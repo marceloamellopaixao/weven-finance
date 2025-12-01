@@ -1,10 +1,3 @@
-Aqui está um **README.md** profissional, estruturado e pronto para ser usado no seu repositório (GitHub/GitLab). Ele destaca as tecnologias modernas que utilizamos e as funcionalidades avançadas que implementamos.
-
-Basta criar um arquivo chamado `README.md` na raiz do projeto e colar o conteúdo abaixo.
-
------
-
-````markdown
 # Weven Finance 💰
 
 ![Next.js](https://img.shields.io/badge/Next.js-14-black)
