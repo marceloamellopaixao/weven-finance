@@ -31,7 +31,6 @@ import {
 import { useRouter } from "next/navigation";
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
 
-// --- Configurações Visuais Modernas ---
 const CATEGORIES = [
   { name: "Casa", color: "bg-blue-500/10 text-blue-600 border-blue-200/50 dark:text-blue-400 dark:border-blue-800/50" },
   { name: "Alimentação", color: "bg-orange-500/10 text-orange-600 border-orange-200/50 dark:text-orange-400 dark:border-orange-800/50" },
@@ -53,7 +52,6 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "transfer", label: "Transferência" },
 ];
 
-// Helper de Data
 const formatDateDisplay = (dateString: string, options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' }) => {
   if (!dateString) return "-";
   const date = new Date(`${dateString}T12:00:00`); 
@@ -68,7 +66,6 @@ export default function DashboardPage() {
   // --- 1. STATES ---
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   
-  // Form States
   const [desc, setDesc] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
@@ -80,12 +77,11 @@ export default function DashboardPage() {
   const [installmentsCount, setInstallmentsCount] = useState("2");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Modais
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
 
-  // --- 2. MEMOS (Lógica de Negócio) ---
+  // --- 2. MEMOS ---
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
     monthsSet.add(new Date().toISOString().slice(0, 7)); 
@@ -120,35 +116,32 @@ export default function DashboardPage() {
     return realCurrentBalance + pendingNet;
   }, [transactions, realCurrentBalance, selectedMonthEnd]);
 
-  // --- 3. EFFECTS (Correção do Erro de Router) ---
-  
-  // Efeito para buscar saldo inicial (se necessário no futuro)
+  // --- 3. EFFECTS ---
   useEffect(() => {
     if (user) {
-      getUserSettings(user.uid).then(() => {
-        // Lógica futura se precisar carregar configs de usuário
-      });
+      getUserSettings(user.uid).then(() => {});
     }
   }, [user]);
 
-  // CORREÇÃO: Redirecionamento dentro do useEffect
   useEffect(() => {
     if (!user && !loading) {
       router.push("/login");
     }
   }, [user, loading, router]);
 
-  // Se não estiver logado, não renderiza nada para evitar flash de conteúdo
-  if (!user && !loading) {
-    return null; 
-  }
+  if (!user && !loading) return null;
 
-  // --- 4. FUNÇÕES HANDLERS ---
+  // --- 4. HANDLERS ---
   const changeMonth = (offset: number) => {
     const currentIndex = availableMonths.findIndex(m => m.value === selectedMonth);
-    const newIndex = currentIndex + offset;
+    const safeIndex = currentIndex === -1 ? 0 : currentIndex;
+    const newIndex = safeIndex + offset;
     if (newIndex >= 0 && newIndex < availableMonths.length) {
       setSelectedMonth(availableMonths[newIndex].value);
+    } else {
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const newDate = new Date(year, month - 1 + offset, 1);
+      setSelectedMonth(newDate.toISOString().slice(0, 7));
     }
   };
 
@@ -188,7 +181,7 @@ export default function DashboardPage() {
     setIsEditOpen(false); setEditingTx(null);
   };
 
-  // --- 5. VARIÁVEIS DERIVADAS ---
+  // --- 5. DERIVADAS ---
   const monthTransactions = transactions.filter(t => t.dueDate && t.dueDate.startsWith(selectedMonth));
   const monthIncome = monthTransactions.filter(t => t.type === 'income').reduce((acc, curr) => acc + curr.amount, 0);
   const monthExpense = monthTransactions.filter(t => t.type === 'expense').reduce((acc, curr) => acc + curr.amount, 0);
@@ -210,22 +203,23 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 font-sans selection:bg-primary/20 selection:text-primary">
       
-      {/* Navbar com Blur */}
-      <nav className="sticky top-0 z-40 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/70 backdrop-blur-xl px-4 md:px-8 h-16 flex items-center justify-between dark:bg-zinc-950/70 supports-backdrop-filter:bg-white/60">
-        <div className="flex items-center gap-3">
+      {/* Navbar Responsiva */}
+      <nav className="sticky top-0 z-40 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/70 backdrop-blur-xl px-4 md:px-8 h-16 flex items-center justify-between dark:bg-zinc-950/70 supports-backdrop-filter-bg-white/60">
+        <div className="flex items-center gap-2 md:gap-3">
           <div className="bg-linear-to-tr from-violet-600 to-indigo-600 p-2 rounded-xl shadow-lg shadow-violet-500/20">
             <Wallet className="h-5 w-5 text-white" />
           </div>
-          <span className="font-bold text-xl tracking-tight text-zinc-800 dark:text-zinc-100">
+          <span className="font-bold text-lg md:text-xl tracking-tight text-zinc-800 dark:text-zinc-100">
             Weven<span className="text-violet-600">Finance</span>
           </span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* Esconde info de usuário no mobile para limpar a tela */}
           <div className="text-right hidden md:block">
             <p className="text-sm font-semibold leading-none text-zinc-900 dark:text-zinc-100">{user?.displayName}</p>
             <Badge variant="secondary" className="mt-1 text-[10px] bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">PRO</Badge>
           </div>
-          <Avatar className="h-10 w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 ring-transparent hover:ring-violet-200 transition-all cursor-pointer">
+          <Avatar className="h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 ring-transparent hover:ring-violet-200 transition-all cursor-pointer">
             <AvatarImage src={user?.photoURL || ""} />
             <AvatarFallback className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600">U</AvatarFallback>
           </Avatar>
@@ -235,20 +229,21 @@ export default function DashboardPage() {
         </div>
       </nav>
 
-      <main className="container mx-auto p-4 md:p-8 space-y-8 max-w-7xl animate-in fade-in duration-500">
+      <main className="container mx-auto p-4 md:p-8 space-y-6 md:space-y-8 max-w-7xl animate-in fade-in duration-500">
         
-        {/* Header e Controles */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        {/* Header Responsivo */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Visão Geral</h1>
-            <p className="text-zinc-500 dark:text-zinc-400 mt-1">Gerencie seu fluxo de caixa e previsões.</p>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Visão Geral</h1>
+            <p className="text-sm md:text-base text-zinc-500 dark:text-zinc-400 mt-1">Gerencie seu fluxo de caixa e previsões.</p>
           </div>
           
-          <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+          {/* Seletor de Mês Full Width no Mobile */}
+          <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm w-full md:w-auto justify-between md:justify-start">
              <Button 
                 variant="ghost" 
                 size="icon" 
-                className="h-8 w-8 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30" 
+                className="h-8 w-8 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0" 
                 onClick={() => changeMonth(-1)}
                 disabled={!canGoBack} 
              >
@@ -256,10 +251,10 @@ export default function DashboardPage() {
             </Button>
             
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-[180px] h-8 border-none shadow-none focus:ring-0 font-semibold text-sm bg-transparent">
+              <SelectTrigger className="w-full md:w-[180px] h-8 border-none shadow-none focus:ring-0 font-semibold text-sm bg-transparent justify-center">
                 <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-violet-500" />
-                  <SelectValue placeholder="Selecione o mês" />
+                  <Calendar className="h-4 w-4 text-violet-500 shrink-0" />
+                  <SelectValue placeholder="Selecione" />
                 </div>
               </SelectTrigger>
               <SelectContent className="max-h-[300px]">
@@ -274,7 +269,7 @@ export default function DashboardPage() {
             <Button 
               variant="ghost" 
               size="icon" 
-              className="h-8 w-8 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30" 
+              className="h-8 w-8 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0" 
               onClick={() => changeMonth(1)}
               disabled={!canGoForward} 
             >
@@ -283,8 +278,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* --- KPI Cards --- */}
-        <div className="grid gap-6 md:grid-cols-3">
+        {/* --- KPI Cards - Stack no Mobile, Grid no Desktop --- */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           
           <Card className="relative overflow-hidden border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl group">
             <div className="absolute inset-0 bg-linear-to-br from-blue-500/5 to-transparent pointer-events-none" />
@@ -344,137 +339,11 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* --- Layout Principal --- */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+        {/* --- Layout Principal (Reordenado no Mobile) --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 items-start">
           
-          {/* Esquerda: Lista e Gráfico */}
-          <div className="lg:col-span-2 space-y-8">
-            
-            <Card className="border-none shadow-lg shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Fluxo Diário</CardTitle>
-                <CardDescription className="text-zinc-500">Visualização temporal de entradas e saídas.</CardDescription>
-              </CardHeader>
-              <CardContent className="h-[280px] w-full">
-                <AreaChart data={chartData} />
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-lg shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden">
-              <CardHeader className="border-b border-zinc-100 dark:border-zinc-800 py-5 px-6 flex flex-row items-center justify-between">
-                <div className="space-y-1">
-                  <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Extrato</CardTitle>
-                  <CardDescription>
-                    Lançamentos de {formatDateDisplay(selectedMonth + '-02', { month: 'long', year: 'numeric' })}.
-                  </CardDescription>
-                </div>
-                <Badge variant="outline" className="bg-zinc-50 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
-                  {monthTransactions.length} Itens
-                </Badge>
-              </CardHeader>
-              
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-zinc-50/50 dark:bg-zinc-900">
-                    <TableRow className="hover:bg-transparent border-zinc-100 dark:border-zinc-800">
-                      <TableHead className="w-[60px] text-center font-semibold text-zinc-500">STS</TableHead>
-                      <TableHead className="font-semibold text-zinc-500">Descrição</TableHead>
-                      <TableHead className="w-[140px] font-semibold text-zinc-500">Data</TableHead>
-                      <TableHead className="text-right font-semibold text-zinc-500">Valor</TableHead>
-                      <TableHead className="w-[50px] text-center"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {monthTransactions.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="h-32 text-center text-zinc-400">Nenhuma movimentação neste mês.</TableCell></TableRow>
-                    ) : (
-                      monthTransactions.map((tx) => {
-                        const overdue = isOverdue(tx);
-                        return (
-                          <TableRow key={tx.id} className={`group border-zinc-100 dark:border-zinc-800 transition-all duration-200 ${overdue ? 'bg-red-50/50 dark:bg-red-900/10' : 'hover:bg-zinc-50/80 dark:hover:bg-zinc-800/50'}`}>
-                            
-                            <TableCell className="text-center align-middle">
-                              <div className="flex justify-center">
-                                <Checkbox 
-                                  checked={tx.status === 'paid'}
-                                  onCheckedChange={() => { if(tx.id) toggleTransactionStatus(user!.uid, tx.id, tx.status); }}
-                                  className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500 border-zinc-300 w-5 h-5 rounded-md transition-all"
-                                />
-                              </div>
-                            </TableCell>
-                            
-                            <TableCell className="align-middle">
-                              <div className="flex flex-col gap-1.5 py-1">
-                                <span className={`font-semibold text-sm ${tx.status === 'paid' ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'}`}>
-                                  {tx.description}
-                                </span>
-                                
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getCategoryStyle(tx.category)}`}>
-                                    {tx.category}
-                                  </span>
-                                  {tx.groupId && (
-                                    <span className="flex items-center text-[10px] bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
-                                      <Layers className="h-3 w-3 mr-1" />
-                                      {tx.installmentCurrent}/{tx.installmentTotal}
-                                    </span>
-                                  )}
-                                  {tx.type === 'income' && (
-                                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold dark:bg-emerald-900/20 dark:text-emerald-400">
-                                       Receita
-                                     </span>
-                                  )}
-                                </div>
-                              </div>
-                            </TableCell>
-                            
-                            <TableCell className="align-middle">
-                              <div className="flex flex-col text-sm">
-                                <span className={`flex items-center font-medium ${overdue ? "text-red-500" : "text-zinc-500 dark:text-zinc-400"}`}>
-                                  <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
-                                  {formatDateDisplay(tx.dueDate)}
-                                  {overdue && <AlertCircle className="h-3.5 w-3.5 ml-1 text-red-500" />}
-                                </span>
-                                {paymentMethod === 'credit_card' && tx.type === 'expense' && <span className="text-[10px] text-zinc-400 ml-5 font-medium">Fatura</span>}
-                              </div>
-                            </TableCell>
-                            
-                            <TableCell className="text-right align-middle">
-                              <span className={`font-bold text-base tracking-tight ${tx.status === 'paid' ? 'text-zinc-400' : (tx.type === 'income' ? 'text-emerald-600' : 'text-zinc-800 dark:text-zinc-200')}`}>
-                                {tx.type === 'expense' ? '- ' : '+ '}
-                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
-                              </span>
-                            </TableCell>
-                            
-                            <TableCell className="text-center align-middle">
-                              <div className="flex justify-center">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg"><MoreHorizontal className="h-4 w-4 text-zinc-400"/></Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-40 p-1 rounded-xl shadow-xl border-zinc-100 dark:border-zinc-800">
-                                    <DropdownMenuItem onClick={() => openEditModal(tx)} className="cursor-pointer rounded-lg text-xs font-medium">
-                                      <Pencil className="mr-2 h-3.5 w-3.5"/> Editar
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => setTxToDelete(tx)} className="text-red-600 focus:text-red-600 cursor-pointer rounded-lg text-xs font-medium focus:bg-red-50 dark:focus:bg-red-900/20">
-                                      <Trash2 className="mr-2 h-3.5 w-3.5"/> Excluir
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </Card>
-          </div>
-
-          {/* Direita: Formulário */}
-          <div className="lg:col-span-1">
+          {/* --- BLOCO DIREITA: FORMULÁRIO (PRIMEIRO NO MOBILE) --- */}
+          <div className="lg:col-span-1 order-1 lg:order-2">
             <div className="sticky top-24 space-y-6">
               
               <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden ring-1 ring-zinc-100 dark:ring-zinc-800">
@@ -490,8 +359,6 @@ export default function DashboardPage() {
                 </CardHeader>
                 
                 <CardContent className="space-y-5">
-                  
-                  {/* Toggle Moderno */}
                   <div className="grid grid-cols-2 gap-1 p-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl">
                     <button 
                       onClick={() => setType('expense')}
@@ -597,11 +464,138 @@ export default function DashboardPage() {
 
             </div>
           </div>
+
+          {/* --- BLOCO ESQUERDA: LISTA E GRÁFICO (SEGUNDO NO MOBILE) --- */}
+          <div className="lg:col-span-2 space-y-8 order-2 lg:order-1">
+            
+            <Card className="border-none shadow-lg shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Fluxo Diário</CardTitle>
+                <CardDescription className="text-zinc-500">Visualização temporal de entradas e saídas.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[280px] w-full">
+                <AreaChart data={chartData} />
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-lg shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden">
+              <CardHeader className="border-b border-zinc-100 dark:border-zinc-800 py-5 px-6 flex flex-row items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Extrato</CardTitle>
+                  <CardDescription>
+                    Lançamentos de {formatDateDisplay(selectedMonth + '-02', { month: 'long', year: 'numeric' })}.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="bg-zinc-50 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
+                  {monthTransactions.length} Itens
+                </Badge>
+              </CardHeader>
+              
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-zinc-50/50 dark:bg-zinc-900">
+                    <TableRow className="hover:bg-transparent border-zinc-100 dark:border-zinc-800">
+                      <TableHead className="w-[60px] text-center font-semibold text-zinc-500">STS</TableHead>
+                      <TableHead className="font-semibold text-zinc-500">Descrição</TableHead>
+                      <TableHead className="w-[140px] font-semibold text-zinc-500">Data</TableHead>
+                      <TableHead className="text-right font-semibold text-zinc-500">Valor</TableHead>
+                      <TableHead className="w-[50px] text-center"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {monthTransactions.length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="h-32 text-center text-zinc-400">Nenhuma movimentação neste mês.</TableCell></TableRow>
+                    ) : (
+                      monthTransactions.map((tx) => {
+                        const overdue = isOverdue(tx);
+                        return (
+                          <TableRow key={tx.id} className={`group border-zinc-100 dark:border-zinc-800 transition-all duration-200 ${overdue ? 'bg-red-50/50 dark:bg-red-900/10' : 'hover:bg-zinc-50/80 dark:hover:bg-zinc-800/50'}`}>
+                            
+                            <TableCell className="text-center align-middle">
+                              <div className="flex justify-center">
+                                <Checkbox 
+                                  checked={tx.status === 'paid'}
+                                  onCheckedChange={() => { if(tx.id) toggleTransactionStatus(user!.uid, tx.id, tx.status); }}
+                                  className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500 border-zinc-300 w-5 h-5 rounded-md transition-all"
+                                />
+                              </div>
+                            </TableCell>
+                            
+                            <TableCell className="align-middle">
+                              <div className="flex flex-col gap-1.5 py-1 whitespace-nowrap">
+                                <span className={`font-semibold text-sm truncate max-w-[150px] ${tx.status === 'paid' ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'}`}>
+                                  {tx.description}
+                                </span>
+                                
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getCategoryStyle(tx.category)}`}>
+                                    {tx.category}
+                                  </span>
+                                  {tx.groupId && (
+                                    <span className="flex items-center text-[10px] bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
+                                      <Layers className="h-3 w-3 mr-1" />
+                                      {tx.installmentCurrent}/{tx.installmentTotal}
+                                    </span>
+                                  )}
+                                  {tx.type === 'income' && (
+                                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold dark:bg-emerald-900/20 dark:text-emerald-400">
+                                       Receita
+                                     </span>
+                                  )}
+                                </div>
+                              </div>
+                            </TableCell>
+                            
+                            <TableCell className="align-middle whitespace-nowrap">
+                              <div className="flex flex-col text-sm">
+                                <span className={`flex items-center font-medium ${overdue ? "text-red-500" : "text-zinc-500 dark:text-zinc-400"}`}>
+                                  <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
+                                  {formatDateDisplay(tx.dueDate)}
+                                  {overdue && <AlertCircle className="h-3.5 w-3.5 ml-1 text-red-500" />}
+                                </span>
+                                {paymentMethod === 'credit_card' && tx.type === 'expense' && <span className="text-[10px] text-zinc-400 ml-5 font-medium">Fatura</span>}
+                              </div>
+                            </TableCell>
+                            
+                            <TableCell className="text-right align-middle whitespace-nowrap">
+                              <span className={`font-bold text-base tracking-tight ${tx.status === 'paid' ? 'text-zinc-400' : (tx.type === 'income' ? 'text-emerald-600' : 'text-zinc-800 dark:text-zinc-200')}`}>
+                                {tx.type === 'expense' ? '- ' : '+ '}
+                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
+                              </span>
+                            </TableCell>
+                            
+                            <TableCell className="text-center align-middle">
+                              <div className="flex justify-center">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg"><MoreHorizontal className="h-4 w-4 text-zinc-400"/></Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-40 p-1 rounded-xl shadow-xl border-zinc-100 dark:border-zinc-800">
+                                    <DropdownMenuItem onClick={() => openEditModal(tx)} className="cursor-pointer rounded-lg text-xs font-medium">
+                                      <Pencil className="mr-2 h-3.5 w-3.5"/> Editar
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setTxToDelete(tx)} className="text-red-600 focus:text-red-600 cursor-pointer rounded-lg text-xs font-medium focus:bg-red-50 dark:focus:bg-red-900/20">
+                                      <Trash2 className="mr-2 h-3.5 w-3.5"/> Excluir
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
+          </div>
+
         </div>
 
         {/* Modal de Edição */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent className="sm:max-w-[500px] w-full max-h-[90vh] overflow-y-auto rounded-2xl p-6">
+          <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[85vh] overflow-y-auto rounded-2xl p-6">
             <DialogHeader>
               <DialogTitle className="text-xl">Editar Lançamento</DialogTitle>
               <DialogDescription>Faça ajustes na transação selecionada.</DialogDescription>
@@ -642,15 +636,15 @@ export default function DashboardPage() {
               </div>
             )}
             <DialogFooter className="gap-3 sm:gap-0">
-              <Button variant="outline" className="rounded-xl h-10" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
-              <Button className="rounded-xl h-10 bg-violet-600 hover:bg-violet-700" onClick={handleSaveEdit}>Salvar Alterações</Button>
+              <Button variant="outline" className="rounded-xl h-10 w-full sm:w-auto" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
+              <Button className="rounded-xl h-10 w-full sm:w-auto bg-violet-600 hover:bg-violet-700" onClick={handleSaveEdit}>Salvar Alterações</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
         {/* Modal de Exclusão */}
         <Dialog open={!!txToDelete} onOpenChange={(open) => !open && setTxToDelete(null)}>
-          <DialogContent className="sm:max-w-[425px] rounded-2xl p-6">
+          <DialogContent className="sm:max-w-[425px] w-[95vw] rounded-2xl p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-600">
                 <div className="p-2 bg-red-100 rounded-full">
@@ -663,7 +657,7 @@ export default function DashboardPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <DialogFooter className="flex-col sm:flex-row gap-3 mt-4">
+            <DialogFooter className="flex flex-col sm:flex-row gap-3 mt-4">
                <Button className="w-full sm:w-auto rounded-xl h-10" variant="ghost" onClick={() => setTxToDelete(null)}>
                 Cancelar
               </Button>
