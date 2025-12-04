@@ -7,7 +7,6 @@ import {
   updateDoc, 
   doc, 
   getDoc, 
-  setDoc, 
   deleteDoc, 
   where, 
   getDocs, 
@@ -152,9 +151,4 @@ export const getUserSettings = async (uid: string): Promise<UserSettings> => {
   const snap = await getDoc(ref);
   if (snap.exists()) return snap.data() as UserSettings;
   return { currentBalance: 0 };
-};
-
-export const updateUserBalance = async (uid: string, newBalance: number) => {
-  const ref = doc(userDoc(uid), "settings", "finance");
-  await setDoc(ref, { currentBalance: newBalance }, { merge: true });
 };

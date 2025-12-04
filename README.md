@@ -1,5 +1,9 @@
 # Weven Finance 💰
 
+# IDEIA
+
+<p>FAZER COM QUE O SALDO DISPONÍVEL SEJA DO MÊS, CASO SOBRAR O VALOR COMO POSITIVO, IR PARA O MÊS SEGUINTE</p>
+
 ![Next.js](https://img.shields.io/badge/Next.js-14-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
 ![Firebase](https://img.shields.io/badge/Firebase-Assas-orange)
