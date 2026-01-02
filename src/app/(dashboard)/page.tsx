@@ -8,7 +8,6 @@ import {
   deleteTransaction, 
   updateTransaction, 
   toggleTransactionStatus, 
-  getUserSettings, 
 } from "@/services/transactionService";
 import AreaChart from "@/components/charts/AreaChart";
 import { Button } from "@/components/ui/button";
@@ -31,16 +30,21 @@ import {
 import { useRouter } from "next/navigation";
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
 
-const CATEGORIES = [
-  { name: "Casa", color: "bg-blue-500/10 text-blue-600 border-blue-200/50 dark:text-blue-400 dark:border-blue-800/50" },
-  { name: "Alimentação", color: "bg-orange-500/10 text-orange-600 border-orange-200/50 dark:text-orange-400 dark:border-orange-800/50" },
-  { name: "Investimento", color: "bg-emerald-500/10 text-emerald-600 border-emerald-200/50 dark:text-emerald-400 dark:border-emerald-800/50" },
-  { name: "Manutenção Carro", color: "bg-red-500/10 text-red-600 border-red-200/50 dark:text-red-400 dark:border-red-800/50" },
-  { name: "Dízimo", color: "bg-violet-500/10 text-violet-600 border-violet-200/50 dark:text-violet-400 dark:border-violet-800/50" },
-  { name: "Compras", color: "bg-pink-500/10 text-pink-600 border-pink-200/50 dark:text-pink-400 dark:border-pink-800/50" },
-  { name: "Salário", color: "bg-green-500/10 text-green-600 border-green-200/50 dark:text-green-400 dark:border-green-800/50" },
-  { name: "Vendas", color: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50" },
-  { name: "Outros", color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50" },
+// --- Configurações Visuais ---
+// Unificamos todas as categorias aqui para os Badges/Cores
+const ALL_CATEGORIES = [
+  // Despesas
+  { name: "Casa", type: "expense", color: "bg-blue-500/10 text-blue-600 border-blue-200/50 dark:text-blue-400 dark:border-blue-800/50" },
+  { name: "Alimentação", type: "expense", color: "bg-orange-500/10 text-orange-600 border-orange-200/50 dark:text-orange-400 dark:border-orange-800/50" },
+  { name: "Investimento", type: "expense", color: "bg-emerald-500/10 text-emerald-600 border-emerald-200/50 dark:text-emerald-400 dark:border-emerald-800/50" },
+  { name: "Manutenção Carro", type: "expense", color: "bg-red-500/10 text-red-600 border-red-200/50 dark:text-red-400 dark:border-red-800/50" },
+  { name: "Dízimo", type: "expense", color: "bg-violet-500/10 text-violet-600 border-violet-200/50 dark:text-violet-400 dark:border-violet-800/50" },
+  { name: "Compras", type: "expense", color: "bg-pink-500/10 text-pink-600 border-pink-200/50 dark:text-pink-400 dark:border-pink-800/50" },
+  // Receitas
+  { name: "Salário", type: "income", color: "bg-green-500/10 text-green-600 border-green-200/50 dark:text-green-400 dark:border-green-800/50" },
+  { name: "Vendas", type: "income", color: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50" },
+  // Ambos
+  { name: "Outros", type: "both", color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50" },
 ];
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
@@ -52,6 +56,7 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "transfer", label: "Transferência" },
 ];
 
+// Helper de Data
 const formatDateDisplay = (dateString: string, options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' }) => {
   if (!dateString) return "-";
   const date = new Date(`${dateString}T12:00:00`); 
@@ -66,30 +71,33 @@ export default function DashboardPage() {
   // --- 1. STATES ---
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   
+  // Form States
   const [desc, setDesc] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [type, setType] = useState<TransactionType>("expense");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("credit_card");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("debit_card"); // Default seguro
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState(new Date().toISOString().split('T')[0]);
   const [isInstallment, setIsInstallment] = useState(false);
   const [installmentsCount, setInstallmentsCount] = useState("2");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Modais
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
 
-  // --- 2. MEMOS ---
+  // --- 2. MEMOS (Lógica de Negócio) ---
+  
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
     monthsSet.add(new Date().toISOString().slice(0, 7)); 
     transactions.forEach(t => { if (t.dueDate) monthsSet.add(t.dueDate.slice(0, 7)); });
     return Array.from(monthsSet).sort().map(monthStr => {
       const [year, month] = monthStr.split('-').map(Number);
-      const date = new Date(year, month - 1, 2); 
-      const label = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      const dateObj = new Date(year, month - 1, 2); 
+      const label = dateObj.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
       return { value: monthStr, label: label.charAt(0).toUpperCase() + label.slice(1) };
     });
   }, [transactions]);
@@ -116,13 +124,12 @@ export default function DashboardPage() {
     return realCurrentBalance + pendingNet;
   }, [transactions, realCurrentBalance, selectedMonthEnd]);
 
-  // --- 3. EFFECTS ---
-  useEffect(() => {
-    if (user) {
-      getUserSettings(user.uid).then(() => {});
-    }
-  }, [user]);
+  // Filtra as categorias baseado no tipo selecionado (Receita ou Despesa)
+  const availableCategories = useMemo(() => {
+    return ALL_CATEGORIES.filter(c => c.type === type || c.type === 'both');
+  }, [type]);
 
+  // --- 3. EFFECTS ---
   useEffect(() => {
     if (!user && !loading) {
       router.push("/login");
@@ -132,6 +139,21 @@ export default function DashboardPage() {
   if (!user && !loading) return null;
 
   // --- 4. HANDLERS ---
+
+  const changeType = (newType: TransactionType) => {
+    setType(newType);
+    
+    // Reseta categorias e métodos padrões ao trocar de tipo
+    if (newType === 'income') {
+      setCategory("Salário"); // Padrão obrigatório sugerido
+      setPaymentMethod("pix"); // Pix é comum para recebimento
+      setIsInstallment(false); // Receita não costuma ser parcelada aqui
+    } else {
+      setCategory(""); // Limpa para forçar escolha ou deixe um padrão
+      setPaymentMethod("credit_card");
+    }
+  };
+
   const changeMonth = (offset: number) => {
     const currentIndex = availableMonths.findIndex(m => m.value === selectedMonth);
     const safeIndex = currentIndex === -1 ? 0 : currentIndex;
@@ -151,18 +173,38 @@ export default function DashboardPage() {
   const handleAdd = async () => {
     if (!desc || !amount || !category) return;
     setIsSubmitting(true);
+    
     try {
       let finalAmount = Number(amount);
       const count = Number(installmentsCount);
+
       if (isInstallment && count > 1 && type === 'expense') {
         finalAmount = finalAmount / count;
         finalAmount = Math.round(finalAmount * 100) / 100;
       }
+
       await addTransaction(user!.uid, {
-        description: desc, amount: finalAmount, type: type, category: category, paymentMethod: paymentMethod, date: date, dueDate: dueDate, isInstallment, installmentsCount: count
+        description: desc,
+        amount: finalAmount,
+        type: type,
+        category: category,
+        paymentMethod: paymentMethod,
+        date: type === 'income' ? dueDate : date, // Se for receita, data compra = data crédito
+        dueDate: dueDate,
+        isInstallment: type === 'expense' ? isInstallment : false, // Bloqueia parcela para receita
+        installmentsCount: count
       });
-      setDesc(""); setAmount(""); setIsInstallment(false); setInstallmentsCount("2");
-    } catch (error) { console.error(error); } finally { setIsSubmitting(false); }
+      setDesc("");
+      setAmount("");
+      setIsInstallment(false);
+      setInstallmentsCount("2");
+      // Mantém a categoria padrão se for receita
+      if (type === 'income') setCategory("Salário");
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleConfirmDelete = async (deleteGroup: boolean) => {
@@ -176,12 +218,18 @@ export default function DashboardPage() {
   const handleSaveEdit = async () => {
     if (!editingTx || !user || !editingTx.id) return;
     await updateTransaction(user.uid, editingTx.id, {
-      description: editingTx.description, amount: Number(editingTx.amount), category: editingTx.category, dueDate: editingTx.dueDate, date: editingTx.date
+      description: editingTx.description,
+      amount: Number(editingTx.amount),
+      category: editingTx.category,
+      dueDate: editingTx.dueDate,
+      date: editingTx.date
     });
-    setIsEditOpen(false); setEditingTx(null);
+    setIsEditOpen(false);
+    setEditingTx(null);
   };
 
-  // --- 5. DERIVADAS ---
+  // --- 5. RENDERIZAÇÃO ---
+
   const monthTransactions = transactions.filter(t => t.dueDate && t.dueDate.startsWith(selectedMonth));
   const monthIncome = monthTransactions.filter(t => t.type === 'income').reduce((acc, curr) => acc + curr.amount, 0);
   const monthExpense = monthTransactions.filter(t => t.type === 'expense').reduce((acc, curr) => acc + curr.amount, 0);
@@ -192,7 +240,7 @@ export default function DashboardPage() {
   })).reverse();
 
   const getCategoryStyle = (catName: string) => 
-    CATEGORIES.find(c => c.name === catName)?.color || "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200";
+    ALL_CATEGORIES.find(c => c.name === catName)?.color || "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200";
 
   const isOverdue = (tx: Transaction) => {
     if (tx.status === 'paid') return false;
@@ -203,23 +251,22 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 font-sans selection:bg-primary/20 selection:text-primary">
       
-      {/* Navbar Responsiva */}
-      <nav className="sticky top-0 z-40 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/70 backdrop-blur-xl px-4 md:px-8 h-16 flex items-center justify-between dark:bg-zinc-950/70 supports-backdrop-filter-bg-white/60">
-        <div className="flex items-center gap-2 md:gap-3">
+      {/* Navbar */}
+      <nav className="sticky top-0 z-40 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/70 backdrop-blur-xl px-4 md:px-8 h-16 flex items-center justify-between dark:bg-zinc-950/70 supports-backdrop-filter:bg-white/60 supports-backdrop-filter:dark:bg-zinc-950/60">
+        <div className="flex items-center gap-3">
           <div className="bg-linear-to-tr from-violet-600 to-indigo-600 p-2 rounded-xl shadow-lg shadow-violet-500/20">
             <Wallet className="h-5 w-5 text-white" />
           </div>
-          <span className="font-bold text-lg md:text-xl tracking-tight text-zinc-800 dark:text-zinc-100">
+          <span className="font-bold text-xl tracking-tight text-zinc-800 dark:text-zinc-100">
             Weven<span className="text-violet-600">Finance</span>
           </span>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Esconde info de usuário no mobile para limpar a tela */}
+        <div className="flex items-center gap-4">
           <div className="text-right hidden md:block">
             <p className="text-sm font-semibold leading-none text-zinc-900 dark:text-zinc-100">{user?.displayName}</p>
             <Badge variant="secondary" className="mt-1 text-[10px] bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">PRO</Badge>
           </div>
-          <Avatar className="h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 ring-transparent hover:ring-violet-200 transition-all cursor-pointer">
+          <Avatar className="h-10 w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 ring-transparent hover:ring-violet-200 transition-all cursor-pointer">
             <AvatarImage src={user?.photoURL || ""} />
             <AvatarFallback className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600">U</AvatarFallback>
           </Avatar>
@@ -229,21 +276,20 @@ export default function DashboardPage() {
         </div>
       </nav>
 
-      <main className="container mx-auto p-4 md:p-8 space-y-6 md:space-y-8 max-w-7xl animate-in fade-in duration-500">
+      <main className="container mx-auto p-4 md:p-8 space-y-8 max-w-7xl animate-in fade-in duration-500">
         
-        {/* Header Responsivo */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
+        {/* Header e Controles */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Visão Geral</h1>
-            <p className="text-sm md:text-base text-zinc-500 dark:text-zinc-400 mt-1">Gerencie seu fluxo de caixa e previsões.</p>
+            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Visão Geral</h1>
+            <p className="text-zinc-500 dark:text-zinc-400 mt-1">Gerencie seu fluxo de caixa e previsões.</p>
           </div>
           
-          {/* Seletor de Mês Full Width no Mobile */}
-          <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm w-full md:w-auto justify-between md:justify-start">
+          <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
              <Button 
                 variant="ghost" 
                 size="icon" 
-                className="h-8 w-8 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0" 
+                className="h-8 w-8 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30" 
                 onClick={() => changeMonth(-1)}
                 disabled={!canGoBack} 
              >
@@ -251,10 +297,10 @@ export default function DashboardPage() {
             </Button>
             
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-full md:w-[180px] h-8 border-none shadow-none focus:ring-0 font-semibold text-sm bg-transparent justify-center">
+              <SelectTrigger className="w-[180px] h-8 border-none shadow-none focus:ring-0 font-semibold text-sm bg-transparent">
                 <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-violet-500 shrink-0" />
-                  <SelectValue placeholder="Selecione" />
+                  <Calendar className="h-4 w-4 text-violet-500" />
+                  <SelectValue placeholder="Selecione o mês" />
                 </div>
               </SelectTrigger>
               <SelectContent className="max-h-[300px]">
@@ -269,7 +315,7 @@ export default function DashboardPage() {
             <Button 
               variant="ghost" 
               size="icon" 
-              className="h-8 w-8 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0" 
+              className="h-8 w-8 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30" 
               onClick={() => changeMonth(1)}
               disabled={!canGoForward} 
             >
@@ -278,9 +324,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* --- KPI Cards - Stack no Mobile, Grid no Desktop --- */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-          
+        {/* --- KPI Cards --- */}
+        <div className="grid gap-6 md:grid-cols-3">
           <Card className="relative overflow-hidden border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl group">
             <div className="absolute inset-0 bg-linear-to-br from-blue-500/5 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
@@ -339,135 +384,11 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* --- Layout Principal (Reordenado no Mobile) --- */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 items-start">
+        {/* --- Layout Principal --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
           
-          {/* --- BLOCO DIREITA: FORMULÁRIO (PRIMEIRO NO MOBILE) --- */}
-          <div className="lg:col-span-1 order-1 lg:order-2">
-            <div className="sticky top-24 space-y-6">
-              
-              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden ring-1 ring-zinc-100 dark:ring-zinc-800">
-                <div className={`h-2 w-full bg-linear-to-r ${type === 'expense' ? 'from-red-500 to-orange-500' : 'from-emerald-500 to-teal-500'}`} />
-                
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-lg flex items-center gap-3">
-                    <div className={`p-2 rounded-xl text-white shadow-lg ${type === 'expense' ? 'bg-linear-to-br from-red-500 to-orange-500 shadow-red-500/20' : 'bg-linear-to-br from-emerald-500 to-teal-500 shadow-emerald-500/20'}`}>
-                      <Plus className="h-4 w-4" />
-                    </div>
-                    {type === 'expense' ? 'Nova Despesa' : 'Nova Receita'}
-                  </CardTitle>
-                </CardHeader>
-                
-                <CardContent className="space-y-5">
-                  <div className="grid grid-cols-2 gap-1 p-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl">
-                    <button 
-                      onClick={() => setType('expense')}
-                      className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 ${type === 'expense' ? 'bg-white dark:bg-zinc-700 shadow-sm text-red-600' : 'text-zinc-500 hover:text-zinc-700'}`}
-                    >
-                      Despesa
-                    </button>
-                    <button 
-                      onClick={() => setType('income')}
-                      className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 ${type === 'income' ? 'bg-white dark:bg-zinc-700 shadow-sm text-emerald-600' : 'text-zinc-500 hover:text-zinc-700'}`}
-                    >
-                      Receita
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <Label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">Descrição</Label>
-                      <Input 
-                        className="mt-1.5 h-11 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl" 
-                        placeholder={type === 'expense' ? "Ex: Netflix" : "Ex: Salário"} 
-                        value={desc} 
-                        onChange={e => setDesc(e.target.value)} 
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">Valor Total</Label>
-                      <div className="relative mt-1.5">
-                        <span className="absolute left-3.5 top-3 text-zinc-400 font-semibold">R$</span>
-                        <Input 
-                          type="number" 
-                          className="pl-10 h-11 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl font-semibold text-lg" 
-                          placeholder="0,00" 
-                          value={amount} 
-                          onChange={e => setAmount(e.target.value)} 
-                        />
-                      </div>
-                      <p className="text-[10px] text-zinc-400 mt-1.5 text-right font-medium">
-                        {isInstallment && type === 'expense' ? "O sistema dividirá este valor" : "Valor único"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-zinc-500 ml-1">Categoria</Label>
-                      <Select onValueChange={setCategory} value={category}>
-                        <SelectTrigger className="h-10 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>
-                          {CATEGORIES.map((cat) => <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-zinc-500 ml-1">Método</Label>
-                      <Select onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} value={paymentMethod}>
-                        <SelectTrigger className="h-10 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {PAYMENT_METHODS.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="bg-zinc-50/80 dark:bg-zinc-800/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800 space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Data Compra</Label>
-                        <Input type="date" className="h-9 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={date} onChange={e => setDate(e.target.value)} />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className={`text-[10px] font-bold uppercase tracking-wider ${type === 'expense' ? 'text-red-500' : 'text-emerald-600'}`}>{type === 'expense' ? 'Vencimento' : 'Data Crédito'}</Label>
-                        <Input type="date" className="h-9 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                      </div>
-                    </div>
-                    
-                    {type === 'expense' && (
-                      <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
-                        <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
-                          <Layers className="h-3.5 w-3.5 text-violet-500" /> Compra Parcelada?
-                        </Label>
-                        <Switch id="inst-switch" className="scale-75 data-[state=checked]:bg-violet-600" checked={isInstallment} onCheckedChange={setIsInstallment} />
-                      </div>
-                    )}
-
-                    {isInstallment && type === 'expense' && (
-                      <div className="animate-in slide-in-from-top-2 pt-1">
-                        <Label className="text-xs font-medium text-zinc-500">Número de Parcelas</Label>
-                        <Input type="number" className="h-9 mt-1.5 bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" min="2" max="60" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
-                      </div>
-                    )}
-                  </div>
-
-                  <Button 
-                    onClick={handleAdd} 
-                    className={`w-full h-11 font-bold text-white shadow-lg rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] ${type === 'expense' ? 'bg-linear-to-r from-red-500 to-orange-500 shadow-red-500/25 hover:shadow-red-500/40' : 'bg-linear-to-r from-emerald-500 to-teal-500 shadow-emerald-500/25 hover:shadow-emerald-500/40'}`} 
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? "Processando..." : (type === 'expense' ? "Confirmar Despesa" : "Confirmar Receita")}
-                  </Button>
-                </CardContent>
-              </Card>
-
-            </div>
-          </div>
-
-          {/* --- BLOCO ESQUERDA: LISTA E GRÁFICO (SEGUNDO NO MOBILE) --- */}
-          <div className="lg:col-span-2 space-y-8 order-2 lg:order-1">
-            
+          {/* Esquerda: Lista e Gráfico */}
+          <div className="lg:col-span-2 space-y-8">
             <Card className="border-none shadow-lg shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl">
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Fluxo Diário</CardTitle>
@@ -522,8 +443,8 @@ export default function DashboardPage() {
                             </TableCell>
                             
                             <TableCell className="align-middle">
-                              <div className="flex flex-col gap-1.5 py-1 whitespace-nowrap">
-                                <span className={`font-semibold text-sm truncate max-w-[150px] ${tx.status === 'paid' ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'}`}>
+                              <div className="flex flex-col gap-1.5 py-1">
+                                <span className={`font-semibold text-sm ${tx.status === 'paid' ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'}`}>
                                   {tx.description}
                                 </span>
                                 
@@ -546,7 +467,7 @@ export default function DashboardPage() {
                               </div>
                             </TableCell>
                             
-                            <TableCell className="align-middle whitespace-nowrap">
+                            <TableCell className="align-middle">
                               <div className="flex flex-col text-sm">
                                 <span className={`flex items-center font-medium ${overdue ? "text-red-500" : "text-zinc-500 dark:text-zinc-400"}`}>
                                   <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
@@ -557,7 +478,7 @@ export default function DashboardPage() {
                               </div>
                             </TableCell>
                             
-                            <TableCell className="text-right align-middle whitespace-nowrap">
+                            <TableCell className="text-right align-middle">
                               <span className={`font-bold text-base tracking-tight ${tx.status === 'paid' ? 'text-zinc-400' : (tx.type === 'income' ? 'text-emerald-600' : 'text-zinc-800 dark:text-zinc-200')}`}>
                                 {tx.type === 'expense' ? '- ' : '+ '}
                                 {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
@@ -591,11 +512,139 @@ export default function DashboardPage() {
             </Card>
           </div>
 
+          {/* Direita: Formulário */}
+          <div className="lg:col-span-1">
+            <div className="sticky top-24 space-y-6">
+              
+              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden ring-1 ring-zinc-100 dark:ring-zinc-800">
+                <div className={`h-2 w-full bg-linear-to-r ${type === 'expense' ? 'from-red-500 to-orange-500' : 'from-emerald-500 to-teal-500'}`} />
+                
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg flex items-center gap-3">
+                    <div className={`p-2 rounded-xl text-white shadow-lg ${type === 'expense' ? 'bg-linear-to-br from-red-500 to-orange-500 shadow-red-500/20' : 'bg-linear-to-br from-emerald-500 to-teal-500 shadow-emerald-500/20'}`}>
+                      <Plus className="h-4 w-4" />
+                    </div>
+                    {type === 'expense' ? 'Nova Despesa' : 'Nova Receita'}
+                  </CardTitle>
+                </CardHeader>
+                
+                <CardContent className="space-y-5">
+                  
+                  {/* Toggle Moderno */}
+                  <div className="grid grid-cols-2 gap-1 p-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl">
+                    <button 
+                      onClick={() => changeType('expense')}
+                      className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 ${type === 'expense' ? 'bg-white dark:bg-zinc-700 shadow-sm text-red-600' : 'text-zinc-500 hover:text-zinc-700'}`}
+                    >
+                      Despesa
+                    </button>
+                    <button 
+                      onClick={() => changeType('income')}
+                      className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 ${type === 'income' ? 'bg-white dark:bg-zinc-700 shadow-sm text-emerald-600' : 'text-zinc-500 hover:text-zinc-700'}`}
+                    >
+                      Receita
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">Descrição</Label>
+                      <Input 
+                        className="mt-1.5 h-11 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl" 
+                        placeholder={type === 'expense' ? "Ex: Netflix" : "Ex: Salário"} 
+                        value={desc} 
+                        onChange={e => setDesc(e.target.value)} 
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">Valor Total</Label>
+                      <div className="relative mt-1.5">
+                        <span className="absolute left-3.5 top-3 text-zinc-400 font-semibold">R$</span>
+                        <Input 
+                          type="number" 
+                          className="pl-10 h-11 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl font-semibold text-lg" 
+                          placeholder="0,00" 
+                          value={amount} 
+                          onChange={e => setAmount(e.target.value)} 
+                        />
+                      </div>
+                      <p className="text-[10px] text-zinc-400 mt-1.5 text-right font-medium">
+                        {isInstallment && type === 'expense' ? "O sistema dividirá este valor" : "Valor único"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                     <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-zinc-500 ml-1">Categoria</Label>
+                      <Select onValueChange={setCategory} value={category}>
+                        <SelectTrigger className="h-10 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                        <SelectContent>
+                          {availableCategories.map((cat) => <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-zinc-500 ml-1">Método</Label>
+                      <Select onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} value={paymentMethod}>
+                        <SelectTrigger className="h-10 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {PAYMENT_METHODS.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="bg-zinc-50/80 dark:bg-zinc-800/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800 space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Oculta Data Compra se for Receita */}
+                      {type === 'expense' && (
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Data Compra</Label>
+                          <Input type="date" className="h-9 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={date} onChange={e => setDate(e.target.value)} />
+                        </div>
+                      )}
+                      
+                      <div className={`space-y-1.5 ${type === 'income' ? 'col-span-2' : ''}`}>
+                        <Label className={`text-[10px] font-bold uppercase tracking-wider ${type === 'expense' ? 'text-red-500' : 'text-emerald-600'}`}>{type === 'expense' ? 'Vencimento' : 'Data Crédito'}</Label>
+                        <Input type="date" className="h-9 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                      </div>
+                    </div>
+                    
+                    {type === 'expense' && (
+                      <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
+                        <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
+                          <Layers className="h-3.5 w-3.5 text-violet-500" /> Compra Parcelada?
+                        </Label>
+                        <Switch id="inst-switch" className="scale-75 data-[state=checked]:bg-violet-600" checked={isInstallment} onCheckedChange={setIsInstallment} />
+                      </div>
+                    )}
+
+                    {isInstallment && type === 'expense' && (
+                      <div className="animate-in slide-in-from-top-2 pt-1">
+                        <Label className="text-xs font-medium text-zinc-500">Número de Parcelas</Label>
+                        <Input type="number" className="h-9 mt-1.5 bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" min="2" max="60" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
+                      </div>
+                    )}
+                  </div>
+
+                  <Button 
+                    onClick={handleAdd} 
+                    className={`w-full h-11 font-bold text-white shadow-lg rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] ${type === 'expense' ? 'bg-linear-to-r from-red-500 to-orange-500 shadow-red-500/25 hover:shadow-red-500/40' : 'bg-linear-to-r from-emerald-500 to-teal-500 shadow-emerald-500/25 hover:shadow-emerald-500/40'}`} 
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "Processando..." : (type === 'expense' ? "Confirmar Despesa" : "Confirmar Receita")}
+                  </Button>
+                </CardContent>
+              </Card>
+
+            </div>
+          </div>
         </div>
 
-        {/* Modal de Edição */}
+        {/* Modal de Edição (Mantido igual) */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[85vh] overflow-y-auto rounded-2xl p-6">
+          <DialogContent className="sm:max-w-[500px] w-full max-h-[90vh] overflow-y-auto rounded-2xl p-6">
             <DialogHeader>
               <DialogTitle className="text-xl">Editar Lançamento</DialogTitle>
               <DialogDescription>Faça ajustes na transação selecionada.</DialogDescription>
@@ -617,7 +666,7 @@ export default function DashboardPage() {
                     <Select value={editingTx.category} onValueChange={(v) => setEditingTx({ ...editingTx, category: v })}>
                       <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                         {CATEGORIES.map((cat) => <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>)}
+                         {ALL_CATEGORIES.map((cat) => <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -636,15 +685,15 @@ export default function DashboardPage() {
               </div>
             )}
             <DialogFooter className="gap-3 sm:gap-0">
-              <Button variant="outline" className="rounded-xl h-10 w-full sm:w-auto" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
-              <Button className="rounded-xl h-10 w-full sm:w-auto bg-violet-600 hover:bg-violet-700" onClick={handleSaveEdit}>Salvar Alterações</Button>
+              <Button variant="outline" className="rounded-xl h-10" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
+              <Button className="rounded-xl h-10 bg-violet-600 hover:bg-violet-700" onClick={handleSaveEdit}>Salvar Alterações</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Modal de Exclusão */}
+        {/* Modal de Exclusão (Mantido igual) */}
         <Dialog open={!!txToDelete} onOpenChange={(open) => !open && setTxToDelete(null)}>
-          <DialogContent className="sm:max-w-[425px] w-[95vw] rounded-2xl p-6">
+          <DialogContent className="sm:max-w-[425px] rounded-2xl p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-600">
                 <div className="p-2 bg-red-100 rounded-full">
@@ -657,7 +706,7 @@ export default function DashboardPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <DialogFooter className="flex flex-col sm:flex-row gap-3 mt-4">
+            <DialogFooter className="flex-col sm:flex-row gap-3 mt-4">
                <Button className="w-full sm:w-auto rounded-xl h-10" variant="ghost" onClick={() => setTxToDelete(null)}>
                 Cancelar
               </Button>
