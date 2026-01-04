@@ -34,14 +34,15 @@ import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction
 // --- Configurações Visuais ---
 const ALL_CATEGORIES = [
   // Despesas
+  { name: "Dízimo", type: "expense", color: "bg-violet-500/10 text-violet-600 border-violet-200/50 dark:text-violet-400 dark:border-violet-800/50" },
   { name: "Casa", type: "expense", color: "bg-blue-500/10 text-blue-600 border-blue-200/50 dark:text-blue-400 dark:border-blue-800/50" },
   { name: "Alimentação", type: "expense", color: "bg-orange-500/10 text-orange-600 border-orange-200/50 dark:text-orange-400 dark:border-orange-800/50" },
   { name: "Investimento", type: "expense", color: "bg-emerald-500/10 text-emerald-600 border-emerald-200/50 dark:text-emerald-400 dark:border-emerald-800/50" },
-  { name: "Dízimo", type: "expense", color: "bg-violet-500/10 text-violet-600 border-violet-200/50 dark:text-violet-400 dark:border-violet-800/50" },
   { name: "Compras", type: "expense", color: "bg-pink-500/10 text-pink-600 border-pink-200/50 dark:text-pink-400 dark:border-pink-800/50" },
   { name: "Streaming", type: "expense", color: "bg-indigo-500/10 text-indigo-600 border-indigo-200/50 dark:text-indigo-400 dark:border-indigo-800/50" },
   // Receitas
   { name: "Salário", type: "income", color: "bg-green-500/10 text-green-600 border-green-200/50 dark:text-green-400 dark:border-green-800/50" },
+  { name: "Rendimento", type: "income", color: "bg-green-500/10 text-green-600 border-green-200/50 dark:text-green-400 dark:border-green-800/50" },
   { name: "Vendas", type: "income", color: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50" },
   { name: "Serviços", type: "income", color: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50" },
   // Ambos
@@ -63,7 +64,7 @@ const formatDateDisplay = (dateString: string, options: Intl.DateTimeFormatOptio
   return date.toLocaleDateString('pt-BR', options);
 };
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 10;
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
@@ -619,10 +620,10 @@ export default function DashboardPage() {
                 <Table>
                   <TableHeader className="bg-zinc-50/50 dark:bg-zinc-900">
                     <TableRow className="hover:bg-transparent border-zinc-100 dark:border-zinc-800">
-                      <TableHead className="w-[50px] text-center font-semibold text-zinc-500">STS</TableHead>
+                      <TableHead className="w-15 text-center font-semibold text-zinc-500">STS</TableHead>
                       <TableHead className="font-semibold text-zinc-500">Descrição</TableHead>
-                      <TableHead className="w-[120px] font-semibold text-zinc-500">Data</TableHead>
-                      <TableHead className="text-right font-semibold text-zinc-500">Valor</TableHead>
+                      <TableHead className="w-50 font-semibold text-zinc-500">Valor</TableHead>
+                      <TableHead className="text-right  font-semibold text-zinc-500">Data</TableHead>
                       <TableHead className="w-10 text-center"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -672,7 +673,14 @@ export default function DashboardPage() {
                             </TableCell>
 
                             <TableCell className="align-middle whitespace-nowrap">
-                              <div className="flex flex-col text-sm">
+                              <span className={`font-bold text-base tracking-tight ${tx.type === 'expense' ? 'text-red-400' : (tx.type === 'income' ? 'text-emerald-600' : 'text-zinc-800 dark:text-zinc-200')}`}>
+                                {tx.type === 'expense' ? '- ' : '+ '}
+                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
+                              </span>
+                            </TableCell>
+
+                            <TableCell className="text-right align-middle whitespace-nowrap">
+                              <div className="flex flex-col items-end text-sm">
                                 <span className={`flex items-center font-medium ${overdue ? "text-red-500" : "text-zinc-500 dark:text-zinc-400"}`}>
                                   <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
                                   {formatDateDisplay(tx.dueDate)}
@@ -680,13 +688,6 @@ export default function DashboardPage() {
                                 </span>
                                 {paymentMethod === 'credit_card' && tx.type === 'expense' && <span className="text-[10px] text-zinc-400 ml-5 font-medium">Fatura</span>}
                               </div>
-                            </TableCell>
-
-                            <TableCell className="text-right align-middle whitespace-nowrap">
-                              <span className={`font-bold text-base tracking-tight ${tx.status === 'paid' ? 'text-zinc-400' : (tx.type === 'income' ? 'text-emerald-600' : 'text-zinc-800 dark:text-zinc-200')}`}>
-                                {tx.type === 'expense' ? '- ' : '+ '}
-                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
-                              </span>
                             </TableCell>
 
                             <TableCell className="text-center align-middle">
