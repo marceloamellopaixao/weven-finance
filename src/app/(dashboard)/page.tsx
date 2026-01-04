@@ -17,35 +17,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import {
-  LogOut, Plus, Wallet, TrendingDown, TrendingUp,
+  Plus, TrendingDown, TrendingUp,
   DollarSign, CalendarDays, MoreHorizontal, Pencil, Trash2,
-  AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle
+  AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
+import LandingPage from "@/components/marketing/LandingPage";
+import { Header } from "@/components/layout/Header"; // Importação do Header Fixo
+import Link from "next/link";
 
 // --- Configurações Visuais ---
 const ALL_CATEGORIES = [
-  // Despesas
   { name: "Dízimo", type: "expense", color: "bg-violet-500/10 text-violet-600 border-violet-200/50 dark:text-violet-400 dark:border-violet-800/50" },
   { name: "Casa", type: "expense", color: "bg-blue-500/10 text-blue-600 border-blue-200/50 dark:text-blue-400 dark:border-blue-800/50" },
   { name: "Alimentação", type: "expense", color: "bg-orange-500/10 text-orange-600 border-orange-200/50 dark:text-orange-400 dark:border-orange-800/50" },
   { name: "Investimento", type: "expense", color: "bg-emerald-500/10 text-emerald-600 border-emerald-200/50 dark:text-emerald-400 dark:border-emerald-800/50" },
   { name: "Compras", type: "expense", color: "bg-pink-500/10 text-pink-600 border-pink-200/50 dark:text-pink-400 dark:border-pink-800/50" },
   { name: "Streaming", type: "expense", color: "bg-indigo-500/10 text-indigo-600 border-indigo-200/50 dark:text-indigo-400 dark:border-indigo-800/50" },
-  // Receitas
   { name: "Salário", type: "income", color: "bg-green-500/10 text-green-600 border-green-200/50 dark:text-green-400 dark:border-green-800/50" },
   { name: "Rendimento", type: "income", color: "bg-green-500/10 text-green-600 border-green-200/50 dark:text-green-400 dark:border-green-800/50" },
   { name: "Vendas", type: "income", color: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50" },
   { name: "Serviços", type: "income", color: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50" },
-  // Ambos
   { name: "Outros", type: "both", color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50" },
 ];
 
@@ -65,11 +62,15 @@ const formatDateDisplay = (dateString: string, options: Intl.DateTimeFormatOptio
 };
 
 const ITEMS_PER_PAGE = 10;
+const FREE_PLAN_LIMIT = 20;
+const MERCADO_PAGO_LINKS = {
+  pro: "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=018bc64fcdfa44e384fc7d74c430be10",
+  premium: "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=cc495aef2c0043c5a272ad5f8594d78e"
+};
 
 export default function DashboardPage() {
-  const { user, logout } = useAuth();
+  const { user, userProfile } = useAuth(); // Logout removido daqui pois está no Header
   const { transactions, loading } = useTransactions();
-  const router = useRouter();
 
   // --- 1. STATES ---
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -99,6 +100,9 @@ export default function DashboardPage() {
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
   const [txToCancelSubscription, setTxToCancelSubscription] = useState<Transaction | null>(null);
+
+  // Modal de bloqueio de plano
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // --- 2. MEMOS ---
 
@@ -140,13 +144,11 @@ export default function DashboardPage() {
     return ALL_CATEGORIES.filter(c => c.type === type || c.type === 'both');
   }, [type]);
 
-  // --- 3. EFFECTS ---
+  const transactionsThisMonthCount = useMemo(() => {
+    return transactions.filter(t => t.dueDate.startsWith(selectedMonth)).length;
+  }, [transactions, selectedMonth]);
 
-  useEffect(() => {
-    if (!user && !loading) {
-      router.push("/login");
-    }
-  }, [user, loading, router]);
+  // --- 3. EFFECTS ---
 
   useEffect(() => {
     setCurrentPage(1);
@@ -159,7 +161,12 @@ export default function DashboardPage() {
     }
   }, [category]);
 
-  if (!user && !loading) return null;
+  // --- RETORNO CONDICIONAL ---
+  if (loading) return null;
+
+  if (!user) {
+    return <LandingPage />;
+  }
 
   // --- 4. HANDLERS ---
 
@@ -192,6 +199,12 @@ export default function DashboardPage() {
   const canGoForward = availableMonths.findIndex(m => m.value === selectedMonth) < availableMonths.length - 1;
 
   const handleAdd = async () => {
+    // BLOQUEIO DE PLANO
+    if (userProfile?.plan !== 'pro' && userProfile?.plan !== 'premium' && transactionsThisMonthCount >= FREE_PLAN_LIMIT) {
+      setShowUpgradeModal(true);
+      return;
+    }
+
     if (!desc || !amount || !category) return;
     setIsSubmitting(true);
     try {
@@ -199,8 +212,9 @@ export default function DashboardPage() {
       const count = Number(installmentsCount);
 
       if (isInstallment && count > 1) {
-        // Se for Streaming, NÃO divide (valor mensal). 
-        // Se for qualquer outra Despesa OU Receita Parcelada, DIVIDE.
+        // Lógica de Divisão:
+        // Se NÃO for Streaming, divide o valor total pelo nº parcelas.
+        // Se FOR Streaming, o valor é mensal, então mantém o que foi digitado.
         if (category !== 'Streaming') {
           finalAmount = finalAmount / count;
         }
@@ -296,30 +310,8 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 font-sans selection:bg-primary/20 selection:text-primary pb-20">
 
-      {/* Navbar Responsiva */}
-      <nav className="sticky top-0 z-40 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/80 backdrop-blur-xl px-4 md:px-8 h-16 flex items-center justify-between dark:bg-zinc-950/80 supports-backdrop-filter:bg-white/60">
-        <div className="flex items-center gap-3">
-          <div className="bg-linear-to-tr from-violet-600 to-indigo-600 p-2 rounded-xl shadow-lg shadow-violet-500/20">
-            <Wallet className="h-5 w-5 text-white" />
-          </div>
-          <span className="font-bold text-xl tracking-tight text-zinc-800 dark:text-zinc-100">
-            Weven<span className="text-violet-600">Finance</span>
-          </span>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right hidden md:block">
-            <p className="text-sm font-semibold leading-none text-zinc-900 dark:text-zinc-100">{user?.displayName}</p>
-            <Badge variant="secondary" className="mt-1 text-[10px] bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">PRO</Badge>
-          </div>
-          <Avatar className="h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 ring-transparent hover:ring-violet-200 transition-all cursor-pointer">
-            <AvatarImage src={user?.photoURL || ""} />
-            <AvatarFallback className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600">U</AvatarFallback>
-          </Avatar>
-          <Button variant="ghost" size="icon" onClick={logout} className="text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors">
-            <LogOut className="h-5 w-5" />
-          </Button>
-        </div>
-      </nav>
+      {/* Componente Header Fixo */}
+      <Header />
 
       <main className="container mx-auto p-3 md:p-8 space-y-6 max-w-7xl animate-in fade-in duration-500">
 
@@ -531,7 +523,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    {/* Switch de Parcelamento / Recorrência (Para AMBOS) */}
+                    {/* Switch de Parcelamento / Recorrência */}
                     <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
                       <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
                         <Layers className="h-3.5 w-3.5 text-violet-500" />
@@ -620,10 +612,10 @@ export default function DashboardPage() {
                 <Table>
                   <TableHeader className="bg-zinc-50/50 dark:bg-zinc-900">
                     <TableRow className="hover:bg-transparent border-zinc-100 dark:border-zinc-800">
-                      <TableHead className="w-15 text-center font-semibold text-zinc-500">STS</TableHead>
+                      <TableHead className="w-[50px] text-center font-semibold text-zinc-500">STS</TableHead>
                       <TableHead className="font-semibold text-zinc-500">Descrição</TableHead>
-                      <TableHead className="w-50 font-semibold text-zinc-500">Valor</TableHead>
-                      <TableHead className="text-right  font-semibold text-zinc-500">Data</TableHead>
+                      <TableHead className="w-[120px] font-semibold text-zinc-500">Data</TableHead>
+                      <TableHead className="text-right font-semibold text-zinc-500">Valor</TableHead>
                       <TableHead className="w-10 text-center"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -658,7 +650,6 @@ export default function DashboardPage() {
                                   </span>
                                   {tx.groupId && (
                                     <span className="flex items-center text-[10px] bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
-                                      {/* Ícone condicional: TV se for Streaming, Layers se for parcelamento normal */}
                                       {tx.category === 'Streaming' ? <Tv className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
                                       {tx.installmentCurrent}/{tx.installmentTotal}
                                     </span>
@@ -673,14 +664,7 @@ export default function DashboardPage() {
                             </TableCell>
 
                             <TableCell className="align-middle whitespace-nowrap">
-                              <span className={`font-bold text-base tracking-tight ${tx.type === 'expense' ? 'text-red-400' : (tx.type === 'income' ? 'text-emerald-600' : 'text-zinc-800 dark:text-zinc-200')}`}>
-                                {tx.type === 'expense' ? '- ' : '+ '}
-                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
-                              </span>
-                            </TableCell>
-
-                            <TableCell className="text-right align-middle whitespace-nowrap">
-                              <div className="flex flex-col items-end text-sm">
+                              <div className="flex flex-col text-sm">
                                 <span className={`flex items-center font-medium ${overdue ? "text-red-500" : "text-zinc-500 dark:text-zinc-400"}`}>
                                   <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
                                   {formatDateDisplay(tx.dueDate)}
@@ -688,6 +672,13 @@ export default function DashboardPage() {
                                 </span>
                                 {paymentMethod === 'credit_card' && tx.type === 'expense' && <span className="text-[10px] text-zinc-400 ml-5 font-medium">Fatura</span>}
                               </div>
+                            </TableCell>
+
+                            <TableCell className="text-right align-middle whitespace-nowrap">
+                              <span className={`font-bold text-base tracking-tight ${tx.status === 'paid' ? 'text-zinc-400' : (tx.type === 'income' ? 'text-emerald-600' : 'text-zinc-800 dark:text-zinc-200')}`}>
+                                {tx.type === 'expense' ? '- ' : '+ '}
+                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
+                              </span>
                             </TableCell>
 
                             <TableCell className="text-center align-middle">
@@ -701,7 +692,6 @@ export default function DashboardPage() {
                                       <Pencil className="mr-2 h-3.5 w-3.5" /> Editar
                                     </DropdownMenuItem>
 
-                                    {/* Exibir opção de Encerrar Assinatura APENAS para Streaming */}
                                     {tx.groupId && tx.category === 'Streaming' && (
                                       <>
                                         <DropdownMenuSeparator />
@@ -893,6 +883,41 @@ export default function DashboardPage() {
                 Confirmar Encerramento
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de UPGRADE (Bloqueio do Plano) */}
+        <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
+          <DialogContent className="sm:max-w-[425px] rounded-2xl p-8 border-violet-500 border-2">
+            <DialogHeader className="text-center items-center">
+              <div className="p-4 bg-violet-100 dark:bg-violet-900/30 rounded-full mb-4 animate-bounce">
+                <Crown className="h-8 w-8 text-violet-600 dark:text-violet-400" />
+              </div>
+              <DialogTitle className="text-2xl font-bold text-violet-600">Limite Atingido!</DialogTitle>
+              <DialogDescription className="text-base text-zinc-600 dark:text-zinc-400 mt-2">
+                Você atingiu o limite de {FREE_PLAN_LIMIT} lançamentos mensais do plano Grátis.
+                <br /><br />
+                Faça o upgrade para o <strong>Plano Pro ou Premium</strong> e tenha acesso ilimitado e muito mais.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex flex-col gap-4 mt-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                <Link href={MERCADO_PAGO_LINKS.pro} target="_blank" className="w-full">
+                  <Button className="w-full h-12 rounded-xl bg-violet-600 hover:bg-violet-700 text-lg font-bold shadow-lg shadow-violet-500/25">
+                    Assinar Pro
+                  </Button>
+                </Link>
+                <Link href={MERCADO_PAGO_LINKS.premium} target="_blank" className="w-full">
+                  <Button variant="outline" className="w-full h-12 rounded-xl border-violet-200 text-violet-700 hover:bg-violet-50">
+                    Assinar Premium
+                  </Button>
+                </Link>
+              </div>
+
+            </DialogFooter>
+            <Button variant="ghost" className="w-full" onClick={() => setShowUpgradeModal(false)}>
+              Continuar no Grátis
+            </Button>
           </DialogContent>
         </Dialog>
 
