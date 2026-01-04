@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { getAllUsers, updateUserStatus, updateUserPlan } from "@/services/userService";
+import { 
+  getAllUsers, 
+  updateUserStatus, 
+  updateUserPlan, 
+  resetUserFinancialData, 
+  deleteUserPermanently 
+} from "@/services/userService";
 import { UserProfile, UserStatus, UserPlan } from "@/types/user";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +16,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShieldAlert, UserX, CheckCircle2, Search } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { 
+  ShieldAlert, UserX, CheckCircle2, Search, MoreVertical, 
+  Trash2, RefreshCcw, FileWarning 
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 export default function AdminPage() {
@@ -19,6 +30,10 @@ export default function AdminPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoadingData, setIsLoadingData] = useState(true);
+
+  // Estados para Modais de Confirmação
+  const [userToReset, setUserToReset] = useState<UserProfile | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
 
   // Proteção de Rota
   useEffect(() => {
@@ -44,17 +59,45 @@ export default function AdminPage() {
   };
 
   const handleStatusChange = async (uid: string, newStatus: string) => {
-    // Tipagem segura: convertemos a string para o tipo UserStatus
     const status = newStatus as UserStatus;
     await updateUserStatus(uid, status);
     setUsers(users.map(u => u.uid === uid ? { ...u, status } : u));
   };
 
   const handlePlanChange = async (uid: string, newPlan: string) => {
-    // Tipagem segura: convertemos a string para o tipo UserPlan
     const plan = newPlan as UserPlan;
     await updateUserPlan(uid, plan);
     setUsers(users.map(u => u.uid === uid ? { ...u, plan } : u));
+  };
+
+  // Ação: Resetar Dados
+  const confirmResetData = async () => {
+    if (!userToReset) return;
+    try {
+      await resetUserFinancialData(userToReset.uid);
+      alert(`Dados financeiros de ${userToReset.displayName} foram apagados.`);
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao resetar dados.");
+    } finally {
+      setUserToReset(null);
+    }
+  };
+
+  // Ação: Excluir Usuário
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    try {
+      await deleteUserPermanently(userToDelete.uid);
+      // Remove da lista local
+      setUsers(users.filter(u => u.uid !== userToDelete.uid));
+      alert(`Usuário ${userToDelete.displayName} removido do sistema.`);
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao excluir usuário.");
+    } finally {
+      setUserToDelete(null);
+    }
   };
 
   const filteredUsers = users.filter(u => 
@@ -72,7 +115,7 @@ export default function AdminPage() {
             <ShieldAlert className="h-8 w-8 text-red-600" />
             Painel Administrativo
           </h1>
-          <p className="text-zinc-500">Gerencie o acesso e planos dos seus clientes.</p>
+          <p className="text-zinc-500">Gerencie o acesso, planos e dados dos seus clientes.</p>
         </div>
         <div className="relative w-full md:w-72">
           <Search className="absolute left-3 top-3 h-4 w-4 text-zinc-400" />
@@ -98,28 +141,28 @@ export default function AdminPage() {
                   <TableHead>Usuário</TableHead>
                   <TableHead>Data Cadastro</TableHead>
                   <TableHead>Plano Atual</TableHead>
-                  <TableHead>Status Acesso</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoadingData ? (
                   <TableRow><TableCell colSpan={5} className="h-24 text-center">Carregando...</TableCell></TableRow>
-                ) : filteredUsers.map((user) => (
-                  <TableRow key={user.uid}>
+                ) : filteredUsers.map((userRow) => (
+                  <TableRow key={userRow.uid}>
                     <TableCell>
                       <div>
-                        <p className="font-medium text-zinc-900 dark:text-zinc-100">{user.displayName}</p>
-                        <p className="text-xs text-zinc-500">{user.email}</p>
+                        <p className="font-medium text-zinc-900 dark:text-zinc-100">{userRow.displayName}</p>
+                        <p className="text-xs text-zinc-500">{userRow.email}</p>
                       </div>
                     </TableCell>
                     <TableCell className="text-zinc-500 text-xs">
-                      {new Date(user.createdAt).toLocaleDateString()}
+                      {new Date(userRow.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
                       <Select 
-                        defaultValue={user.plan} 
-                        onValueChange={(val) => handlePlanChange(user.uid, val)}
+                        defaultValue={userRow.plan} 
+                        onValueChange={(val) => handlePlanChange(userRow.uid, val)}
                       >
                         <SelectTrigger className="w-[120px] h-8 text-xs border-zinc-200">
                           <SelectValue />
@@ -133,31 +176,61 @@ export default function AdminPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Badge variant={user.status === 'active' ? 'default' : 'destructive'} className={user.status === 'active' ? 'bg-emerald-500 hover:bg-emerald-600' : ''}>
-                          {user.status === 'active' ? 'Ativo' : 'Bloqueado'}
+                        <Badge variant={userRow.status === 'active' ? 'default' : 'destructive'} className={userRow.status === 'active' ? 'bg-emerald-500 hover:bg-emerald-600' : ''}>
+                          {userRow.status === 'active' ? 'Ativo' : 'Bloqueado'}
                         </Badge>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      {user.status === 'active' ? (
-                        <Button 
-                          variant="destructive" 
-                          size="sm" 
-                          className="h-8 text-xs"
-                          onClick={() => handleStatusChange(user.uid, 'inactive')}
-                        >
-                          <UserX className="h-3 w-3 mr-1" /> Bloquear
-                        </Button>
-                      ) : (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="h-8 text-xs border-emerald-500 text-emerald-600 hover:bg-emerald-50"
-                          onClick={() => handleStatusChange(user.uid, 'active')}
-                        >
-                          <CheckCircle2 className="h-3 w-3 mr-1" /> Liberar
-                        </Button>
-                      )}
+                      <div className="flex justify-end items-center gap-2">
+                        {/* Botão Rápido de Status */}
+                        {userRow.status === 'active' ? (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-zinc-400 hover:text-red-500"
+                            title="Bloquear Acesso"
+                            onClick={() => handleStatusChange(userRow.uid, 'inactive')}
+                          >
+                            <UserX className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-emerald-500 hover:text-emerald-600"
+                            title="Liberar Acesso"
+                            onClick={() => handleStatusChange(userRow.uid, 'active')}
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                          </Button>
+                        )}
+
+                        {/* Menu de Ações Avançadas */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Opções Avançadas</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              className="text-amber-600 focus:text-amber-700 cursor-pointer"
+                              onClick={() => setUserToReset(userRow)}
+                            >
+                              <RefreshCcw className="mr-2 h-4 w-4" /> Resetar Financeiro
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              className="text-red-600 focus:text-red-700 cursor-pointer"
+                              onClick={() => setUserToDelete(userRow)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Excluir Cadastro
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -166,6 +239,59 @@ export default function AdminPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* --- MODAIS DE CONFIRMAÇÃO --- */}
+
+      {/* Modal Resetar Dados */}
+      <Dialog open={!!userToReset} onOpenChange={(open) => !open && setUserToReset(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <RefreshCcw className="h-5 w-5" />
+              Resetar Dados Financeiros
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              Você está prestes a apagar <strong>TODAS</strong> as transações, receitas e despesas de:
+              <br/>
+              <span className="font-bold text-foreground block mt-1">{userToReset?.displayName}</span>
+              <br/>
+              Essa ação não pode ser desfeita. O usuário manterá o plano e o acesso.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setUserToReset(null)}>Cancelar</Button>
+            <Button variant="default" className="bg-amber-600 hover:bg-amber-700" onClick={confirmResetData}>
+              Confirmar Reset
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Excluir Usuário */}
+      <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <FileWarning className="h-5 w-5" />
+              Excluir Usuário Definitivamente
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              Isso apagará o cadastro e todos os dados de:
+              <br/>
+              <span className="font-bold text-foreground block mt-1">{userToDelete?.displayName}</span>
+              <br/>
+              O usuário perderá o acesso imediatamente.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setUserToDelete(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={confirmDeleteUser}>
+              Confirmar Exclusão
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
