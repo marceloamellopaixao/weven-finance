@@ -10,7 +10,6 @@ const strToBuf = (str: string) => new TextEncoder().encode(str);
 const bufToStr = (buf: ArrayBuffer) => new TextDecoder().decode(buf);
 
 // Helper para converter buffer em Base64 (para salvar no Firestore)
-// CORREÇÃO: Aceita tanto ArrayBuffer quanto Uint8Array para resolver o erro TS2345
 const bufToBase64 = (buf: ArrayBuffer | Uint8Array) => {
   const binary = String.fromCharCode(...new Uint8Array(buf));
   return window.btoa(binary);
@@ -29,6 +28,9 @@ const base64ToBuf = (str: string) => {
 // Obtém ou cria uma chave de criptografia única para este dispositivo/usuário
 async function getKey(uid: string): Promise<CryptoKey> {
   const STORAGE_KEY = `weven_key_${uid}`;
+  // Verifica se estamos no ambiente do navegador
+  if (typeof window === 'undefined') return {} as CryptoKey;
+
   const storedKey = localStorage.getItem(STORAGE_KEY);
 
   if (storedKey) {
@@ -58,6 +60,8 @@ async function getKey(uid: string): Promise<CryptoKey> {
 
 export const encryptData = async (data: string | number, uid: string): Promise<string> => {
   try {
+    if (typeof window === 'undefined') return String(data);
+
     const key = await getKey(uid);
     const iv = window.crypto.getRandomValues(new Uint8Array(IV_LENGTH));
     const encodedData = strToBuf(String(data));
@@ -78,6 +82,7 @@ export const encryptData = async (data: string | number, uid: string): Promise<s
 
 export const decryptData = async (cipherText: string, uid: string): Promise<string> => {
   try {
+    if (typeof window === 'undefined') return cipherText;
     if (!cipherText || !cipherText.includes(":")) return cipherText; // Não está encriptado
 
     const [ivB64, contentB64] = cipherText.split(":");
@@ -93,8 +98,26 @@ export const decryptData = async (cipherText: string, uid: string): Promise<stri
 
     return bufToStr(decryptedBuffer);
   } catch {
-    // CORREÇÃO: Variável 'e' removida para satisfazer a regra no-unused-vars
-    // Se falhar (ex: chave errada ou dado antigo), retorna o original
     return cipherText;
   }
 };
+
+// NOVO: Gera um fingerprint (hash visual) da chave para mostrar na UI
+export const getKeyFingerprint = async (uid: string): Promise<string> => {
+    try {
+        if (typeof window === 'undefined') return "Carregando...";
+        
+        const key = await getKey(uid);
+        // Exporta a chave bruta
+        const exported = await window.crypto.subtle.exportKey("raw", key);
+        // Gera um hash SHA-256 da chave para não expor a chave real, mas criar um identificador único
+        const hashBuffer = await window.crypto.subtle.digest("SHA-256", exported);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        
+        // Retorna um formato amigável
+        return `key_${hashHex.substring(0, 8)}...${hashHex.substring(hashHex.length - 8)}_e2ee`;
+    } catch {
+        return "Chave não inicializada";
+    }
+}
