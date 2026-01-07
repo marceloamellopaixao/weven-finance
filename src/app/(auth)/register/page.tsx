@@ -37,17 +37,11 @@ export default function RegisterPage() {
     setIsLoading(true);
     try {
       await registerWithEmail(name, email, password);
-      router.push("/");
-    } catch (err: unknown) { // CORREÇÃO: Substituído 'any' por 'unknown'
+      // SUCESSO: Redireciona para a tela de aviso de verificação
+      router.push("/verify-email");
+    } catch (err: unknown) {
       console.error(err);
-      
-      // Verificação de tipo segura (Type Narrowing)
-      if (
-        typeof err === 'object' && 
-        err !== null && 
-        'code' in err && 
-        (err as { code: string }).code === 'auth/email-already-in-use'
-      ) {
+      if (typeof err === 'object' && err !== null && 'code' in err && (err as { code: string }).code === 'auth/email-already-in-use') {
         setError("Este e-mail já está cadastrado.");
       } else {
         setError("Erro ao criar conta. Tente novamente.");
@@ -60,7 +54,6 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 relative overflow-hidden font-sans px-4">
       
-      {/* Background Decorativo */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-[100px]" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[100px]" />
