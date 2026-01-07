@@ -21,6 +21,8 @@ interface AuthContextType {
   user: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
+  privacyMode: boolean;
+  togglePrivacyMode: () => void;
   signInWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   registerWithEmail: (name: string, email: string, pass: string) => Promise<void>;
@@ -33,12 +35,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [privacyMode, setPrivacyMode] = useState(false);
+  
   const router = useRouter();
 
+  // 1. Efeito isolado para carregar a preferência de privacidade (roda apenas uma vez na montagem)
+  useEffect(() => {
+    const storedPrivacy = localStorage.getItem("weven_privacy_mode");
+    if (storedPrivacy === "true") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPrivacyMode(true);
+    }
+  }, []);
+
+  // 2. Efeito para monitorar a autenticação
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        // Recarrega o usuário para garantir que o status de emailVerified esteja atualizado
+        // Recarrega o usuário para garantir status atualizado
         await currentUser.reload();
         
         const userRef = doc(db, "users", currentUser.uid);
@@ -57,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           setUserProfile(profile);
         } else {
-          // Perfil padrão
+          // Cria perfil padrão se não existir
           const newProfile: UserProfile = {
             uid: currentUser.uid,
             email: currentUser.email || "",
@@ -81,6 +95,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, [router]);
 
+  const togglePrivacyMode = () => {
+    setPrivacyMode((prev) => {
+      const newValue = !prev;
+      localStorage.setItem("weven_privacy_mode", String(newValue));
+      return newValue;
+    });
+  };
+
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     await signInWithPopup(auth, provider);
@@ -89,18 +111,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithEmail = async (email: string, pass: string) => {
     await signInWithEmailAndPassword(auth, email, pass);
-    // O redirecionamento e verificação ocorrem no useEffect ou na página de destino
     router.push("/");
   };
 
   const registerWithEmail = async (name: string, email: string, pass: string) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
     await updateProfile(userCredential.user, { displayName: name });
-    
-    // ENVIAR E-MAIL DE VERIFICAÇÃO
     await sendEmailVerification(userCredential.user);
-    
-    // Não redireciona para a home logada imediatamente, deixa a página de registro cuidar do fluxo
   };
 
   const logout = async () => {
@@ -110,7 +127,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading, signInWithGoogle, loginWithEmail, registerWithEmail, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      userProfile, 
+      loading, 
+      privacyMode, 
+      togglePrivacyMode, 
+      signInWithGoogle, 
+      loginWithEmail, 
+      registerWithEmail, 
+      logout 
+    }}>
       {!loading && children}
     </AuthContext.Provider>
   );
