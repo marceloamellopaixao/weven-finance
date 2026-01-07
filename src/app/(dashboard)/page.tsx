@@ -22,9 +22,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import {
-  Plus, TrendingDown, TrendingUp,
-  DollarSign, CalendarDays, MoreHorizontal, Pencil, Trash2,
-  AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown
+  Plus, DollarSign, CalendarDays, MoreHorizontal, Pencil, Trash2,
+  AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown,
+  Eye, EyeOff,
+  TrendingUp,
+  TrendingDown
 } from "lucide-react";
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
 import LandingPage from "@/components/marketing/LandingPage";
@@ -62,14 +64,14 @@ const formatDateDisplay = (dateString: string, options: Intl.DateTimeFormatOptio
 };
 
 const ITEMS_PER_PAGE = 10;
-const FREE_PLAN_LIMIT = 50; 
+const FREE_PLAN_LIMIT = 50;
 const MERCADO_PAGO_LINKS = {
   pro: "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=018bc64fcdfa44e384fc7d74c430be10",
   premium: "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=cc495aef2c0043c5a272ad5f8594d78e"
 };
 
 export default function DashboardPage() {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, privacyMode, togglePrivacyMode } = useAuth(); // Pegando estado global
   const { transactions, loading } = useTransactions();
   const router = useRouter();
 
@@ -101,9 +103,15 @@ export default function DashboardPage() {
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
   const [txToCancelSubscription, setTxToCancelSubscription] = useState<Transaction | null>(null);
-  
+
   // Modal de bloqueio de plano
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  // Helper para formatar moeda com suporte a privacidade
+  const formatCurrency = (value: number) => {
+    if (privacyMode) return "R$ ••••••";
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  };
 
   // --- 2. TRAVA DE SEGURANÇA DE E-MAIL ---
   useEffect(() => {
@@ -324,18 +332,18 @@ export default function DashboardPage() {
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Visão Geral</h1>
           <p className="text-sm md:text-base text-zinc-500 dark:text-zinc-400 mt-1">Gerencie seu fluxo de caixa e previsões.</p>
         </div>
-        
+
         <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm w-full md:w-auto justify-between md:justify-start">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-9 w-9 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0" 
-              onClick={() => changeMonth(-1)}
-              disabled={!canGoBack} 
-            >
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0"
+            onClick={() => changeMonth(-1)}
+            disabled={!canGoBack}
+          >
             <ChevronLeft className="h-5 w-5" />
           </Button>
-          
+
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
             <SelectTrigger className="w-full md:w-[200px] h-9 border-none shadow-none focus:ring-0 font-semibold text-sm bg-transparent flex justify-center text-center">
               <div className="flex items-center gap-2">
@@ -352,12 +360,12 @@ export default function DashboardPage() {
             </SelectContent>
           </Select>
 
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-9 w-9 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0" 
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0"
             onClick={() => changeMonth(1)}
-            disabled={!canGoForward} 
+            disabled={!canGoForward}
           >
             <ChevronRight className="h-5 w-5" />
           </Button>
@@ -369,14 +377,21 @@ export default function DashboardPage() {
         <Card className="relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl group active:scale-[0.99] transition-transform">
           <div className="absolute inset-0 bg-linear-to-br from-blue-500/5 to-transparent pointer-events-none" />
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-            <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Saldo Consolidado</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Saldo Consolidado</CardTitle>
+              {/* Botão de Olho Rápido */}
+              <button onClick={togglePrivacyMode} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                {privacyMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </button>
+            </div>
             <div className="p-2 bg-blue-500/10 rounded-xl text-blue-600 dark:text-blue-400">
               <DollarSign className="h-5 w-5" />
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className={`text-3xl font-bold tracking-tight ${realCurrentBalance < 0 ? 'text-red-500' : 'text-zinc-900 dark:text-zinc-50'}`}>
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(realCurrentBalance)}
+            {/* Uso do formatCurrency aqui */}
+            <div className={`text-3xl font-bold tracking-tight ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (realCurrentBalance < 0 ? 'text-red-500' : 'text-zinc-900 dark:text-zinc-50')}`}>
+              {formatCurrency(realCurrentBalance)}
             </div>
             <p className="text-xs text-zinc-400 mt-2 font-medium">Caixa atual disponível</p>
           </CardContent>
@@ -391,18 +406,19 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className={`text-3xl font-bold tracking-tight ${monthBalance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-              {monthBalance > 0 ? "+" : ""}
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(monthBalance)}
+            <div className={`text-3xl font-bold tracking-tight ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (monthBalance >= 0 ? 'text-emerald-600' : 'text-red-600')}`}>
+              {!privacyMode && (monthBalance > 0 ? "+" : "")}
+              {formatCurrency(monthBalance)}
             </div>
+            {/* Também ocultar detalhes pequenos se estiver em modo privacidade */}
             <div className="flex items-center gap-3 mt-2 text-xs font-medium">
               <span className="flex items-center text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-md">
                 <ArrowUpCircle className="w-3 h-3 mr-1" />
-                {new Intl.NumberFormat('pt-BR', { compactDisplay: "short", notation: "compact", style: 'currency', currency: 'BRL' }).format(monthIncome)}
+                {formatCurrency(monthIncome)}
               </span>
               <span className="flex items-center text-red-600 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-md">
                 <ArrowDownCircle className="w-3 h-3 mr-1" />
-                {new Intl.NumberFormat('pt-BR', { compactDisplay: "short", notation: "compact", style: 'currency', currency: 'BRL' }).format(monthExpense)}
+                {formatCurrency(monthExpense)}
               </span>
             </div>
           </CardContent>
@@ -416,8 +432,8 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className={`text-3xl font-bold tracking-tight ${projectedAccumulatedBalance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(projectedAccumulatedBalance)}
+            <div className={`text-3xl font-bold tracking-tight ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (projectedAccumulatedBalance >= 0 ? 'text-emerald-600' : 'text-red-600')}`}>
+              {formatCurrency(projectedAccumulatedBalance)}
             </div>
             <p className="text-xs text-zinc-400 mt-2 font-medium">Projeção ao fim do mês</p>
           </CardContent>
@@ -426,14 +442,14 @@ export default function DashboardPage() {
 
       {/* --- Layout Principal --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 items-start">
-        
+
         {/* --- BLOCO DIREITA: FORMULÁRIO (PRIMEIRO NO MOBILE) --- */}
         <div className="lg:col-span-1 order-1 lg:order-2">
           <div className="sticky top-24 space-y-6">
-            
+
             <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden ring-1 ring-zinc-100 dark:ring-zinc-800">
               <div className={`h-2 w-full bg-linear-to-r ${type === 'expense' ? 'from-red-500 to-orange-500' : 'from-emerald-500 to-teal-500'}`} />
-              
+
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg flex items-center gap-3">
                   <div className={`p-2 rounded-xl text-white shadow-lg ${type === 'expense' ? 'bg-linear-to-br from-red-500 to-orange-500 shadow-red-500/20' : 'bg-linear-to-br from-emerald-500 to-teal-500 shadow-emerald-500/20'}`}>
@@ -442,16 +458,16 @@ export default function DashboardPage() {
                   {type === 'expense' ? 'Nova Despesa' : 'Nova Receita'}
                 </CardTitle>
               </CardHeader>
-              
+
               <CardContent className="space-y-5">
                 <div className="grid grid-cols-2 gap-1 p-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl">
-                  <button 
+                  <button
                     onClick={() => changeType('expense')}
                     className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 ${type === 'expense' ? 'bg-white dark:bg-zinc-700 shadow-sm text-red-600' : 'text-zinc-500 hover:text-zinc-700'}`}
                   >
                     Despesa
                   </button>
-                  <button 
+                  <button
                     onClick={() => changeType('income')}
                     className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 ${type === 'income' ? 'bg-white dark:bg-zinc-700 shadow-sm text-emerald-600' : 'text-zinc-500 hover:text-zinc-700'}`}
                   >
@@ -462,35 +478,35 @@ export default function DashboardPage() {
                 <div className="space-y-4">
                   <div>
                     <Label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">Descrição</Label>
-                    <Input 
-                      className="mt-1.5 h-12 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl" 
-                      placeholder={type === 'expense' ? "Ex: Netflix" : "Ex: Salário"} 
-                      value={desc} 
-                      onChange={e => setDesc(e.target.value)} 
+                    <Input
+                      className="mt-1.5 h-12 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl"
+                      placeholder={type === 'expense' ? "Ex: Netflix" : "Ex: Salário"}
+                      value={desc}
+                      onChange={e => setDesc(e.target.value)}
                     />
                   </div>
                   <div>
                     <Label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">Valor Total</Label>
                     <div className="relative mt-1.5">
                       <span className="absolute left-3.5 top-3 text-zinc-400 font-semibold">R$</span>
-                      <Input 
-                        type="number" 
-                        className="pl-10 h-12 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl font-semibold text-lg" 
-                        placeholder="0,00" 
-                        value={amount} 
-                        onChange={e => setAmount(e.target.value)} 
+                      <Input
+                        type="number"
+                        className="pl-10 h-12 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl font-semibold text-lg"
+                        placeholder="0,00"
+                        value={amount}
+                        onChange={e => setAmount(e.target.value)}
                       />
                     </div>
                     <p className="text-[10px] text-zinc-400 mt-1.5 text-right font-medium">
-                      {isInstallment && type === 'expense' 
-                        ? (category === 'Streaming' ? "Valor Mensal (Assinatura)" : "O sistema dividirá este valor") 
+                      {isInstallment && type === 'expense'
+                        ? (category === 'Streaming' ? "Valor Mensal (Assinatura)" : "O sistema dividirá este valor")
                         : "Valor único"}
                     </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                   <div className="space-y-1.5">
+                  <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-zinc-500 ml-1">Categoria</Label>
                     <Select onValueChange={setCategory} value={category}>
                       <SelectTrigger className="h-12 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -519,19 +535,19 @@ export default function DashboardPage() {
                         <Input type="date" className="h-10 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={date} onChange={e => setDate(e.target.value)} />
                       </div>
                     )}
-                    
+
                     <div className={`space-y-1.5 ${type === 'income' ? 'col-span-2' : ''}`}>
                       <Label className={`text-[10px] font-bold uppercase tracking-wider ${type === 'expense' ? 'text-red-500' : 'text-emerald-600'}`}>{type === 'expense' ? 'Vencimento' : 'Data Crédito'}</Label>
                       <Input type="date" className="h-10 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={dueDate} onChange={e => setDueDate(e.target.value)} />
                     </div>
                   </div>
-                  
+
                   {/* Switch de Parcelamento / Recorrência */}
                   <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
                     <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
-                      <Layers className="h-3.5 w-3.5 text-violet-500" /> 
-                      {type === 'expense' 
-                        ? (category === 'Streaming' ? 'Recorrência (Mensal)' : 'Compra Parcelada?') 
+                      <Layers className="h-3.5 w-3.5 text-violet-500" />
+                      {type === 'expense'
+                        ? (category === 'Streaming' ? 'Recorrência (Mensal)' : 'Compra Parcelada?')
                         : 'Recebimento Parcelado?'}
                     </Label>
                     <Switch id="inst-switch" className="scale-100 data-[state=checked]:bg-violet-600" checked={isInstallment} onCheckedChange={setIsInstallment} />
@@ -540,16 +556,16 @@ export default function DashboardPage() {
                   {isInstallment && (
                     <div className="animate-in slide-in-from-top-2 pt-1">
                       <Label className="text-xs font-medium text-zinc-500">
-                         {category === 'Streaming' ? 'Meses de Assinatura (Previsão)' : 'Número de Parcelas'}
+                        {category === 'Streaming' ? 'Meses de Assinatura (Previsão)' : 'Número de Parcelas'}
                       </Label>
                       <Input type="number" className="h-10 mt-1.5 bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" min="2" max="60" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
                     </div>
                   )}
                 </div>
 
-                <Button 
-                  onClick={handleAdd} 
-                  className={`w-full h-12 font-bold text-white shadow-lg rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] ${type === 'expense' ? 'bg-linear-to-r from-red-500 to-orange-500 shadow-red-500/25 hover:shadow-red-500/40' : 'bg-linear-to-r from-emerald-500 to-teal-500 shadow-emerald-500/25 hover:shadow-emerald-500/40'}`} 
+                <Button
+                  onClick={handleAdd}
+                  className={`w-full h-12 font-bold text-white shadow-lg rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] ${type === 'expense' ? 'bg-linear-to-r from-red-500 to-orange-500 shadow-red-500/25 hover:shadow-red-500/40' : 'bg-linear-to-r from-emerald-500 to-teal-500 shadow-emerald-500/25 hover:shadow-emerald-500/40'}`}
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? "Processando..." : (type === 'expense' ? "Confirmar Despesa" : "Confirmar Receita")}
@@ -562,7 +578,7 @@ export default function DashboardPage() {
 
         {/* --- BLOCO ESQUERDA: LISTA E GRÁFICO (SEGUNDO NO MOBILE) --- */}
         <div className="lg:col-span-2 space-y-8 order-2 lg:order-1">
-          
+
           <Card className="border-none shadow-lg shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Fluxo Diário</CardTitle>
@@ -610,7 +626,7 @@ export default function DashboardPage() {
                 </div>
               </div>
             </CardHeader>
-            
+
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader className="bg-zinc-50/50 dark:bg-zinc-900">
@@ -630,23 +646,23 @@ export default function DashboardPage() {
                       const overdue = isOverdue(tx);
                       return (
                         <TableRow key={tx.id} className={`group border-zinc-100 dark:border-zinc-800 transition-all duration-200 ${overdue ? 'bg-red-50/50 dark:bg-red-900/10' : 'hover:bg-zinc-50/80 dark:hover:bg-zinc-800/50'}`}>
-                          
+
                           <TableCell className="text-center align-middle">
                             <div className="flex justify-center">
-                              <Checkbox 
+                              <Checkbox
                                 checked={tx.status === 'paid'}
-                                onCheckedChange={() => { if(tx.id) toggleTransactionStatus(user!.uid, tx.id, tx.status); }}
+                                onCheckedChange={() => { if (tx.id) toggleTransactionStatus(user!.uid, tx.id, tx.status); }}
                                 className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500 border-zinc-300 w-5 h-5 rounded-md transition-all cursor-pointer"
                               />
                             </div>
                           </TableCell>
-                          
+
                           <TableCell className="align-middle">
                             <div className="flex flex-col gap-1.5 py-1 whitespace-nowrap">
                               <span className={`font-semibold text-sm truncate max-w-[140px] md:max-w-[200px] ${tx.status === 'paid' ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'}`}>
                                 {tx.description}
                               </span>
-                              
+
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getCategoryStyle(tx.category)}`}>
                                   {tx.category}
@@ -658,14 +674,14 @@ export default function DashboardPage() {
                                   </span>
                                 )}
                                 {tx.type === 'income' && (
-                                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold dark:bg-emerald-900/20 dark:text-emerald-400">
-                                     Receita
-                                   </span>
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold dark:bg-emerald-900/20 dark:text-emerald-400">
+                                    Receita
+                                  </span>
                                 )}
                               </div>
                             </div>
                           </TableCell>
-                          
+
                           <TableCell className="align-middle whitespace-nowrap">
                             <div className="flex flex-col text-sm">
                               <span className={`flex items-center font-medium ${overdue ? "text-red-500" : "text-zinc-500 dark:text-zinc-400"}`}>
@@ -676,37 +692,37 @@ export default function DashboardPage() {
                               {paymentMethod === 'credit_card' && tx.type === 'expense' && <span className="text-[10px] text-zinc-400 ml-5 font-medium">Fatura</span>}
                             </div>
                           </TableCell>
-                          
+
                           <TableCell className="text-right align-middle whitespace-nowrap">
                             <span className={`font-bold text-base tracking-tight ${tx.status === 'paid' ? 'text-zinc-400' : (tx.type === 'income' ? 'text-emerald-600' : 'text-zinc-800 dark:text-zinc-200')}`}>
                               {tx.type === 'expense' ? '- ' : '+ '}
                               {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
                             </span>
                           </TableCell>
-                          
+
                           <TableCell className="text-center align-middle">
                             <div className="flex justify-center">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg"><MoreHorizontal className="h-4 w-4 text-zinc-400"/></Button>
+                                  <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg"><MoreHorizontal className="h-4 w-4 text-zinc-400" /></Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-40 p-1 rounded-xl shadow-xl border-zinc-100 dark:border-zinc-800">
                                   <DropdownMenuItem onClick={() => openEditModal(tx)} className="cursor-pointer rounded-lg text-xs font-medium">
-                                    <Pencil className="mr-2 h-3.5 w-3.5"/> Editar
+                                    <Pencil className="mr-2 h-3.5 w-3.5" /> Editar
                                   </DropdownMenuItem>
-                                  
+
                                   {tx.groupId && tx.category === 'Streaming' && (
                                     <>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem onClick={() => setTxToCancelSubscription(tx)} className="text-amber-600 focus:text-amber-700 cursor-pointer rounded-lg text-xs font-medium focus:bg-amber-50 dark:focus:bg-amber-900/20">
-                                        <XCircle className="mr-2 h-3.5 w-3.5"/> Encerrar Assinatura
+                                        <XCircle className="mr-2 h-3.5 w-3.5" /> Encerrar Assinatura
                                       </DropdownMenuItem>
                                       <DropdownMenuSeparator />
                                     </>
                                   )}
 
                                   <DropdownMenuItem onClick={() => setTxToDelete(tx)} className="text-red-600 focus:text-red-600 cursor-pointer rounded-lg text-xs font-medium focus:bg-red-50 dark:focus:bg-red-900/20">
-                                    <Trash2 className="mr-2 h-3.5 w-3.5"/> Excluir
+                                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
@@ -726,18 +742,18 @@ export default function DashboardPage() {
                 Página {currentPage} de {totalPages || 1}
               </div>
               <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="h-8 text-xs disabled:opacity-50 rounded-lg"
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
                 >
                   Anterior
                 </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="h-8 text-xs disabled:opacity-50 rounded-lg"
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage >= totalPages}
@@ -771,7 +787,7 @@ export default function DashboardPage() {
                 <Label>Descrição</Label>
                 <Input className="h-10 rounded-lg" value={editingTx.description} onChange={e => setEditingTx({ ...editingTx, description: e.target.value })} />
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Valor</Label>
@@ -782,7 +798,7 @@ export default function DashboardPage() {
                   <Select value={editingTx.category} onValueChange={(v) => setEditingTx({ ...editingTx, category: v })}>
                     <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                       {ALL_CATEGORIES.map((cat) => <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>)}
+                      {ALL_CATEGORIES.map((cat) => <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -802,7 +818,7 @@ export default function DashboardPage() {
           )}
           <DialogFooter className="flex flex-col sm:flex-row gap-3">
             <Button variant="ghost" className="w-full sm:w-auto" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
-            
+
             {editingTx?.groupId ? (
               <>
                 <Button variant="outline" className="w-full sm:w-auto" onClick={() => handleConfirmEdit(false)}>
@@ -832,12 +848,12 @@ export default function DashboardPage() {
               Excluir Transação
             </DialogTitle>
             <DialogDescription className="pt-3 text-base">
-              Tem certeza? Você vai apagar: <br/> <span className="font-bold text-zinc-900 dark:text-white mt-1 block">{txToDelete?.description}</span>
+              Tem certeza? Você vai apagar: <br /> <span className="font-bold text-zinc-900 dark:text-white mt-1 block">{txToDelete?.description}</span>
             </DialogDescription>
           </DialogHeader>
 
           <DialogFooter className="flex-col sm:flex-row gap-3 mt-4">
-             <Button className="w-full sm:w-auto rounded-xl h-10" variant="ghost" onClick={() => setTxToDelete(null)}>
+            <Button className="w-full sm:w-auto rounded-xl h-10" variant="ghost" onClick={() => setTxToDelete(null)}>
               Cancelar
             </Button>
 
@@ -851,7 +867,7 @@ export default function DashboardPage() {
                 </Button>
               </>
             ) : (
-               <Button className="w-full sm:w-auto rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white" onClick={() => handleConfirmDelete(false)}>
+              <Button className="w-full sm:w-auto rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white" onClick={() => handleConfirmDelete(false)}>
                 Confirmar Exclusão
               </Button>
             )}
@@ -871,15 +887,15 @@ export default function DashboardPage() {
             </DialogTitle>
             <DialogDescription className="pt-3 text-base">
               Você vai parar de pagar <strong>{txToCancelSubscription?.description}</strong>.
-              <br/><br/>
+              <br /><br />
               A parcela de <strong>{formatDateDisplay(txToCancelSubscription?.dueDate || "")}</strong> será a última mantida.
-              <br/>
+              <br />
               Todas as cobranças futuras serão excluídas.
             </DialogDescription>
           </DialogHeader>
 
           <DialogFooter className="flex-col sm:flex-row gap-3 mt-4">
-             <Button className="w-full sm:w-auto rounded-xl h-10" variant="ghost" onClick={() => setTxToCancelSubscription(null)}>
+            <Button className="w-full sm:w-auto rounded-xl h-10" variant="ghost" onClick={() => setTxToCancelSubscription(null)}>
               Voltar
             </Button>
             <Button className="w-full sm:w-auto rounded-xl h-10 bg-amber-600 hover:bg-amber-700 text-white" onClick={handleConfirmCancelSubscription}>
@@ -899,7 +915,7 @@ export default function DashboardPage() {
             <DialogTitle className="text-2xl font-bold text-violet-600">Limite Atingido!</DialogTitle>
             <DialogDescription className="text-base text-zinc-600 dark:text-zinc-400 mt-2">
               Você atingiu o limite de {FREE_PLAN_LIMIT} lançamentos mensais do plano Grátis.
-              <br/><br/>
+              <br /><br />
               Faça o upgrade para o <strong>Plano Pro</strong> e tenha acesso ilimitado e muito mais.
             </DialogDescription>
           </DialogHeader>
