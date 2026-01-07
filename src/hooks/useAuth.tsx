@@ -3,22 +3,23 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { 
   onAuthStateChanged, 
-  User as FirebaseUser, 
+  User, 
   GoogleAuthProvider, 
   signInWithPopup, 
   signOut,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  updateProfile
+  updateProfile,
+  sendEmailVerification
 } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/services/firebase/client";
 import { useRouter } from "next/navigation";
 import { UserProfile } from "@/types/user";
 
 interface AuthContextType {
-  user: FirebaseUser | null;
-  userProfile: UserProfile | null; // Dados do banco (Plano, Role, Status)
+  user: User | null;
+  userProfile: UserProfile | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
@@ -29,7 +30,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -37,27 +38,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        // Buscar perfil no Firestore
+        // Recarrega o usuário para garantir que o status de emailVerified esteja atualizado
+        await currentUser.reload();
+        
         const userRef = doc(db, "users", currentUser.uid);
         const userSnap = await getDoc(userRef);
 
         if (userSnap.exists()) {
           const profile = userSnap.data() as UserProfile;
-          
-          // VERIFICAÇÃO DE BLOQUEIO
           if (profile.status === 'inactive') {
             await signOut(auth);
             setUser(null);
             setUserProfile(null);
-            alert("Seu acesso foi suspenso. Entre em contato com o suporte.");
+            alert("Seu acesso foi suspenso.");
             router.push("/login");
             setLoading(false);
             return;
           }
-
           setUserProfile(profile);
         } else {
-          // Criar perfil padrão se não existir (Primeiro acesso)
+          // Perfil padrão
           const newProfile: UserProfile = {
             uid: currentUser.uid,
             email: currentUser.email || "",
@@ -84,11 +84,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     await signInWithPopup(auth, provider);
-    router.push("/");
+    router.push("/"); 
   };
 
   const loginWithEmail = async (email: string, pass: string) => {
     await signInWithEmailAndPassword(auth, email, pass);
+    // O redirecionamento e verificação ocorrem no useEffect ou na página de destino
     router.push("/");
   };
 
@@ -96,14 +97,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
     await updateProfile(userCredential.user, { displayName: name });
     
-    // O onAuthStateChanged vai lidar com a criação do documento no banco
-    router.push("/");
+    // ENVIAR E-MAIL DE VERIFICAÇÃO
+    await sendEmailVerification(userCredential.user);
+    
+    // Não redireciona para a home logada imediatamente, deixa a página de registro cuidar do fluxo
   };
 
   const logout = async () => {
     await signOut(auth);
-    setUser(null);
-    setUserProfile(null);
     router.push("/");
     router.refresh();
   };
