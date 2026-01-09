@@ -2,14 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { 
-  getAllUsers, 
-  updateUserStatus, 
-  updateUserPlan, 
-  resetUserFinancialData, 
-  deleteUserPermanently 
+import { usePlans } from "@/hooks/usePlans";
+import {
+  getAllUsers,
+  updateUserStatus,
+  updateUserPlan,
+  updateUserRole, // Import novo
+  getUserTransactionCount, // Import novo
+  resetUserFinancialData,
+  deleteUserPermanently
 } from "@/services/userService";
-import { UserProfile, UserStatus, UserPlan } from "@/types/user";
+import { updatePlansConfig } from "@/services/systemService";
+import { UserProfile, UserStatus, UserPlan, UserRole } from "@/types/user";
+import { PlansConfig, PlanDetails } from "@/types/system";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,27 +23,49 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { 
-  ShieldAlert, UserX, CheckCircle2, Search, MoreVertical, 
-  Trash2, RefreshCcw, FileWarning 
-} from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  ShieldAlert, UserX, CheckCircle2, Search, MoreVertical,
+  Trash2, RefreshCcw, Save, Loader2, User as UserIcon, CreditCard, AlertTriangle
+} from "lucide-react";
 
 export default function AdminPage() {
   const { userProfile, loading } = useAuth();
+  const { plans, refreshPlans } = usePlans();
   const router = useRouter();
+
+  // States de UI
+  const [activeTab, setActiveTab] = useState<"users" | "plans">("users");
+
+  // States de Usuários
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [isLoadingData, setIsLoadingData] = useState(true);
-
-  // Estados para Modais de Confirmação
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [userToReset, setUserToReset] = useState<UserProfile | null>(null);
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
 
-  // Proteção de Rota
+  // Estado para Bloqueio com Motivo
+  const [userToBlock, setUserToBlock] = useState<UserProfile | null>(null);
+  const [selectedReason, setSelectedReason] = useState(""); // Motivo selecionado no dropdown
+  const [customReason, setCustomReason] = useState("");     // Motivo digitado (se Outros)
+
+  const blockReasonOptions = [
+    "Falta de Pagamento",
+    "Violação dos Termos de Uso",
+    "Solicitação do Usuário",
+    "Outros"
+  ];
+
+  // States de Planos
+  const [editedPlans, setEditedPlans] = useState<PlansConfig | null>(null);
+  const [isSavingPlans, setIsSavingPlans] = useState(false);
+
+  // Inicialização
   useEffect(() => {
     if (!loading) {
-      if (userProfile?.role !== 'admin') {
+      // Permite acesso para admin e moderator (exemplo, ajuste conforme sua regra)
+      if (userProfile?.role !== 'admin' && userProfile?.role !== 'moderator') {
         router.push("/");
       } else {
         loadUsers();
@@ -46,22 +73,67 @@ export default function AdminPage() {
     }
   }, [userProfile, loading, router]);
 
+  useEffect(() => {
+    if (plans) setEditedPlans(plans);
+  }, [plans]);
+
   const loadUsers = async () => {
-    setIsLoadingData(true);
+    setIsLoadingUsers(true);
     try {
       const data = await getAllUsers();
       setUsers(data);
+      // Carrega as contagens em segundo plano para não travar a UI
+      fetchCounts(data);
     } catch (error) {
       console.error("Erro ao carregar usuários", error);
     } finally {
-      setIsLoadingData(false);
+      setIsLoadingUsers(false);
     }
   };
 
+  const fetchCounts = async (usersList: UserProfile[]) => {
+    const usersWithCounts = await Promise.all(
+      usersList.map(async (u) => {
+        const count = await getUserTransactionCount(u.uid);
+        return { ...u, transactionCount: count };
+      })
+    );
+    setUsers(usersWithCounts);
+  };
+
+  // Handlers de Usuário
   const handleStatusChange = async (uid: string, newStatus: string) => {
     const status = newStatus as UserStatus;
+    if (status === 'inactive') {
+      const user = users.find(u => u.uid === uid);
+      if (user) {
+        setUserToBlock(user);
+        setSelectedReason(""); // Resetar seleção anterior
+        setCustomReason("");   // Resetar texto anterior
+      }
+      return;
+    }
     await updateUserStatus(uid, status);
     setUsers(users.map(u => u.uid === uid ? { ...u, status } : u));
+  };
+
+  const confirmBlockUser = async () => {
+    if (!userToBlock) return;
+
+    // Se escolheu "Outros", usa o texto digitado, senão usa a opção do select
+    const finalReason = selectedReason === "Outros" ? customReason : selectedReason;
+
+    if (!finalReason) {
+      alert("Por favor, informe um motivo para o bloqueio.");
+      return;
+    }
+
+    await updateUserStatus(userToBlock.uid, 'inactive', finalReason);
+    setUsers(users.map(u => u.uid === userToBlock.uid ? { ...u, status: 'inactive' } : u));
+
+    setUserToBlock(null);
+    setSelectedReason("");
+    setCustomReason("");
   };
 
   const handlePlanChange = async (uid: string, newPlan: string) => {
@@ -70,223 +142,386 @@ export default function AdminPage() {
     setUsers(users.map(u => u.uid === uid ? { ...u, plan } : u));
   };
 
-  // Ação: Resetar Dados
+  const handleRoleChange = async (uid: string, newRole: string) => {
+    const role = newRole as UserRole;
+    await updateUserRole(uid, role);
+    setUsers(users.map(u => u.uid === uid ? { ...u, role } : u));
+  };
+
   const confirmResetData = async () => {
     if (!userToReset) return;
-    try {
-      await resetUserFinancialData(userToReset.uid);
-      alert(`Dados financeiros de ${userToReset.displayName} foram apagados.`);
-    } catch (error) {
-      console.error(error);
-      alert("Erro ao resetar dados.");
-    } finally {
-      setUserToReset(null);
-    }
+    await resetUserFinancialData(userToReset.uid);
+    setUserToReset(null);
+    alert("Dados resetados.");
   };
 
-  // Ação: Excluir Usuário
   const confirmDeleteUser = async () => {
     if (!userToDelete) return;
+    await deleteUserPermanently(userToDelete.uid);
+    setUsers(users.filter(u => u.uid !== userToDelete.uid));
+    setUserToDelete(null);
+    alert("Usuário excluído.");
+  };
+
+  // Handlers de Planos
+  const handlePlanEdit = (planKey: keyof PlansConfig, field: keyof PlanDetails, value: string | number) => {
+    if (!editedPlans) return;
+    setEditedPlans({
+      ...editedPlans,
+      [planKey]: {
+        ...editedPlans[planKey],
+        [field]: value
+      }
+    });
+  };
+
+  const handleFeaturesEdit = (planKey: keyof PlansConfig, value: string) => {
+    if (!editedPlans) return;
+    const featuresArray = value.split('\n').filter(line => line.trim() !== '');
+    setEditedPlans({
+      ...editedPlans,
+      [planKey]: {
+        ...editedPlans[planKey],
+        features: featuresArray
+      }
+    });
+  };
+
+  const savePlans = async () => {
+    if (!editedPlans) return;
+    setIsSavingPlans(true);
     try {
-      await deleteUserPermanently(userToDelete.uid);
-      // Remove da lista local
-      setUsers(users.filter(u => u.uid !== userToDelete.uid));
-      alert(`Usuário ${userToDelete.displayName} removido do sistema.`);
+      await updatePlansConfig(editedPlans);
+      await refreshPlans();
+      alert("Configurações salvas com sucesso!");
     } catch (error) {
       console.error(error);
-      alert("Erro ao excluir usuário.");
+      alert("Erro ao salvar.");
     } finally {
-      setUserToDelete(null);
+      setIsSavingPlans(false);
     }
   };
 
-  const filteredUsers = users.filter(u => 
-    u.displayName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filteredUsers = users.filter(u =>
+    u.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (loading || userProfile?.role !== 'admin') return null;
+  if (loading || userProfile?.role !== 'admin' || !editedPlans) return null;
 
   return (
-    <div className="container mx-auto p-8 max-w-7xl animate-in fade-in duration-500">
+    <div className="container mx-auto p-4 md:p-8 max-w-7xl animate-in fade-in duration-500">
+
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
             <ShieldAlert className="h-8 w-8 text-red-600" />
-            Painel Administrativo
+            Administração
           </h1>
-          <p className="text-zinc-500">Gerencie o acesso, planos e dados dos seus clientes.</p>
-        </div>
-        <div className="relative w-full md:w-72">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-zinc-400" />
-          <Input 
-            placeholder="Buscar por nome ou email..." 
-            className="pl-9 bg-white dark:bg-zinc-900"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
+          <p className="text-zinc-500">Controle total da plataforma.</p>
         </div>
       </div>
 
-      <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900">
-        <CardHeader>
-          <CardTitle>Base de Usuários ({users.length})</CardTitle>
-          <CardDescription>Lista completa de clientes cadastrados.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Usuário</TableHead>
-                  <TableHead>Data Cadastro</TableHead>
-                  <TableHead>Plano Atual</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoadingData ? (
-                  <TableRow><TableCell colSpan={5} className="h-24 text-center">Carregando...</TableCell></TableRow>
-                ) : filteredUsers.map((userRow) => (
-                  <TableRow key={userRow.uid}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium text-zinc-900 dark:text-zinc-100">{userRow.displayName}</p>
-                        <p className="text-xs text-zinc-500">{userRow.email}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-zinc-500 text-xs">
-                      {new Date(userRow.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      <Select 
-                        defaultValue={userRow.plan} 
-                        onValueChange={(val) => handlePlanChange(userRow.uid, val)}
-                      >
-                        <SelectTrigger className="w-[120px] h-8 text-xs border-zinc-200">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="free">Free</SelectItem>
-                          <SelectItem value="pro">Pro 👑</SelectItem>
-                          <SelectItem value="premium">Premium 💎</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={userRow.status === 'active' ? 'default' : 'destructive'} className={userRow.status === 'active' ? 'bg-emerald-500 hover:bg-emerald-600' : ''}>
-                          {userRow.status === 'active' ? 'Ativo' : 'Bloqueado'}
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end items-center gap-2">
-                        {/* Botão Rápido de Status */}
-                        {userRow.status === 'active' ? (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-zinc-400 hover:text-red-500"
-                            title="Bloquear Acesso"
-                            onClick={() => handleStatusChange(userRow.uid, 'inactive')}
-                          >
-                            <UserX className="h-4 w-4" />
-                          </Button>
-                        ) : (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-emerald-500 hover:text-emerald-600"
-                            title="Liberar Acesso"
-                            onClick={() => handleStatusChange(userRow.uid, 'active')}
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                          </Button>
-                        )}
+      {/* Navegação de Abas Personalizada */}
+      <div className="space-y-6">
+        <div className="bg-white dark:bg-zinc-900 p-1 rounded-xl border border-zinc-200 dark:border-zinc-800 w-full md:w-fit grid grid-cols-2">
+          <button
+            onClick={() => setActiveTab("users")}
+            className={`flex items-center justify-center gap-2 rounded-lg px-6 py-2 text-sm font-medium transition-all ${activeTab === "users"
+              ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
+              : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300"
+              }`}
+          >
+            <UserIcon className="h-4 w-4" /> Gerenciar Usuários
+          </button>
+          <button
+            onClick={() => setActiveTab("plans")}
+            className={`flex items-center justify-center gap-2 rounded-lg px-6 py-2 text-sm font-medium transition-all ${activeTab === "plans"
+              ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
+              : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300"
+              }`}
+          >
+            <CreditCard className="h-4 w-4" /> Gerenciar Planos
+          </button>
+        </div>
 
-                        {/* Menu de Ações Avançadas */}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Opções Avançadas</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              className="text-amber-600 focus:text-amber-700 cursor-pointer"
-                              onClick={() => setUserToReset(userRow)}
-                            >
-                              <RefreshCcw className="mr-2 h-4 w-4" /> Resetar Financeiro
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              className="text-red-600 focus:text-red-700 cursor-pointer"
-                              onClick={() => setUserToDelete(userRow)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" /> Excluir Cadastro
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+        {/* --- CONTEÚDO: USUÁRIOS --- */}
+        {activeTab === "users" && (
+          <div className="animate-in fade-in zoom-in-95 duration-300">
+            <div className="relative w-full md:w-72 mb-4">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-zinc-400" />
+              <Input
+                placeholder="Buscar usuário..."
+                className="pl-9 bg-white dark:bg-zinc-900 rounded-xl"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+            </div>
+
+            <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden">
+              <CardHeader className="border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+                <CardTitle>Base de Usuários</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="pl-6">Usuário</TableHead>
+                        <TableHead>Cadastro</TableHead>
+                        <TableHead>Plano</TableHead>
+                        <TableHead>Função</TableHead>
+                        <TableHead className="text-center">Registros</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right pr-6">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {isLoadingUsers ? (
+                        <TableRow><TableCell colSpan={7} className="h-24 text-center">Carregando...</TableCell></TableRow>
+                      ) : filteredUsers.map((user) => (
+                        <TableRow key={user.uid}>
+                          <TableCell className="pl-6">
+                            <div>
+                              <p className="font-medium text-zinc-900 dark:text-zinc-100">{user.displayName}</p>
+                              <p className="text-xs text-zinc-500">{user.email}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-zinc-500 text-xs">
+                            {new Date(user.createdAt).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            <Select defaultValue={user.plan} onValueChange={(val) => handlePlanChange(user.uid, val)}>
+                              <SelectTrigger className="w-[120px] h-8 text-xs border-zinc-200">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="free">Free 🥉</SelectItem>
+                                <SelectItem value="premium">Premium 🥈</SelectItem>
+                                <SelectItem value="pro">Pro 🥇</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            <Select defaultValue={user.role} onValueChange={(val) => handleRoleChange(user.uid, val)}>
+                              <SelectTrigger className="w-[140px] h-8 text-xs border-zinc-200">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="client">Client</SelectItem>
+                                <SelectItem value="moderator">Moderator</SelectItem>
+                                <SelectItem value="admin">Admin</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary" className="bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
+                              {user.transactionCount ?? "..."}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={user.status === 'active' ? 'default' : 'destructive'} className={user.status === 'active' ? 'bg-emerald-500' : ''}>
+                              {user.status === 'active' ? 'Ativo' : 'Bloqueado'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right pr-6">
+                            <div className="flex justify-end items-center gap-2">
+                              {user.status === 'active' ? (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-red-500" onClick={() => handleStatusChange(user.uid, 'inactive')}><UserX className="h-4 w-4" /></Button>
+                              ) : (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500" onClick={() => handleStatusChange(user.uid, 'active')}><CheckCircle2 className="h-4 w-4" /></Button>
+                              )}
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onClick={() => setUserToReset(user)}><RefreshCcw className="mr-2 h-4 w-4" /> Resetar Dados</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => setUserToDelete(user)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" /> Excluir Conta</DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+        )}
 
-      {/* --- MODAIS DE CONFIRMAÇÃO --- */}
+        {/* --- CONTEÚDO: PLANOS --- */}
+        {activeTab === "plans" && (
+          <div className="animate-in fade-in zoom-in-95 duration-300">
+            <div className="flex justify-end mb-4">
+              <Button onClick={savePlans} disabled={isSavingPlans} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 rounded-xl shadow-lg shadow-emerald-500/20">
+                {isSavingPlans ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Salvar Alterações
+              </Button>
+            </div>
 
-      {/* Modal Resetar Dados */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* PLANO FREE */}
+              <Card className="border border-zinc-200 dark:border-zinc-800 rounded-2xl bg-white dark:bg-zinc-900">
+                <CardHeader className="bg-zinc-50 dark:bg-zinc-950/50 rounded-t-2xl pb-4">
+                  <CardTitle className="text-zinc-500">Plano Grátis</CardTitle>
+                  <CardDescription>Configurações do nível gratuito.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 pt-6">
+                  <div className="space-y-2">
+                    <Label>Nome de Exibição</Label>
+                    <Input value={editedPlans.free.name} onChange={e => handlePlanEdit('free', 'name', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Descrição</Label>
+                    <Input value={editedPlans.free.description} onChange={e => handlePlanEdit('free', 'description', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Limite de Lançamentos</Label>
+                    <Input type="number" value={editedPlans.free.limit} onChange={e => handlePlanEdit('free', 'limit', Number(e.target.value))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Lista de Benefícios (um por linha)</Label>
+                    <textarea
+                      className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
+                      value={editedPlans.free.features.join('\n')}
+                      onChange={e => handleFeaturesEdit('free', e.target.value)}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* PLANO PRO */}
+              <Card className="border-2 border-violet-500/20 rounded-2xl bg-white dark:bg-zinc-900 shadow-xl shadow-violet-500/10">
+                <CardHeader className="bg-violet-50/50 dark:bg-violet-900/10 rounded-t-2xl pb-4">
+                  <CardTitle className="text-violet-600">Plano Pro</CardTitle>
+                  <CardDescription>O plano intermediário/padrão.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 pt-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Nome</Label>
+                      <Input value={editedPlans.pro.name} onChange={e => handlePlanEdit('pro', 'name', e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Preço (R$)</Label>
+                      <Input type="number" value={editedPlans.pro.price} onChange={e => handlePlanEdit('pro', 'price', Number(e.target.value))} />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Link de Pagamento (Mercado Pago)</Label>
+                    <Input className="font-mono text-xs text-violet-600" value={editedPlans.pro.paymentLink} onChange={e => handlePlanEdit('pro', 'paymentLink', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Descrição</Label>
+                    <Input value={editedPlans.pro.description} onChange={e => handlePlanEdit('pro', 'description', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Lista de Benefícios</Label>
+                    <textarea
+                      className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
+                      value={editedPlans.pro.features.join('\n')}
+                      onChange={e => handleFeaturesEdit('pro', e.target.value)}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* PLANO PREMIUM */}
+              <Card className="border-2 border-emerald-500/20 rounded-2xl bg-white dark:bg-zinc-900 shadow-xl shadow-emerald-500/10">
+                <CardHeader className="bg-emerald-50/50 dark:bg-emerald-900/10 rounded-t-2xl pb-4">
+                  <CardTitle className="text-emerald-600">Plano Premium</CardTitle>
+                  <CardDescription>O plano mais completo.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 pt-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Nome</Label>
+                      <Input value={editedPlans.premium.name} onChange={e => handlePlanEdit('premium', 'name', e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Preço (R$)</Label>
+                      <Input type="number" value={editedPlans.premium.price} onChange={e => handlePlanEdit('premium', 'price', Number(e.target.value))} />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Link de Pagamento</Label>
+                    <Input className="font-mono text-xs text-emerald-600" value={editedPlans.premium.paymentLink} onChange={e => handlePlanEdit('premium', 'paymentLink', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Descrição</Label>
+                    <Input value={editedPlans.premium.description} onChange={e => handlePlanEdit('premium', 'description', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Lista de Benefícios</Label>
+                    <textarea
+                      className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
+                      value={editedPlans.premium.features.join('\n')}
+                      onChange={e => handleFeaturesEdit('premium', e.target.value)}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modais de Usuário */}
       <Dialog open={!!userToReset} onOpenChange={(open) => !open && setUserToReset(null)}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-amber-600">
-              <RefreshCcw className="h-5 w-5" />
-              Resetar Dados Financeiros
-            </DialogTitle>
-            <DialogDescription className="pt-2">
-              Você está prestes a apagar <strong>TODAS</strong> as transações, receitas e despesas de:
-              <br/>
-              <span className="font-bold text-foreground block mt-1">{userToReset?.displayName}</span>
-              <br/>
-              Essa ação não pode ser desfeita. O usuário manterá o plano e o acesso.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setUserToReset(null)}>Cancelar</Button>
-            <Button variant="default" className="bg-amber-600 hover:bg-amber-700" onClick={confirmResetData}>
-              Confirmar Reset
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+        <DialogContent><DialogHeader><DialogTitle>Resetar Dados?</DialogTitle><DialogDescription>Confirme para apagar todas as transações de {userToReset?.displayName}.</DialogDescription></DialogHeader><DialogFooter><Button onClick={() => setUserToReset(null)} variant="ghost">Cancelar</Button><Button onClick={confirmResetData} variant="destructive">Confirmar</Button></DialogFooter></DialogContent>
+      </Dialog>
+      <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+        <DialogContent><DialogHeader><DialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle className="h-5 w-5" /> Excluir Usuário?</DialogTitle><DialogDescription>Confirme para remover {userToDelete?.displayName} permanentemente. Isso não pode ser desfeito.</DialogDescription></DialogHeader><DialogFooter><Button onClick={() => setUserToDelete(null)} variant="ghost">Cancelar</Button><Button onClick={confirmDeleteUser} variant="destructive">Confirmar Exclusão</Button></DialogFooter></DialogContent>
       </Dialog>
 
-      {/* Modal Excluir Usuário */}
-      <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+      {/* Modal de Bloqueio com Motivo */}
+      <Dialog open={!!userToBlock} onOpenChange={(open) => !open && setUserToBlock(null)}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
-              <FileWarning className="h-5 w-5" />
-              Excluir Usuário Definitivamente
+              <UserX className="h-5 w-5" />
+              Bloquear Usuário
             </DialogTitle>
-            <DialogDescription className="pt-2">
-              Isso apagará o cadastro e todos os dados de:
-              <br/>
-              <span className="font-bold text-foreground block mt-1">{userToDelete?.displayName}</span>
-              <br/>
-              O usuário perderá o acesso imediatamente.
+            <DialogDescription>
+              Você está suspendendo o acesso de <strong>{userToBlock?.displayName}</strong>.
             </DialogDescription>
           </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Motivo do Bloqueio</Label>
+              <Select onValueChange={setSelectedReason} value={selectedReason}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um motivo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {blockReasonOptions.map(opt => (
+                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedReason === "Outros" && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                <Label>Descreva o motivo</Label>
+                <textarea
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder="Digite o motivo específico..."
+                  value={customReason}
+                  onChange={(e) => setCustomReason(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setUserToDelete(null)}>Cancelar</Button>
-            <Button variant="destructive" onClick={confirmDeleteUser}>
-              Confirmar Exclusão
+            <Button variant="ghost" onClick={() => setUserToBlock(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={confirmBlockUser}>
+              Confirmar Bloqueio
             </Button>
           </DialogFooter>
         </DialogContent>
