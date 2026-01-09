@@ -149,7 +149,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-zinc-500">Celular</Label>
-                    <Input value={phone.toString().replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")} onChange={(e) => setPhone(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500" />
+                    <Input value={phone ? phone.toString().replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3") : ""} onChange={(e) => setPhone(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500" />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-zinc-500">E-mail de Acesso</Label>
@@ -174,7 +174,7 @@ export default function SettingsPage() {
                   <div className="flex justify-between items-start z-10">
                     <div>
                       <CardTitle className="text-3xl flex items-center gap-2 font-bold">
-                        {currentPlan === 'free' ? <Medal className="h-8 w-8 text-zinc-400" /> : currentPlan === 'premium' ? <Medal className="h-8 w-8 text-yellow-300" /> : <Medal className="h-8 w-8 text-[#966d07]" />} Weven {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}
+                        {currentPlan === 'free' ? <Medal className="h-8 w-8 text-zinc-400" /> : currentPlan === 'premium' ? <Medal className="h-8 w-8 text-violet-300" /> : <Medal className="h-8 w-8 text-[#966d07]" />} Weven {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}
                       </CardTitle>
                       <CardDescription className={`mt-2 text-lg ${currentPlan === 'free' ? 'text-zinc-400' : 'text-violet-100'}`}>
                         {currentPlan === 'free' ? <div>Você está utilizando a versão básica.</div> : "Obrigado por apoiar nosso desenvolvimento!"}
