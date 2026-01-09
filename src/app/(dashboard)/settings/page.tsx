@@ -10,28 +10,29 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { 
-  User, Lock, CreditCard, ShieldCheck, 
-  LogOut, Wallet, Crown, CheckCircle2, AlertTriangle, EyeOff, Loader2, Sparkles, Star
+import {
+  User, Lock, CreditCard, ShieldCheck,
+  LogOut, CheckCircle2, AlertTriangle, EyeOff, Loader2, Medal
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { updateOwnProfile, deleteUserPermanently } from "@/services/userService";
-import { getKeyFingerprint } from "@/lib/crypto"; // Importação nova
+import { getKeyFingerprint } from "@/lib/crypto";
 import Link from "next/link";
-
-const MERCADO_PAGO_LINKS = {
-  pro: "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=018bc64fcdfa44e384fc7d74c430be10",
-  premium: "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=cc495aef2c0043c5a272ad5f8594d78e"
-};
+import { usePlans } from "@/hooks/usePlans";
 
 export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode } = useAuth();
+  const { plans } = usePlans();
+
+  // State da Aba Ativa
   const [activeTab, setActiveTab] = useState("account");
-  
+
   // States do Formulário
-  const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [completeName, setCompleteName] = useState("");
+  const [phone, setPhone] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  
+
   // States de Segurança
   const [keyFingerprint, setKeyFingerprint] = useState("Carregando identificador seguro...");
 
@@ -41,7 +42,9 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (userProfile) {
-      setName(userProfile.displayName);
+      setDisplayName(userProfile.displayName);
+      setCompleteName(userProfile.completeName);
+      setPhone(userProfile.phone);
     }
   }, [userProfile]);
 
@@ -56,7 +59,7 @@ export default function SettingsPage() {
     if (!user) return;
     setIsSaving(true);
     try {
-      await updateOwnProfile(user.uid, { displayName: name });
+      await updateOwnProfile(user.uid, { displayName, completeName, phone });
     } catch (error) {
       console.error("Erro ao salvar perfil:", error);
     } finally {
@@ -79,9 +82,9 @@ export default function SettingsPage() {
   const currentPlan = userProfile?.plan || "free";
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 font-sans p-4 md:p-8 pb-20">
+    <div className="bg-zinc-50 dark:bg-zinc-950 font-sans p-4 md:p-8 pb-20">
       <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
-        
+
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -126,7 +129,7 @@ export default function SettingsPage() {
                     <div className="absolute bottom-0 right-0 p-1.5 bg-green-500 border-4 border-white dark:border-zinc-900 rounded-full" title="Online"></div>
                   </div>
                   <div className="space-y-1 text-center sm:text-left">
-                    <h3 className="font-bold text-2xl text-zinc-900 dark:text-zinc-100">{name || "Usuário"}</h3>
+                    <h3 className="font-bold text-2xl text-zinc-900 dark:text-zinc-100">{displayName || "Usuário"}</h3>
                     <p className="text-sm text-zinc-500 font-medium">{user?.email}</p>
                     <div className="flex flex-wrap justify-center sm:justify-start gap-2 pt-2">
                       <Badge variant="secondary" className={`uppercase text-[10px] tracking-wider border ${currentPlan === 'free' ? 'bg-zinc-100 text-zinc-600 border-zinc-200' : 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300'}`}>Plano {currentPlan}</Badge>
@@ -136,46 +139,116 @@ export default function SettingsPage() {
                 </div>
                 <Separator className="bg-zinc-100 dark:bg-zinc-800" />
                 <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-2"><Label className="text-zinc-500">Nome de Exibição</Label><Input value={name} onChange={(e) => setName(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500" /></div>
-                  <div className="space-y-2"><Label className="text-zinc-500">E-mail de Acesso</Label><Input defaultValue={user?.email || ""} disabled className="h-11 rounded-xl bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 opacity-70 cursor-not-allowed" /><p className="text-[10px] text-zinc-400">O e-mail não pode ser alterado por segurança.</p></div>
+                  <div className="space-y-2">
+                    <Label className="text-zinc-500">Nome de Exibição (Apelido)</Label>
+                    <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-zinc-500">Nome Completo</Label>
+                    <Input value={completeName} onChange={(e) => setCompleteName(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-zinc-500">Celular</Label>
+                    <Input value={phone.toString().replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")} onChange={(e) => setPhone(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-zinc-500">E-mail de Acesso</Label>
+                    <Input defaultValue={user?.email || ""} disabled className="h-11 rounded-xl bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 opacity-70 cursor-not-allowed" />
+                  </div>
                 </div>
               </CardContent>
               <CardFooter className="flex justify-end border-t border-zinc-50 dark:border-zinc-800/50 pt-6 bg-zinc-50/50 dark:bg-zinc-900/50 rounded-b-3xl">
-                <Button onClick={handleSaveProfile} disabled={isSaving} className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-8 h-11 shadow-lg shadow-violet-500/20 transition-all active:scale-95">{isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Salvar Alterações"}</Button>
+                <Button onClick={handleSaveProfile} disabled={isSaving} className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-8 h-11 shadow-lg shadow-violet-500/20 transition-all active:scale-95">
+                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Salvar Alterações"}
+                </Button>
               </CardFooter>
             </Card>
           )}
 
           {/* ABA PLANOS */}
           {activeTab === "billing" && (
-             <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
+            <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
               <Card className={`border-none shadow-xl rounded-3xl relative overflow-hidden text-white ${currentPlan === 'free' ? 'bg-zinc-800 dark:bg-zinc-900' : 'bg-linear-to-br from-violet-600 to-indigo-700 shadow-violet-500/20'}`}>
                 <div className="absolute top-0 right-0 p-40 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
                 <CardHeader>
                   <div className="flex justify-between items-start z-10">
                     <div>
-                      <CardTitle className="text-3xl flex items-center gap-2 font-bold">{currentPlan === 'free' ? <Wallet className="h-8 w-8 text-zinc-400" /> : <Crown className="h-8 w-8 text-yellow-300 fill-yellow-300" />} Weven {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}</CardTitle>
-                      <CardDescription className={`mt-2 text-lg ${currentPlan === 'free' ? 'text-zinc-400' : 'text-violet-100'}`}>{currentPlan === 'free' ? "Você está utilizando a versão básica." : "Obrigado por apoiar nosso desenvolvimento!"}</CardDescription>
+                      <CardTitle className="text-3xl flex items-center gap-2 font-bold">
+                        {currentPlan === 'free' ? <Medal className="h-8 w-8 text-zinc-400" /> : currentPlan === 'premium' ? <Medal className="h-8 w-8 text-yellow-300" /> : <Medal className="h-8 w-8 text-[#966d07]" />} Weven {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}
+                      </CardTitle>
+                      <CardDescription className={`mt-2 text-lg ${currentPlan === 'free' ? 'text-zinc-400' : 'text-violet-100'}`}>
+                        {currentPlan === 'free' ? <div>Você está utilizando a versão básica.</div> : "Obrigado por apoiar nosso desenvolvimento!"}
+                      </CardDescription>
                     </div>
                     <Badge className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white border-none flex gap-1.5 items-center px-3 py-1.5 text-sm"><CheckCircle2 className="h-4 w-4" /> Plano Ativo</Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="z-10 relative">{currentPlan === 'free' && (<div className="mt-4"><p className="text-sm text-zinc-300 mb-6">Faça o upgrade para remover limites e desbloquear todo o potencial.</p></div>)}</CardContent>
               </Card>
-              {currentPlan !== 'premium' && (
+              {currentPlan !== 'pro' && (
                 <div className="grid gap-6 md:grid-cols-2">
-                   {currentPlan !== 'pro' && (
-                     <Card className="border-2 border-violet-100 dark:border-violet-900/30 shadow-lg hover:shadow-xl hover:border-violet-300 transition-all bg-white dark:bg-zinc-900 rounded-3xl group cursor-pointer relative overflow-hidden">
-                       <div className="absolute top-0 left-0 w-full h-1 bg-violet-500" />
-                       <CardHeader><CardTitle className="flex justify-between items-center"><span className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-violet-500" /> Weven Pro</span><span className="text-xl font-bold text-zinc-900 dark:text-white">R$ 19,90</span></CardTitle><CardDescription>Transações ilimitadas + Controle de Streaming.</CardDescription></CardHeader>
-                       <CardFooter><Link href={MERCADO_PAGO_LINKS.pro} target="_blank" className="w-full"><Button className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-500/20 group-hover:scale-[1.02] transition-transform">Fazer Upgrade Pro</Button></Link></CardFooter>
-                     </Card>
-                   )}
-                   <Card className="border-2 border-emerald-100 dark:border-emerald-900/30 shadow-lg hover:shadow-xl hover:border-emerald-300 transition-all bg-white dark:bg-zinc-900 rounded-3xl group cursor-pointer relative overflow-hidden">
-                     <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500" />
-                     <CardHeader><CardTitle className="flex justify-between items-center"><span className="flex items-center gap-2"><Star className="h-5 w-5 text-emerald-500" /> Weven Premium</span><span className="text-xl font-bold text-zinc-900 dark:text-white">R$ 49,90</span></CardTitle><CardDescription>Tudo do Pro + Criptografia Exclusiva + Suporte VIP.</CardDescription></CardHeader>
-                     <CardFooter><Link href={MERCADO_PAGO_LINKS.premium} target="_blank" className="w-full"><Button variant="outline" className="w-full rounded-xl border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 group-hover:scale-[1.02] transition-transform">Fazer Upgrade Premium</Button></Link></CardFooter>
-                   </Card>
+                  {currentPlan !== 'premium' && (
+                    <Card className="border-2 border-violet-100 dark:border-violet-900/30 shadow-lg hover:shadow-xl hover:border-violet-300 transition-all bg-white dark:bg-zinc-900 rounded-3xl group cursor-pointer relative overflow-hidden">
+                      <div className="absolute top-0 left-0 w-full h-1 bg-violet-500" />
+                      <CardHeader>
+                        <CardTitle className="flex justify-between items-center">
+                          <span className="flex items-center gap-2">
+                            <Medal className="h-5 w-5 text-violet-500" /> Weven Premium
+                          </span>
+                          <span className="text-xl font-bold text-zinc-900 dark:text-white">
+                            R$ 19,90
+                          </span>
+                        </CardTitle>
+                        <CardDescription>
+                          Transações ilimitadas + Controle de Streaming.
+                        </CardDescription>
+                        <nav>
+                          <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
+                            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-violet-500" /> Transações Ilimitadas</li>
+                            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-violet-500" /> Suporte a Contas de Streaming</li>
+                            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-violet-500" /> Relatórios Avançados</li>
+                          </ul>
+                        </nav>
+                      </CardHeader>
+                      <CardFooter>
+                        <Link href={plans.premium.paymentLink} target="_blank" className="w-full">
+                          <Button className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-500/20 group-hover:scale-[1.02] transition-transform">
+                            Fazer Upgrade Premium
+                          </Button>
+                        </Link>
+                      </CardFooter>
+                    </Card>
+                  )}
+                  <Card className="border-2 border-[#fffbbc] dark:border-[#F7EF8A]/30 shadow-lg hover:shadow-xl hover:border-amber-300 transition-all bg-white dark:bg-zinc-900 rounded-3xl group cursor-pointer relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-[#F7EF8A]" />
+                    <CardHeader>
+                      <CardTitle className="flex justify-between items-center">
+                        <span className="flex items-center gap-2">
+                          <Medal className="h-5 w-5 text-[#dbce19]" /> Weven Pro
+                        </span>
+                        <span className="text-xl font-bold text-zinc-900 dark:text-white">
+                          R$ 49,90
+                        </span>
+                      </CardTitle>
+                      <CardDescription>
+                        Tudo do Pro + Criptografia Exclusiva + Suporte VIP.
+                      </CardDescription>
+                      <nav>
+                        <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
+                          <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[#dbce19]" /> Criptografia de Dados End-to-End (E2EE)</li>
+                          <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[#dbce19]" /> Suporte Prioritário 24/7</li>
+                          <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[#dbce19]" /> Acesso Antecipado a Novos Recursos</li>
+                        </ul>
+                      </nav>
+                    </CardHeader>
+                    <CardFooter>
+                      <Link href={plans.pro.paymentLink} target="_blank" className="w-full">
+                        <Button variant="outline" className="w-full rounded-xl border-[#dbce19] text-[#a89d00] hover:bg-amber-50 dark:hover:bg-amber-900/20 group-hover:scale-[1.02] transition-transform">
+                          Fazer Upgrade Pro
+                        </Button>
+                      </Link>
+                    </CardFooter>
+                  </Card>
                 </div>
               )}
             </div>
@@ -196,7 +269,7 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-8">
-                
+
                 {/* Toggle Privacidade */}
                 <div className="flex items-center justify-between p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-100 dark:border-zinc-800 transition-all hover:border-zinc-300 dark:hover:border-zinc-700">
                   <div className="space-y-1">
