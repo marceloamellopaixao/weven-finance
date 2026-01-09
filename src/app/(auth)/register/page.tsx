@@ -13,7 +13,9 @@ export default function RegisterPage() {
   const { registerWithEmail } = useAuth();
   const router = useRouter();
   
-  const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [completeName, setCompleteName] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -36,7 +38,7 @@ export default function RegisterPage() {
 
     setIsLoading(true);
     try {
-      await registerWithEmail(name, email, password);
+      await registerWithEmail(displayName, email, password, phone, completeName);
       // SUCESSO: Redireciona para a tela de aviso de verificação
       router.push("/verify-email");
     } catch (err: unknown) {
@@ -76,15 +78,40 @@ export default function RegisterPage() {
           </div>
 
           <form onSubmit={handleRegister} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                <Label htmlFor="displayName">Apelido (Dashboard)</Label>
+                <Input 
+                    id="displayName" 
+                    placeholder="Ex: Marcelo" 
+                    required
+                    className="bg-white/50 dark:bg-zinc-800/50"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                />
+                </div>
+                <div className="space-y-2">
+                <Label htmlFor="phone">Celular</Label>
+                <Input 
+                    id="phone" 
+                    placeholder="(11) 99999-9999" 
+                    required
+                    className="bg-white/50 dark:bg-zinc-800/50"
+                    value={phone.toString().replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")}
+                    onChange={(e) => setPhone(e.target.value)}
+                />
+                </div>
+            </div>
+
             <div className="space-y-2">
-              <Label htmlFor="name">Nome Completo</Label>
+              <Label htmlFor="completeName">Nome Completo</Label>
               <Input 
-                id="name" 
-                placeholder="Ex: João Silva" 
+                id="completeName" 
+                placeholder="Ex: Marcelo Augusto" 
                 required
                 className="bg-white/50 dark:bg-zinc-800/50"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={completeName}
+                onChange={(e) => setCompleteName(e.target.value)}
               />
             </div>
 
@@ -101,30 +128,32 @@ export default function RegisterPage() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
-              <Input 
-                id="password" 
-                type="password" 
-                placeholder="******" 
-                required
-                className="bg-white/50 dark:bg-zinc-800/50"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                <Label htmlFor="password">Senha</Label>
+                <Input 
+                    id="password" 
+                    type="password" 
+                    placeholder="******" 
+                    required
+                    className="bg-white/50 dark:bg-zinc-800/50"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                />
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirmar Senha</Label>
-              <Input 
-                id="confirmPassword" 
-                type="password" 
-                placeholder="******" 
-                required
-                className="bg-white/50 dark:bg-zinc-800/50"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
+                <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirmar</Label>
+                <Input 
+                    id="confirmPassword" 
+                    type="password" 
+                    placeholder="******" 
+                    required
+                    className="bg-white/50 dark:bg-zinc-800/50"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+                </div>
             </div>
 
             {error && (
