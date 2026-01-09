@@ -25,7 +25,7 @@ interface AuthContextType {
   togglePrivacyMode: () => void;
   signInWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
-  registerWithEmail: (name: string, email: string, pass: string) => Promise<void>;
+  registerWithEmail: (name: string, email: string, pass: string, phone: string, completeName: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   
   const router = useRouter();
 
-  // 1. Efeito isolado para carregar a preferência de privacidade (roda apenas uma vez na montagem)
+  // Efeito para carregar a preferência de modo privacidade
   useEffect(() => {
     const storedPrivacy = localStorage.getItem("weven_privacy_mode");
     if (storedPrivacy === "true") {
@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // 2. Efeito para monitorar a autenticação
+  // Efeito para monitorar a autenticação
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
@@ -60,12 +60,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (userSnap.exists()) {
           const profile = userSnap.data() as UserProfile;
+
+          // Verifica se o usuário está inativo
           if (profile.status === 'inactive') {
-            await signOut(auth);
-            setUser(null);
-            setUserProfile(null);
-            alert("Seu acesso foi suspenso.");
-            router.push("/login");
+            setUserProfile(profile);
+            router.push("/blocked");
             setLoading(false);
             return;
           }
@@ -76,6 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             uid: currentUser.uid,
             email: currentUser.email || "",
             displayName: currentUser.displayName || "Usuário",
+            completeName: currentUser.displayName || "",
+            phone: "",
             photoURL: currentUser.photoURL || "",
             role: 'client',
             plan: 'free',
@@ -114,9 +115,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push("/");
   };
 
-  const registerWithEmail = async (name: string, email: string, pass: string) => {
+  const registerWithEmail = async (name: string, email: string, pass: string, phone: string, completeName: string) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
     await updateProfile(userCredential.user, { displayName: name });
+
+    // Cria o perfil do usuário no Firestore
+    const newProfile: UserProfile = {
+      uid: userCredential.user.uid,
+      email: email,
+      displayName: name,
+      completeName: completeName,
+      phone: phone,
+      role: 'client',
+      plan: 'free',
+      status: 'active',
+      createdAt: new Date().toISOString()
+    }
+
+    await setDoc(doc(db, "users", userCredential.user.uid), newProfile);
+
     await sendEmailVerification(userCredential.user);
   };
 
