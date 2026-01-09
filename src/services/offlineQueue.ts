@@ -1,7 +1,7 @@
 interface QueueOperation {
   id: string;
   type: "ADD_TRANSACTION" | "UPDATE_INSTALLMENT";
-  payload: Record<string, unknown>; // Correção do "any"
+  payload: Record<string, unknown>;
   timestamp: number;
 }
 
