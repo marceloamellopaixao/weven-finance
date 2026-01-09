@@ -3,56 +3,32 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Wallet, ShieldCheck, Zap, ArrowRight, Star, Lock, Smartphone } from "lucide-react";
+import { CheckCircle2, Wallet, ShieldCheck, Zap, ArrowRight, Lock, Smartphone, Medal } from "lucide-react";
 import Link from "next/link";
 
 const LINK_PRO = "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=018bc64fcdfa44e384fc7d74c430be10";
-const LINK_PREMIUM = "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=cc495aef2c0043c5a272ad5f8594d78e";
+// const LINK_PREMIUM = "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=cc495aef2c0043c5a272ad5f8594d78e";
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white font-sans text-zinc-900 selection:bg-violet-100 selection:text-violet-900">
-      
-      {/* Navbar Marketing */}
-      <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-zinc-100">
-        <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="bg-violet-600 p-2 rounded-xl shadow-lg shadow-violet-200">
-              <Wallet className="h-5 w-5 text-white" />
-            </div>
-            <span className="font-bold text-xl tracking-tight text-zinc-900">
-              Weven<span className="text-violet-600">Finance</span>
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link href="/login" className="hidden sm:block">
-              <Button variant="ghost" className="rounded-full font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50">Login</Button>
-            </Link>
-            <Link href="/register">
-              <Button className="rounded-full bg-zinc-900 text-white hover:bg-zinc-800 font-medium px-6 shadow-xl shadow-zinc-200 hover:shadow-2xl transition-all hover:scale-105">
-                Começar Agora
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-white font-sans text-zinc-900 selection:bg-violet-100 selection:text-violet-900 transition-all duration-800">
 
       {/* Hero Section */}
       <section className="pt-40 pb-24 px-6 relative overflow-hidden">
         {/* Glow Effects - Adjusted for Light Mode */}
         <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-violet-100/50 rounded-full blur-[120px] -z-10" />
         <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-blue-50/50 rounded-full blur-[100px] -z-10" />
-        
+
         <div className="container mx-auto text-center max-w-4xl space-y-8">
           <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700 px-4 py-1.5 rounded-full text-sm font-medium backdrop-blur-md shadow-sm">
             🔒 Seus dados financeiros, 100% criptografados.
           </Badge>
-          
+
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight leading-[1.1] text-zinc-900">
-            O fim das planilhas <br/>
+            O fim das planilhas <br />
             <span className="text-transparent bg-clip-text bg-linear-to-r from-violet-600 to-indigo-600">financeiras complicadas.</span>
           </h1>
-          
+
           <p className="text-xl text-zinc-500 max-w-2xl mx-auto leading-relaxed">
             Controle gastos, gerencie assinaturas e projete seu futuro financeiro com uma interface que você realmente vai querer usar.
           </p>
@@ -70,23 +46,23 @@ export default function LandingPage() {
 
           {/* Dashboard Preview Mockup - Light Version */}
           <div className="mt-16 relative mx-auto max-w-5xl rounded-2xl border border-zinc-200 bg-white/50 backdrop-blur-sm shadow-2xl shadow-zinc-200/50 overflow-hidden aspect-video group">
-             <div className="absolute inset-0 bg-linear-to-t from-white via-transparent to-transparent z-10" />
-             {/* Abstract UI representation */}
-             <div className="p-6 grid grid-cols-3 gap-6 h-full opacity-60 group-hover:opacity-100 transition-opacity duration-700">
-               <div className="col-span-1 space-y-4 pt-8 pl-4">
-                  <div className="h-24 w-full bg-zinc-600 rounded-xl border border-zinc-100" />
-                  <div className="h-24 w-full bg-zinc-600 rounded-xl border border-zinc-100" />
-                  <div className="h-40 w-full bg-zinc-600 rounded-xl border border-zinc-100" />
-               </div>
-               <div className="col-span-2 space-y-4 pt-8 pr-4">
-                  <div className="h-64 w-full bg-zinc-600 rounded-xl border border-zinc-100 flex items-center justify-center text-zinc-300 font-mono text-sm">
-                    Gráfico Interativo
-                  </div>
-                  <div className="h-32 w-full bg-zinc-600 rounded-xl border border-zinc-100" />
-               </div>
+            <div className="absolute inset-0 bg-linear-to-t from-white via-transparent to-transparent z-10" />
+            {/* Abstract UI representation */}
+            <div className="p-6 grid grid-cols-3 gap-6 h-full opacity-60 group-hover:opacity-100 transition-opacity duration-700">
+              <div className="col-span-1 space-y-4 pt-8 pl-4">
+                <div className="h-24 w-full bg-zinc-600 rounded-xl border border-zinc-100" />
+                <div className="h-24 w-full bg-zinc-600 rounded-xl border border-zinc-100" />
+                <div className="h-40 w-full bg-zinc-600 rounded-xl border border-zinc-100" />
+              </div>
+              <div className="col-span-2 space-y-4 pt-8 pr-4">
+                <div className="h-64 w-full bg-zinc-600 rounded-xl border border-zinc-100 flex items-center justify-center text-zinc-300 font-mono text-sm">
+                  Gráfico Interativo
+                </div>
+                <div className="h-32 w-full bg-zinc-600 rounded-xl border border-zinc-100" />
+              </div>
             </div>
             <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20">
-               <p className="text-zinc-500 text-sm font-medium bg-white/70 px-4 py-2 rounded-full shadow-sm backdrop-blur-md">Design focado em clareza e velocidade.</p>
+              <p className="text-zinc-500 text-sm font-medium bg-white/70 px-4 py-2 rounded-full shadow-sm backdrop-blur-md">Design focado em clareza e velocidade.</p>
             </div>
           </div>
         </div>
@@ -138,7 +114,7 @@ export default function LandingPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-zinc-500 leading-relaxed">
-                  Uma interface que funciona perfeitamente no seu celular. Lance gastos em segundos, onde quer que esteja.
+                  Uma interface que funciona perfeitamente no seu celular. Lance ganhos e gastos em segundos, onde quer que esteja.
                 </p>
               </CardContent>
             </Card>
@@ -158,11 +134,13 @@ export default function LandingPage() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8 items-start">
-            
+
             {/* PLANO BÁSICO */}
             <Card className="bg-zinc-50 border-zinc-200 shadow-none hover:border-zinc-300 transition-all rounded-4xl">
               <CardHeader className="p-8 pb-0">
-                <CardTitle className="text-xl font-bold text-zinc-900">Iniciante</CardTitle>
+                <CardTitle className="text-xl font-bold text-zinc-900 flex items-center gap-2">
+                  Free <Medal className="h-5 w-5 text-zinc-400" />
+                </CardTitle>
                 <CardDescription className="text-zinc-500">Para testar e organizar o básico.</CardDescription>
                 <div className="pt-6 pb-2">
                   <span className="text-4xl font-bold text-zinc-900">R$ 0</span>
@@ -182,15 +160,17 @@ export default function LandingPage() {
               </CardFooter>
             </Card>
 
-            {/* PLANO PRO */}
+            {/* PLANO PREMIUM */}
             <Card className="bg-white border-violet-200 shadow-2xl shadow-violet-200/50 rounded-4xl relative scale-105 z-10">
               <div className="absolute top-0 left-0 w-full h-10 bg-linear-to-r from-violet-500 to-indigo-500" >
                 <CardTitle className="flex justify-center items-center w-full h-full text-zinc-200">Plano Popular</CardTitle>
               </div>
               <CardHeader className="p-8 pb-0">
                 <div className="flex justify-between items-center mb-2">
-                   <CardTitle className="text-xl font-bold text-zinc-900">Pro</CardTitle>
-                   <Badge className="bg-violet-100 text-violet-600 hover:bg-violet-200 border-none">Recente</Badge>
+                  <CardTitle className="text-xl font-bold text-zinc-900 flex items-center gap-2">
+                    Premium <Medal className="h-5 w-5 text-[#966d07]" />
+                  </CardTitle>
+                  <Badge className="bg-violet-100 text-violet-600 hover:bg-violet-200 border-none">+Assinado</Badge>
                 </div>
                 <CardDescription className="text-zinc-500">Liberdade total para suas finanças.</CardDescription>
                 <div className="pt-6 pb-2 flex items-baseline gap-1">
@@ -200,10 +180,10 @@ export default function LandingPage() {
               </CardHeader>
               <CardContent className="p-8 pt-6 space-y-4">
                 <ul className="space-y-3 text-sm text-zinc-600">
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-violet-500 shrink-0" /> <span className="font-medium text-zinc-900">Lançamentos Ilimitados</span></li>
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-violet-500 shrink-0" /> Gestão de Streaming</li>
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-violet-500 shrink-0" /> Projeção de Saldo</li>
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-violet-500 shrink-0" /> Criptografia Básica</li>
+                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-[#966d07] shrink-0" /> <span className="font-medium text-zinc-900">Lançamentos Ilimitados</span></li>
+                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-[#966d07] shrink-0" /> Gestão de Streaming</li>
+                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-[#966d07] shrink-0" /> Projeção de Saldo</li>
+                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-[#966d07] shrink-0" /> Criptografia Básica</li>
                 </ul>
               </CardContent>
               <CardFooter className="p-8 pt-0">
@@ -215,11 +195,11 @@ export default function LandingPage() {
               </CardFooter>
             </Card>
 
-            {/* PLANO PREMIUM */}
+            {/* PLANO PRO */}
             <Card className="bg-white border-zinc-200 shadow-xl hover:border-emerald-200 hover:shadow-emerald-100/50 transition-all rounded-4xl">
               <CardHeader className="p-8 pb-0">
                 <CardTitle className="text-xl font-bold text-zinc-900 flex items-center gap-2">
-                   Premium <Star className="h-4 w-4 text-emerald-500 fill-emerald-500" />
+                  Pro <Medal className="h-5 w-5 text-amber-400" />
                 </CardTitle>
                 <CardDescription className="text-zinc-500">O máximo de poder e segurança.</CardDescription>
                 <div className="pt-6 pb-2 flex items-baseline gap-1">
@@ -229,26 +209,30 @@ export default function LandingPage() {
               </CardHeader>
               <CardContent className="p-8 pt-6 space-y-4">
                 <ul className="space-y-3 text-sm text-zinc-600">
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> Tudo do Plano Pro</li>
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> <span className="font-medium text-zinc-900">Criptografia E2E (Chave Pessoal)</span></li>
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> Exportação CSV</li>
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> Suporte Prioritário VIP</li>
+                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-amber-400 shrink-0" /> Tudo do Plano Pro</li>
+                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-amber-400 shrink-0" /> <span className="font-medium text-zinc-900">Criptografia E2E (Chave Pessoal)</span></li>
+                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-amber-400 shrink-0" /> Exportação CSV</li>
+                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-amber-400 shrink-0" /> Suporte Prioritário VIP</li>
                 </ul>
               </CardContent>
               <CardFooter className="p-8 pt-0">
-                 <a href={LINK_PREMIUM} target="_blank" rel="noopener noreferrer" className="w-full">
+                {/* <a href={LINK_PREMIUM} target="_blank" rel="noopener noreferrer" className="w-full">
+                  <Button className="w-full rounded-2xl h-12 border border-zinc-200 bg-white text-zinc-900 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all hover:scale-105 active:scale-95 shadow-sm" variant="outline">
+                    Assinar Premium
+                  </Button>
+                </a> */}
+                <a onClick={() => { alert("Assinatura Premium em breve!") }} target="_blank" rel="noopener noreferrer" className="w-full">
                   <Button className="w-full rounded-2xl h-12 border border-zinc-200 bg-white text-zinc-900 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all hover:scale-105 active:scale-95 shadow-sm" variant="outline">
                     Assinar Premium
                   </Button>
                 </a>
               </CardFooter>
             </Card>
-
           </div>
-          
+
           <div className="mt-16 text-center">
             <p className="text-sm text-zinc-500 flex justify-center items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-zinc-400" /> Pagamento seguro processado por Mercado Pago
+              <ShieldCheck className="h-5 w-5 text-zinc-400" /> Pagamento seguro processado por Mercado Pago
             </p>
           </div>
         </div>
