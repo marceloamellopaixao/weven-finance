@@ -113,9 +113,6 @@
   --sidebar-ring: oklch(0.551 0.027 264.364);
 }
 
-/* Configurações de Reset e Base 
-   (Substitui o antigo @layer base)
-*/
 @layer base {
   * {
     @apply border-border outline-ring/50;
