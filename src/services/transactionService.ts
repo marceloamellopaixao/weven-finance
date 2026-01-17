@@ -17,7 +17,7 @@ import {
 import { transactionsCol, userDoc } from "./firebase/collections";
 import { db } from "./firebase/client"; 
 import { Transaction, UserSettings, CreateTransactionDTO } from "@/types/transaction";
-import { encryptData, decryptData } from "@/lib/crypto";
+import { encryptData, decryptData, decryptLegacy } from "@/lib/crypto";
 
 // --- Helper de Data Seguro (UTC) ---
 const addMonthsUTC = (dateStr: string, monthsToAdd: number): string => {
@@ -30,6 +30,56 @@ const addMonthsUTC = (dateStr: string, monthsToAdd: number): string => {
   return finalDate.toISOString().split('T')[0];
 };
 
+// --- MIGRAÇÃO DE CRIPTOGRAFIA ---
+export const migrateCryptography = async (uid: string) => {
+  const q = query(transactionsCol(uid));
+  const snapshot = await getDocs(q);
+  const batch = writeBatch(db);
+  let count = 0;
+
+  for (const docSnap of snapshot.docs) {
+    const data = docSnap.data();
+    
+    // Tenta decriptar com a chave LEGADA (antiga)
+    const legDesc = await decryptLegacy(data.description, uid);
+    const legAmount = await decryptLegacy(data.amount, uid);
+
+    // Se conseguiu ler com a chave velha, significa que precisa atualizar para a nova
+    if (legDesc !== null || legAmount !== null) {
+      // Usa o valor decriptado (se conseguiu) ou mantém o original (se já estava certo/texto plano)
+      const descToSave = legDesc !== null ? legDesc : data.description;
+      const amountToSave = legAmount !== null ? legAmount : data.amount;
+
+      // Encripta com a NOVA chave (determinística)
+      const newDesc = await encryptData(descToSave, uid);
+      const newAmount = await encryptData(amountToSave, uid);
+
+      batch.update(docSnap.ref, {
+        description: newDesc,
+        amount: newAmount,
+        isEncrypted: true
+      });
+      count++;
+    } else if (!data.isEncrypted) {
+       // Se não estava encriptado (texto plano), encripta agora
+       const newDesc = await encryptData(data.description, uid);
+       const newAmount = await encryptData(data.amount, uid);
+       
+       batch.update(docSnap.ref, {
+         description: newDesc,
+         amount: newAmount,
+         isEncrypted: true
+       });
+       count++;
+    }
+  }
+
+  if (count > 0) {
+    await batch.commit();
+  }
+  return count;
+};
+
 // --- Transações ---
 
 export const subscribeToTransactions = (uid: string, callback: (data: Transaction[]) => void) => {
@@ -38,14 +88,26 @@ export const subscribeToTransactions = (uid: string, callback: (data: Transactio
   return onSnapshot(q, async (snapshot) => {
     const transactionsPromises = snapshot.docs.map(async (doc) => {
       const data = doc.data();
-      const decryptedDesc = data.isEncrypted ? await decryptData(data.description, uid) : data.description;
-      const decryptedAmount = data.isEncrypted ? await decryptData(data.amount, uid) : data.amount;
+      
+      let decryptedDesc = data.description;
+      let decryptedAmount = data.amount;
+
+      if (data.isEncrypted) {
+        decryptedDesc = await decryptData(data.description, uid);
+        decryptedAmount = await decryptData(data.amount, uid);
+      }
+
+      const parsedAmount = Number(decryptedAmount);
+      const safeAmount = isNaN(parsedAmount) ? 0 : parsedAmount;
+      
+      const isDecryptionFailed = data.isEncrypted && decryptedDesc === data.description && data.description.length > 50;
+      const safeDesc = isDecryptionFailed ? "🔒 Dados Protegidos (Migração Necessária)" : decryptedDesc;
 
       return {
         id: doc.id,
         ...data,
-        description: decryptedDesc,
-        amount: Number(decryptedAmount),
+        description: safeDesc,
+        amount: safeAmount,
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
       } as Transaction;
     });
@@ -63,16 +125,18 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
   const basePurchaseDate = tx.date;
   const baseDueDate = tx.dueDate;
 
-  const encryptedDesc = await encryptData(tx.description, uid);
   const encryptedAmount = await encryptData(tx.amount, uid);
 
   for (let i = 0; i < count; i++) {
     const currentDueDate = addMonthsUTC(baseDueDate, i);
+    
+    const descText = tx.isInstallment ? `${tx.description} (${i + 1}/${count})` : tx.description;
+    const encryptedDesc = await encryptData(descText, uid);
 
     const newTx: Record<string, unknown> = {
       userId: uid,
-      description: encryptedDesc,
-      amount: encryptedAmount,
+      description: encryptedDesc, 
+      amount: encryptedAmount,   
       type: tx.type,
       category: tx.category,
       paymentMethod: tx.paymentMethod,
@@ -80,7 +144,7 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
       date: basePurchaseDate,
       dueDate: currentDueDate,
       createdAt: serverTimestamp(),
-      isEncrypted: true,
+      isEncrypted: true, 
       
       ...(tx.isInstallment && {
         groupId,
@@ -88,11 +152,6 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
         installmentTotal: count,
       })
     };
-    
-    if (tx.isInstallment) {
-        const descWithInstallment = `${tx.description} (${i + 1}/${count})`;
-        newTx.description = await encryptData(descWithInstallment, uid);
-    }
 
     batchPromises.push(addDoc(transactionsCol(uid), newTx));
   }
@@ -147,11 +206,17 @@ export const updateTransaction = async (uid: string, transactionId: string, data
   const txRef = doc(transactionsCol(uid), transactionId);
   
   const updates: Record<string, unknown> = { ...data };
-  if (data.description) updates.description = await encryptData(data.description, uid);
-  if (data.amount !== undefined) updates.amount = await encryptData(data.amount, uid);
-  if (updates.description || updates.amount !== undefined) updates.isEncrypted = true;
+  
+  if (data.amount !== undefined) {
+    updates.amount = await encryptData(data.amount, uid);
+    updates.isEncrypted = true;
+  }
 
   if (!updateGroup) {
+    if (data.description) {
+        updates.description = await encryptData(data.description, uid);
+        updates.isEncrypted = true;
+    }
     await updateDoc(txRef, updates);
     return;
   }
@@ -163,7 +228,6 @@ export const updateTransaction = async (uid: string, transactionId: string, data
   if (currentTx.groupId) {
     const q = query(transactionsCol(uid), where("groupId", "==", currentTx.groupId));
     const querySnapshot = await getDocs(q);
-    
     const batch = writeBatch(db);
 
     for (const docSnap of querySnapshot.docs) {
@@ -176,6 +240,7 @@ export const updateTransaction = async (uid: string, transactionId: string, data
         const cleanDesc = data.description; 
         const descWithSuffix = `${cleanDesc} (${docData.installmentCurrent}/${docData.installmentTotal})`;
         batchUpdates.description = await encryptData(descWithSuffix, uid);
+        batchUpdates.isEncrypted = true;
       }
 
       if (!isTargetDoc) {
@@ -189,6 +254,10 @@ export const updateTransaction = async (uid: string, transactionId: string, data
 
     await batch.commit();
   } else {
+    if (data.description) {
+        updates.description = await encryptData(data.description, uid);
+        updates.isEncrypted = true;
+    }
     await updateDoc(txRef, updates);
   }
 };
@@ -198,8 +267,6 @@ export const toggleTransactionStatus = async (uid: string, transactionId: string
   const ref = doc(transactionsCol(uid), transactionId);
   await updateDoc(ref, { status: newStatus });
 };
-
-// --- Saldo ---
 
 export const getUserSettings = async (uid: string): Promise<UserSettings> => {
   const ref = doc(userDoc(uid), "settings", "finance");
