@@ -3,13 +3,23 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Wallet, ShieldCheck, Zap, ArrowRight, Lock, Smartphone, Medal } from "lucide-react";
+import { CheckCircle2, Wallet, ShieldCheck, Zap, ArrowRight, Lock, Smartphone, Medal, Loader2 } from "lucide-react";
 import Link from "next/link";
-
-const LINK_PRO = "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=018bc64fcdfa44e384fc7d74c430be10";
-// const LINK_PREMIUM = "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=cc495aef2c0043c5a272ad5f8594d78e";
+import { usePlans } from "@/hooks/usePlans"; // Importação do Hook
 
 export default function LandingPage() {
+  const { plans, loading } = usePlans(); // Hook para buscar dados do Firestore
+
+  // Estado de carregamento elegante
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-violet-600" />
+        <p className="text-zinc-500">Carregando ofertas...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white font-sans text-zinc-900 selection:bg-violet-100 selection:text-violet-900 transition-all duration-800">
 
@@ -122,7 +132,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Pricing Section - Light */}
+      {/* Pricing Section - Light & Dynamic */}
       <section className="py-24 px-6 relative bg-white" id="pricing">
         <div className="container mx-auto max-w-6xl">
           <div className="text-center mb-16 space-y-4">
@@ -135,99 +145,103 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-3 gap-8 items-start">
 
-            {/* PLANO BÁSICO */}
-            <Card className="bg-zinc-50 border-zinc-200 shadow-none hover:border-zinc-300 transition-all rounded-4xl">
-              <CardHeader className="p-8 pb-0">
-                <CardTitle className="text-xl font-bold text-zinc-900 flex items-center gap-2">
-                  Free <Medal className="h-5 w-5 text-zinc-400" />
-                </CardTitle>
-                <CardDescription className="text-zinc-500">Para testar e organizar o básico.</CardDescription>
-                <div className="pt-6 pb-2">
-                  <span className="text-4xl font-bold text-zinc-900">R$ 0</span>
-                </div>
-              </CardHeader>
-              <CardContent className="p-8 pt-6 space-y-4">
-                <ul className="space-y-3 text-sm text-zinc-600">
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-zinc-400" /> Até 20 lançamentos/mês</li>
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-zinc-400" /> Gráficos Básicos</li>
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-zinc-400" /> Controle Manual</li>
-                </ul>
-              </CardContent>
-              <CardFooter className="p-8 pt-0">
-                <Link href="/register" className="w-full">
-                  <Button className="w-full rounded-2xl h-12 bg-white hover:bg-zinc-50 text-zinc-900 border border-zinc-200 shadow-sm font-medium transition-all hover:scale-105 active:scale-95">Começar Agora</Button>
-                </Link>
-              </CardFooter>
-            </Card>
-
-            {/* PLANO PREMIUM */}
-            <Card className="bg-white border-violet-200 shadow-2xl shadow-violet-200/50 rounded-4xl relative scale-105 z-10">
-              <div className="absolute top-0 left-0 w-full h-10 bg-linear-to-r from-violet-500 to-indigo-500" >
-                <CardTitle className="flex justify-center items-center w-full h-full text-zinc-200">Plano Popular</CardTitle>
-              </div>
-              <CardHeader className="p-8 pb-0">
-                <div className="flex justify-between items-center mb-2">
+            {/* PLANO FREE (Dynamic - Medalha de Bronze) */}
+            {plans.free.active && (
+              <Card className="bg-zinc-50 border-zinc-200 shadow-none hover:border-zinc-300 transition-all rounded-4xl">
+                <CardHeader className="p-8 pb-0">
                   <CardTitle className="text-xl font-bold text-zinc-900 flex items-center gap-2">
-                    Premium <Medal className="h-5 w-5 text-[#966d07]" />
+                    {plans.free.name} <Medal className="h-5 w-5 text-zinc-400" />
                   </CardTitle>
-                  <Badge className="bg-violet-100 text-violet-600 hover:bg-violet-200 border-none">+Assinado</Badge>
-                </div>
-                <CardDescription className="text-zinc-500">Liberdade total para suas finanças.</CardDescription>
-                <div className="pt-6 pb-2 flex items-baseline gap-1">
-                  <span className="text-4xl font-bold text-zinc-900">R$ 19,90</span>
-                  <span className="text-zinc-400 text-sm">/mês</span>
-                </div>
-              </CardHeader>
-              <CardContent className="p-8 pt-6 space-y-4">
-                <ul className="space-y-3 text-sm text-zinc-600">
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-[#966d07] shrink-0" /> <span className="font-medium text-zinc-900">Lançamentos Ilimitados</span></li>
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-[#966d07] shrink-0" /> Gestão de Streaming</li>
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-[#966d07] shrink-0" /> Projeção de Saldo</li>
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-[#966d07] shrink-0" /> Criptografia Básica</li>
-                </ul>
-              </CardContent>
-              <CardFooter className="p-8 pt-0">
-                <a href={LINK_PRO} target="_blank" rel="noopener noreferrer" className="w-full">
-                  <Button className="w-full rounded-2xl bg-violet-600 text-white hover:bg-violet-700 font-bold h-12 shadow-lg shadow-violet-200 transition-all hover:scale-105 active:scale-95">
-                    Assinar Pro
-                  </Button>
-                </a>
-              </CardFooter>
-            </Card>
+                  <CardDescription className="text-zinc-500">{plans.free.description}</CardDescription>
+                  <div className="pt-6 pb-2">
+                    <span className="text-4xl font-bold text-zinc-900">R$ {plans.free.price}</span>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-8 pt-6 space-y-4">
+                  <ul className="space-y-3 text-sm text-zinc-600">
+                    {plans.free.features.map((feature, i) => (
+                      <li key={i} className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-zinc-400" /> {feature}</li>
+                    ))}
+                  </ul>
+                </CardContent>
+                <CardFooter className="p-8 pt-0">
+                  <Link href="/register" className="w-full">
+                    <Button className="w-full rounded-2xl h-12 bg-white hover:bg-zinc-50 text-zinc-900 border border-zinc-200 shadow-sm font-medium transition-all hover:scale-105 active:scale-95">Começar Agora</Button>
+                  </Link>
+                </CardFooter>
+              </Card>
+            )}
 
-            {/* PLANO PRO */}
-            <Card className="bg-white border-zinc-200 shadow-xl hover:border-emerald-200 hover:shadow-emerald-100/50 transition-all rounded-4xl">
-              <CardHeader className="p-8 pb-0">
-                <CardTitle className="text-xl font-bold text-zinc-900 flex items-center gap-2">
-                  Pro <Medal className="h-5 w-5 text-amber-400" />
-                </CardTitle>
-                <CardDescription className="text-zinc-500">O máximo de poder e segurança.</CardDescription>
-                <div className="pt-6 pb-2 flex items-baseline gap-1">
-                  <span className="text-4xl font-bold text-zinc-900">R$ 49,90</span>
-                  <span className="text-zinc-500 text-sm">/mês</span>
+            {/* PLANO PREMIUM (Dynamic - Medalha de Prata) */}
+            {plans.premium.active && (
+              <Card className="bg-white border-zinc-200 shadow-xl hover:border-amber-400 hover:shadow-amber-100/50 transition-all rounded-4xl">
+                <CardHeader className="p-8 pb-0">
+                  <div className="flex justify-between items-center mb-2">
+                    <CardTitle className="text-xl font-bold text-zinc-900 flex items-center gap-2">
+                      {plans.premium.name} <Medal className="h-5 w-5 text-emerald-500" />
+                    </CardTitle>
+                    {/* Badge opcional para premium */}
+                    <Badge variant="outline" className="text-emerald-600 border-emerald-200">Completo</Badge>
+                  </div>
+                  <CardDescription className="text-zinc-500">{plans.premium.description}</CardDescription>
+                  <div className="pt-6 pb-2 flex items-baseline gap-1">
+                    <span className="text-4xl font-bold text-zinc-900">R$ {plans.premium.price}</span>
+                    <span className="text-zinc-500 text-sm">/mês</span>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-8 pt-6 space-y-4">
+                  <ul className="space-y-3 text-sm text-zinc-600">
+                    {plans.premium.features.map((feature, i) => (
+                      <li key={i} className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> {feature}</li>
+                    ))}
+                  </ul>
+                </CardContent>
+                <CardFooter className="p-8 pt-0">
+                  <a href={plans.premium.paymentLink} target="_blank" rel="noopener noreferrer" className="w-full">
+                    <Button className="w-full rounded-2xl h-12 border border-zinc-200 bg-white text-zinc-900 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all hover:scale-105 active:scale-95 shadow-sm" variant="outline">
+                      Assinar {plans.premium.name}
+                    </Button>
+                  </a>
+                </CardFooter>
+              </Card>
+            )}
+
+            {/* PLANO PRO (Dynamic & Recommended - Medalha de Ouro) */}
+            {plans.pro.active && (
+              <Card className="bg-white border-violet-200 shadow-2xl shadow-violet-200/50 rounded-4xl relative scale-105 z-10">
+                <div className="absolute top-0 left-0 w-full h-10 bg-linear-to-r from-violet-500 to-indigo-500" >
+                  <CardTitle className="flex justify-center items-center w-full h-full text-white text-xs uppercase tracking-widest font-bold">Recomendado</CardTitle>
                 </div>
-              </CardHeader>
-              <CardContent className="p-8 pt-6 space-y-4">
-                <ul className="space-y-3 text-sm text-zinc-600">
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-amber-400 shrink-0" /> Tudo do Plano Pro</li>
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-amber-400 shrink-0" /> <span className="font-medium text-zinc-900">Criptografia E2E (Chave Pessoal)</span></li>
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-amber-400 shrink-0" /> Exportação CSV</li>
-                  <li className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-amber-400 shrink-0" /> Suporte Prioritário VIP</li>
-                </ul>
-              </CardContent>
-              <CardFooter className="p-8 pt-0">
-                {/* <a href={LINK_PREMIUM} target="_blank" rel="noopener noreferrer" className="w-full">
-                  <Button className="w-full rounded-2xl h-12 border border-zinc-200 bg-white text-zinc-900 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all hover:scale-105 active:scale-95 shadow-sm" variant="outline">
-                    Assinar Premium
-                  </Button>
-                </a> */}
-                <a onClick={() => { alert("Assinatura Premium em breve!") }} target="_blank" rel="noopener noreferrer" className="w-full">
-                  <Button className="w-full rounded-2xl h-12 border border-zinc-200 bg-white text-zinc-900 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all hover:scale-105 active:scale-95 shadow-sm" variant="outline">
-                    Assinar Premium
-                  </Button>
-                </a>
-              </CardFooter>
-            </Card>
+                <CardHeader className="p-8 pb-0 mt-6">
+                  <div className="flex justify-between items-center mb-2">
+                    <CardTitle className="text-xl font-bold text-zinc-900 flex items-center gap-2">
+                      {plans.pro.name} <Medal className="h-5 w-5 text-violet-500 fill-violet-100" />
+                    </CardTitle>
+                    <Badge className="bg-violet-100 text-violet-600 hover:bg-violet-200 border-none">Popular</Badge>
+                  </div>
+                  <CardDescription className="text-zinc-500">{plans.pro.description}</CardDescription>
+                  <div className="pt-6 pb-2 flex items-baseline gap-1">
+                    <span className="text-4xl font-bold text-zinc-900">R$ {plans.pro.price}</span>
+                    <span className="text-zinc-400 text-sm">/mês</span>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-8 pt-6 space-y-4">
+                  <ul className="space-y-3 text-sm text-zinc-600">
+                    {plans.pro.features.map((feature, i) => (
+                      <li key={i} className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-violet-500 shrink-0" /> {feature}</li>
+                    ))}
+                  </ul>
+                </CardContent>
+                <CardFooter className="p-8 pt-0">
+                  <a href={plans.pro.paymentLink} target="_blank" rel="noopener noreferrer" className="w-full">
+                    <Button className="w-full rounded-2xl bg-violet-600 text-white hover:bg-violet-700 font-bold h-12 shadow-lg shadow-violet-200 transition-all hover:scale-105 active:scale-95">
+                      Assinar {plans.pro.name}
+                    </Button>
+                  </a>
+                </CardFooter>
+              </Card>
+            )}
+
           </div>
 
           <div className="mt-16 text-center">
