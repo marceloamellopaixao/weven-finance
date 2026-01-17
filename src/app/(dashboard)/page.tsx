@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTransactions } from "@/hooks/useTransactions";
+import { usePlans } from "@/hooks/usePlans";
 import {
   addTransaction,
   deleteTransaction,
@@ -22,11 +23,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import {
-  Plus, DollarSign, CalendarDays, MoreHorizontal, Pencil, Trash2,
-  AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown,
-  Eye, EyeOff,
-  TrendingUp,
-  TrendingDown
+  Plus, TrendingDown, TrendingUp, Eye, EyeOff,
+  DollarSign, CalendarDays, MoreHorizontal, Pencil, Trash2,
+  AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown
 } from "lucide-react";
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
 import LandingPage from "@/components/marketing/LandingPage";
@@ -64,15 +63,12 @@ const formatDateDisplay = (dateString: string, options: Intl.DateTimeFormatOptio
 };
 
 const ITEMS_PER_PAGE = 10;
-const FREE_PLAN_LIMIT = 50;
-const MERCADO_PAGO_LINKS = {
-  pro: "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=018bc64fcdfa44e384fc7d74c430be10",
-  premium: "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=cc495aef2c0043c5a272ad5f8594d78e"
-};
+const FREE_PLAN_LIMIT = 20;
 
 export default function DashboardPage() {
-  const { user, userProfile, privacyMode, togglePrivacyMode } = useAuth(); // Pegando estado global
+  const { user, userProfile, privacyMode, togglePrivacyMode } = useAuth();
   const { transactions, loading } = useTransactions();
+  const { plans } = usePlans();
   const router = useRouter();
 
   // --- 1. STATES ---
@@ -107,7 +103,7 @@ export default function DashboardPage() {
   // Modal de bloqueio de plano
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
-  // Helper para formatar moeda com suporte a privacidade
+  // Helper para formatar moeda com privacidade
   const formatCurrency = (value: number) => {
     if (privacyMode) return "R$ ••••••";
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -184,7 +180,7 @@ export default function DashboardPage() {
     return <LandingPage />;
   }
 
-  // Se o e-mail não estiver verificado, retorna nulo para não mostrar o dashboard
+  // Se email não verificado, retorna nulo para não mostrar o dashboard
   if (user && !user.emailVerified) return null;
 
   // --- 5. HANDLERS ---
@@ -218,8 +214,10 @@ export default function DashboardPage() {
   const canGoForward = availableMonths.findIndex(m => m.value === selectedMonth) < availableMonths.length - 1;
 
   const handleAdd = async () => {
+    const limit = plans.free.limit || FREE_PLAN_LIMIT;
+
     // BLOQUEIO DE PLANO
-    if (userProfile?.plan !== 'pro' && userProfile?.plan !== 'premium' && transactionsThisMonthCount >= FREE_PLAN_LIMIT) {
+    if (userProfile?.plan !== 'pro' && userProfile?.plan !== 'premium' && transactionsThisMonthCount >= limit) {
       setShowUpgradeModal(true);
       return;
     }
@@ -324,6 +322,7 @@ export default function DashboardPage() {
   const uniqueCategories = Array.from(new Set(transactions.map(t => t.category))).sort();
 
   return (
+
     <main className="container mx-auto p-3 md:p-8 space-y-6 max-w-7xl animate-in fade-in duration-500">
 
       {/* Header Responsivo */}
@@ -669,8 +668,10 @@ export default function DashboardPage() {
                                 </span>
                                 {tx.groupId && (
                                   <span className="flex items-center text-[10px] bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
+                                    {/* Ícone condicional: TV se for Streaming, Layers se for parcelamento normal */}
                                     {tx.category === 'Streaming' ? <Tv className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
-                                    {tx.installmentCurrent}/{tx.installmentTotal}
+                                    {/* Proteção contra NaN na exibição da parcela */}
+                                    {(tx.installmentCurrent || 0)}/{(tx.installmentTotal || 0)}
                                   </span>
                                 )}
                                 {tx.type === 'income' && (
@@ -711,6 +712,7 @@ export default function DashboardPage() {
                                     <Pencil className="mr-2 h-3.5 w-3.5" /> Editar
                                   </DropdownMenuItem>
 
+                                  {/* Exibir opção de Encerrar Assinatura APENAS para Streaming */}
                                   {tx.groupId && tx.category === 'Streaming' && (
                                     <>
                                       <DropdownMenuSeparator />
@@ -921,12 +923,12 @@ export default function DashboardPage() {
           </DialogHeader>
           <DialogFooter className="flex flex-col gap-4 mt-6 w-full">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-              <Link href={MERCADO_PAGO_LINKS.pro} target="_blank" className="w-full">
+              <Link href={plans.pro.paymentLink} target="_blank" className="w-full">
                 <Button className="w-full h-12 rounded-xl bg-violet-600 hover:bg-violet-700 text-lg font-bold shadow-lg shadow-violet-500/25">
                   Assinar Pro
                 </Button>
               </Link>
-              <Link href={MERCADO_PAGO_LINKS.premium} target="_blank" className="w-full">
+              <Link href={plans.premium.paymentLink} target="_blank" className="w-full">
                 <Button variant="outline" className="w-full h-12 rounded-xl border-violet-200 text-violet-700 hover:bg-violet-50">
                   Assinar Premium
                 </Button>
