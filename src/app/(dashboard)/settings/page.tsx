@@ -12,17 +12,22 @@ import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   User, Lock, CreditCard, ShieldCheck,
-  LogOut, CheckCircle2, AlertTriangle, EyeOff, Loader2, Medal
+  LogOut, CheckCircle2, AlertTriangle, EyeOff, Loader2, Medal,
+  RefreshCw
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { updateOwnProfile, deleteUserPermanently } from "@/services/userService";
 import { getKeyFingerprint } from "@/lib/crypto";
 import Link from "next/link";
 import { usePlans } from "@/hooks/usePlans";
+import { migrateCryptography } from "@/services/transactionService";
 
 export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode } = useAuth();
   const { plans } = usePlans();
+
+  // State de Migração
+  const [isMigrating, setIsMigrating] = useState(false);
 
   // State da Aba Ativa
   const [activeTab, setActiveTab] = useState("account");
@@ -79,10 +84,25 @@ export default function SettingsPage() {
     }
   };
 
+  // Handler de Migração
+  const handleMigration = async () => {
+    if (!user) return;
+    setIsMigrating(true);
+    try {
+      const count = await migrateCryptography(user.uid);
+      alert(`Sucesso! ${count} transações foram atualizadas para a nova segurança.`);
+    } catch (e) {
+      console.error(e);
+      alert("Erro na migração.");
+    } finally {
+      setIsMigrating(false);
+    }
+  };
+
   const currentPlan = userProfile?.plan || "free";
 
   return (
-    <div className="bg-zinc-50 dark:bg-zinc-950 font-sans p-4 md:p-8 pb-20">
+    <div className="font-sans p-4 md:p-8 pb-20">
       <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
 
         {/* Header */}
@@ -279,7 +299,7 @@ export default function SettingsPage() {
                   {/* Usa togglePrivacyMode do hook para persistir globalmente */}
                   <Switch checked={privacyMode} onCheckedChange={togglePrivacyMode} className="data-[state=checked]:bg-violet-600" />
                 </div>
-
+                <Separator className="bg-zinc-300 dark:bg-zinc-800" />
                 <div className="space-y-4">
                   <div className="flex items-center gap-2"><Lock className="h-4 w-4 text-violet-500" /><h3 className="font-semibold text-sm uppercase tracking-wider text-zinc-500">Segurança de Dados</h3></div>
                   <div className="p-5 rounded-2xl bg-zinc-950 text-zinc-400 font-mono text-xs break-all relative border border-zinc-800 shadow-inner">
@@ -289,9 +309,27 @@ export default function SettingsPage() {
                     {keyFingerprint}
                   </div>
                   <p className="text-xs text-zinc-500 leading-relaxed">* Seus dados sensíveis são criptografados antes de sair do seu dispositivo. Nem mesmo os desenvolvedores da Weven Finance possuem acesso aos valores das suas transações.</p>
+                  <Separator className="bg-zinc-300 dark:bg-zinc-800" />
+
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-900/50">
+                    <h4 className="text-sm font-bold text-blue-700 dark:text-blue-300 mb-2 flex items-center gap-2">
+                      <RefreshCw className="h-4 w-4" /> Manutenção de Dados
+                    </h4>
+                    <p className="text-xs text-blue-600/80 dark:text-blue-400 mb-4">
+                      Se você trocou de dispositivo e seus dados antigos aparecem como &quot;Dados Protegidos&quot; ou códigos estranhos, clique abaixo para tentar recuperá-los usando sua chave antiga e convertê-los para o novo padrão seguro.
+                    </p>
+                    <Button
+                      size="sm"
+                      onClick={handleMigration}
+                      disabled={isMigrating}
+                      className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg w-full sm:w-auto"
+                    >
+                      {isMigrating ? "Migrando..." : "Corrigir/Migrar Criptografia"}
+                    </Button>
+                  </div>
                 </div>
-                <Separator className="bg-zinc-100 dark:bg-zinc-800" />
-                <div className="pt-2">
+                <Separator className="bg-zinc-300 dark:bg-zinc-800" />
+                <div className="space-y-4">
                   <h3 className="text-red-600 font-bold text-sm flex items-center gap-2 mb-3"><AlertTriangle className="h-4 w-4" /> Zona de Perigo</h3>
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-950/10 rounded-2xl">
                     <p className="text-xs text-red-600/80 dark:text-red-400">A exclusão da conta é <strong>irreversível</strong>. Todos os dados serão apagados.</p>
