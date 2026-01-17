@@ -21,7 +21,7 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className={inter.className}>
         <AuthProvider>
-          <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 font-sans transition-all duration-800">
+          <div className="min-h-screen bg-zinc-100 dark:bg-zinc-950 font-sans transition-all duration-800">
             <Header />
             {children}
           </div>
