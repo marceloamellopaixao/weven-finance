@@ -13,7 +13,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import {
   User, Lock, CreditCard, ShieldCheck,
   LogOut, CheckCircle2, AlertTriangle, EyeOff, Loader2, Medal,
-  RefreshCw
+  RefreshCw,
+  Clock,
+  CheckCircle
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { updateOwnProfile, deleteUserPermanently } from "@/services/userService";
@@ -188,19 +190,94 @@ export default function SettingsPage() {
           {/* ABA PLANOS */}
           {activeTab === "billing" && (
             <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
-              <Card className={`border-none shadow-xl rounded-3xl relative overflow-hidden text-white ${currentPlan === 'free' ? 'bg-zinc-800 dark:bg-zinc-900' : 'bg-linear-to-br from-violet-600 to-indigo-700 shadow-violet-500/20'}`}>
+              <Card
+                className={`border-none shadow-xl rounded-3xl relative overflow-hidden text-white flex flex-col justify-center min-h-[10px]"
+                  ${currentPlan === 'free'
+                    ? 'bg-linear-to-br from-amber-700 to-amber-900 shadow-amber-700/30'
+                    : currentPlan === 'premium'
+                      ? 'bg-linear-to-br from-slate-600 to-slate-800 shadow-slate-500/30'
+                      : 'bg-linear-to-br from-yellow-500 to-amber-600 shadow-yellow-500/30'
+                  }`}
+              >
                 <div className="absolute top-0 right-0 p-40 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
-                <CardHeader>
-                  <div className="flex justify-between items-start z-10">
-                    <div>
-                      <CardTitle className="text-3xl flex items-center gap-2 font-bold">
-                        {currentPlan === 'free' ? <Medal className="h-8 w-8 text-zinc-400" /> : currentPlan === 'premium' ? <Medal className="h-8 w-8 text-violet-300" /> : <Medal className="h-8 w-8 text-[#966d07]" />} Weven {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}
+                <CardHeader className="relative z-10 flex-1 flex items-center">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
+
+                    {/* BLOCO PRINCIPAL */}
+                    <div className="space-y-3">
+                      <CardTitle className="text-3xl font-bold flex items-center gap-3">
+                        {currentPlan === 'free' && <Medal className="h-8 w-8 text-amber-400" />}
+                        {currentPlan === 'premium' && <Medal className="h-8 w-8 text-slate-200" />}
+                        {currentPlan === 'pro' && <Medal className="h-8 w-8 text-yellow-300" />}
+                        <span>
+                          Weven{' '}
+                          <span className="opacity-90">
+                            {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}
+                          </span>
+                        </span>
                       </CardTitle>
-                      <CardDescription className={`mt-2 text-lg ${currentPlan === 'free' ? 'text-zinc-400' : 'text-violet-100'}`}>
-                        {currentPlan === 'free' ? <div>Você está utilizando a versão básica.</div> : "Obrigado por apoiar nosso desenvolvimento!"}
+
+                      <CardDescription className="text-base text-white/75 max-w-md leading-relaxed">
+                        {currentPlan === 'free'
+                          ? plans.free.description
+                          : 'Obrigado por apoiar nosso desenvolvimento!'}
                       </CardDescription>
                     </div>
-                    <Badge className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white border-none flex gap-1.5 items-center px-3 py-1.5 text-sm"><CheckCircle2 className="h-4 w-4" /> Plano Ativo</Badge>
+
+                    {/* FEATURES */}
+                    {plans[currentPlan].features && (
+                      <nav className="lg:pt-0">
+                        <ul className="space-y-2 text-sm text-white/70">
+                          {plans[currentPlan].features.map((feature, index) => (
+                            <li key={index} className="flex items-start gap-2">
+                              <CheckCircle2 className="h-4 w-4 mt-0.5 text-white/60" />
+                              <span>{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </nav>
+                    )}
+
+                    {/* STATUS / BADGES */}
+                    <div className="flex flex-col gap-2 items-start lg:items-end">
+
+                      {/* Status pagamento */}
+                      <Badge className="bg-white/15 backdrop-blur-md text-white border-none flex gap-2 items-center px-3 py-1.5 text-xs">
+                        {userProfile?.paymentStatus === 'paid' && (
+                          <>
+                            <CheckCircle className="h-4 w-4 text-emerald-300" />
+                            Pagamento Confirmado
+                          </>
+                        )}
+
+                        {userProfile?.paymentStatus === 'pending' && (
+                          <>
+                            <Clock className="h-4 w-4 text-amber-300" />
+                            Pagamento Pendente
+                          </>
+                        )}
+
+                        {userProfile?.paymentStatus === 'overdue' && (
+                          <>
+                            <AlertTriangle className="h-4 w-4 text-red-300" />
+                            Pagamento Atrasado
+                          </>
+                        )}
+                      </Badge>
+
+                      {/* Plano ativo */}
+                      <Badge className="bg-white/10 backdrop-blur-md text-white border-none flex gap-2 items-center px-3 py-1.5 text-xs">
+                        <CheckCircle2 className="h-4 w-4 text-white/70" />
+                        Plano Ativo
+                      </Badge>
+
+                      {/* Renovação */}
+                      <Badge className="bg-white/10 backdrop-blur-md text-white border-none flex gap-2 items-center px-3 py-1.5 text-xs">
+                        <CheckCircle2 className="h-4 w-4 text-white/70" />
+                        Renovação Automática
+                      </Badge>
+
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="z-10 relative">{currentPlan === 'free' && (<div className="mt-4"><p className="text-sm text-zinc-300 mb-6">Faça o upgrade para remover limites e desbloquear todo o potencial.</p></div>)}</CardContent>
@@ -208,62 +285,75 @@ export default function SettingsPage() {
               {currentPlan !== 'pro' && (
                 <div className="grid gap-6 md:grid-cols-2">
                   {currentPlan !== 'premium' && (
-                    <Card className="border-2 border-violet-100 dark:border-violet-900/30 shadow-lg hover:shadow-xl hover:border-violet-300 transition-all bg-white dark:bg-zinc-900 rounded-3xl group cursor-pointer relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-full h-1 bg-violet-500" />
+                    <Card className="border-2 border-slate-300/40 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all bg-white dark:bg-zinc-900 rounded-3xl group">
+                      <div className="absolute top-0 left-0 w-full h-1 bg-slate-400" />
                       <CardHeader>
                         <CardTitle className="flex justify-between items-center">
                           <span className="flex items-center gap-2">
-                            <Medal className="h-5 w-5 text-violet-500" /> Weven Premium
+                            <Medal className="h-5 w-5 text-slate-500" /> Weven Premium
                           </span>
                           <span className="text-xl font-bold text-zinc-900 dark:text-white">
-                            R$ 19,90
+                            R$ {plans.premium.price.toFixed(2).toString().replace(".", ",")}
                           </span>
                         </CardTitle>
                         <CardDescription>
-                          Transações ilimitadas + Controle de Streaming.
+                          {plans.premium.description}
                         </CardDescription>
                         <nav>
-                          <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
-                            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-violet-500" /> Transações Ilimitadas</li>
-                            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-violet-500" /> Suporte a Contas de Streaming</li>
-                            <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-violet-500" /> Relatórios Avançados</li>
-                          </ul>
+                          {plans.premium.features &&
+                            (
+                              <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
+                                {plans.premium.features.map((feature, index) => (
+                                  <li key={index} className="flex items-center gap-2">
+                                    <CheckCircle2 className="h-4 w-4 text-slate-500" /> {feature}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
                         </nav>
                       </CardHeader>
                       <CardFooter>
                         <Link href={plans.premium.paymentLink} target="_blank" className="w-full">
-                          <Button className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-500/20 group-hover:scale-[1.02] transition-transform">
+                          <Button className="w-full rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-lg shadow-slate-500/20">
                             Fazer Upgrade Premium
                           </Button>
                         </Link>
                       </CardFooter>
                     </Card>
                   )}
-                  <Card className="border-2 border-[#fffbbc] dark:border-[#F7EF8A]/30 shadow-lg hover:shadow-xl hover:border-amber-300 transition-all bg-white dark:bg-zinc-900 rounded-3xl group cursor-pointer relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-[#F7EF8A]" />
+                  <Card className="border-2 border-yellow-300/40 dark:border-yellow-700/30 shadow-lg hover:shadow-xl transition-all bg-white dark:bg-zinc-900 rounded-3xl group">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-yellow-400" />
                     <CardHeader>
                       <CardTitle className="flex justify-between items-center">
                         <span className="flex items-center gap-2">
-                          <Medal className="h-5 w-5 text-[#dbce19]" /> Weven Pro
+                          <Medal className="h-5 w-5 text-yellow-500" /> Weven Pro
                         </span>
                         <span className="text-xl font-bold text-zinc-900 dark:text-white">
-                          R$ 49,90
+                          R$ {plans.pro.price.toFixed(2).toString().replace(".", ",")}
                         </span>
                       </CardTitle>
                       <CardDescription>
-                        Tudo do Pro + Criptografia Exclusiva + Suporte VIP.
+                        {plans.pro.description}
                       </CardDescription>
                       <nav>
-                        <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
-                          <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[#dbce19]" /> Criptografia de Dados End-to-End (E2EE)</li>
-                          <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[#dbce19]" /> Suporte Prioritário 24/7</li>
-                          <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[#dbce19]" /> Acesso Antecipado a Novos Recursos</li>
-                        </ul>
+                        {plans.pro.features &&
+                          (
+                            <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
+                              {plans.pro.features.map((feature, index) => (
+                                <li key={index} className="flex items-center gap-2">
+                                  <CheckCircle2 className="h-4 w-4 text-yellow-500" /> {feature}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                       </nav>
                     </CardHeader>
                     <CardFooter>
                       <Link href={plans.pro.paymentLink} target="_blank" className="w-full">
-                        <Button variant="outline" className="w-full rounded-xl border-[#dbce19] text-[#a89d00] hover:bg-amber-50 dark:hover:bg-amber-900/20 group-hover:scale-[1.02] transition-transform">
+                        <Button
+                          variant="outline"
+                          className="w-full rounded-xl border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"
+                        >
                           Fazer Upgrade Pro
                         </Button>
                       </Link>
