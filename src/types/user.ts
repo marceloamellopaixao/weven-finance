@@ -1,6 +1,8 @@
 export type UserRole = 'admin' | 'moderator' | 'client';
-export type UserPlan = 'free' | 'premium' | 'pro';
 export type UserStatus = 'active' | 'inactive';
+export type UserPlan = 'free' | 'premium' | 'pro';
+export type AuthProvider = 'google' | 'facebook' | 'email';
+export type UserPaymentStatus = 'paid' | 'pending' | 'overdue';
 
 export interface UserProfile {
   uid: string;
@@ -15,4 +17,6 @@ export interface UserProfile {
   blockReason?: string;
   createdAt: string; // ISO Date
   transactionCount?: number;
+  authProvider?: AuthProvider;
+  paymentStatus?: UserPaymentStatus;
 }
