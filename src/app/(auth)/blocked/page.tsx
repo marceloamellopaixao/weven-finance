@@ -6,43 +6,57 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Lock, MessageCircle } from "lucide-react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+// import { Metadata } from "next";
+
+// Head for Blocked Page
+// export const metadata: Metadata = {
+//   title: "Conta Bloqueada - Finance Manager",
+//   description: "Sua conta está bloqueada. Entre em contato com o suporte para mais informações.",
+// }
 
 export default function BlockedPage() {
   const { userProfile, logout, loading, user } = useAuth();
   const router = useRouter();
 
-  // Redirecionamentos de segurança
   useEffect(() => {
-    if (!loading) {
-      // Se estiver logado e ATIVO, não deveria estar aqui -> vai para home
-      if (userProfile && userProfile.status === 'active') {
-        router.push("/");
-      }
+    if (loading) return;
+
+    // Se não estiver logado, não faz sentido acessar /blocked
+    if (!user) {
+      router.push("/");
+      return;
+    }
+
+    // Se estiver ativo, não deveria estar aqui
+    if (userProfile?.status === "active") {
+      router.push("/");
     }
   }, [user, userProfile, loading, router]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950">Carregando...</div>;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 font-sans p-4">
+    <div className="h-full w-full flex items-center justify-center px-4 py-8 bg-zinc-50 dark:bg-zinc-950">
       <Card className="w-full max-w-md border-red-200 dark:border-red-900/50 shadow-2xl bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
         <div className="h-2 w-full bg-red-600" />
-        
-        <CardHeader className="text-center pb-2 pt-8">
+
+        <CardHeader className="text-center pb-2 pt-2">
           <div className="mx-auto bg-red-50 dark:bg-red-900/20 p-4 rounded-full w-fit mb-4 animate-in zoom-in duration-500 border border-red-100 dark:border-red-900/50">
             <Lock className="h-10 w-10 text-red-600 dark:text-red-500" />
           </div>
-          <CardTitle className="text-2xl font-bold text-red-600 dark:text-red-500">Acesso Suspenso</CardTitle>
+          <CardTitle className="text-2xl font-bold text-red-600 dark:text-red-500">
+            Acesso Suspenso
+          </CardTitle>
         </CardHeader>
-        
+
         <CardContent className="text-center space-y-6 px-8">
           <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed">
             A sua conta encontra-se temporariamente bloqueada pelos administradores do sistema.
           </p>
-          
+
           {userProfile?.blockReason ? (
             <div className="bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/50 p-4 rounded-xl text-left shadow-sm">
-              <span className="flex text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider mb-1 flex items-center gap-2">
+              <span className="flex text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider mb-1 items-center gap-2">
                 Motivo do Bloqueio
               </span>
               <p className="text-red-900 dark:text-red-100 font-medium text-sm">
@@ -61,16 +75,16 @@ export default function BlockedPage() {
         </CardContent>
 
         <CardFooter className="flex flex-col gap-3 pt-2 pb-8 px-8">
-          <Button 
+          <Button
             className="w-full bg-green-600 hover:bg-green-700 text-white gap-2 h-12 rounded-xl shadow-lg shadow-green-600/20 transition-all hover:scale-[1.02] font-semibold text-base"
-            onClick={() => window.open("https://wa.me/5511988024979", "_blank")} // Substitua pelo número real do suporte
+            onClick={() => window.open("https://wa.me/5511992348613", "_blank")}
           >
             <MessageCircle className="h-5 w-5" /> Falar no WhatsApp
           </Button>
-          
-          <Button 
-            variant="ghost" 
-            className="w-full text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 h-12 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800" 
+
+          <Button
+            variant="ghost"
+            className="w-full text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 h-12 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800"
             onClick={logout}
           >
             Sair da Conta
