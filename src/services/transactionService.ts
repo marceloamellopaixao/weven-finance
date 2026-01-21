@@ -1,21 +1,21 @@
-import { 
-  addDoc, 
-  serverTimestamp, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  updateDoc, 
-  doc, 
-  getDoc, 
-  setDoc, 
-  deleteDoc, 
-  where, 
-  getDocs, 
+import {
+  addDoc,
+  serverTimestamp,
+  onSnapshot,
+  query,
+  orderBy,
+  updateDoc,
+  doc,
+  getDoc,
+  setDoc,
+  deleteDoc,
+  where,
+  getDocs,
   writeBatch,
-  Timestamp 
+  Timestamp
 } from "firebase/firestore";
 import { transactionsCol, userDoc } from "./firebase/collections";
-import { db } from "./firebase/client"; 
+import { db } from "./firebase/client";
 import { Transaction, UserSettings, CreateTransactionDTO } from "@/types/transaction";
 import { encryptData, decryptData, decryptLegacy } from "@/lib/crypto";
 
@@ -39,7 +39,7 @@ export const migrateCryptography = async (uid: string) => {
 
   for (const docSnap of snapshot.docs) {
     const data = docSnap.data();
-    
+
     // Tenta decriptar com a chave LEGADA (antiga)
     const legDesc = await decryptLegacy(data.description, uid);
     const legAmount = await decryptLegacy(data.amount, uid);
@@ -61,16 +61,16 @@ export const migrateCryptography = async (uid: string) => {
       });
       count++;
     } else if (!data.isEncrypted) {
-       // Se não estava encriptado (texto plano), encripta agora
-       const newDesc = await encryptData(data.description, uid);
-       const newAmount = await encryptData(data.amount, uid);
-       
-       batch.update(docSnap.ref, {
-         description: newDesc,
-         amount: newAmount,
-         isEncrypted: true
-       });
-       count++;
+      // Se não estava encriptado (texto plano), encripta agora
+      const newDesc = await encryptData(data.description, uid);
+      const newAmount = await encryptData(data.amount, uid);
+
+      batch.update(docSnap.ref, {
+        description: newDesc,
+        amount: newAmount,
+        isEncrypted: true
+      });
+      count++;
     }
   }
 
@@ -80,48 +80,72 @@ export const migrateCryptography = async (uid: string) => {
   return count;
 };
 
-// --- Transações ---
-
-export const subscribeToTransactions = (uid: string, callback: (data: Transaction[]) => void) => {
+// --- Transações (Realtime) ---
+export const subscribeToTransactions = (
+  uid: string,
+  onChange: (data: Transaction[]) => void,
+  onError?: (error: Error) => void
+) => {
   const q = query(transactionsCol(uid), orderBy("date", "desc"));
-  
-  return onSnapshot(q, async (snapshot) => {
-    const transactionsPromises = snapshot.docs.map(async (doc) => {
-      const data = doc.data();
-      
-      let decryptedDesc = data.description;
-      let decryptedAmount = data.amount;
 
-      if (data.isEncrypted) {
-        decryptedDesc = await decryptData(data.description, uid);
-        decryptedAmount = await decryptData(data.amount, uid);
+  return onSnapshot(
+    q,
+    async (snapshot) => {
+      try {
+        const transactions = await Promise.all(
+          snapshot.docs.map(async (docSnap) => {
+            const data = docSnap.data();
+
+            let decryptedDesc = data.description;
+            let decryptedAmount = data.amount;
+
+            if (data.isEncrypted) {
+              decryptedDesc = await decryptData(data.description, uid);
+              decryptedAmount = await decryptData(data.amount, uid);
+            }
+
+            const parsedAmount = Number(decryptedAmount);
+            const safeAmount = isNaN(parsedAmount) ? 0 : parsedAmount;
+
+            const isDecryptionFailed =
+              data.isEncrypted &&
+              decryptedDesc === data.description &&
+              data.description.length > 50;
+
+            return {
+              id: docSnap.id,
+              ...data,
+              description: isDecryptionFailed
+                ? "🔒 Dados Protegidos (Migração Necessária)"
+                : decryptedDesc,
+              amount: safeAmount,
+              createdAt:
+                data.createdAt instanceof Timestamp
+                  ? data.createdAt.toDate()
+                  : data.createdAt,
+            } as Transaction;
+          })
+        );
+
+        onChange(transactions);
+      } catch (err) {
+        console.error("Erro ao processar transações:", err);
+        onError?.(err as Error);
       }
-
-      const parsedAmount = Number(decryptedAmount);
-      const safeAmount = isNaN(parsedAmount) ? 0 : parsedAmount;
-      
-      const isDecryptionFailed = data.isEncrypted && decryptedDesc === data.description && data.description.length > 50;
-      const safeDesc = isDecryptionFailed ? "🔒 Dados Protegidos (Migração Necessária)" : decryptedDesc;
-
-      return {
-        id: doc.id,
-        ...data,
-        description: safeDesc,
-        amount: safeAmount,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
-      } as Transaction;
-    });
-
-    const transactions = await Promise.all(transactionsPromises);
-    callback(transactions);
-  });
+    },
+    (error) => {
+      console.error("Erro realtime transações:", error);
+      onError?.(error);
+    }
+  );
 };
 
+// Adicionar nova transação (com suporte a parcelas)
 export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
   const batchPromises = [];
   const groupId = crypto.randomUUID();
   const count = tx.isInstallment ? Math.max(1, Math.floor(tx.installmentsCount)) : 1;
-  
+
   const basePurchaseDate = tx.date;
   const baseDueDate = tx.dueDate;
 
@@ -129,14 +153,14 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
 
   for (let i = 0; i < count; i++) {
     const currentDueDate = addMonthsUTC(baseDueDate, i);
-    
+
     const descText = tx.isInstallment ? `${tx.description} (${i + 1}/${count})` : tx.description;
     const encryptedDesc = await encryptData(descText, uid);
 
     const newTx: Record<string, unknown> = {
       userId: uid,
-      description: encryptedDesc, 
-      amount: encryptedAmount,   
+      description: encryptedDesc,
+      amount: encryptedAmount,
       type: tx.type,
       category: tx.category,
       paymentMethod: tx.paymentMethod,
@@ -144,8 +168,8 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
       date: basePurchaseDate,
       dueDate: currentDueDate,
       createdAt: serverTimestamp(),
-      isEncrypted: true, 
-      
+      isEncrypted: true,
+
       ...(tx.isInstallment && {
         groupId,
         installmentCurrent: i + 1,
@@ -159,31 +183,33 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
   await Promise.all(batchPromises);
 };
 
+// Deletar transação (com opção de deletar todo o grupo)
 export const deleteTransaction = async (uid: string, transactionId: string, deleteGroup: boolean = false) => {
   if (deleteGroup) {
     const txRef = doc(transactionsCol(uid), transactionId);
     const txSnap = await getDoc(txRef);
-    
+
     if (!txSnap.exists()) return;
     const txData = txSnap.data();
 
     if (txData.groupId) {
       const q = query(transactionsCol(uid), where("groupId", "==", txData.groupId));
       const querySnapshot = await getDocs(q);
-      
+
       const batch = writeBatch(db);
       querySnapshot.docs.forEach((docSnap) => {
         batch.delete(docSnap.ref);
       });
-      
+
       await batch.commit();
-      return; 
+      return;
     }
   }
 
   await deleteDoc(doc(transactionsCol(uid), transactionId));
 };
 
+// Cancelar parcelas futuras de um grupo de transações
 export const cancelFutureInstallments = async (uid: string, groupId: string, lastInstallmentDate: string) => {
   const q = query(
     transactionsCol(uid),
@@ -192,7 +218,7 @@ export const cancelFutureInstallments = async (uid: string, groupId: string, las
   );
 
   const querySnapshot = await getDocs(q);
-  
+
   if (querySnapshot.empty) return;
 
   const batch = writeBatch(db);
@@ -202,11 +228,12 @@ export const cancelFutureInstallments = async (uid: string, groupId: string, las
   await batch.commit();
 };
 
+// Atualizar transação (com opção de atualizar todo o grupo)
 export const updateTransaction = async (uid: string, transactionId: string, data: Partial<Transaction>, updateGroup: boolean = false) => {
   const txRef = doc(transactionsCol(uid), transactionId);
-  
+
   const updates: Record<string, unknown> = { ...data };
-  
+
   if (data.amount !== undefined) {
     updates.amount = await encryptData(data.amount, uid);
     updates.isEncrypted = true;
@@ -214,8 +241,8 @@ export const updateTransaction = async (uid: string, transactionId: string, data
 
   if (!updateGroup) {
     if (data.description) {
-        updates.description = await encryptData(data.description, uid);
-        updates.isEncrypted = true;
+      updates.description = await encryptData(data.description, uid);
+      updates.isEncrypted = true;
     }
     await updateDoc(txRef, updates);
     return;
@@ -233,11 +260,11 @@ export const updateTransaction = async (uid: string, transactionId: string, data
     for (const docSnap of querySnapshot.docs) {
       const docData = docSnap.data();
       const isTargetDoc = docSnap.id === transactionId;
-      
+
       const batchUpdates: Record<string, unknown> = { ...updates };
 
       if (data.description) {
-        const cleanDesc = data.description; 
+        const cleanDesc = data.description;
         const descWithSuffix = `${cleanDesc} (${docData.installmentCurrent}/${docData.installmentTotal})`;
         batchUpdates.description = await encryptData(descWithSuffix, uid);
         batchUpdates.isEncrypted = true;
@@ -246,7 +273,7 @@ export const updateTransaction = async (uid: string, transactionId: string, data
       if (!isTargetDoc) {
         delete batchUpdates.date;
         delete batchUpdates.dueDate;
-        delete batchUpdates.status; 
+        delete batchUpdates.status;
       }
 
       batch.update(docSnap.ref, batchUpdates);
@@ -255,19 +282,21 @@ export const updateTransaction = async (uid: string, transactionId: string, data
     await batch.commit();
   } else {
     if (data.description) {
-        updates.description = await encryptData(data.description, uid);
-        updates.isEncrypted = true;
+      updates.description = await encryptData(data.description, uid);
+      updates.isEncrypted = true;
     }
     await updateDoc(txRef, updates);
   }
 };
 
+// Alternar status da transação (paid <-> pending)
 export const toggleTransactionStatus = async (uid: string, transactionId: string, currentStatus: "paid" | "pending") => {
   const newStatus = currentStatus === "paid" ? "pending" : "paid";
   const ref = doc(transactionsCol(uid), transactionId);
   await updateDoc(ref, { status: newStatus });
 };
 
+// --- Configurações do Usuário ---
 export const getUserSettings = async (uid: string): Promise<UserSettings> => {
   const ref = doc(userDoc(uid), "settings", "finance");
   const snap = await getDoc(ref);
@@ -275,6 +304,31 @@ export const getUserSettings = async (uid: string): Promise<UserSettings> => {
   return { currentBalance: 0 };
 };
 
+// --- User Settings (Realtime) ---
+export const subscribeToUserSettings = (
+  uid: string,
+  onChange: (data: UserSettings) => void,
+  onError?: (error: Error) => void
+) => {
+  const ref = doc(userDoc(uid), "settings", "finance");
+
+  return onSnapshot(
+    ref,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        onChange(snapshot.data() as UserSettings);
+      } else {
+        onChange({ currentBalance: 0 });
+      }
+    },
+    (error) => {
+      console.error("Erro realtime user settings:", error);
+      onError?.(error);
+    }
+  );
+};
+
+// Atualizar saldo atual do usuário
 export const updateUserBalance = async (uid: string, newBalance: number) => {
   const ref = doc(userDoc(uid), "settings", "finance");
   await setDoc(ref, { currentBalance: newBalance }, { merge: true });
