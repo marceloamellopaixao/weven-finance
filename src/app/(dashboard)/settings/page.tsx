@@ -267,14 +267,25 @@ export default function SettingsPage() {
 
                       {/* Plano ativo */}
                       <Badge className="bg-white/10 backdrop-blur-md text-white border-none flex gap-2 items-center px-3 py-1.5 text-xs">
-                        <CheckCircle2 className="h-4 w-4 text-white/70" />
-                        Plano Ativo
+                        {userProfile?.status === 'active' ? (
+                          <><CheckCircle className="h-4 w-4 text-white/70" />Plano {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Ativo</>
+                        ) : (
+                          <><AlertTriangle className="h-4 w-4 text-white/70" />Plano {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Inativo</>
+                        )}
+
                       </Badge>
 
                       {/* Renovação */}
                       <Badge className="bg-white/10 backdrop-blur-md text-white border-none flex gap-2 items-center px-3 py-1.5 text-xs">
-                        <CheckCircle2 className="h-4 w-4 text-white/70" />
-                        Renovação Automática
+                        {userProfile?.paymentStatus === 'paid' ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 text-white/70" /> Renovação Automática
+                          </>
+                        ) : (
+                          <>
+                            <AlertTriangle className="h-4 w-4 text-white/70" /> Renovação Desativada
+                          </>
+                        )}
                       </Badge>
 
                     </div>
