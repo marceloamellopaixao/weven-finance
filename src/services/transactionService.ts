@@ -12,8 +12,10 @@ import {
   where,
   getDocs,
   writeBatch,
-  Timestamp
+  Timestamp,
+  increment,
 } from "firebase/firestore";
+
 import { transactionsCol, userDoc } from "./firebase/collections";
 import { db } from "./firebase/client";
 import { Transaction, UserSettings, CreateTransactionDTO } from "@/types/transaction";
@@ -21,13 +23,25 @@ import { encryptData, decryptData, decryptLegacy } from "@/lib/crypto";
 
 // --- Helper de Data Seguro (UTC) ---
 const addMonthsUTC = (dateStr: string, monthsToAdd: number): string => {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const targetMonthDate = new Date(Date.UTC(year, (month - 1) + monthsToAdd, 1));
-  const lastDayOfTargetMonth = new Date(Date.UTC(targetMonthDate.getUTCFullYear(), targetMonthDate.getUTCMonth() + 1, 0));
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const targetMonthDate = new Date(Date.UTC(year, month - 1 + monthsToAdd, 1));
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(targetMonthDate.getUTCFullYear(), targetMonthDate.getUTCMonth() + 1, 0)
+  );
   const maxDays = lastDayOfTargetMonth.getUTCDate();
   const finalDay = Math.min(day, maxDays);
-  const finalDate = new Date(Date.UTC(targetMonthDate.getUTCFullYear(), targetMonthDate.getUTCMonth(), finalDay));
-  return finalDate.toISOString().split('T')[0];
+
+  const finalDate = new Date(
+    Date.UTC(targetMonthDate.getUTCFullYear(), targetMonthDate.getUTCMonth(), finalDay)
+  );
+
+  return finalDate.toISOString().split("T")[0];
+};
+
+// --- Helper: contador realtime no documento do usuário ---
+const bumpUserTransactionCount = async (uid: string, delta: number) => {
+  const ref = doc(db, "users", uid);
+  await updateDoc(ref, { transactionCount: increment(delta) });
 };
 
 // --- MIGRAÇÃO DE CRIPTOGRAFIA ---
@@ -40,43 +54,36 @@ export const migrateCryptography = async (uid: string) => {
   for (const docSnap of snapshot.docs) {
     const data = docSnap.data();
 
-    // Tenta decriptar com a chave LEGADA (antiga)
     const legDesc = await decryptLegacy(data.description, uid);
     const legAmount = await decryptLegacy(data.amount, uid);
 
-    // Se conseguiu ler com a chave velha, significa que precisa atualizar para a nova
     if (legDesc !== null || legAmount !== null) {
-      // Usa o valor decriptado (se conseguiu) ou mantém o original (se já estava certo/texto plano)
       const descToSave = legDesc !== null ? legDesc : data.description;
       const amountToSave = legAmount !== null ? legAmount : data.amount;
 
-      // Encripta com a NOVA chave (determinística)
       const newDesc = await encryptData(descToSave, uid);
       const newAmount = await encryptData(amountToSave, uid);
 
       batch.update(docSnap.ref, {
         description: newDesc,
         amount: newAmount,
-        isEncrypted: true
+        isEncrypted: true,
       });
       count++;
     } else if (!data.isEncrypted) {
-      // Se não estava encriptado (texto plano), encripta agora
       const newDesc = await encryptData(data.description, uid);
       const newAmount = await encryptData(data.amount, uid);
 
       batch.update(docSnap.ref, {
         description: newDesc,
         amount: newAmount,
-        isEncrypted: true
+        isEncrypted: true,
       });
       count++;
     }
   }
 
-  if (count > 0) {
-    await batch.commit();
-  }
+  if (count > 0) await batch.commit();
   return count;
 };
 
@@ -86,7 +93,13 @@ export const subscribeToTransactions = (
   onChange: (data: Transaction[]) => void,
   onError?: (error: Error) => void
 ) => {
-  const q = query(transactionsCol(uid), orderBy("date", "desc"));
+  /**
+   * IMPORTANTE:
+   * No seu dashboard você filtra por dueDate (mês/ano).
+   * Então a ordenação mais coerente aqui é dueDate desc.
+   * Se preferir manter por "date", pode, mas o comportamento fica menos previsível.
+   */
+  const q = query(transactionsCol(uid), orderBy("dueDate", "desc"));
 
   return onSnapshot(
     q,
@@ -105,11 +118,12 @@ export const subscribeToTransactions = (
             }
 
             const parsedAmount = Number(decryptedAmount);
-            const safeAmount = isNaN(parsedAmount) ? 0 : parsedAmount;
+            const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
 
             const isDecryptionFailed =
               data.isEncrypted &&
               decryptedDesc === data.description &&
+              typeof data.description === "string" &&
               data.description.length > 50;
 
             return {
@@ -120,9 +134,7 @@ export const subscribeToTransactions = (
                 : decryptedDesc,
               amount: safeAmount,
               createdAt:
-                data.createdAt instanceof Timestamp
-                  ? data.createdAt.toDate()
-                  : data.createdAt,
+                data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
             } as Transaction;
           })
         );
@@ -135,14 +147,14 @@ export const subscribeToTransactions = (
     },
     (error) => {
       console.error("Erro realtime transações:", error);
-      onError?.(error);
+      onError?.(error as Error);
     }
   );
 };
 
 // Adicionar nova transação (com suporte a parcelas)
 export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
-  const batchPromises = [];
+  const batchPromises: Promise<unknown>[] = [];
   const groupId = crypto.randomUUID();
   const count = tx.isInstallment ? Math.max(1, Math.floor(tx.installmentsCount)) : 1;
 
@@ -169,27 +181,33 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
       dueDate: currentDueDate,
       createdAt: serverTimestamp(),
       isEncrypted: true,
-
       ...(tx.isInstallment && {
         groupId,
         installmentCurrent: i + 1,
         installmentTotal: count,
-      })
+      }),
     };
 
     batchPromises.push(addDoc(transactionsCol(uid), newTx));
   }
 
   await Promise.all(batchPromises);
+
+  // ✅ contador em tempo real no documento do usuário
+  await bumpUserTransactionCount(uid, count);
 };
 
 // Deletar transação (com opção de deletar todo o grupo)
-export const deleteTransaction = async (uid: string, transactionId: string, deleteGroup: boolean = false) => {
+export const deleteTransaction = async (
+  uid: string,
+  transactionId: string,
+  deleteGroup: boolean = false
+) => {
   if (deleteGroup) {
     const txRef = doc(transactionsCol(uid), transactionId);
     const txSnap = await getDoc(txRef);
-
     if (!txSnap.exists()) return;
+
     const txData = txSnap.data();
 
     if (txData.groupId) {
@@ -197,20 +215,26 @@ export const deleteTransaction = async (uid: string, transactionId: string, dele
       const querySnapshot = await getDocs(q);
 
       const batch = writeBatch(db);
-      querySnapshot.docs.forEach((docSnap) => {
-        batch.delete(docSnap.ref);
-      });
-
+      querySnapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
       await batch.commit();
+
+      // ✅ decrementa pelo total apagado
+      await bumpUserTransactionCount(uid, -querySnapshot.size);
       return;
     }
   }
 
   await deleteDoc(doc(transactionsCol(uid), transactionId));
+
+  await bumpUserTransactionCount(uid, -1);
 };
 
 // Cancelar parcelas futuras de um grupo de transações
-export const cancelFutureInstallments = async (uid: string, groupId: string, lastInstallmentDate: string) => {
+export const cancelFutureInstallments = async (
+  uid: string,
+  groupId: string,
+  lastInstallmentDate: string
+) => {
   const q = query(
     transactionsCol(uid),
     where("groupId", "==", groupId),
@@ -218,20 +242,23 @@ export const cancelFutureInstallments = async (uid: string, groupId: string, las
   );
 
   const querySnapshot = await getDocs(q);
-
   if (querySnapshot.empty) return;
 
   const batch = writeBatch(db);
-  querySnapshot.docs.forEach((doc) => {
-    batch.delete(doc.ref);
-  });
+  querySnapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
   await batch.commit();
+
+  await bumpUserTransactionCount(uid, -querySnapshot.size);
 };
 
 // Atualizar transação (com opção de atualizar todo o grupo)
-export const updateTransaction = async (uid: string, transactionId: string, data: Partial<Transaction>, updateGroup: boolean = false) => {
+export const updateTransaction = async (
+  uid: string,
+  transactionId: string,
+  data: Partial<Transaction>,
+  updateGroup: boolean = false
+) => {
   const txRef = doc(transactionsCol(uid), transactionId);
-
   const updates: Record<string, unknown> = { ...data };
 
   if (data.amount !== undefined) {
@@ -250,6 +277,7 @@ export const updateTransaction = async (uid: string, transactionId: string, data
 
   const txSnap = await getDoc(txRef);
   if (!txSnap.exists()) return;
+
   const currentTx = txSnap.data();
 
   if (currentTx.groupId) {
@@ -290,7 +318,11 @@ export const updateTransaction = async (uid: string, transactionId: string, data
 };
 
 // Alternar status da transação (paid <-> pending)
-export const toggleTransactionStatus = async (uid: string, transactionId: string, currentStatus: "paid" | "pending") => {
+export const toggleTransactionStatus = async (
+  uid: string,
+  transactionId: string,
+  currentStatus: "paid" | "pending"
+) => {
   const newStatus = currentStatus === "paid" ? "pending" : "paid";
   const ref = doc(transactionsCol(uid), transactionId);
   await updateDoc(ref, { status: newStatus });
@@ -323,7 +355,7 @@ export const subscribeToUserSettings = (
     },
     (error) => {
       console.error("Erro realtime user settings:", error);
-      onError?.(error);
+      onError?.(error as Error);
     }
   );
 };
