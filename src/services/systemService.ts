@@ -40,7 +40,7 @@ export const updatePlansConfig = async (config: PlansConfig) => {
  * Subscription em tempo real
  * Retorna função de unsubscribe (OBRIGATÓRIO usar)
  */
-export const subscribePlansConfig = (
+export const subscribeToPlansConfig = (
   onChange: (data: PlansConfig) => void,
   onError?: (error: Error) => void
 ) => {
