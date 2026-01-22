@@ -9,8 +9,11 @@ import { BlockedGuard } from "@/components/guards/BlockedGuard";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Weven Finance",
-  description: "Gerenciamento financeiro",
+  title: "Weven Finance | Gerenciamento Financeiro",
+  description: "Gerenciamento financeiro pessoal e empresarial.",
+  icons: {
+    icon: "/wevenfinance.svg",
+  },
 };
 
 export default function RootLayout({
