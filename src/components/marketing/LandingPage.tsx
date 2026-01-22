@@ -7,6 +7,14 @@ import { CheckCircle2, Wallet, ShieldCheck, Zap, ArrowRight, Lock, Smartphone, M
 import Link from "next/link";
 import { usePlans } from "@/hooks/usePlans"; // Importação do Hook
 
+export const metadata = {
+  title: "Weven Finance | Home",
+  description: "Gerenciamento financeiro | Página Inicial",
+  icons: {
+    icon: "/wevenfinance.svg",
+  },
+};
+
 export default function LandingPage() {
   const { plans, loading } = usePlans(); // Hook para buscar dados do Firestore
 
