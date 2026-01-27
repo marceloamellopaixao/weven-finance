@@ -25,12 +25,14 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import {
   Plus, TrendingDown, TrendingUp, Eye, EyeOff,
   DollarSign, CalendarDays, MoreHorizontal, Pencil, Trash2,
-  AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown
+  AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown, Search, HelpCircle, CheckCircle2
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
 import LandingPage from "@/components/marketing/LandingPage";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import FormExpenseIncome from "@/components/FormExpenseIncome";
 
 // --- Configurações Visuais ---
 const ALL_CATEGORIES = [
@@ -47,13 +49,13 @@ const ALL_CATEGORIES = [
   { name: "Outros", type: "both", color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50" },
 ];
 
-const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
-  { value: "credit_card", label: "Cartão de Crédito" },
-  { value: "debit_card", label: "Débito" },
-  { value: "pix", label: "Pix" },
-  { value: "boleto", label: "Boleto" },
-  { value: "cash", label: "Dinheiro" },
-  { value: "transfer", label: "Transferência" },
+const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
+  { value: "credit_card", label: "Cartão de Crédito", hasDueDate: true },
+  { value: "boleto", label: "Boleto", hasDueDate: true },
+  { value: "debit_card", label: "Cartão de Débito", hasDueDate: false },
+  { value: "pix", label: "Pix", hasDueDate: false },
+  { value: "cash", label: "Dinheiro", hasDueDate: false },
+  { value: "transfer", label: "Transferência", hasDueDate: false },
 ];
 
 const formatDateDisplay = (dateString: string, options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' }) => {
@@ -78,6 +80,7 @@ export default function DashboardPage() {
   const [filterType, setFilterType] = useState<"all" | "income" | "expense">("all");
   const [filterStatus, setFilterStatus] = useState<"all" | "paid" | "pending">("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState<string>("");
 
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
@@ -87,8 +90,8 @@ export default function DashboardPage() {
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [type, setType] = useState<TransactionType>("expense");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("debit_card");
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("debit_card");
   const [dueDate, setDueDate] = useState(new Date().toISOString().split('T')[0]);
   const [isInstallment, setIsInstallment] = useState(false);
   const [installmentsCount, setInstallmentsCount] = useState("2");
@@ -99,9 +102,11 @@ export default function DashboardPage() {
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
   const [txToCancelSubscription, setTxToCancelSubscription] = useState<Transaction | null>(null);
-
-  // Modal de bloqueio de plano
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  // Modal de Check-in Diário
+  const [pendingCheckins, setPendingCheckins] = useState<Transaction[]>([]);
+  const [showCheckinModal, setShowCheckinModal] = useState(false);
 
   // Helper para formatar moeda com privacidade
   const formatCurrency = (value: number) => {
@@ -116,7 +121,24 @@ export default function DashboardPage() {
     }
   }, [user, loading, router]);
 
-  // --- 3. MEMOS ---
+  // --- 3. CHECK-IN DIÁRIO (Pop-up Inteligente) ---
+  useEffect(() => {
+    if (loading || !user || pendingCheckins.length > 0) return; // Se já carregou ou já tem lista, para.
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // Filtra transações PENDENTES que venceram hoje ou antes
+    const toCheck = transactions.filter(t => {
+      return t.status === 'pending' && t.dueDate <= todayStr;
+    });
+
+    if (toCheck.length > 0) {
+      setPendingCheckins(toCheck);
+      setShowCheckinModal(true);
+    }
+  }, [transactions, loading, user, pendingCheckins]);
+
+  // --- 4. MEMOS ---
 
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
@@ -160,11 +182,16 @@ export default function DashboardPage() {
     return transactions.filter(t => t.dueDate.startsWith(selectedMonth)).length;
   }, [transactions, selectedMonth]);
 
-  // --- 4. EFFECTS ---
+  const showDueDateInput = useMemo(() => {
+    const method = PAYMENT_METHODS.find(pm => pm.value === paymentMethod);
+    return method ? method.hasDueDate : false;
+  }, [paymentMethod]);
+
+  // --- 5. EFFECTS ---
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedMonth, filterType, filterStatus, filterCategory]);
+  }, [selectedMonth, filterType, filterStatus, filterCategory, searchTerm]);
 
   useEffect(() => {
     if (category === 'Streaming') {
@@ -180,10 +207,10 @@ export default function DashboardPage() {
     return <LandingPage />;
   }
 
-  // Se email não verificado, retorna nulo para não mostrar o dashboard
+  // Validação de e-mail não verificado
   if (user && !user.emailVerified) return null;
 
-  // --- 5. HANDLERS ---
+  // --- 6. HANDLERS ---
 
   const changeType = (newType: TransactionType) => {
     setType(newType);
@@ -235,13 +262,15 @@ export default function DashboardPage() {
         finalAmount = Math.round(finalAmount * 100) / 100;
       }
 
+      const finalDueDate = showDueDateInput ? dueDate : date;
+
       await addTransaction(user!.uid, {
         description: desc,
         amount: finalAmount,
         type: type,
         category: category,
         paymentMethod: paymentMethod,
-        date: type === 'income' ? dueDate : date,
+        date: type === 'income' ? finalDueDate : date,
         dueDate: dueDate,
         isInstallment,
         installmentsCount: count
@@ -285,7 +314,23 @@ export default function DashboardPage() {
     setEditingTx(null);
   };
 
-  // --- 6. RENDERIZAÇÃO E FILTRAGEM ---
+  const handleCheckinAction = async (tx: Transaction, markAsPaid: boolean) => {
+    if (!user || !tx.id) return;
+
+    if (markAsPaid) {
+      await toggleTransactionStatus(user!.uid, tx.id!, 'pending'); // Marca como pago
+    }
+
+    // Remove da lista de check-ins pendentes
+    setPendingCheckins(prev => prev.filter(t => t.id !== tx.id));
+
+    // Fecha o modal se não houver mais check-ins pendentes
+    if (pendingCheckins.length <= 1) {
+      setShowCheckinModal(false);
+    }
+  }
+
+  // --- 7. RENDERIZAÇÃO E FILTRAGEM ---
 
   const monthTransactions = transactions.filter(t => t.dueDate && t.dueDate.startsWith(selectedMonth));
 
@@ -293,6 +338,14 @@ export default function DashboardPage() {
     if (filterType !== 'all' && t.type !== filterType) return false;
     if (filterStatus !== 'all' && t.status !== filterStatus) return false;
     if (filterCategory !== 'all' && t.category !== filterCategory) return false;
+
+    // Filtro de Busca (Texto e Valores)
+    if (searchTerm) {
+      const lowerSearch = searchTerm.toLowerCase();
+      const matchDesc = t.description.toLowerCase().includes(lowerSearch);
+      const matchVal = t.amount.toString().includes(lowerSearch);
+      if (!matchDesc && !matchVal) return false;
+    }
     return true;
   });
 
@@ -324,8 +377,6 @@ export default function DashboardPage() {
   return (
 
     <main className="container mx-auto p-3 md:p-8 space-y-6 max-w-7xl animate-in fade-in duration-500">
-
-      {/* Header Responsivo */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Visão Geral</h1>
@@ -377,55 +428,88 @@ export default function DashboardPage() {
           <div className="absolute inset-0 bg-linear-to-br from-blue-500/5 to-transparent pointer-events-none" />
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Saldo Consolidado</CardTitle>
-              {/* Botão de Olho Rápido */}
-              <button onClick={togglePrivacyMode} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
-                {privacyMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Saldo em Caixa (Hoje - {new Date().toLocaleDateString()})</CardTitle>
+              <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title={privacyMode ? "Mostrar Saldo" : "Esconder Saldo"}>
+                {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
+              <TooltipProvider>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger><HelpCircle className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" /></TooltipTrigger>
+                  <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800">
+                    <p>Saldo disponível em seu banco para o dia atual.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
+
             <div className="p-2 bg-blue-500/10 rounded-xl text-blue-600 dark:text-blue-400">
               <DollarSign className="h-5 w-5" />
             </div>
           </CardHeader>
           <CardContent className="relative">
-            {/* Uso do formatCurrency aqui */}
             <div className={`text-3xl font-bold tracking-tight ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (realCurrentBalance < 0 ? 'text-red-500' : 'text-zinc-900 dark:text-zinc-50')}`}>
               {formatCurrency(realCurrentBalance)}
             </div>
-            <p className="text-xs text-zinc-400 mt-2 font-medium">Caixa atual disponível</p>
+            <p className="text-xs text-zinc-400 mt-2 font-medium">Valor disponível em seu banco</p>
           </CardContent>
         </Card>
 
         <Card className="relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl">
           <div className="absolute inset-0 bg-linear-to-br from-violet-500/5 to-transparent pointer-events-none" />
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-            <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Balanço Mensal</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+                Balanço do Mês
+              </CardTitle>
+              <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title={privacyMode ? "Mostrar Saldo" : "Esconder Saldo"}>
+                {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+              <TooltipProvider>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger><HelpCircle className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" /></TooltipTrigger>
+                  <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800">
+                    <p>Indica os valores totais de receitas e despesas do mês atual.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
             <div className={`p-2 rounded-xl ${monthBalance >= 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
               {monthBalance >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className={`text-3xl font-bold tracking-tight ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (monthBalance >= 0 ? 'text-emerald-600' : 'text-red-600')}`}>
-              {!privacyMode && (monthBalance > 0 ? "+" : "")}
-              {formatCurrency(monthBalance)}
-            </div>
-            {/* Também ocultar detalhes pequenos se estiver em modo privacidade */}
-            <div className="flex items-center gap-3 mt-2 text-xs font-medium">
-              <span className="flex items-center text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-md">
-                <ArrowUpCircle className="w-3 h-3 mr-1" />
+            <div className="flex font-bold items-center gap-3 mt-2 text-xs">
+              <span className="text-3xl flex items-center text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-md">
+                <ArrowUpCircle className="w-6 h-6 mr-1" />
                 {formatCurrency(monthIncome)}
               </span>
-              <span className="flex items-center text-red-600 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-md">
-                <ArrowDownCircle className="w-3 h-3 mr-1" />
+              <span className="text-3xl font-bold flex items-center text-red-600 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-md">
+                <ArrowDownCircle className="w-6 h-6 mr-1" />
                 {formatCurrency(monthExpense)}
               </span>
             </div>
+            <p className="text-xs text-zinc-400 mt-2 font-medium">
+              Balanço do Mês de receitas e despesas, pagas ou pendentes.
+            </p>
           </CardContent>
         </Card>
 
         <Card className={`relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-            <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Previsão Final</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Previsão Final</CardTitle>
+              <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title={privacyMode ? "Mostrar Saldo" : "Esconder Saldo"}>
+                {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+              <TooltipProvider>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger><HelpCircle className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" /></TooltipTrigger>
+                  <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800">
+                    <p>Saldo projetado ao final do mês considerando transações pendentes.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
             <div className="p-2 bg-violet-500/10 rounded-xl text-violet-600 dark:text-violet-400">
               <Layers className="h-5 w-5" />
             </div>
