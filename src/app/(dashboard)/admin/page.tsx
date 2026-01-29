@@ -599,11 +599,11 @@ export default function AdminPage() {
                     <SelectItem value="all">Todos Pagamentos</SelectItem>
                     <SelectItem value="free">Grátis</SelectItem>
                     <SelectItem value="paid">Pago</SelectItem>
-                    <SelectItem value="unpaid_group" className="text-red-500 font-medium">⚠️ Inadimplentes (Geral)</SelectItem>
                     <SelectItem value="pending">Pendente</SelectItem>
                     <SelectItem value="not_paid">Não Pago</SelectItem>
                     <SelectItem value="overdue">Atrasado</SelectItem>
                     <SelectItem value="canceled">Cancelado</SelectItem>
+                    <SelectItem value="unpaid_group" className="text-red-500 font-medium">⚠️ Inadimplentes</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
