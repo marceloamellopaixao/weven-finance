@@ -12,7 +12,10 @@ export interface Transaction {
   type: TransactionType;
   category: string;
   status: TransactionStatus;
-  paymentMethod: PaymentMethod; // Novo campo
+  paymentMethod: PaymentMethod;
+
+  // Se a transação está arquivada ou não
+  isArchived?: boolean;
   
   date: string;    // Data da Competência (Quando a compra ocorreu)
   dueDate: string; // Data de Vencimento (Quando o dinheiro sai)
