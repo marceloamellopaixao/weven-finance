@@ -151,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 1. Aguarda carregamento total (Auth + Perfil)
     if (loading) return;
 
-    const publicRoutes = ["/", "/login", "/register", "/reset-password", "/_not-found", "/goodbye"];
+    const publicRoutes = ["/", "/login", "/register", "/forgot-password", "/not-found", "/goodbye"];
     const isPublicRoute = publicRoutes.includes(pathname);
 
     // 2. Cenário: Usuário NÃO logado
