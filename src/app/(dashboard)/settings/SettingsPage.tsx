@@ -15,18 +15,21 @@ import {
   LogOut, CheckCircle2, AlertTriangle, EyeOff, Loader2, Medal,
   RefreshCw,
   Clock,
-  CheckCircle
+  CheckCircle,
+  X
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { updateOwnProfile, deleteUserPermanently } from "@/services/userService";
+import { updateOwnProfile, softDeleteUser } from "@/services/userService";
 import { getKeyFingerprint } from "@/lib/crypto";
 import Link from "next/link";
 import { usePlans } from "@/hooks/usePlans";
 import { migrateCryptography } from "@/services/transactionService";
+import { useRouter } from "next/navigation";
 
 export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode } = useAuth();
   const { plans } = usePlans();
+  const router = useRouter();
 
   // State de Migração
   const [isMigrating, setIsMigrating] = useState(false);
@@ -74,14 +77,21 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDeleteAccount = async () => {
+  const handleDeleteAccount = async (): Promise<void> => {
     if (!user) return;
     setIsDeleting(true);
+
     try {
-      await deleteUserPermanently(user.uid);
-      await logout();
+      await softDeleteUser(user.uid);
+      router.push("/goodbye");
     } catch (error) {
-      console.error(error);
+      let errorMessage = "Ocorreu um erro ao tentar excluir sua conta.";
+
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      alert(errorMessage);
       setIsDeleting(false);
     }
   };
@@ -155,7 +165,12 @@ export default function SettingsPage() {
                     <p className="text-sm text-zinc-500 font-medium">{user?.email}</p>
                     <div className="flex flex-wrap justify-center sm:justify-start gap-2 pt-2">
                       <Badge variant="secondary" className={`uppercase text-[10px] tracking-wider border ${currentPlan === 'free' ? 'bg-zinc-100 text-zinc-600 border-zinc-200' : 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300'}`}>Plano {currentPlan}</Badge>
-                      <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 gap-1"><CheckCircle2 className="h-3 w-3" /> Verificado</Badge>
+                      <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 gap-1">
+                        {user?.emailVerified ?
+                          <><CheckCircle2 className="h-3 w-3" /> Verificado</> :
+                          <><X className="h-3 w-3" /> Não Verificado</>
+                        }
+                      </Badge>
                     </div>
                   </div>
                 </div>
@@ -445,8 +460,30 @@ export default function SettingsPage() {
         {/* Modal de Confirmação de Exclusão */}
         <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
           <DialogContent className="sm:max-w-[425px] rounded-3xl p-6">
-            <DialogHeader><DialogTitle className="text-red-600 flex items-center gap-2"><AlertTriangle className="h-5 w-5" /> Tem certeza absoluta?</DialogTitle><DialogDescription className="pt-3">Esta ação não pode ser desfeita.</DialogDescription></DialogHeader>
-            <DialogFooter className="gap-2 sm:gap-0 mt-4"><Button variant="outline" onClick={() => setShowDeleteModal(false)} className="rounded-xl h-10 w-full sm:w-auto">Cancelar</Button><Button variant="destructive" onClick={handleDeleteAccount} disabled={isDeleting} className="rounded-xl h-10 w-full sm:w-auto bg-red-600 hover:bg-red-700">{isDeleting ? "Excluindo..." : "Sim, excluir conta"}</Button></DialogFooter>
+            <DialogHeader>
+              <DialogTitle className="text-red-600 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" /> Tem certeza absoluta?
+              </DialogTitle>
+              <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
+                Esta ação não pode ser desfeita.
+              </DialogDescription>
+              <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
+                Realizando a exclusão, todos os seus dados serão permanentemente removidos dos nossos servidores.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 mt-4">
+              <Button variant="outline"
+                onClick={() => setShowDeleteModal(false)}
+                className="rounded-xl h-10 w-full sm:w-auto">
+                Cancelar
+              </Button>
+              <Button variant="destructive"
+                onClick={handleDeleteAccount}
+                disabled={isDeleting}
+                className="rounded-xl h-10 w-full sm:w-auto bg-red-600 hover:bg-red-700">
+                {isDeleting ? "Excluindo..." : "Sim, excluir conta"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
