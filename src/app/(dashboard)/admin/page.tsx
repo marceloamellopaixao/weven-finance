@@ -603,7 +603,7 @@ export default function AdminPage() {
                     <SelectItem value="not_paid">Não Pago</SelectItem>
                     <SelectItem value="overdue">Atrasado</SelectItem>
                     <SelectItem value="canceled">Cancelado</SelectItem>
-                    <SelectItem value="unpaid_group" className="text-red-500 font-medium">⚠️ Inadimplentes</SelectItem>
+                    <SelectItem value="unpaid_group" className="text-red-500 font-medium">⚠️ Inadimplentes (Geral)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
