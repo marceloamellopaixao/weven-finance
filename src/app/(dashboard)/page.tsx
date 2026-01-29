@@ -25,7 +25,7 @@ import {
   Plus, TrendingDown, TrendingUp, Eye, EyeOff,
   DollarSign, CalendarDays, MoreHorizontal, Pencil, Trash2,
   AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown, Search, HelpCircle, CheckCircle2,
-  Medal
+  Medal, Info, AlertTriangle,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
@@ -65,6 +65,14 @@ const formatDateDisplay = (dateString: string, options: Intl.DateTimeFormatOptio
 
 const ITEMS_PER_PAGE = 10;
 const FREE_PLAN_LIMIT = 20;
+
+// Tipo para feedback genérico (VALIDAÇÃO DE PAGAMENTO)
+type FeedbackData = {
+  isOpen: boolean;
+  type: 'success' | 'error' | 'info';
+  title: string;
+  message: string;
+};
 
 export default function DashboardPage() {
   const { user, userProfile, privacyMode, togglePrivacyMode } = useAuth();
@@ -106,13 +114,22 @@ export default function DashboardPage() {
   // Modal de Check-in Diário
   const [pendingCheckins, setPendingCheckins] = useState<Transaction[]>([]);
   const [showCheckinModal, setShowCheckinModal] = useState(false);
-  const [hasRunCheckin, setHasRunCheckin] = useState(false); // NOVO: Controle para rodar apenas 1 vez
+  const [hasRunCheckin, setHasRunCheckin] = useState(false);
+
+  // Modal Genérico de Feedback (Sucesso/Erro)
+  const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
 
   // Helper para formatar moeda com privacidade
   const formatCurrency = (value: number) => {
-    if (privacyMode) return "R$ ••••••";
+    // Nota: Para modais de erro/sucesso, ignoramos o privacyMode para clareza da mensagem
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
+
+  // Helper para display na UI (com blur)
+  // const formatCurrencyDisplay = (value: number) => {
+  //   if (privacyMode) return "R$ ••••••";
+  //   return formatCurrency(value);
+  // };
 
   // --- 2. TRAVA DE SEGURANÇA DE E-MAIL ---
   useEffect(() => {
@@ -285,8 +302,6 @@ export default function DashboardPage() {
     // BLOQUEIO DE PLANO
     if (userProfile?.plan !== 'pro' && userProfile?.plan !== 'premium' && transactionsThisMonthCount >= limit) {
       setShowUpgradeModal(true);
-      // Implementar função para alterar o dado no banco
-      // Informar que acabou o limite do usuário sendo 20 no free e unlimited em outros planos
       return;
     }
 
@@ -355,12 +370,39 @@ export default function DashboardPage() {
     setEditingTx(null);
   };
 
-  // Handler do Check-in Rápido
+  // Handler do Check-in Rápido e Dropdown da Tabela
   const handleCheckinAction = async (tx: Transaction, markAsPaid: boolean) => {
-    if (markAsPaid && tx.id) {
-      await toggleTransactionStatus(user!.uid, tx.id, 'pending');
+    if (!user || !tx.id) return;
+
+    // --- VALIDAÇÃO DE SALDO ---
+    // Apenas se estiver tentando pagar uma DESPESA
+    if (markAsPaid && tx.type === 'expense') {
+      if (realCurrentBalance < tx.amount) {
+        setFeedbackModal({
+          isOpen: true,
+          type: 'error',
+          title: 'Saldo Insuficiente',
+          message: `Você possui ${formatCurrency(realCurrentBalance)} em caixa, mas a conta é de ${formatCurrency(tx.amount)}. A operação foi cancelada.`
+        });
+        return; // BLOQUEIA A AÇÃO
+      }
     }
 
+    // Se passou na validação, executa
+    const currentStatus = markAsPaid ? 'pending' : 'paid'; // Lógica inversa do toggle: se quero 'markAsPaid', passo status atual 'pending' para o toggle virar 'paid'
+    await toggleTransactionStatus(user.uid, tx.id, currentStatus);
+
+    // Feedback de Sucesso
+    setFeedbackModal({
+      isOpen: true,
+      type: 'success',
+      title: markAsPaid ? (tx.type === 'income' ? 'Recebido!' : 'Pago!') : (tx.type === 'income' ? 'Cancelado Recebimento' : 'Pagamento Cancelado'),
+      message: markAsPaid
+        ? `A transação "${tx.description}" foi confirmada com sucesso.`
+        : `A transação "${tx.description}" voltou para pendente.`
+    });
+
+    // Remove da lista de pendências do modal de check-in se necessário
     const newList = pendingCheckins.filter(p => p.id !== tx.id);
     setPendingCheckins(newList);
 
@@ -370,7 +412,6 @@ export default function DashboardPage() {
   };
 
   // --- 7. RENDERIZAÇÃO E FILTRAGEM ---
-
   const monthTransactions = transactions.filter(t => t.dueDate && t.dueDate.startsWith(selectedMonth));
 
   const displayedTransactions = monthTransactions.filter(t => {
@@ -378,7 +419,6 @@ export default function DashboardPage() {
     if (filterStatus !== 'all' && t.status !== filterStatus) return false;
     if (filterCategory !== 'all' && t.category !== filterCategory) return false;
 
-    // Filtro de Busca (Texto e Valor)
     if (searchTerm) {
       const lowerSearch = searchTerm.toLowerCase();
       const matchDesc = t.description.toLowerCase().includes(lowerSearch);
@@ -566,7 +606,7 @@ export default function DashboardPage() {
         {/* --- Layout Principal --- */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 items-start">
 
-          {/* --- BLOCO DIREITA: FORMULÁRIO (PRIMEIRO NO MOBILE) --- */}
+          {/* --- BLOCO DIREITA: FORMULÁRIO --- */}
           <div className="lg:col-span-1 order-1 lg:order-2">
             <div className="sticky top-24 space-y-6">
 
@@ -651,7 +691,6 @@ export default function DashboardPage() {
 
                   <div className="bg-zinc-50/80 dark:bg-zinc-800/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800 space-y-4">
                     <div className="grid grid-cols-2 gap-3">
-                      {/* Oculta Data de Compra se for Renda */}
                       {type === 'expense' && (
                         <div className="space-y-1.5">
                           <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Data do Gasto</Label>
@@ -659,7 +698,6 @@ export default function DashboardPage() {
                         </div>
                       )}
 
-                      {/* Mostra Data de Vencimento apenas se o método exigir (Cartão/Boleto) ou se for Renda */}
                       {(showDueDateInput || type === 'income') && (
                         <div className={`space-y-1.5 ${type === 'income' ? 'col-span-2' : ''}`}>
                           <Label className={`text-[10px] font-bold uppercase tracking-wider ${type === 'expense' ? 'text-red-500' : 'text-emerald-600'}`}>{type === 'expense' ? 'Vencimento' : 'Data Crédito'}</Label>
@@ -668,7 +706,6 @@ export default function DashboardPage() {
                       )}
                     </div>
 
-                    {/* Switch de Parcelamento / Recorrência */}
                     <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
                       <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
                         <Layers className="h-3.5 w-3.5 text-violet-500" />
@@ -702,7 +739,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* --- BLOCO ESQUERDA: LISTA E GRÁFICO (SEGUNDO NO MOBILE) --- */}
+          {/* --- BLOCO ESQUERDA: LISTA E GRÁFICO --- */}
           <div className="lg:col-span-2 space-y-8 order-2 lg:order-1">
 
             {/* Gráfico do Fluxo Mensal */}
@@ -850,7 +887,6 @@ export default function DashboardPage() {
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" className="w-40 p-1 rounded-xl shadow-xl border-zinc-100 dark:border-zinc-800">
 
-                                    {/* Opção: Check-in rápido (Pagar/Receber) */}
                                     {tx.status === 'pending' && (
                                       <DropdownMenuItem onClick={() => handleCheckinAction(tx, true)} className="cursor-pointer rounded-lg text-xs font-medium text-emerald-600 focus:text-emerald-700 focus:bg-emerald-50">
                                         <CheckCircle2 className="mr-2 h-3.5 w-3.5" />
@@ -858,12 +894,17 @@ export default function DashboardPage() {
                                       </DropdownMenuItem>
                                     )}
 
-                                    {/* Opção: Editar */}
+                                    {tx.status === 'paid' && (
+                                      <DropdownMenuItem onClick={() => handleCheckinAction(tx, false)} className="cursor-pointer rounded-lg text-xs font-medium text-red-600 focus:text-red-700 focus:bg-red-50">
+                                        <XCircle className="mr-2 h-3.5 w-3.5" />
+                                        {tx.type === 'income' ? 'Não Recebido' : 'Não Pago'}
+                                      </DropdownMenuItem>
+                                    )}
+
                                     <DropdownMenuItem onClick={() => openEditModal(tx)} className="cursor-pointer rounded-lg text-xs font-medium">
                                       <Pencil className="mr-2 h-3.5 w-3.5" /> Editar
                                     </DropdownMenuItem>
 
-                                    {/* Opção: Encerrar Assinatura */}
                                     {tx.groupId && tx.category === 'Streaming' && (
                                       <>
                                         <DropdownMenuSeparator />
@@ -874,7 +915,6 @@ export default function DashboardPage() {
                                       </>
                                     )}
 
-                                    {/* Opção: Excluir */}
                                     <DropdownMenuItem onClick={() => setTxToDelete(tx)} className="text-red-600 focus:text-red-600 cursor-pointer rounded-lg text-xs font-medium focus:bg-red-50 dark:focus:bg-red-900/20">
                                       <Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir
                                     </DropdownMenuItem>
@@ -968,7 +1008,6 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                {/* Método de Pagamento */}
                 <div className="col-span-2 space-y-2">
                   <Label className="text-xs font-semibold text-zinc-500 uppercase">Método de Pagamento</Label>
                   <Select value={editingTx.paymentMethod} onValueChange={(v) => setEditingTx({ ...editingTx, paymentMethod: v as PaymentMethod })}>
@@ -979,9 +1018,7 @@ export default function DashboardPage() {
                   </Select>
                 </div>
 
-                {/* Valida se é Renda ou Gasto */}
                 {editingTx.type === 'income' ? (
-                  // Renda
                   <div className="flex flex-col items-start gap-2">
                     {editingTx.type === 'income' && (
                       <div className="w-full space-y-2">
@@ -995,7 +1032,6 @@ export default function DashboardPage() {
                     )}
                   </div>
                 ) : (
-                  // Gasto
                   <div className="flex flex-col items-start gap-2">
                     {editingTx.dueDate && (
                       <div className="w-full grid grid-cols-2 gap-4 p-4 rounded-xl border border-zinc-100">
@@ -1006,7 +1042,6 @@ export default function DashboardPage() {
                           </div>
                         )}
 
-                        {/* Se boleto ou cartão de crédito */}
                         {(editingTx.type === 'expense' && (editingTx.paymentMethod === 'boleto' || editingTx.paymentMethod === 'credit_card')) && (
                           <div className="space-y-2">
                             <Label className="text-xs font-semibold text-red-500 uppercase">Vencimento</Label>
@@ -1148,7 +1183,7 @@ export default function DashboardPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Modal de UPGRADE (Bloqueio do Plano) */}
+        {/* Modal de UPGRADE */}
         <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
           <DialogContent className="w-[calc(100vw-2rem)] max-w-[520px] sm:max-w-md rounded-2xl p-6 sm:p-8 border-violet-500 border-2 max-h-[85vh] overflow-y-auto">
             <DialogHeader className="text-center items-center">
@@ -1192,6 +1227,24 @@ export default function DashboardPage() {
                   Continuar no Grátis
                 </Button>
               </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Feedback Genérico (Validação de Saldo, Sucesso, etc.) */}
+        <Dialog open={feedbackModal.isOpen} onOpenChange={(open) => !open && setFeedbackModal({ ...feedbackModal, isOpen: false })}>
+          <DialogContent className="rounded-2xl sm:max-w-[400px]">
+            <DialogHeader>
+              <div className={`mx-auto p-3 rounded-full mb-2 w-fit ${feedbackModal.type === 'success' ? 'bg-emerald-100 text-emerald-600' : feedbackModal.type === 'error' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                {feedbackModal.type === 'success' ? <CheckCircle2 className="h-6 w-6" /> : feedbackModal.type === 'error' ? <AlertTriangle className="h-6 w-6" /> : <Info className="h-6 w-6" />}
+              </div>
+              <DialogTitle className="text-center">{feedbackModal.title}</DialogTitle>
+              <DialogDescription className="text-center pt-2">
+                {feedbackModal.message}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })} className="w-full rounded-xl">Entendido</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
