@@ -17,7 +17,7 @@ import {
   Clock,
   CheckCircle,
   X,
-  Info
+  Info,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { updateOwnProfile, softDeleteUser } from "@/services/userService";
@@ -50,8 +50,12 @@ export default function SettingsPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Estado para feedback modal (substitui alert)
+  // Estado para feedback modal
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
+
+  // Constantes de Animação (Padrão do Sistema)
+  const fadeInUp = "animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both";
+  const zoomIn = "animate-in fade-in zoom-in-50 duration-500 fill-mode-both";
 
   useEffect(() => {
     if (userProfile) {
@@ -119,36 +123,47 @@ export default function SettingsPage() {
 
   return (
     <div className="font-sans p-4 md:p-8 pb-20">
-      <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
+      
+      {/* Background Decorativo */}
+      <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-violet-500/5 rounded-full blur-[100px]" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-500/5 rounded-full blur-[100px]" />
+      </div>
+
+      <div className="relative z-10 max-w-5xl mx-auto space-y-8">
 
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className={`${fadeInUp} flex flex-col md:flex-row justify-between items-start md:items-center gap-4`}>
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Configurações</h1>
             <p className="text-zinc-500 dark:text-zinc-400">Gerencie sua conta, privacidade e assinatura.</p>
           </div>
-          <Button variant="destructive" onClick={logout} className="gap-2 rounded-xl shadow-sm hover:shadow-red-500/20 transition-all">
+          <Button 
+            variant="destructive" 
+            onClick={logout} 
+            className="gap-2 rounded-xl shadow-sm hover:shadow-red-500/20 transition-all hover:cursor-pointer hover:scale-105 duration-200"
+          >
             <LogOut className="h-4 w-4" /> Sair da Conta
           </Button>
         </div>
 
         {/* Navegação de Abas Personalizada */}
-        <div className="space-y-6">
+        <div className={`${fadeInUp} delay-150 space-y-6`}>
           <div className="bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 grid grid-cols-3 w-full md:w-[480px] shadow-sm">
-            <button onClick={() => setActiveTab("account")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 ${activeTab === "account" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button onClick={() => setActiveTab("account")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "account" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <User className="h-4 w-4" /> Geral
             </button>
-            <button onClick={() => setActiveTab("billing")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 ${activeTab === "billing" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button onClick={() => setActiveTab("billing")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "billing" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <CreditCard className="h-4 w-4" /> Planos
             </button>
-            <button onClick={() => setActiveTab("security")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 ${activeTab === "security" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button onClick={() => setActiveTab("security")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "security" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <ShieldCheck className="h-4 w-4" /> Privacidade
             </button>
           </div>
 
           {/* ABA GERAL */}
           {activeTab === "account" && (
-            <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl animate-in fade-in zoom-in-95 duration-300">
+            <Card className={`${zoomIn} delay-200 border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl`}>
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-2 text-xl">
                   <div className="p-2 bg-violet-100 dark:bg-violet-900/30 rounded-full"><User className="h-5 w-5 text-violet-600 dark:text-violet-400" /></div> Perfil do Usuário
@@ -157,12 +172,12 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-8">
                 <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-                  <div className="relative">
-                    <Avatar className="h-24 w-24 border-4 border-zinc-50 dark:border-zinc-800 shadow-xl">
-                      <AvatarImage src={user?.photoURL || ""} />
+                  <div className="relative group">
+                    <Avatar className="h-24 w-24 border-4 border-zinc-50 dark:border-zinc-800 shadow-xl transition-transform duration-300 group-hover:scale-105">
+                      <AvatarImage src={user?.photoURL || ""} className="object-cover" />
                       <AvatarFallback className="text-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500">{user?.displayName?.charAt(0) || "U"}</AvatarFallback>
                     </Avatar>
-                    <div className="absolute bottom-0 right-0 p-1.5 bg-green-500 border-4 border-white dark:border-zinc-900 rounded-full" title="Online"></div>
+                    <div className="absolute bottom-0 right-0 p-1.5 bg-green-500 border-4 border-white dark:border-zinc-900 rounded-full animate-pulse" title="Online"></div>
                   </div>
                   <div className="space-y-1 text-center sm:text-left">
                     <h3 className="font-bold text-2xl text-zinc-900 dark:text-zinc-100">{displayName || "Usuário"}</h3>
@@ -182,15 +197,15 @@ export default function SettingsPage() {
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label className="text-zinc-500">Nome de Exibição (Apelido)</Label>
-                    <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500" />
+                    <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500 bg-zinc-50/50 dark:bg-zinc-900/50" />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-zinc-500">Nome Completo</Label>
-                    <Input value={completeName} onChange={(e) => setCompleteName(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500" />
+                    <Input value={completeName} onChange={(e) => setCompleteName(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500 bg-zinc-50/50 dark:bg-zinc-900/50" />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-zinc-500">Celular</Label>
-                    <Input value={phone ? phone.toString().replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3") : ""} onChange={(e) => setPhone(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500" />
+                    <Input value={phone ? phone.toString().replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3") : ""} onChange={(e) => setPhone(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500 bg-zinc-50/50 dark:bg-zinc-900/50" />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-zinc-500">E-mail de Acesso</Label>
@@ -199,7 +214,7 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
               <CardFooter className="flex justify-end border-t border-zinc-50 dark:border-zinc-800/50 pt-6 bg-zinc-50/50 dark:bg-zinc-900/50 rounded-b-3xl">
-                <Button onClick={handleSaveProfile} disabled={isSaving} className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-8 h-11 shadow-lg shadow-violet-500/20 transition-all active:scale-95">
+                <Button onClick={handleSaveProfile} disabled={isSaving} className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-8 h-11 shadow-lg shadow-violet-500/20 transition-all active:scale-95 hover:cursor-pointer duration-200">
                   {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Salvar Alterações"}
                 </Button>
               </CardFooter>
@@ -208,7 +223,7 @@ export default function SettingsPage() {
 
           {/* ABA PLANOS */}
           {activeTab === "billing" && (
-            <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
+            <div className={`${fadeInUp} delay-200 space-y-6`}>
               <Card
                 className={`border-none shadow-xl rounded-3xl relative overflow-hidden text-white flex flex-col justify-center min-h-[10px]"
                   ${currentPlan === 'free'
@@ -315,7 +330,7 @@ export default function SettingsPage() {
               {currentPlan !== 'pro' && (
                 <div className="grid gap-6 md:grid-cols-2">
                   {currentPlan !== 'premium' && (
-                    <Card className="border-2 border-slate-300/40 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all bg-white dark:bg-zinc-900 rounded-3xl group">
+                    <Card className="border-2 border-slate-300/40 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all bg-white dark:bg-zinc-900 rounded-3xl group transform hover:-translate-y-1 duration-300">
                       <div className="absolute top-0 left-0 w-full h-1 bg-slate-400" />
                       <CardHeader>
                         <CardTitle className="flex justify-between items-center">
@@ -344,14 +359,14 @@ export default function SettingsPage() {
                       </CardHeader>
                       <CardFooter>
                         <Link href={plans.premium.paymentLink} target="_blank" className="w-full">
-                          <Button className="w-full rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-lg shadow-slate-500/20">
+                          <Button className="w-full rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-lg shadow-slate-500/20 hover:cursor-pointer transition-all active:scale-[0.98]">
                             Fazer Upgrade Premium
                           </Button>
                         </Link>
                       </CardFooter>
                     </Card>
                   )}
-                  <Card className="border-2 border-yellow-300/40 dark:border-yellow-700/30 shadow-lg hover:shadow-xl transition-all bg-white dark:bg-zinc-900 rounded-3xl group">
+                  <Card className="border-2 border-yellow-300/40 dark:border-yellow-700/30 shadow-lg hover:shadow-xl transition-all bg-white dark:bg-zinc-900 rounded-3xl group transform hover:-translate-y-1 duration-300">
                     <div className="absolute top-0 left-0 w-full h-1 bg-yellow-400" />
                     <CardHeader>
                       <CardTitle className="flex justify-between items-center">
@@ -382,7 +397,7 @@ export default function SettingsPage() {
                       <Link href={plans.pro.paymentLink} target="_blank" className="w-full">
                         <Button
                           variant="outline"
-                          className="w-full rounded-xl border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"
+                          className="w-full rounded-xl border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 hover:cursor-pointer transition-all active:scale-[0.98]"
                         >
                           Fazer Upgrade Pro
                         </Button>
@@ -396,7 +411,7 @@ export default function SettingsPage() {
 
           {/* ABA SEGURANÇA */}
           {activeTab === "security" && (
-            <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl animate-in fade-in zoom-in-95 duration-300">
+            <Card className={`${zoomIn} delay-200 border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl`}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-full">
@@ -415,12 +430,12 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-2"><EyeOff className="h-5 w-5 text-zinc-600 dark:text-zinc-400" /><Label className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Modo Discreto (Blur)</Label></div>
                     <p className="text-sm text-zinc-500">Oculta valores monetários no Dashboard para privacidade.</p>
                   </div>
-                  <Switch checked={privacyMode} onCheckedChange={togglePrivacyMode} className="data-[state=checked]:bg-violet-600" />
+                  <Switch checked={privacyMode} onCheckedChange={togglePrivacyMode} className="data-[state=checked]:bg-violet-600 hover:cursor-pointer" />
                 </div>
                 <Separator className="bg-zinc-300 dark:bg-zinc-800" />
                 <div className="space-y-4">
                   <div className="flex items-center gap-2"><Lock className="h-4 w-4 text-violet-500" /><h3 className="font-semibold text-sm uppercase tracking-wider text-zinc-500">Segurança de Dados</h3></div>
-                  <div className="p-5 rounded-2xl bg-zinc-950 text-zinc-400 font-mono text-xs break-all relative border border-zinc-800 shadow-inner">
+                  <div className="p-5 rounded-2xl bg-zinc-950 text-zinc-400 font-mono text-xs break-all relative border border-zinc-800 shadow-inner group transition-all hover:border-zinc-700">
                     <div className="absolute top-3 right-3"><Badge variant="outline" className="text-[10px] border-zinc-700 text-emerald-500 font-bold px-2 py-0.5">E2EE ATIVO</Badge></div>
                     <p className="mb-2 text-zinc-600 uppercase tracking-widest text-[10px] font-bold">Identificador Seguro (Hash)</p>
                     {keyFingerprint}
@@ -439,7 +454,7 @@ export default function SettingsPage() {
                       size="sm"
                       onClick={handleMigration}
                       disabled={isMigrating}
-                      className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg w-full sm:w-auto"
+                      className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg w-full sm:w-auto hover:cursor-pointer transition-all active:scale-95"
                     >
                       {isMigrating ? "Migrando..." : "Corrigir/Migrar Criptografia"}
                     </Button>
@@ -450,7 +465,7 @@ export default function SettingsPage() {
                   <h3 className="text-red-600 font-bold text-sm flex items-center gap-2 mb-3"><AlertTriangle className="h-4 w-4" /> Zona de Perigo</h3>
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-950/10 rounded-2xl">
                     <p className="text-xs text-red-600/80 dark:text-red-400">A exclusão da conta é <strong>irreversível</strong>. Todos os dados serão apagados.</p>
-                    <Button variant="outline" onClick={() => setShowDeleteModal(true)} className="text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 dark:hover:bg-red-900/40 dark:border-red-900 whitespace-nowrap rounded-xl">Excluir Minha Conta</Button>
+                    <Button variant="outline" onClick={() => setShowDeleteModal(true)} className="text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 dark:hover:bg-red-900/40 dark:border-red-900 whitespace-nowrap rounded-xl hover:cursor-pointer transition-all active:scale-95">Excluir Minha Conta</Button>
                   </div>
                 </div>
               </CardContent>
@@ -475,13 +490,13 @@ export default function SettingsPage() {
             <DialogFooter className="gap-2 mt-4">
               <Button variant="outline"
                 onClick={() => setShowDeleteModal(false)}
-                className="rounded-xl h-10 w-full sm:w-auto">
+                className="rounded-xl h-10 w-full sm:w-auto hover:cursor-pointer transition-all duration-200">
                 Cancelar
               </Button>
               <Button variant="destructive"
                 onClick={handleDeleteAccount}
                 disabled={isDeleting}
-                className="rounded-xl h-10 w-full sm:w-auto bg-red-600 hover:bg-red-700">
+                className="rounded-xl h-10 w-full sm:w-auto bg-red-600 hover:bg-red-700 hover:cursor-pointer transition-all duration-200">
                 {isDeleting ? "Excluindo..." : "Sim, excluir conta"}
               </Button>
             </DialogFooter>
@@ -501,7 +516,7 @@ export default function SettingsPage() {
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })} className="w-full rounded-xl">Entendido</Button>
+              <Button onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })} className="w-full rounded-xl hover:cursor-pointer transition-all duration-200">Entendido</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
