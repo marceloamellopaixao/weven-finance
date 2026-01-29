@@ -6,11 +6,12 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { Header } from "@/components/layout/Header";
 import { BlockedGuard } from "@/components/guards/BlockedGuard";
 import { ToastContainer } from "react-toastify";
+import { Footer } from "@/components/layout/Footer";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Weven Finance | Gerenciamento Financeiro",
+  title: "WevenFinance | Gerenciamento Financeiro",
   description: "Gerenciamento financeiro pessoal e empresarial.",
   icons: {
     icon: "/wevenfinance.svg",
@@ -31,8 +32,20 @@ export default function RootLayout({
               <Header />
               <main className="flex-1">
                 {children}
-                <ToastContainer />
+                <ToastContainer
+                  position="top-right"
+                  autoClose={3000}
+                  hideProgressBar={false}
+                  newestOnTop={false}
+                  closeOnClick
+                  rtl={false}
+                  pauseOnFocusLoss
+                  draggable
+                  pauseOnHover
+                  theme="colored"
+                />
               </main>
+              <Footer />
             </div>
           </BlockedGuard>
         </AuthProvider>
