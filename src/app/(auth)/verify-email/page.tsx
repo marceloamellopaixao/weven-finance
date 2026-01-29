@@ -44,9 +44,8 @@ export default function VerifyEmailPage() {
             
             // 3. Redireciona para o dashboard
             router.push("/"); 
-            // Opcional: router.refresh() se necessário
         } else {
-            alert("Ainda não conseguimos confirmar. Verifique sua caixa de entrada (e spam) e clique no link.");
+            alert("Ainda não conseguimos confirmar. \nVerifique sua caixa de entrada (e spam) e clique no link.");
         }
     } catch (error) {
         console.error("Erro ao verificar:", error);
