@@ -4,15 +4,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Wallet, Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 export default function RegisterPage() {
   const { registerWithEmail } = useAuth();
-  const router = useRouter();
-  
+
   const [displayName, setDisplayName] = useState("");
   const [completeName, setCompleteName] = useState("");
   const [phone, setPhone] = useState("");
@@ -25,7 +23,43 @@ export default function RegisterPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    
+
+    // Verifica cada campo individualmente
+    if (!displayName) {
+      setError("Por favor, insira um apelido para o dashboard.");
+      return;
+    }
+
+    if (!phone) {
+      setError("Por favor, insira seu número de celular/telefone.");
+      return;
+    }
+
+    if (!completeName) {
+      setError("Por favor, insira seu nome completo.");
+      return;
+    }
+
+    if (!email) {
+      setError("Por favor, insira seu e-mail.");
+      return;
+    }
+
+    if (!displayName || !completeName || !email || !password || !confirmPassword || !phone) {
+      setError("Por favor, preencha todos os campos.");
+      return;
+    }
+
+    if (!password) {
+      setError("Por favor, insira sua senha.");
+      return;
+    }
+
+    if (!confirmPassword) {
+      setError("Por favor, confirme sua senha.");
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError("As senhas não coincidem.");
       return;
@@ -38,33 +72,39 @@ export default function RegisterPage() {
 
     setIsLoading(true);
     try {
-      await registerWithEmail(displayName, email, password, phone, completeName);
-      // SUCESSO: Redireciona para a tela de aviso de verificação
-      router.push("/verify-email");
-    } catch (err: unknown) {
-      console.error(err);
-      if (typeof err === 'object' && err !== null && 'code' in err && (err as { code: string }).code === 'auth/email-already-in-use') {
-        setError("Este e-mail já está cadastrado.");
-      } else {
-        setError("Erro ao criar conta. Tente novamente.");
-      }
+      await registerWithEmail(displayName, completeName, email, password, phone);
+    } catch (err) {
+      setError(err as string);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const formatPhone = (value: string) => {
+    if (!value) return "";
+    const digits = value.replace(/\D/g, "");
+
+    if (digits.length <= 10) {
+      // Formato Fixo: (11) 4444-4444
+      return digits.replace(/(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3").replace(/-$/, "");
+    } else {
+      // Formato Celular: (11) 99999-9999
+      return digits.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 relative overflow-hidden font-sans px-4">
-      
+
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-[100px]" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[100px]" />
       </div>
 
       <div className="w-full max-w-[400px] relative z-10 animate-in fade-in zoom-in-95 duration-500">
-        
+
         <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl border border-white/20 dark:border-zinc-800 shadow-2xl rounded-3xl p-6 md:p-8">
-          
+
           <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center p-3 bg-linear-to-tr from-violet-600 to-indigo-600 rounded-2xl shadow-lg shadow-violet-500/20 mb-4">
               <Wallet className="h-6 w-6 text-white" />
@@ -79,36 +119,38 @@ export default function RegisterPage() {
 
           <form onSubmit={handleRegister} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+              <div className="space-y-2">
                 <Label htmlFor="displayName">Apelido (Dashboard)</Label>
-                <Input 
-                    id="displayName" 
-                    placeholder="Ex: Marcelo" 
-                    required
-                    className="bg-white/50 dark:bg-zinc-800/50"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
+                <Input
+                  id="displayName"
+                  placeholder="Ex: Marcelo"
+                  className="bg-white/50 dark:bg-zinc-800/50"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
                 />
-                </div>
-                <div className="space-y-2">
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="phone">Celular</Label>
-                <Input 
-                    id="phone" 
-                    placeholder="(11) 99999-9999" 
-                    required
-                    className="bg-white/50 dark:bg-zinc-800/50"
-                    value={phone.toString().replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")}
-                    onChange={(e) => setPhone(e.target.value)}
+                <Input
+                  id="phone"
+                  placeholder="(11) 99999-9999"
+                  className="bg-white/50 dark:bg-zinc-800/50"
+                  maxLength={15}
+                  value={formatPhone(phone)}
+                  onChange={(e) => {
+                    // Salva apenas os números no estado
+                    const rawValue = e.target.value.replace(/\D/g, "");
+                    setPhone(rawValue);
+                  }}
                 />
-                </div>
+              </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="completeName">Nome Completo</Label>
-              <Input 
-                id="completeName" 
-                placeholder="Ex: Marcelo Augusto" 
-                required
+              <Input
+                id="completeName"
+                placeholder="Ex: Marcelo Augusto"
                 className="bg-white/50 dark:bg-zinc-800/50"
                 value={completeName}
                 onChange={(e) => setCompleteName(e.target.value)}
@@ -117,11 +159,9 @@ export default function RegisterPage() {
 
             <div className="space-y-2">
               <Label htmlFor="email">E-mail</Label>
-              <Input 
-                id="email" 
-                type="email" 
-                placeholder="seu@email.com" 
-                required
+              <Input
+                id="email"
+                placeholder="seu@email.com"
                 className="bg-white/50 dark:bg-zinc-800/50"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -129,31 +169,29 @@ export default function RegisterPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+              <div className="space-y-2">
                 <Label htmlFor="password">Senha</Label>
-                <Input 
-                    id="password" 
-                    type="password" 
-                    placeholder="******" 
-                    required
-                    className="bg-white/50 dark:bg-zinc-800/50"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="******"
+                  className="bg-white/50 dark:bg-zinc-800/50"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                 />
-                </div>
+              </div>
 
-                <div className="space-y-2">
+              <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirmar</Label>
-                <Input 
-                    id="confirmPassword" 
-                    type="password" 
-                    placeholder="******" 
-                    required
-                    className="bg-white/50 dark:bg-zinc-800/50"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  placeholder="******"
+                  className="bg-white/50 dark:bg-zinc-800/50"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
                 />
-                </div>
+              </div>
             </div>
 
             {error && (
@@ -162,8 +200,8 @@ export default function RegisterPage() {
               </div>
             )}
 
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium shadow-lg shadow-violet-500/20 transition-all active:scale-[0.98]"
               disabled={isLoading}
             >
@@ -172,8 +210,8 @@ export default function RegisterPage() {
           </form>
 
           <div className="mt-6 text-center">
-            <Link 
-              href="/login" 
+            <Link
+              href="/login"
               className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 flex items-center justify-center gap-1 transition-colors"
             >
               <ArrowLeft className="w-3 h-3" /> Voltar para Login
