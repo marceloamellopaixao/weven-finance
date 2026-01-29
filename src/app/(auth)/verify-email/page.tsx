@@ -2,54 +2,75 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/hooks/useAuth"; // Certifique-se que o caminho está certo
 import { sendEmailVerification } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/services/firebase/client";
 import { Mail, ShieldCheck, ArrowRight, RefreshCw, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "react-toastify"; // Sugestão: Use Sonner ou similar para alertas mais bonitos que o window.alert
+import { FirebaseError } from "firebase/app";
 
 export default function VerifyEmailPage() {
   const { logout, user } = useAuth();
   const router = useRouter();
   const [isChecking, setIsChecking] = useState(false);
+  const [isResending, setIsResending] = useState(false);
 
   const handleSendEmailVerification = async () => {
     try {
-      if (!user) {
-        alert("Usuário não autenticado!");
-        return;
-      }
+      if (!user) return;
+      setIsResending(true);
+      
       await sendEmailVerification(user);
-      alert("E-mail de verificação enviado com sucesso!");
-    }
-    catch (error) {
-      alert("Erro ao enviar e-mail. Tente novamente em alguns minutos.");
-      console.error(error);
+      
+      // Use toast se tiver, ou alert
+      toast.success("E-mail enviado! Verifique sua caixa de entrada.");
+    } catch (error) {
+        // Tratamento para evitar spam de cliques
+       if (error instanceof FirebaseError && error.code === 'auth/too-many-requests') {
+           toast.error("Muitas tentativas. Aguarde um pouco.");
+       } else {
+           toast.error("Erro ao enviar e-mail.");
+       }
+    } finally {
+        setIsResending(false);
     }
   };
 
   const checkVerification = async () => {
     if (!user) return;
     setIsChecking(true);
+
     try {
-        // 1. Força o Firebase a atualizar o token localmente para ver se o emailVerified mudou
+        // 1. Recarrega os dados do usuário no Auth
         await user.reload();
         
+        // 2. IMPORTANTE: Força a atualização do Token (JWT)
+        // Isso garante que o claim 'email_verified' seja atualizado para o backend/firestore rules
+        await user.getIdToken(true);
+
         if (user.emailVerified) {
-            // 2. Atualiza o banco de dados para refletir a verificação
+            // 3. Atualiza o Firestore (Backup visual e para regras de negócio)
             const userRef = doc(db, "users", user.uid);
-            await updateDoc(userRef, { verifiedEmail: true });
             
-            // 3. Redireciona para o dashboard
-            router.push("/"); 
+            // Usamos merge true por segurança, embora updateDoc já seja seguro
+            await updateDoc(userRef, { 
+                verifiedEmail: true,
+                status: 'active' // Garante que o status esteja ativo
+            });
+            
+            // 4. Redirecionamento
+            // O AuthProvider vai detectar a mudança, mas forçamos aqui para ser instantâneo
+            router.refresh(); // Atualiza componentes do servidor se houver
+            router.replace("/"); 
         } else {
-            alert("Ainda não conseguimos confirmar. \nVerifique sua caixa de entrada (e spam) e clique no link.");
+            toast.error("Ainda não detectamos a verificação.\n\nSe você já clicou no link, aguarde alguns segundos e tente novamente.");
         }
     } catch (error) {
-        console.error("Erro ao verificar:", error);
-        alert("Erro ao verificar status. Tente novamente.");
+        console.error("Erro na verificação:", error);
+        toast.error("Ocorreu um erro ao verificar. Tente novamente.");
     } finally {
         setIsChecking(false);
     }
@@ -57,6 +78,7 @@ export default function VerifyEmailPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 relative overflow-hidden font-sans px-4">
+      
       {/* Background Decorativo */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-[100px]" />
@@ -73,9 +95,9 @@ export default function VerifyEmailPage() {
             </div>
             <CardTitle className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Verifique seu E-mail</CardTitle>
             <CardDescription className="text-base mt-2 text-zinc-600 dark:text-zinc-400">
-              Enviamos um link de confirmação para o seu endereço de e-mail.
-              <br />
-              Clique nele para ativar sua conta e liberar seu acesso ao painel.
+              Enviamos um link de confirmação para <strong>{user?.email}</strong>.
+              <br className="mb-2"/>
+              Clique nele para ativar sua conta.
             </CardDescription>
           </CardHeader>
 
@@ -87,15 +109,15 @@ export default function VerifyEmailPage() {
                 <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div className="space-y-1">
-                <h4 className="font-semibold text-emerald-900 dark:text-emerald-100 text-sm">Privacidade Garantida</h4>
+                <h4 className="font-semibold text-emerald-900 dark:text-emerald-100 text-sm">Conta Segura</h4>
                 <p className="text-xs text-emerald-700 dark:text-emerald-300 leading-relaxed">
-                  Utilizamos criptografia de ponta a ponta. Isso significa que <strong>ninguém da nossa equipe</strong>, desenvolvedores ou suporte, consegue visualizar seus valores, saldos ou transações. Seus dados são exclusivamente seus.
+                  Após verificar o e-mail, você terá acesso imediato ao painel. Seus dados já estão criptografados e protegidos.
                 </p>
               </div>
             </div>
 
             <div className="text-center text-sm text-zinc-500 dark:text-zinc-400">
-              <p>Não recebeu o e-mail? Verifique sua caixa de Spam.</p>
+              <p>Não recebeu? Verifique a pasta de <strong>Spam</strong> ou <strong>Lixo Eletrônico</strong>.</p>
             </div>
           </CardContent>
 
@@ -109,9 +131,20 @@ export default function VerifyEmailPage() {
                 Já verifiquei meu e-mail
             </Button>
             
-            <Button variant="ghost" onClick={handleSendEmailVerification} className="w-full h-12 flex items-center gap-2 rounded-xl border-zinc-200 hover:bg-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800">Enviar Novamente</Button>
+            <Button 
+                variant="ghost" 
+                onClick={handleSendEmailVerification} 
+                disabled={isResending}
+                className="w-full h-12 flex items-center gap-2 rounded-xl border-zinc-200 hover:bg-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+                {isResending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reenviar E-mail"}
+            </Button>
             
-            <Button onClick={logout} variant="outline" className="w-full h-12 flex items-center gap-2 rounded-xl border-zinc-200 hover:bg-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800">
+            <Button 
+                onClick={logout} 
+                variant="outline" 
+                className="w-full h-12 flex items-center gap-2 rounded-xl border-zinc-200 hover:bg-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
               Voltar para Login <ArrowRight className=" h-4 w-4" />
             </Button>
           </CardFooter>
