@@ -16,7 +16,8 @@ import {
   RefreshCw,
   Clock,
   CheckCircle,
-  X
+  X,
+  Info
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { updateOwnProfile, softDeleteUser } from "@/services/userService";
@@ -26,29 +27,31 @@ import { usePlans } from "@/hooks/usePlans";
 import { migrateCryptography } from "@/services/transactionService";
 import { useRouter } from "next/navigation";
 
+// Tipo para feedback
+type FeedbackData = {
+  isOpen: boolean;
+  type: 'success' | 'error' | 'info';
+  title: string;
+  message: string;
+};
+
 export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode } = useAuth();
   const { plans } = usePlans();
   const router = useRouter();
 
-  // State de Migração
   const [isMigrating, setIsMigrating] = useState(false);
-
-  // State da Aba Ativa
   const [activeTab, setActiveTab] = useState("account");
-
-  // States do Formulário
   const [displayName, setDisplayName] = useState("");
   const [completeName, setCompleteName] = useState("");
   const [phone, setPhone] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-
-  // States de Segurança
   const [keyFingerprint, setKeyFingerprint] = useState("Carregando identificador seguro...");
-
-  // States de Modais
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Estado para feedback modal (substitui alert)
+  const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
 
   useEffect(() => {
     if (userProfile) {
@@ -58,20 +61,25 @@ export default function SettingsPage() {
     }
   }, [userProfile]);
 
-  // Carregar Fingerprint real da chave
   useEffect(() => {
     if (user?.uid) {
       getKeyFingerprint(user.uid).then(setKeyFingerprint);
     }
   }, [user]);
 
+  const showFeedback = (type: 'success' | 'error' | 'info', title: string, message: string) => {
+    setFeedbackModal({ isOpen: true, type, title, message });
+  };
+
   const handleSaveProfile = async () => {
     if (!user) return;
     setIsSaving(true);
     try {
       await updateOwnProfile(user.uid, { displayName, completeName, phone });
+      showFeedback('success', 'Sucesso', 'Perfil atualizado com sucesso!');
     } catch (error) {
       console.error("Erro ao salvar perfil:", error);
+      showFeedback('error', 'Erro', 'Falha ao salvar as alterações.');
     } finally {
       setIsSaving(false);
     }
@@ -86,26 +94,22 @@ export default function SettingsPage() {
       router.push("/goodbye");
     } catch (error) {
       let errorMessage = "Ocorreu um erro ao tentar excluir sua conta.";
-
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-
-      alert(errorMessage);
+      if (error instanceof Error) errorMessage = error.message;
+      showFeedback('error', 'Erro na Exclusão', errorMessage);
       setIsDeleting(false);
+      setShowDeleteModal(false);
     }
   };
 
-  // Handler de Migração
   const handleMigration = async () => {
     if (!user) return;
     setIsMigrating(true);
     try {
       const count = await migrateCryptography(user.uid);
-      alert(`Sucesso! ${count} transações foram atualizadas para a nova segurança.`);
+      showFeedback('success', 'Migração Concluída', `${count} transações foram atualizadas para a nova segurança.`);
     } catch (e) {
       console.error(e);
-      alert("Erro na migração.");
+      showFeedback('error', 'Erro na Migração', 'Não foi possível completar a migração de criptografia.');
     } finally {
       setIsMigrating(false);
     }
@@ -406,13 +410,11 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-8">
 
-                {/* Toggle Privacidade */}
                 <div className="flex items-center justify-between p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-100 dark:border-zinc-800 transition-all hover:border-zinc-300 dark:hover:border-zinc-700">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2"><EyeOff className="h-5 w-5 text-zinc-600 dark:text-zinc-400" /><Label className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Modo Discreto (Blur)</Label></div>
                     <p className="text-sm text-zinc-500">Oculta valores monetários no Dashboard para privacidade.</p>
                   </div>
-                  {/* Usa togglePrivacyMode do hook para persistir globalmente */}
                   <Switch checked={privacyMode} onCheckedChange={togglePrivacyMode} className="data-[state=checked]:bg-violet-600" />
                 </div>
                 <Separator className="bg-zinc-300 dark:bg-zinc-800" />
@@ -421,10 +423,9 @@ export default function SettingsPage() {
                   <div className="p-5 rounded-2xl bg-zinc-950 text-zinc-400 font-mono text-xs break-all relative border border-zinc-800 shadow-inner">
                     <div className="absolute top-3 right-3"><Badge variant="outline" className="text-[10px] border-zinc-700 text-emerald-500 font-bold px-2 py-0.5">E2EE ATIVO</Badge></div>
                     <p className="mb-2 text-zinc-600 uppercase tracking-widest text-[10px] font-bold">Identificador Seguro (Hash)</p>
-                    {/* Mostra o Fingerprint Real */}
                     {keyFingerprint}
                   </div>
-                  <p className="text-xs text-zinc-500 leading-relaxed">* Seus dados sensíveis são criptografados antes de sair do seu dispositivo. Nem mesmo os desenvolvedores da Weven Finance possuem acesso aos valores das suas transações.</p>
+                  <p className="text-xs text-zinc-500 leading-relaxed">* Seus dados sensíveis são criptografados antes de sair do seu dispositivo.</p>
                   <Separator className="bg-zinc-300 dark:bg-zinc-800" />
 
                   <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-900/50">
@@ -432,7 +433,7 @@ export default function SettingsPage() {
                       <RefreshCw className="h-4 w-4" /> Manutenção de Dados
                     </h4>
                     <p className="text-xs text-blue-600/80 dark:text-blue-400 mb-4">
-                      Se você trocou de dispositivo e seus dados antigos aparecem como &quot;Dados Protegidos&quot; ou códigos estranhos, clique abaixo para tentar recuperá-los usando sua chave antiga e convertê-los para o novo padrão seguro.
+                      Se você trocou de dispositivo e seus dados antigos aparecem como &quot;Dados Protegidos&quot;, clique abaixo.
                     </p>
                     <Button
                       size="sm"
@@ -483,6 +484,24 @@ export default function SettingsPage() {
                 className="rounded-xl h-10 w-full sm:w-auto bg-red-600 hover:bg-red-700">
                 {isDeleting ? "Excluindo..." : "Sim, excluir conta"}
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal Genérico de Feedback */}
+        <Dialog open={feedbackModal.isOpen} onOpenChange={(open) => !open && setFeedbackModal({ ...feedbackModal, isOpen: false })}>
+          <DialogContent className="rounded-2xl sm:max-w-[400px]">
+            <DialogHeader>
+              <div className={`mx-auto p-3 rounded-full mb-2 w-fit ${feedbackModal.type === 'success' ? 'bg-emerald-100 text-emerald-600' : feedbackModal.type === 'error' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                {feedbackModal.type === 'success' ? <CheckCircle2 className="h-6 w-6" /> : feedbackModal.type === 'error' ? <AlertTriangle className="h-6 w-6" /> : <Info className="h-6 w-6" />}
+              </div>
+              <DialogTitle className="text-center">{feedbackModal.title}</DialogTitle>
+              <DialogDescription className="text-center pt-2">
+                {feedbackModal.message}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })} className="w-full rounded-xl">Entendido</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
