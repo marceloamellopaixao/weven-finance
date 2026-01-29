@@ -39,10 +39,29 @@ export default function LoginPage() {
     setIsLoading(true);
     setError("");
     try {
+      if (email.trim() === "" || password.trim() === "") {
+        setError("Por favor, preencha todos os campos.");
+        setIsLoading(false);
+        return;
+      }
+
+      if (password.length < 6) {
+        setError("A senha deve ter no mínimo 6 caracteres.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Validador de E-mails
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setError("Por favor, insira um e-mail válido.");
+        setIsLoading(false);
+        return;
+      }
+
       await loginWithEmail(email, password);
     } catch (err) {
-      console.error(err);
-      setError("E-mail ou senha incorretos.");
+      setError(err as string);
       setIsLoading(false);
     }
   };
@@ -53,7 +72,7 @@ export default function LoginPage() {
     try {
       await signInWithGoogle();
     } catch (err) {
-      console.error("Login Google falhou", err);
+      setError(err as string);
       setIsGoogleLoading(false);
     }
   };
@@ -90,12 +109,11 @@ export default function LoginPage() {
                 <Label htmlFor="email">E-mail</Label>
                 <Input 
                   id="email" 
-                  type="email" 
+                  type="text" 
                   placeholder="seu@email.com" 
                   className="bg-white/50 dark:bg-zinc-800/50"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  required
                 />
               </div>
               <div className="space-y-2">
@@ -110,7 +128,6 @@ export default function LoginPage() {
                   className="bg-white/50 dark:bg-zinc-800/50"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  required
                 />
               </div>
 
