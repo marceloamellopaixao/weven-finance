@@ -205,7 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Prioridade 4: Role Admin (Opcional, mantendo sua lógica)
-    if (pathname.startsWith("/admin")) {
+    if (isEmailVerified && (pathname.startsWith("/admin"))) {
       if (userProfile.role !== "admin" && userProfile.role !== "moderator") {
         router.replace("/");
       }
