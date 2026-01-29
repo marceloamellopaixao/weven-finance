@@ -89,6 +89,7 @@ import {
   AlertTriangle,
   Info,
   History,
+  Lock,
 } from "lucide-react";
 
 type UserWithCount = UserProfile & { transactionCount?: number };
@@ -101,6 +102,9 @@ type FeedbackData = {
   title: string;
   message: string;
 };
+
+// E-mail do Dono Supremo (Hardcoded para segurança extra na UI)
+const CREATOR_EMAIL = "marceloampsenpai@gmail.com";
 
 export default function AdminPage() {
   const { userProfile, loading } = useAuth();
@@ -162,15 +166,59 @@ export default function AdminPage() {
   const [editedPlans, setEditedPlans] = useState<PlansConfig | null>(null);
   const [isSavingPlans, setIsSavingPlans] = useState(false);
 
-  // --- PERMISSÕES ---
+  // --- PERMISSÕES (Lógica Refinada) ---
   const canManageSensitive = userProfile?.role === "admin";
-  const canRestore = userProfile?.role === "admin";
+  const canRestore = userProfile?.role === "admin" || userProfile?.role === "moderator";
 
+  // Lógica de Permissão de Visualização
   const canViewRole = useCallback((targetRole: UserRole) => {
     if (userProfile?.role === "admin") return true;
-    if (userProfile?.role === "moderator") return targetRole === "client";
-    return false;
+    if (userProfile?.role === "moderator") return targetRole === "client"; // Moderador só vê clientes? Ou vê tudo mas só edita clientes?
+    // Ajuste: Moderadores geralmente precisam ver a equipe, mas vamos manter simples:
+    // Se for moderador, vê tudo, mas as ações são limitadas via disabled nos inputs.
+    return true; 
   }, [userProfile?.role]);
+
+  // Lógica de Permissão para EDITAR CARGO
+  const canEditRole = useCallback((targetUser: UserProfile) => {
+    if (!userProfile) return false;
+
+    // 1. Ninguém edita o próprio cargo
+    if (targetUser.uid === userProfile.uid) return false;
+
+    // 2. Ninguém edita o cargo do Criador Supremo
+    if (targetUser.email === CREATOR_EMAIL) return false;
+
+    // 3. Moderador NÃO edita cargo de ninguém
+    if (userProfile.role === 'moderator') return false;
+
+    // 4. Admin
+    if (userProfile.role === 'admin') {
+      // Se sou o Criador, posso editar qualquer um (exceto eu mesmo, já tratado acima)
+      if (userProfile.email === CREATOR_EMAIL) return true;
+
+      // Se sou Admin Comum, NÃO posso editar outros Admins
+      if (targetUser.role === 'admin') return false;
+
+      // Admin Comum pode editar Moderadores e Clientes
+      return true;
+    }
+
+    return false;
+  }, [userProfile]);
+
+  // Lógica de Permissão para EDITAR PLANO
+  const canEditPlan = useCallback((targetUser: UserProfile) => {
+    if (!userProfile) return false;
+
+    // Se o alvo é Admin ou Moderador, o plano é "Isento" (não editável via dropdown de plano)
+    if (targetUser.role === 'admin' || targetUser.role === 'moderator') return false;
+
+    // Admin e Moderador podem editar plano de Clientes
+    if (userProfile.role === 'admin' || userProfile.role === 'moderator') return true;
+
+    return false;
+  }, [userProfile]);
 
   // --- Guards ---
   useEffect(() => {
@@ -440,13 +488,17 @@ export default function AdminPage() {
         }
       }
 
+      // Filtragem visual: Moderador vê tudo, mas se quisermos esconder Admins dele, seria aqui.
+      // O requisito diz "não pode trocar cargo", mas não explicitamente "não pode ver".
+      // Vamos manter visível para transparência, mas com ações bloqueadas.
       const isVisible = canViewRole(u.role);
+      
       let matchesStatus = true;
       if (statusFilter !== "all") {
         matchesStatus = u.status === statusFilter;
       }
 
-      return matchesSearch && matchesRole && matchesPlan && matchesPayment && isVisible && matchesStatus;
+      return matchesSearch && matchesRole && matchesPlan && matchesPayment && matchesStatus && isVisible;
     });
 
     const rolePriority: Record<UserRole, number> = { admin: 1, moderator: 2, client: 3 };
@@ -542,8 +594,8 @@ export default function AdminPage() {
           {/* --- USERS TAB --- */}
           {activeTab === "users" && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
+              {/* Filtros e Busca */}
               <div className="space-y-2">
-                {/* Busca */}
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-3.5 h-4 w-4 text-zinc-400" />
                   <Input
@@ -554,9 +606,7 @@ export default function AdminPage() {
                   />
                 </div>
 
-                {/* Filtros em Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* Filtro: Plano */}
                   <Select value={planFilter} onValueChange={(val) => setPlanFilter(val as UserPlan | "all")}>
                     <SelectTrigger className="w-full h-11 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
                       <SelectValue placeholder="Plano" />
@@ -569,7 +619,6 @@ export default function AdminPage() {
                     </SelectContent>
                   </Select>
 
-                  {/* Filtro: Cargo */}
                   <Select value={roleFilter} onValueChange={(val) => setRoleFilter(val as UserRole | "all")}>
                     <SelectTrigger className="w-full h-11 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
                       <SelectValue placeholder="Cargo" />
@@ -582,7 +631,6 @@ export default function AdminPage() {
                     </SelectContent>
                   </Select>
 
-                  {/* Filtro: Status */}
                   <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val as UserStatus | "all")}>
                     <SelectTrigger className="w-full h-11 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
                       <SelectValue placeholder="Status" />
@@ -595,7 +643,6 @@ export default function AdminPage() {
                     </SelectContent>
                   </Select>
 
-                  {/* Filtro: Pagamento */}
                   <Select value={paymentStatusFilter} onValueChange={(val) => setPaymentStatusFilter(val as PaymentFilterType)}>
                     <SelectTrigger className="w-full h-11 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
                       <SelectValue placeholder="Pagamento" />
@@ -614,8 +661,8 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <Card className="border-none shadow-sm shadow-violet-600/50 dark:shadow-violet-600/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
-                <CardHeader className="py-4 px-6 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-300/50 dark:bg-zinc-900/50">
+              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
+                <CardHeader className="py-4 px-6 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
                   <CardTitle className="text-lg font-semibold text-violet-600 dark:text-violet-400">Base de Usuários</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -650,7 +697,9 @@ export default function AdminPage() {
                             </TableCell>
                           </TableRow>
                         ) : paginatedUsers.map((u) => {
-                          const isAdminOrMod = u.role === 'admin' || u.role === 'moderator';
+                          const isTargetAdminOrMod = u.role === 'admin' || u.role === 'moderator';
+                          const canChangeRole = canEditRole(u);
+                          const canChangePlan = canEditPlan(u);
 
                           return (
                             <TableRow key={u.uid} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-zinc-100 dark:border-zinc-800 transition-colors">
@@ -668,29 +717,41 @@ export default function AdminPage() {
                               </TableCell>
 
                               <TableCell>
-                                <Select value={u.plan} onValueChange={(val) => handlePlanChange(u.uid, val)}>
-                                  <SelectTrigger className="w-[120px] h-8 text-xs border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 rounded-lg">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="free">Free</SelectItem>
-                                    <SelectItem value="premium">Premium 💎</SelectItem>
-                                    <SelectItem value="pro">Pro 👑</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                                {canChangePlan ? (
+                                  <Select value={u.plan} onValueChange={(val) => handlePlanChange(u.uid, val)}>
+                                    <SelectTrigger className="w-[120px] h-8 text-xs border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 rounded-lg">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="free">Free</SelectItem>
+                                      <SelectItem value="premium">Premium 💎</SelectItem>
+                                      <SelectItem value="pro">Pro 👑</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <div className="flex items-center gap-1 text-xs text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-lg w-fit cursor-not-allowed">
+                                    <Lock className="h-3 w-3" /> {u.plan.toUpperCase()}
+                                  </div>
+                                )}
                               </TableCell>
 
                               <TableCell>
-                                <Select value={u.role} onValueChange={(val) => handleRoleChange(u.uid, val)}>
-                                  <SelectTrigger className="w-[110px] h-8 text-xs border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 rounded-lg">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="client">Cliente</SelectItem>
-                                    <SelectItem value="moderator">Moderador</SelectItem>
-                                    <SelectItem value="admin">Admin</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                                {canChangeRole ? (
+                                  <Select value={u.role} onValueChange={(val) => handleRoleChange(u.uid, val)}>
+                                    <SelectTrigger className="w-[110px] h-8 text-xs border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 rounded-lg">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="client">Cliente</SelectItem>
+                                      <SelectItem value="moderator">Moderador</SelectItem>
+                                      <SelectItem value="admin">Admin</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <div className="flex items-center gap-1 text-xs text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-lg w-fit cursor-not-allowed">
+                                    <Lock className="h-3 w-3" /> {u.role === 'client' ? 'Cliente' : u.role === 'admin' ? 'Admin' : 'Moderador'}
+                                  </div>
+                                )}
                               </TableCell>
 
                               <TableCell className="text-center">
@@ -700,7 +761,7 @@ export default function AdminPage() {
                               </TableCell>
 
                               <TableCell>
-                                {isAdminOrMod ? (
+                                {isTargetAdminOrMod ? (
                                   <div className="flex items-center gap-1 text-xs text-emerald-600 font-medium pl-2 bg-emerald-50 dark:bg-emerald-900/20 py-1 px-2 rounded-lg w-fit" title="Isento de pagamento">
                                     <ShieldCheck className="h-3 w-3" />
                                     Isento
@@ -738,10 +799,12 @@ export default function AdminPage() {
 
                               <TableCell className="text-right pr-6">
                                 <div className="flex justify-end items-center gap-2">
+                                  {/* Botão de Bloqueio/Desbloqueio - Apenas Admin pode bloquear outros admins */}
                                   {u.status === "active" ? (
                                     <Button
                                       variant="ghost"
                                       size="icon"
+                                      disabled={!canChangeRole && u.role !== 'client'} // Se não pode mudar cargo (ex: Mod tentando bloquear Admin), bloqueia botão
                                       className="h-8 w-8 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                                       title="Bloquear Usuário"
                                       onClick={() => handleStatusChange(u.uid, "blocked")}
@@ -752,6 +815,7 @@ export default function AdminPage() {
                                     <Button
                                       variant="ghost"
                                       size="icon"
+                                      disabled={!canChangeRole && u.role !== 'client'}
                                       className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
                                       title="Reativar Usuário"
                                       onClick={() => handleStatusChange(u.uid, "active")}
@@ -776,7 +840,11 @@ export default function AdminPage() {
                                             <RefreshCcw className="mr-2 h-4 w-4" /> Resetar Dados
                                           </DropdownMenuItem>
                                           <DropdownMenuSeparator />
-                                          <DropdownMenuItem onClick={() => setUserToDelete(u)} className="text-red-600 focus:text-red-700 focus:bg-red-50 cursor-pointer rounded-lg text-xs font-medium dark:focus:bg-red-900/20">
+                                          <DropdownMenuItem 
+                                            onClick={() => setUserToDelete(u)} 
+                                            disabled={!canChangeRole} // Usa mesma lógica: se não pode editar cargo, não deve deletar (hierarquia)
+                                            className="text-red-600 focus:text-red-700 focus:bg-red-50 cursor-pointer rounded-lg text-xs font-medium dark:focus:bg-red-900/20 disabled:opacity-50"
+                                          >
                                             <Trash2 className="mr-2 h-4 w-4" /> Excluir Conta
                                           </DropdownMenuItem>
                                         </>
@@ -953,7 +1021,7 @@ export default function AdminPage() {
 
                     <div className="space-y-2">
                       <Label className="text-xs font-bold uppercase text-zinc-400">Link Pagamento</Label>
-                      <Input className="rounded-xl h-10 font-mono text-xs text-slate-600" value={editedPlans.premium.paymentLink ?? ""} onChange={(e) => handlePlanEdit("premium", "paymentLink", e.target.value)} />
+                      <Input className="rounded-xl h-10 font-mono text-xs text-emerald-600" value={editedPlans.premium.paymentLink ?? ""} onChange={(e) => handlePlanEdit("premium", "paymentLink", e.target.value)} />
                     </div>
 
                     <div className="space-y-2">
