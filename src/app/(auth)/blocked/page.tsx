@@ -4,34 +4,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Lock, MessageCircle } from "lucide-react";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-// import { Metadata } from "next";
-
-// Head for Blocked Page
-// export const metadata: Metadata = {
-//   title: "Conta Bloqueada - Finance Manager",
-//   description: "Sua conta está bloqueada. Entre em contato com o suporte para mais informações.",
-// }
 
 export default function BlockedPage() {
-  const { userProfile, logout, loading, user } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (loading) return;
-
-    // Se não estiver logado, não faz sentido acessar /blocked
-    if (!user) {
-      router.push("/");
-      return;
-    }
-
-    // Se estiver ativo, não deveria estar aqui
-    if (userProfile?.status === "active") {
-      router.push("/");
-    }
-  }, [user, userProfile, loading, router]);
+  const { userProfile, logout, loading } = useAuth();
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950">Carregando...</div>;
 
