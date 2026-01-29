@@ -22,20 +22,20 @@ export default function VerifyEmailPage() {
     try {
       if (!user) return;
       setIsResending(true);
-      
+
       await sendEmailVerification(user);
-      
+
       // Use toast se tiver, ou alert
       toast.success("E-mail enviado! Verifique sua caixa de entrada.");
     } catch (error) {
-        // Tratamento para evitar spam de cliques
-       if (error instanceof FirebaseError && error.code === 'auth/too-many-requests') {
-           toast.error("Muitas tentativas. Aguarde um pouco.");
-       } else {
-           toast.error("Erro ao enviar e-mail.");
-       }
+      // Tratamento para evitar spam de cliques
+      if (error instanceof FirebaseError && error.code === 'auth/too-many-requests') {
+        toast.error("Muitas tentativas. Aguarde um pouco.");
+      } else {
+        toast.error("Erro ao enviar e-mail.");
+      }
     } finally {
-        setIsResending(false);
+      setIsResending(false);
     }
   };
 
@@ -44,41 +44,41 @@ export default function VerifyEmailPage() {
     setIsChecking(true);
 
     try {
-        // 1. Recarrega os dados do usuário no Auth
-        await user.reload();
-        
-        // 2. IMPORTANTE: Força a atualização do Token (JWT)
-        // Isso garante que o claim 'email_verified' seja atualizado para o backend/firestore rules
-        await user.getIdToken(true);
+      // 1. Recarrega os dados do usuário no Auth
+      await user.reload();
 
-        if (user.emailVerified) {
-            // 3. Atualiza o Firestore (Backup visual e para regras de negócio)
-            const userRef = doc(db, "users", user.uid);
-            
-            // Usamos merge true por segurança, embora updateDoc já seja seguro
-            await updateDoc(userRef, { 
-                verifiedEmail: true,
-                status: 'active' // Garante que o status esteja ativo
-            });
-            
-            // 4. Redirecionamento
-            // O AuthProvider vai detectar a mudança, mas forçamos aqui para ser instantâneo
-            router.refresh(); // Atualiza componentes do servidor se houver
-            router.replace("/"); 
-        } else {
-            toast.error("Ainda não detectamos a verificação.\n\nSe você já clicou no link, aguarde alguns segundos e tente novamente.");
-        }
+      // 2. IMPORTANTE: Força a atualização do Token (JWT)
+      // Isso garante que o claim 'email_verified' seja atualizado para o backend/firestore rules
+      await user.getIdToken(true);
+
+      if (user.emailVerified) {
+        // 3. Atualiza o Firestore (Backup visual e para regras de negócio)
+        const userRef = doc(db, "users", user.uid);
+
+        // Usamos merge true por segurança, embora updateDoc já seja seguro
+        await updateDoc(userRef, {
+          verifiedEmail: true,
+          status: 'active' // Garante que o status esteja ativo
+        });
+
+        // 4. Redirecionamento
+        // O AuthProvider vai detectar a mudança, mas forçamos aqui para ser instantâneo
+        router.refresh(); // Atualiza componentes do servidor se houver
+        router.replace("/");
+      } else {
+        toast.error("Ainda não detectamos a verificação.\n\nSe você já clicou no link, aguarde alguns segundos e tente novamente.");
+      }
     } catch (error) {
-        console.error("Erro na verificação:", error);
-        toast.error("Ocorreu um erro ao verificar. Tente novamente.");
+      console.error("Erro na verificação:", error);
+      toast.error("Ocorreu um erro ao verificar. Tente novamente.");
     } finally {
-        setIsChecking(false);
+      setIsChecking(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 relative overflow-hidden font-sans px-4">
-      
+    <div className="flex items-center justify-center relative overflow-hidden font-sans p-4">
+
       {/* Background Decorativo */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-[100px]" />
@@ -86,7 +86,7 @@ export default function VerifyEmailPage() {
       </div>
 
       <div className="w-full max-w-lg relative z-10 animate-in fade-in zoom-in-95 duration-500">
-        <Card className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border-zinc-200 dark:border-zinc-800 shadow-2xl rounded-3xl overflow-hidden">
+        <Card className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border-zinc-200 dark:border-zinc-800 shadow-lg rounded-3xl overflow-hidden">
           <div className="h-2 w-full bg-linear-to-r from-violet-500 to-emerald-500" />
 
           <CardHeader className="text-center pb-2">
@@ -96,7 +96,7 @@ export default function VerifyEmailPage() {
             <CardTitle className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Verifique seu E-mail</CardTitle>
             <CardDescription className="text-base mt-2 text-zinc-600 dark:text-zinc-400">
               Enviamos um link de confirmação para <strong>{user?.email}</strong>.
-              <br className="mb-2"/>
+              <br className="mb-2" />
               Clique nele para ativar sua conta.
             </CardDescription>
           </CardHeader>
@@ -122,28 +122,28 @@ export default function VerifyEmailPage() {
           </CardContent>
 
           <CardFooter className="flex flex-col gap-3 pt-2 pb-8">
-            <Button 
-                onClick={checkVerification} 
-                disabled={isChecking}
-                className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg transition-all active:scale-[0.98]"
+            <Button
+              onClick={checkVerification}
+              disabled={isChecking}
+              className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg transition-all active:scale-[0.98]"
             >
-                {isChecking ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                Já verifiquei meu e-mail
+              {isChecking ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              Já verifiquei meu e-mail
             </Button>
-            
-            <Button 
-                variant="ghost" 
-                onClick={handleSendEmailVerification} 
-                disabled={isResending}
-                className="w-full h-12 flex items-center gap-2 rounded-xl border-zinc-200 hover:bg-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
+
+            <Button
+              variant="ghost"
+              onClick={handleSendEmailVerification}
+              disabled={isResending}
+              className="w-full h-12 flex items-center gap-2 rounded-xl border-zinc-200 hover:bg-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
-                {isResending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reenviar E-mail"}
+              {isResending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reenviar E-mail"}
             </Button>
-            
-            <Button 
-                onClick={logout} 
-                variant="outline" 
-                className="w-full h-12 flex items-center gap-2 rounded-xl border-zinc-200 hover:bg-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
+
+            <Button
+              onClick={logout}
+              variant="outline"
+              className="w-full h-12 flex items-center gap-2 rounded-xl border-zinc-200 hover:bg-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
               Voltar para Login <ArrowRight className=" h-4 w-4" />
             </Button>
