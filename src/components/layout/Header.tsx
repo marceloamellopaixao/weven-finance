@@ -10,7 +10,7 @@ import Link from "next/link";
 export function Header() {
   const { user, userProfile, logout } = useAuth();
 
-  // Considera logado se houver usuário OU se o perfil já foi carregado (caso de usuário inativo/bloqueado)
+  // Considera logado se houver usuário OU se o perfil já foi carregado
   const isAuthenticated = !!user || !!userProfile;
 
   // SE NÃO TIVER USUÁRIO LOGADO, MOSTRA O HEADER DA LANDING PAGE
@@ -43,9 +43,10 @@ export function Header() {
 
   // SE ESTIVER LOGADO (OU BLOQUEADO), MOSTRA O HEADER DO DASHBOARD
   return (
-    <nav className="sticky top-0 z-50 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/80 backdrop-blur-xl px-4 md:px-8 h-16 flex items-center justify-between dark:bg-zinc-950/80 supports-backdrop-filter:bg-white/60">
+    <nav className="sticky top-0 z-50 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/80 backdrop-blur-xl px-4 md:px-8 h-16 flex items-center justify-between dark:bg-zinc-950/80">
       <div className="flex items-center gap-3">
         <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+          {/* Corrigido para bg-gradient-to-tr (padrão Tailwind) */}
           <div className="bg-linear-to-tr from-violet-600 to-indigo-600 p-2 rounded-xl shadow-lg shadow-violet-500/20">
             <Wallet className="h-5 w-5 text-white" />
           </div>
@@ -56,11 +57,20 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
-        {/* Botão Admin (Só aparece se for admin) */}
-        {userProfile?.role === 'admin' && (
+        {/* Botão Admin / Moderador */}
+        {(userProfile?.role === 'admin' || userProfile?.role === 'moderator') && (
           <Link href="/admin">
-            <Button variant="outline" size="sm" className="hidden md:flex gap-2 border-red-200 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
-              <ShieldAlert className="h-4 w-4" /> Painel Admin
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className={`hidden md:flex gap-2 ${
+                userProfile.role === 'admin'
+                  ? "border-red-200 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  : "border-yellow-200 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"
+              }`}
+            >
+              <ShieldAlert className="h-4 w-4" /> 
+              {userProfile.role === 'admin' ? "Painel Admin" : "Painel Moderador"}
             </Button>
           </Link>
         )}
@@ -71,16 +81,16 @@ export function Header() {
             {user?.displayName || userProfile?.displayName || "Usuário"}
           </p>
           <div className="flex justify-end mt-1">
-             <Badge variant="secondary" className={`text-[10px] uppercase border ${
-               userProfile?.plan === 'pro' || userProfile?.plan === 'premium' 
-               ? 'bg-violet-100 text-violet-600 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400' 
-               : 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400'
-             }`}>
-               {userProfile?.plan || "Free"}
-             </Badge>
+            <Badge variant="secondary" className={`text-[10px] uppercase border ${
+              userProfile?.plan === 'pro' || userProfile?.plan === 'premium'
+                ? 'bg-violet-100 text-violet-600 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400'
+                : 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400'
+            }`}>
+              {userProfile?.plan || "Free"}
+            </Badge>
           </div>
         </div>
-        
+
         <Link href="/settings">
           <Avatar className="h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 ring-transparent hover:ring-violet-200 transition-all cursor-pointer">
             <AvatarImage src={user?.photoURL || userProfile?.photoURL || ""} />
