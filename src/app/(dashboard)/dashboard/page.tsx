@@ -30,7 +30,6 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
-import LandingPage from "@/components/marketing/LandingPage";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -123,6 +122,9 @@ export default function DashboardPage() {
   // Modal Genérico de Feedback (Sucesso/Erro)
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
 
+  // Constantes de Animação (Padrão do Sistema)
+  const fadeInUp = "animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both";
+
   // Helper para formatar moeda com privacidade
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -133,13 +135,6 @@ export default function DashboardPage() {
     if (privacyMode) return "R$ ••••••";
     return formatCurrency(value);
   };
-
-  // --- 2. TRAVA DE SEGURANÇA DE E-MAIL ---
-  useEffect(() => {
-    if (!loading && user && !user.emailVerified) {
-      router.push("/verify-email");
-    }
-  }, [user, loading, router]);
 
   // --- 3. CHECK-IN DIÁRIO (Pop-up Inteligente) ---
   useEffect(() => {
@@ -251,7 +246,7 @@ export default function DashboardPage() {
   if (loading) return null;
 
   if (!user) {
-    return <LandingPage />;
+    return null; // O useEffect de redirecionamento irá lidar com isso
   }
 
   if (user && !user.emailVerified) {
@@ -408,13 +403,13 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 gap-1 p-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl">
         <button
           onClick={() => changeType('expense')}
-          className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 ${type === 'expense' ? 'bg-white dark:bg-zinc-700 shadow-sm text-red-600' : 'text-zinc-500 hover:text-zinc-700'}`}
+          className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 hover:cursor-pointer ${type === 'expense' ? 'bg-white dark:bg-zinc-700 shadow-sm text-red-600' : 'text-zinc-500 hover:text-zinc-700'}`}
         >
           Gasto
         </button>
         <button
           onClick={() => changeType('income')}
-          className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 ${type === 'income' ? 'bg-white dark:bg-zinc-700 shadow-sm text-emerald-600' : 'text-zinc-500 hover:text-zinc-700'}`}
+          className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 hover:cursor-pointer ${type === 'income' ? 'bg-white dark:bg-zinc-700 shadow-sm text-emerald-600' : 'text-zinc-500 hover:text-zinc-700'}`}
         >
           Renda
         </button>
@@ -510,7 +505,7 @@ export default function DashboardPage() {
 
       <Button
         onClick={handleAdd}
-        className={`w-full h-12 font-bold text-white shadow-lg rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] ${type === 'expense' ? 'bg-linear-to-r from-red-500 to-orange-500 shadow-red-500/25 hover:shadow-red-500/40' : 'bg-linear-to-r from-emerald-500 to-teal-500 shadow-emerald-500/25 hover:shadow-emerald-500/40'}`}
+        className={`w-full h-12 font-bold text-white shadow-lg rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] hover:cursor-pointer duration-200 ${type === 'expense' ? 'bg-linear-to-r from-red-500 to-orange-500 shadow-red-500/25 hover:shadow-red-500/40' : 'bg-linear-to-r from-emerald-500 to-teal-500 shadow-emerald-500/25 hover:shadow-emerald-500/40'}`}
         disabled={isSubmitting}
       >
         {isSubmitting ? "Processando..." : (type === 'expense' ? "Confirmar Despesa" : "Confirmar Receita")}
@@ -519,7 +514,7 @@ export default function DashboardPage() {
       <Button
         variant="ghost"
         onClick={() => setIsFormOpen(false)}
-        className="w-full h-12 font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-all"
+        className="w-full h-12 font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-all hover:cursor-pointer duration-200"
       >
         Cancelar
       </Button>
@@ -568,10 +563,10 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen font-sans selection:bg-primary/20 selection:text-primary pb-20">
 
-      <main className="container mx-auto p-3 md:p-8 space-y-6 max-w-7xl animate-in fade-in duration-500">
+      <main className="container mx-auto p-3 md:p-8 space-y-6 max-w-7xl">
 
         {/* TOP BAR: TÍTULO + CONTROLES + BOTÃO NOVA TRANSAÇÃO */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className={`${fadeInUp} flex flex-col md:flex-row md:items-center justify-between gap-4`}>
           <div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Visão Geral</h1>
             <p className="text-sm md:text-base text-zinc-500 dark:text-zinc-400 mt-1">Gerencie seu fluxo de caixa e previsões.</p>
@@ -581,18 +576,18 @@ export default function DashboardPage() {
             {/* Botão de Nova Transação (Visível em Mobile e Desktop) */}
             <Button
               onClick={() => setIsFormOpen(true)}
-              className="h-11 rounded-xl bg-linear-to-r from-violet-600 to-indigo-600 text-white font-bold shadow-lg shadow-violet-500/25 active:scale-[0.98] transition-all w-full sm:w-auto"
+              className="h-11 rounded-xl bg-linear-to-r from-violet-600 to-indigo-600 text-white font-bold shadow-lg shadow-violet-500/25 active:scale-[0.98] transition-all w-full sm:w-auto hover:cursor-pointer duration-200"
             >
               <Plus className="mr-2 h-4 w-4" /> Nova Transação
             </Button>
 
             {/* Seletor de Mês */}
             <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm w-full sm:w-auto justify-between md:justify-start">
-              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0" onClick={() => changeMonth(-1)} disabled={!canGoBack}>
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0 hover:cursor-pointer duration-200" onClick={() => changeMonth(-1)} disabled={!canGoBack}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="w-full md:w-40 h-7 border-none shadow-none focus:ring-0 font-semibold text-sm bg-transparent flex justify-center text-center">
+                <SelectTrigger className="w-full md:w-40 h-7 border-none shadow-none focus:ring-0 font-semibold text-sm bg-transparent flex justify-center text-center hover:cursor-pointer duration-200">
                   <div className="flex items-center gap-2">
                     <Calendar className="h-3.5 w-3.5 text-violet-500 shrink-0" />
                     <SelectValue placeholder="Selecione" />
@@ -606,7 +601,7 @@ export default function DashboardPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0" onClick={() => changeMonth(1)} disabled={!canGoForward}>
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0 hover:cursor-pointer duration-200" onClick={() => changeMonth(1)} disabled={!canGoForward}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -616,7 +611,7 @@ export default function DashboardPage() {
         {/* --- KPI Cards --- */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           {/* SALDO EM CAIXA */}
-          <Card className="relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl group active:scale-[0.99] transition-transform">
+          <Card className={`${fadeInUp} delay-150 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl group active:scale-[0.99] transition-transform`}>
             <div className="absolute inset-0 bg-linear-to-br from-blue-500/5 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
               <div className="flex items-center gap-2">
@@ -642,7 +637,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* MOVIMENTAÇÃO */}
-          <Card className="relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl">
+          <Card className={`${fadeInUp} delay-300 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl`}>
             <div className="absolute inset-0 bg-linear-to-br from-violet-500/5 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
@@ -671,7 +666,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* PREVISÃO */}
-          <Card className={`relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
+          <Card className={`${fadeInUp} delay-500 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
                 <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Previsão de Fechamento</CardTitle>
@@ -700,7 +695,7 @@ export default function DashboardPage() {
         <div className="w-full space-y-8">
 
           {/* Gráfico do Fluxo Mensal */}
-          <Card className="border-none shadow-lg shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl">
+          <Card className={`${fadeInUp} delay-700 border-none shadow-lg shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl`}>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Fluxo Mensal</CardTitle>
               <CardDescription className="text-zinc-500">Evolução do saldo ao longo do tempo.</CardDescription>
@@ -711,7 +706,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Tabela de Transações */}
-          <Card className="border-none shadow-lg shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden">
+          <Card className={`${fadeInUp} delay-700 border-none shadow-lg shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden`}>
             <CardHeader className="border-b border-zinc-100 dark:border-zinc-800 py-5 px-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
@@ -840,7 +835,7 @@ export default function DashboardPage() {
                             <div className="flex justify-center">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg"><MoreHorizontal className="h-4 w-4 text-zinc-400" /></Button>
+                                  <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg hover:cursor-pointer duration-200"><MoreHorizontal className="h-4 w-4 text-zinc-400" /></Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-40 p-1 rounded-xl shadow-xl border-zinc-100 dark:border-zinc-800">
 
@@ -897,7 +892,7 @@ export default function DashboardPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 text-xs disabled:opacity-50 rounded-lg"
+                  className="h-8 text-xs disabled:opacity-50 rounded-lg hover:cursor-pointer duration-200"
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
                 >
@@ -906,7 +901,7 @@ export default function DashboardPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 text-xs disabled:opacity-50 rounded-lg"
+                  className="h-8 text-xs disabled:opacity-50 rounded-lg hover:cursor-pointer duration-200"
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage >= totalPages}
                 >
@@ -1028,19 +1023,19 @@ export default function DashboardPage() {
               </div>
             )}
             <DialogFooter className="flex flex-col sm:flex-row gap-3">
-              <Button variant="ghost" className="w-full sm:w-auto" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
+              <Button variant="ghost" className="w-full sm:w-auto hover:cursor-pointer duration-200" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
 
               {editingTx?.groupId ? (
                 <>
-                  <Button variant="outline" className="w-full sm:w-auto" onClick={() => handleConfirmEdit(false)}>
+                  <Button variant="outline" className="w-full sm:w-auto hover:cursor-pointer duration-200" onClick={() => handleConfirmEdit(false)}>
                     Apenas Esta
                   </Button>
-                  <Button className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700" onClick={() => handleConfirmEdit(true)}>
+                  <Button className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700 hover:cursor-pointer duration-200" onClick={() => handleConfirmEdit(true)}>
                     Todas as Parcelas
                   </Button>
                 </>
               ) : (
-                <Button className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700" onClick={() => handleConfirmEdit(false)}>
+                <Button className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700 hover:cursor-pointer duration-200" onClick={() => handleConfirmEdit(false)}>
                   Salvar
                 </Button>
               )}
@@ -1064,21 +1059,21 @@ export default function DashboardPage() {
             </DialogHeader>
 
             <DialogFooter className="flex-col sm:flex-row gap-3 mt-4">
-              <Button className="w-full sm:w-auto rounded-xl h-10" variant="ghost" onClick={() => setTxToDelete(null)}>
+              <Button className="w-full sm:w-auto rounded-xl h-10 hover:cursor-pointer duration-200" variant="ghost" onClick={() => setTxToDelete(null)}>
                 Cancelar
               </Button>
 
               {txToDelete?.groupId ? (
                 <>
-                  <Button className="w-full sm:w-auto rounded-xl h-10" variant="outline" onClick={() => handleConfirmDelete(false)}>
+                  <Button className="w-full sm:w-auto rounded-xl h-10 hover:cursor-pointer duration-200" variant="outline" onClick={() => handleConfirmDelete(false)}>
                     Apenas Esta
                   </Button>
-                  <Button className="w-full sm:w-auto rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white" onClick={() => handleConfirmDelete(true)}>
+                  <Button className="w-full sm:w-auto rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200" onClick={() => handleConfirmDelete(true)}>
                     Todas as Parcelas
                   </Button>
                 </>
               ) : (
-                <Button className="w-full sm:w-auto rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white" onClick={() => handleConfirmDelete(false)}>
+                <Button className="w-full sm:w-auto rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200" onClick={() => handleConfirmDelete(false)}>
                   Confirmar Exclusão
                 </Button>
               )}
@@ -1106,10 +1101,10 @@ export default function DashboardPage() {
             </DialogHeader>
 
             <DialogFooter className="flex-col sm:flex-row gap-3 mt-4">
-              <Button className="w-full sm:w-auto rounded-xl h-10" variant="ghost" onClick={() => setTxToCancelSubscription(null)}>
+              <Button className="w-full sm:w-auto rounded-xl h-10 hover:cursor-pointer duration-200" variant="ghost" onClick={() => setTxToCancelSubscription(null)}>
                 Voltar
               </Button>
-              <Button className="w-full sm:w-auto rounded-xl h-10 bg-amber-600 hover:bg-amber-700 text-white" onClick={handleConfirmCancelSubscription}>
+              <Button className="w-full sm:w-auto rounded-xl h-10 bg-amber-600 hover:bg-amber-700 text-white hover:cursor-pointer duration-200" onClick={handleConfirmCancelSubscription}>
                 Confirmar Encerramento
               </Button>
             </DialogFooter>
@@ -1141,13 +1136,13 @@ export default function DashboardPage() {
             <DialogFooter className="grid grid-cols-2 gap-3 mt-2">
               <Button
                 variant="outline"
-                className="rounded-xl h-12"
+                className="rounded-xl h-12 hover:cursor-pointer duration-200"
                 onClick={() => handleCheckinAction(pendingCheckins[0], false)}
               >
                 Ainda Não
               </Button>
               <Button
-                className="rounded-xl h-12 bg-green-600 hover:bg-green-700 text-white"
+                className="rounded-xl h-12 bg-green-600 hover:bg-green-700 text-white hover:cursor-pointer duration-200"
                 onClick={() => handleCheckinAction(pendingCheckins[0], true)}
               >
                 Já Paguei/Recebi
@@ -1180,21 +1175,21 @@ export default function DashboardPage() {
                 <Link href={plans.premium.paymentLink} target="_blank" className="block w-full">
                   <Button
                     variant="outline"
-                    className="w-full h-12 rounded-xl  sm:text-lg font-bold border-violet-200 text-violet-700 hover:bg-violet-50 shadow-lg shadow-violet-500/25 transition-all duration-400"
+                    className="w-full h-12 rounded-xl  sm:text-lg font-bold border-violet-200 text-violet-700 hover:bg-violet-50 shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
                   >
                     <Medal className="inline-block h-6 w-6 text-violet-600 dark:text-violet-400" /> Premium
                   </Button>
                 </Link>
 
                 <Link href={plans.pro.paymentLink} target="_blank" className="block w-full">
-                  <Button className="w-full h-12 rounded-xl bg-violet-600 hover:bg-violet-700  sm:text-lg font-bold shadow-lg shadow-violet-500/25 transition-all duration-400">
+                  <Button className="w-full h-12 rounded-xl bg-violet-600 hover:bg-violet-700  sm:text-lg font-bold shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer">
                     <Medal className="inline-block h-6 w-6 text-zinc-100 dark:text-zinc-200" /> Pro
                   </Button>
                 </Link>
 
                 <Button
                   variant="ghost"
-                  className="col-span-2 w-full h-12 sm:text-lg rounded-xl bg-violet-500 text-zinc-100 hover:bg-violet-700 hover:text-zinc-200 shadow-lg shadow-violet-500/25 transition-all duration-400"
+                  className="col-span-2 w-full h-12 sm:text-lg rounded-xl bg-violet-500 text-zinc-100 hover:bg-violet-700 hover:text-zinc-200 shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
                   onClick={() => setShowUpgradeModal(false)}
                 >
                   Continuar no Grátis
@@ -1217,7 +1212,7 @@ export default function DashboardPage() {
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })} className="w-full rounded-xl">Entendido</Button>
+              <Button onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })} className="w-full rounded-xl hover:cursor-pointer duration-200">Entendido</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
