@@ -179,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Prioridade 2: Verificação de E-mail
-    const isEmailVerified = userProfile.verifiedEmail || user.emailVerified;
+    const isEmailVerified = userProfile.verifiedEmail;
 
     if (!isEmailVerified) {
       // Se NÃO verificado, o usuário SÓ pode estar em /verify-email
