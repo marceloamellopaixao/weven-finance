@@ -305,7 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       }
-      router.push("/");
+      router.replace("/");
     } catch (error) {
       console.error("Erro no Google Login:", error);
       let message = "Erro ao entrar com Google.";
@@ -320,7 +320,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithEmail = async (email: string, pass: string) => {
     try {
       await signInWithEmailAndPassword(auth, email, pass);
-      router.push("/");
+      router.replace("/");
     } catch (error) {
       let message = "Erro ao entrar.";
       if (error instanceof FirebaseError) {
@@ -333,7 +333,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await signOut(auth);
-    router.push("/");
+    router.replace("/");
     router.refresh();
   };
 
