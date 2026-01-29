@@ -84,6 +84,8 @@ export const migrateCryptography = async (uid: string) => {
   }
 
   if (count > 0) await batch.commit();
+
+  await bumpUserTransactionCount(uid, 0);
   return count;
 };
 
@@ -93,19 +95,13 @@ export const subscribeToTransactions = (
   onChange: (data: Transaction[]) => void,
   onError?: (error: Error) => void
 ) => {
-  /**
-   * IMPORTANTE:
-   * No seu dashboard você filtra por dueDate (mês/ano).
-   * Então a ordenação mais coerente aqui é dueDate desc.
-   * Se preferir manter por "date", pode, mas o comportamento fica menos previsível.
-   */
   const q = query(transactionsCol(uid), orderBy("dueDate", "desc"));
 
   return onSnapshot(
     q,
     async (snapshot) => {
       try {
-        const transactions = await Promise.all(
+        const allTransactions = await Promise.all(
           snapshot.docs.map(async (docSnap) => {
             const data = docSnap.data();
 
@@ -139,14 +135,17 @@ export const subscribeToTransactions = (
           })
         );
 
-        onChange(transactions);
+        // Filtro de Segurança: Remove transações arquivadas da visualização do usuário
+        const activeTransactions = allTransactions.filter(t => !t.isArchived);
+
+        onChange(activeTransactions);
       } catch (err) {
         console.error("Erro ao processar transações:", err);
         onError?.(err as Error);
       }
     },
     (error) => {
-      console.error("Erro realtime transações:", error);
+      console.error("Erro ao buscar transações:", error);
       onError?.(error as Error);
     }
   );
@@ -181,6 +180,7 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
       dueDate: currentDueDate,
       createdAt: serverTimestamp(),
       isEncrypted: true,
+      isArchived: false,
       ...(tx.isInstallment && {
         groupId,
         installmentCurrent: i + 1,
@@ -192,8 +192,6 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
   }
 
   await Promise.all(batchPromises);
-
-  // ✅ contador em tempo real no documento do usuário
   await bumpUserTransactionCount(uid, count);
 };
 
@@ -218,14 +216,12 @@ export const deleteTransaction = async (
       querySnapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
       await batch.commit();
 
-      // ✅ decrementa pelo total apagado
       await bumpUserTransactionCount(uid, -querySnapshot.size);
       return;
     }
   }
 
   await deleteDoc(doc(transactionsCol(uid), transactionId));
-
   await bumpUserTransactionCount(uid, -1);
 };
 
@@ -247,7 +243,6 @@ export const cancelFutureInstallments = async (
   const batch = writeBatch(db);
   querySnapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
   await batch.commit();
-
   await bumpUserTransactionCount(uid, -querySnapshot.size);
 };
 
