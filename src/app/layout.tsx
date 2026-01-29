@@ -5,6 +5,7 @@ import "./globals.css";
 import { AuthProvider } from "@/hooks/useAuth";
 import { Header } from "@/components/layout/Header";
 import { BlockedGuard } from "@/components/guards/BlockedGuard";
+import { ToastContainer } from "react-toastify";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -30,6 +31,7 @@ export default function RootLayout({
               <Header />
               <main className="flex-1">
                 {children}
+                <ToastContainer />
               </main>
             </div>
           </BlockedGuard>
