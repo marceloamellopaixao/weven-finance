@@ -124,7 +124,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             router.push("/goodbye");
             signOut(auth);
           }
-        } else {
+        } 
+        
+        if (profile.status === "active") {
           // Se usuário estiver verificado no perfil, mas não no Auth
           if (profile.verifiedEmail === true && user.emailVerified === false) {
             user.reload().catch(() => { }); // catch silencioso para evitar unhandled promise
