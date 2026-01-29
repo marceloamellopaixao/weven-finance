@@ -125,13 +125,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             signOut(auth);
           }
         } else {
-          // Apenas redireciona verificações se o status estiver OK (ativo)
-
-          // Redireciona para verificação de e-mail se necessário
-          if (profile.verifiedEmail === false || user.emailVerified === false) {
-            if (pathname !== "/verify-email") router.push("/verify-email");
-          }
-
           // Se usuário estiver verificado no perfil, mas não no Auth
           if (profile.verifiedEmail === true && user.emailVerified === false) {
             user.reload().catch(() => { }); // catch silencioso para evitar unhandled promise
