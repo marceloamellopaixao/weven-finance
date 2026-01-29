@@ -26,7 +26,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <AuthProvider>
           <BlockedGuard>
-            <div className="min-h-screen bg-zinc-100 dark:bg-zinc-950 font-sans transition-all duration-800 flex flex-col">
+            <div className="min-h-screen bg-zinc-200 dark:bg-zinc-950 font-sans transition-all duration-800 flex flex-col">
               <Header />
               <main className="flex-1">
                 {children}
