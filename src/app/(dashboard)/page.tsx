@@ -26,6 +26,7 @@ import {
   DollarSign, CalendarDays, MoreHorizontal, Pencil, Trash2,
   AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown, Search, HelpCircle, CheckCircle2,
   Medal, Info, AlertTriangle,
+  Calculator
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
@@ -126,10 +127,10 @@ export default function DashboardPage() {
   };
 
   // Helper para display na UI (com blur)
-  // const formatCurrencyDisplay = (value: number) => {
-  //   if (privacyMode) return "R$ ••••••";
-  //   return formatCurrency(value);
-  // };
+  const formatCurrencyDisplay = (value: number) => {
+    if (privacyMode) return "R$ ••••••";
+    return formatCurrency(value);
+  };
 
   // --- 2. TRAVA DE SEGURANÇA DE E-MAIL ---
   useEffect(() => {
@@ -501,12 +502,12 @@ export default function DashboardPage() {
 
         {/* --- KPI Cards --- */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-          {/* SALDO EM CAIXA */}
+          {/* SALDO EM CAIXA (AGORA: SALDO ATUAL REALIZADO) */}
           <Card className="relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl group active:scale-[0.99] transition-transform">
             <div className="absolute inset-0 bg-linear-to-br from-blue-500/5 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Saldo em Caixa (Hoje - {new Date().toLocaleDateString()})</CardTitle>
+                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Saldo Atual (Hoje)</CardTitle>
                 <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title={privacyMode ? "Mostrar Saldo" : "Esconder Saldo"}>
                   {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -514,7 +515,7 @@ export default function DashboardPage() {
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger><HelpCircle className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" /></TooltipTrigger>
                     <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800">
-                      <p>Saldo disponível em seu banco para o dia atual.</p>
+                      <p>Dinheiro que realmente entrou menos o que já saiu (Pago/Recebido).</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -526,19 +527,19 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="relative h-full flex flex-col justify-center">
               <div className={`text-3xl font-bold tracking-tight ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (realCurrentBalance < 0 ? 'text-red-500' : 'text-blue-600 dark:text-zinc-50')}`}>
-                {formatCurrency(realCurrentBalance)}
+                {formatCurrencyDisplay(realCurrentBalance)}
               </div>
-              <p className="text-xs text-zinc-400 mt-2 font-medium">Valor disponível em seu banco</p>
+              <p className="text-xs text-zinc-400 mt-2 font-medium">O que você tem hoje (Realizado).</p>
             </CardContent>
           </Card>
 
-          {/* BALANÇO DO MÊS */}
+          {/* BALANÇO DO MÊS (AGORA: MOVIMENTAÇÃO MENSAL) */}
           <Card className="relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl">
             <div className="absolute inset-0 bg-linear-to-br from-violet-500/5 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
                 <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-                  Balanço do Mês
+                  Movimentação (Mês)
                 </CardTitle>
                 <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title={privacyMode ? "Mostrar Saldo" : "Esconder Saldo"}>
                   {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -547,37 +548,40 @@ export default function DashboardPage() {
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger><HelpCircle className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" /></TooltipTrigger>
                     <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800">
-                      <p>Indica os valores totais de rendas e gastos do mês atual.</p>
+                      <p>Total de Receitas e Despesas agendadas para este mês (Pago + Pendente).</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
-              <div className={`rounded-xl ${monthBalance >= 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
-                {monthBalance >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
+              <div className={`p-2 rounded-xl ${monthBalance >= 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
+                {monthBalance >= 0 ?
+                  <TrendingUp className="h-5 w-5" /> :
+                  <TrendingDown className="h-5 w-5" />
+                }
               </div>
             </CardHeader>
             <CardContent className="relative h-full flex flex-col justify-center">
               <div className="flex flex-col items-start font-bold gap-2 text-xs md:flex-col md:items-start sm:flex-row sm:items-start">
                 <span className="text-3xl flex items-center text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-md">
                   <ArrowUpCircle className="w-6 h-6 mr-1" />
-                  {formatCurrency(monthIncome)}
+                  {formatCurrencyDisplay(monthIncome)}
                 </span>
                 <span className="text-3xl font-bold flex items-center text-red-600 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-md">
                   <ArrowDownCircle className="w-6 h-6 mr-1" />
-                  {formatCurrency(monthExpense)}
+                  {formatCurrencyDisplay(monthExpense)}
                 </span>
               </div>
               <p className="text-xs text-zinc-400 mt-2 font-medium">
-                Balanço do Mês de rendas e gastos.
+                Total de entradas e saídas do mês.
               </p>
             </CardContent>
           </Card>
 
-          {/* PREVISÃO FINAL DO MÊS */}
+          {/* PREVISÃO FINAL DO MÊS (AGORA: PREVISÃO DE FECHAMENTO) */}
           <Card className={`relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Previsão Final</CardTitle>
+                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Previsão de Fechamento</CardTitle>
                 <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" title={privacyMode ? "Mostrar Saldo" : "Esconder Saldo"}>
                   {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -585,20 +589,20 @@ export default function DashboardPage() {
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger><HelpCircle className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors" /></TooltipTrigger>
                     <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800">
-                      <p>Saldo projetado ao final do mês considerando transações pendentes.</p>
+                      <p>Cálculo: Saldo Atual + (A Receber - A Pagar) no mês.</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
               <div className="p-2 bg-violet-500/10 rounded-xl text-violet-600 dark:text-violet-400">
-                <Layers className="h-5 w-5" />
+                <Calculator className="h-5 w-5" />
               </div>
             </CardHeader>
             <CardContent className="relative h-full flex flex-col justify-center">
               <div className={`text-3xl font-bold tracking-tight ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (projectedAccumulatedBalance >= 0 ? 'text-emerald-600' : 'text-red-600')}`}>
-                {formatCurrency(projectedAccumulatedBalance)}
+                {formatCurrencyDisplay(projectedAccumulatedBalance)}
               </div>
-              <p className="text-xs text-zinc-400 mt-2 font-medium">Saldo projetado ao final do mês com transações pendentes.</p>
+              <p className="text-xs text-zinc-400 mt-2 font-medium">Estimativa para o fim do mês.</p>
             </CardContent>
           </Card>
         </div>
