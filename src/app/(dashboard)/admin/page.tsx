@@ -483,7 +483,6 @@ export default function AdminPage() {
           <p className="text-zinc-500">Controle total da plataforma.</p>
         </div>
 
-        {/* Somente Admin pode normalizar dados (ação sensível global) */}
         {canManageSensitive && (
           <Button
             onClick={() => setShowNormalizeConfirm(true)}
