@@ -6,7 +6,7 @@ import { Wallet, MoveLeft, FileQuestion } from "lucide-react";
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-400 dark:bg-zinc-950 p-4 relative overflow-hidden font-sans">
+    <div className="h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans">
       
       {/* Background Decorativo */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
