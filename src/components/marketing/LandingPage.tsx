@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePlans } from "@/hooks/usePlans"; // Importação do Hook
 
 export const metadata = {
-  title: "Weven Finance | Home",
+  title: "WevenFinance | Home",
   description: "Gerenciamento financeiro | Página Inicial",
   icons: {
     icon: "/wevenfinance.svg",
