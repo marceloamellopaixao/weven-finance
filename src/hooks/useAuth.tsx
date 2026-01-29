@@ -124,8 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             router.push("/goodbye");
             signOut(auth);
           }
-        } 
-        
+        }
+
         if (profile.status === "active") {
           // Se usuário estiver verificado no perfil, mas não no Auth
           if (profile.verifiedEmail === true && user.emailVerified === false) {
@@ -147,63 +147,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, [user, router, pathname]);
 
-  // --- Proteção de Rotas ---
   useEffect(() => {
+    // 1. Aguarda carregamento total (Auth + Perfil)
     if (loading) return;
 
-    const publicRoutes = ["/", "/login", "/register", "reset-password", "/_not-found", "/goodbye"];
+    const publicRoutes = ["/", "/login", "/register", "/reset-password", "/_not-found", "/goodbye"];
     const isPublicRoute = publicRoutes.includes(pathname);
 
-    // 1. Usuário NÃO logado
+    // 2. Cenário: Usuário NÃO logado
     if (!user) {
       if (!isPublicRoute) {
-        router.push("/login");
+        router.replace("/login"); // Use replace para evitar histórico de loop
       }
       return;
     }
 
-    // 2. Usuário LOGADO
-    if (userProfile) {
-      // Bloqueio de rotas públicas para quem já está logado
-      if ((pathname === "/login" || pathname === "/register" || pathname === "/blocked" || pathname === "/goodbye") && userProfile.status === 'active') {
-        router.push("/");
-        return;
-      }
+    // 3. Cenário: Usuário LOGADO (mas perfil ainda carregando ou inexistente)
+    if (!userProfile) return;
 
+    // --- A partir daqui, temos User + UserProfile ---
 
-      if (userProfile.status === "blocked" || userProfile.status === "inactive") {
-        if (pathname !== "/blocked") router.push("/blocked");
-        return;
-      }
-
+    // Prioridade 1: Status Bloqueado/Inativo/Deletado
+    if (userProfile.status !== "active") {
       if (userProfile.status === "deleted") {
-        if (pathname !== "/goodbye") router.push("/goodbye");
+        if (pathname !== "/goodbye") router.replace("/goodbye");
+      } else {
+        // Bloqueado ou inativo
+        if (pathname !== "/blocked") router.replace("/blocked");
+      }
+      return; // PARE AQUI. Não deixe executar o resto.
+    }
+
+    // Prioridade 2: Verificação de E-mail
+    const isEmailVerified = user.emailVerified || userProfile.verifiedEmail;
+
+    if (!isEmailVerified) {
+      // Se NÃO verificado, o usuário SÓ pode estar em /verify-email
+      if (pathname !== "/verify-email") {
+        router.replace("/verify-email");
+      }
+      return; // PARE AQUI. Isso impede o redirecionamento para a Home.
+    }
+
+    // Prioridade 3: Se já está verificado (isEmailVerified === true)
+    if (isEmailVerified) {
+      // Não deve conseguir acessar a página de verificar
+      if (pathname === "/verify-email") {
+        router.replace("/");
         return;
       }
 
-      const isEmailVerified = user.emailVerified || userProfile.verifiedEmail;
-
-      // Redireciona para home se e-mail já verificado e ativo
-      if (isEmailVerified && userProfile.status === "active") {
-        if (pathname === "/verify-email") {
-          router.push("/");
-          return;
-        }
-      } else {
-        // Redireciona para verificação de e-mail se não verificado
-        if (!isEmailVerified && userProfile.status === "active" ) {
-          if (pathname !== "/verify-email") router.push("/verify-email");
-          return;
-        }
-      }
-
-      if (pathname.startsWith("/admin")) {
-        if (userProfile.role !== "admin" && userProfile.role !== "moderator") {
-          router.push("/");
-        }
+      // Não deve acessar login/register/goodbye se já está logado e ativo
+      if (["/login", "/register", "/goodbye", "/blocked"].includes(pathname)) {
+        router.replace("/");
         return;
       }
     }
+
+    // Prioridade 4: Role Admin (Opcional, mantendo sua lógica)
+    if (pathname.startsWith("/admin")) {
+      if (userProfile.role !== "admin" && userProfile.role !== "moderator") {
+        router.replace("/");
+      }
+    }
+
   }, [user, userProfile, loading, pathname, router]);
 
   const togglePrivacyMode = () => {
