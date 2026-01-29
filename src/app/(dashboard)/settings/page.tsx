@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import SettingsPage from "./SettingsPage";
 
 export const metadata: Metadata = {
-    title: "Weven Finance | Configurações",
+    title: "WevenFinance | Configurações",
     description: "Gerenciamento financeiro | Configurações",
     icons: {
         icon: "/wevenfinance.svg",
