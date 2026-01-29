@@ -111,30 +111,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onSnapshot(userRef, (snap) => {
       if (snap.exists()) {
         const profile = snap.data() as UserProfile;
-        
+
         // Verifica status críticos (Lógica inicial de redirecionamento imediato)
         if (profile.status === "inactive" || profile.status === "blocked") {
           // Permite apenas a página blocked
           if (pathname !== "/blocked") router.push("/blocked");
-        } 
-        
+        }
+
         if (profile.status === "deleted") {
-           // Permite apenas a página goodbye
-           if (pathname !== "/goodbye") {
-             router.push("/goodbye");
-             signOut(auth);
-           }
+          // Permite apenas a página goodbye
+          if (pathname !== "/goodbye") {
+            router.push("/goodbye");
+            signOut(auth);
+          }
         } else {
           // Apenas redireciona verificações se o status estiver OK (ativo)
-          
+
           // Redireciona para verificação de e-mail se necessário
           if (profile.verifiedEmail === false || user.emailVerified === false) {
-             if (pathname !== "/verify-email") router.push("/verify-email");
+            if (pathname !== "/verify-email") router.push("/verify-email");
           }
 
           // Se usuário estiver verificado no perfil, mas não no Auth
           if (profile.verifiedEmail === true && user.emailVerified === false) {
-            user.reload().catch(() => {}); // catch silencioso para evitar unhandled promise
+            user.reload().catch(() => { }); // catch silencioso para evitar unhandled promise
           }
         }
 
@@ -156,7 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (loading) return;
 
-    const publicRoutes = ["/", "/login", "/register", "reset-password","/_not-found", "/goodbye"];
+    const publicRoutes = ["/", "/login", "/register", "reset-password", "/_not-found", "/goodbye"];
     const isPublicRoute = publicRoutes.includes(pathname);
 
     // 1. Usuário NÃO logado
@@ -175,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      
+
       if (userProfile.status === "blocked" || userProfile.status === "inactive") {
         if (pathname !== "/blocked") router.push("/blocked");
         return;
@@ -187,12 +187,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const isEmailVerified = user.emailVerified || userProfile.verifiedEmail;
-      if (!isEmailVerified) {
-        if (pathname !== "/verify-email") router.push("/verify-email");
-        return;
-      } else if (pathname === "/verify-email") {
-        router.push("/");
-        return;
+
+      // Redireciona para home se e-mail já verificado e ativo
+      if (isEmailVerified && userProfile.status === "active") {
+        if (pathname === "/verify-email") {
+          router.push("/");
+          return;
+        }
+      } else {
+        // Redireciona para verificação de e-mail se não verificado
+        if (!isEmailVerified && userProfile.status === "active" ) {
+          if (pathname !== "/verify-email") router.push("/verify-email");
+          return;
+        }
       }
 
       if (pathname.startsWith("/admin")) {
@@ -254,8 +261,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const provider = new GoogleAuthProvider();
       // Força seleção de conta para evitar loop de login automático se houver erro
-      provider.setCustomParameters({ prompt: 'select_account' }); 
-      
+      provider.setCustomParameters({ prompt: 'select_account' });
+
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
@@ -267,7 +274,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const userRef = doc(db, "users", user.uid);
         const snap = await getDoc(userRef);
-        
+
         if (!snap.exists()) {
           const newProfile: UserProfile = {
             uid: user.uid,
@@ -292,7 +299,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           const data = snap.data() as UserProfile;
           if (data.status === 'active' && data.deletedAt) {
-             await setDoc(userRef, { deletedAt: null }, { merge: true });
+            await setDoc(userRef, { deletedAt: null }, { merge: true });
           }
         }
       }
