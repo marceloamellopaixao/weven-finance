@@ -19,7 +19,6 @@ import {
   UserPaymentStatus,
 } from "@/types/user";
 
-
 // Realtime: Buscar todos os usuários (Admin)
 export const subscribeToAllUsers = (
   onChange: (users: UserProfile[]) => void,
@@ -92,7 +91,7 @@ export const normalizeDatabaseUsers = async () => {
     const updates: Record<string, unknown> = {};
     let needsUpdate = false;
 
-    // Verifica cada campo novo. Se não existir (undefined), define o padrão.
+    // Verifica cada campo novo
     if (data.phone === undefined) { updates.phone = ""; needsUpdate = true; }
     if (data.completeName === undefined) { updates.completeName = data.displayName || ""; needsUpdate = true; }
     if (data.transactionCount === undefined) { updates.transactionCount = 0; needsUpdate = true; }
@@ -100,7 +99,7 @@ export const normalizeDatabaseUsers = async () => {
     if (data.verifiedEmail === undefined) { updates.verifiedEmail = false; needsUpdate = true; }
     if (data.blockReason === undefined) { updates.blockReason = ""; needsUpdate = true; }
 
-    // Garante campos antigos essenciais também
+    // Garante campos antigos essenciais
     if (data.role === undefined) { updates.role = 'client'; needsUpdate = true; }
     if (data.plan === undefined) { updates.plan = 'free'; needsUpdate = true; }
     if (data.status === undefined) { updates.status = 'active'; needsUpdate = true; }
@@ -118,7 +117,7 @@ export const normalizeDatabaseUsers = async () => {
   return updateCount;
 };
 
-// Atualizar status do usuário (Ativo/Bloqueado)
+// Atualizar status do usuário
 export const updateUserStatus = async (
   uid: string,
   status: UserStatus,
@@ -136,7 +135,7 @@ export const updateUserStatus = async (
   }
 };
 
-// Atualizar plano do usuário (free/premium/pro)
+// Atualizar plano
 export const updateUserPlan = async (uid: string, plan: UserPlan) => {
   try {
     const userRef = doc(db, "users", uid);
@@ -147,7 +146,7 @@ export const updateUserPlan = async (uid: string, plan: UserPlan) => {
   }
 };
 
-// Atualizar Role (admin/moderator/client)
+// Atualizar Role
 export const updateUserRole = async (uid: string, role: UserRole) => {
   try {
     const userRef = doc(db, "users", uid);
@@ -158,7 +157,7 @@ export const updateUserRole = async (uid: string, role: UserRole) => {
   }
 };
 
-// Atualizar status de pagamento do usuário (paid/pending/overdue)
+// Atualizar status de pagamento
 export const updateUserPaymentStatus = async (
   uid: string,
   paymentStatus: UserPaymentStatus
@@ -172,7 +171,7 @@ export const updateUserPaymentStatus = async (
   }
 };
 
-// Obter contagem de transações do usuário
+// Obter contagem de transações
 export const getUserTransactionCount = async (uid: string): Promise<number> => {
   try {
     const transactionsRef = collection(db, "users", uid, "transactions");
@@ -184,7 +183,6 @@ export const getUserTransactionCount = async (uid: string): Promise<number> => {
 
     return total;
   } catch (error) {
-
     console.error(`Erro ao contar transações para o usuário ${uid}:`, error);
     return 0;
   }
@@ -222,11 +220,14 @@ export const updateOwnProfile = async (
   }
 };
 
-// Resetar dados financeiros do usuário (Delete Físico)
+// --- GESTÃO DE DADOS FINANCEIROS ---
+
+// 1. Resetar (Apagar) dados financeiros
 export const resetUserFinancialData = async (uid: string) => {
   const transactionsRef = collection(db, "users", uid, "transactions");
   const snapshot = await getDocs(transactionsRef);
 
+  // Firestore batch limit is 500
   const CHUNK_SIZE = 450; 
   const chunks = [];
   
@@ -286,7 +287,7 @@ export const unarchiveUserFinancialData = async (uid: string) => {
   }
 };
 
-// 3. Exclusão Lógica (Cliente se exclui)
+// 4. Exclusão Lógica
 export const softDeleteUser = async (uid: string): Promise<void> => {
   try {
     // Arquiva transações (esconde do painel)
@@ -315,11 +316,13 @@ export const softDeleteUser = async (uid: string): Promise<void> => {
   }
 };
 
-// 4. Restauração Completa (Admin restaura conta)
-export const restoreUserAccount = async (uid: string): Promise<void> => {
+// 5. Restauração (Admin restaura conta)
+export const restoreUserAccount = async (uid: string, restoreData: boolean = true): Promise<void> => {
   try {
-    // Desarquiva transações (mostra no painel novamente)
-    await unarchiveUserFinancialData(uid);
+    // Se solicitado, desarquiva transações (mostra no painel novamente)
+    if (restoreData) {
+      await unarchiveUserFinancialData(uid);
+    }
 
     // Reativa usuário
     const userRef = doc(db, "users", uid);
@@ -327,7 +330,7 @@ export const restoreUserAccount = async (uid: string): Promise<void> => {
       status: 'active' as UserStatus,
       // Define como pending para que o admin verifique o pagamento depois
       paymentStatus: 'pending' as UserPaymentStatus, 
-      blockReason: "", // Limpa motivo de bloqueio
+      blockReason: "", 
       deletedAt: null
     });
   } catch (error: unknown) {
