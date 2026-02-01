@@ -103,8 +103,8 @@ type FeedbackData = {
   message: string;
 };
 
-// E-mail do Dono Supremo (Hardcoded para segurança extra na UI)
-const CREATOR_EMAIL = "marceloampsenpai@gmail.com";
+// Dono Supremo (Hardcoded para segurança extra na UI)
+const CREATOR_SUPREME = "Z3ciyXudWuZZywhojA6iWJTurH52";
 
 export default function AdminPage() {
   const { userProfile, loading } = useAuth();
@@ -128,7 +128,7 @@ export default function AdminPage() {
   const [planFilter, setPlanFilter] = useState<UserPlan | "all">("all");
   const [statusFilter, setStatusFilter] = useState<UserStatus | "all">("all");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<PaymentFilterType>("all");
-  
+
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
   const usersPerPage = 10;
@@ -139,10 +139,10 @@ export default function AdminPage() {
   const [deletedUserData, setDeletedUserData] = useState<DeletionSuccessData>(null);
   const [userToReactivate, setUserToReactivate] = useState<UserProfile | null>(null);
   const [userToBlock, setUserToBlock] = useState<UserProfile | null>(null);
-  
+
   // Modal de Restauração
   const [userToRestore, setUserToRestore] = useState<{ user: UserProfile, withData: boolean } | null>(null);
-  
+
   // Modal de Normalização
   const [showNormalizeConfirm, setShowNormalizeConfirm] = useState(false);
 
@@ -173,10 +173,8 @@ export default function AdminPage() {
   // Lógica de Permissão de Visualização
   const canViewRole = useCallback((targetRole: UserRole) => {
     if (userProfile?.role === "admin") return true;
-    if (userProfile?.role === "moderator") return targetRole === "client"; // Moderador só vê clientes? Ou vê tudo mas só edita clientes?
-    // Ajuste: Moderadores geralmente precisam ver a equipe, mas vamos manter simples:
-    // Se for moderador, vê tudo, mas as ações são limitadas via disabled nos inputs.
-    return true; 
+    if (userProfile?.role === "moderator") return targetRole === "client";
+    return true;
   }, [userProfile?.role]);
 
   // Lógica de Permissão para EDITAR CARGO
@@ -187,7 +185,7 @@ export default function AdminPage() {
     if (targetUser.uid === userProfile.uid) return false;
 
     // 2. Ninguém edita o cargo do Criador Supremo
-    if (targetUser.email === CREATOR_EMAIL) return false;
+    if (targetUser.uid === CREATOR_SUPREME) return false;
 
     // 3. Moderador NÃO edita cargo de ninguém
     if (userProfile.role === 'moderator') return false;
@@ -195,7 +193,7 @@ export default function AdminPage() {
     // 4. Admin
     if (userProfile.role === 'admin') {
       // Se sou o Criador, posso editar qualquer um (exceto eu mesmo, já tratado acima)
-      if (userProfile.email === CREATOR_EMAIL) return true;
+      if (userProfile.uid === CREATOR_SUPREME) return true;
 
       // Se sou Admin Comum, NÃO posso editar outros Admins
       if (targetUser.role === 'admin') return false;
@@ -328,7 +326,7 @@ export default function AdminPage() {
       showFeedback('error', 'Campo Obrigatório', 'Por favor, informe um motivo para o bloqueio.');
       return;
     }
-    
+
     await updateUserStatus(userToBlock.uid, "blocked", finalReason);
 
     if (pendingPaymentChange && pendingPaymentChange.uid === userToBlock.uid) {
@@ -381,7 +379,7 @@ export default function AdminPage() {
       setUserToBlock(u);
       setSelectedReason("Falta de Pagamento");
       return;
-    } 
+    }
     if (status === "canceled") {
       setPendingPaymentChange({ uid, status });
       setUserToBlock(u);
@@ -404,7 +402,7 @@ export default function AdminPage() {
     await resetUserFinancialData(userToReset.uid);
     setUserToReset(null);
     showFeedback('success', 'Dados Resetados', 'Todas as transações do usuário foram apagadas permanentemente.');
-    
+
     try {
       const count = await getUserTransactionCount(userToReset.uid);
       setUsers((prev) =>
@@ -492,7 +490,7 @@ export default function AdminPage() {
       // O requisito diz "não pode trocar cargo", mas não explicitamente "não pode ver".
       // Vamos manter visível para transparência, mas com ações bloqueadas.
       const isVisible = canViewRole(u.role);
-      
+
       let matchesStatus = true;
       if (statusFilter !== "all") {
         matchesStatus = u.status === statusFilter;
@@ -525,7 +523,7 @@ export default function AdminPage() {
 
   return (
     <div className="font-sans min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-8 pb-20 relative overflow-hidden">
-      
+
       {/* Background Decorativo */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-violet-500/5 rounded-full blur-[100px]" />
@@ -826,23 +824,32 @@ export default function AdminPage() {
 
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"><MoreVertical className="h-4 w-4 text-zinc-500" /></Button>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800">
+                                        <MoreVertical className="h-4 w-4 text-zinc-500" />
+                                      </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" className="rounded-xl p-1 shadow-xl border-zinc-200 dark:border-zinc-800">
                                       <DropdownMenuLabel className="text-xs">Ações</DropdownMenuLabel>
                                       <DropdownMenuSeparator />
                                       {canManageSensitive && (
                                         <>
-                                          <DropdownMenuItem onClick={() => window.open(`/api/impersonate?uid=${u.uid}`, "_blank")} className="cursor-pointer rounded-lg text-xs font-medium">
+                                          <DropdownMenuItem
+                                            onClick={() => window.open(`/api/impersonate?uid=${u.uid}`, "_blank")}
+                                            disabled={!canChangeRole}
+                                            className="cursor-pointer rounded-lg text-xs font-medium"
+                                          >
                                             <User className="mr-2 h-4 w-4" /> Impersonar
                                           </DropdownMenuItem>
-                                          <DropdownMenuItem onClick={() => setUserToReset(u)} className="cursor-pointer rounded-lg text-xs font-medium">
+                                          <DropdownMenuItem
+                                            onClick={() => setUserToReset(u)}
+                                            disabled={!canChangeRole}
+                                            className="cursor-pointer rounded-lg text-xs font-medium disabled:opacity-50">
                                             <RefreshCcw className="mr-2 h-4 w-4" /> Resetar Dados
                                           </DropdownMenuItem>
                                           <DropdownMenuSeparator />
-                                          <DropdownMenuItem 
-                                            onClick={() => setUserToDelete(u)} 
-                                            disabled={!canChangeRole} // Usa mesma lógica: se não pode editar cargo, não deve deletar (hierarquia)
+                                          <DropdownMenuItem
+                                            onClick={() => setUserToDelete(u)}
+                                            disabled={!canChangeRole}
                                             className="text-red-600 focus:text-red-700 focus:bg-red-50 cursor-pointer rounded-lg text-xs font-medium dark:focus:bg-red-900/20 disabled:opacity-50"
                                           >
                                             <Trash2 className="mr-2 h-4 w-4" /> Excluir Conta
@@ -876,6 +883,7 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* --- RESTORE TAB --- */}
           {activeTab === "restore" && canRestore && (
             <div className={`${fadeInUp} delay-200`}>
               <Card className="border-none shadow-lg shadow-orange-500/10 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
