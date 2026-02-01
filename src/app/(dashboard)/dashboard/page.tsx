@@ -31,7 +31,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 
 // --- Configurações Visuais ---
 const ALL_CATEGORIES = [
@@ -78,7 +78,6 @@ export default function DashboardPage() {
   const { user, userProfile, privacyMode, togglePrivacyMode } = useAuth();
   const { transactions, loading } = useTransactions();
   const { plans } = usePlans();
-  const router = useRouter();
 
   // --- 1. STATES ---
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -243,19 +242,8 @@ export default function DashboardPage() {
   }, [category]);
 
   // --- RETORNO CONDICIONAL ---
-  if (loading) return null;
-
-  if (!user) {
-    return null; // O useEffect de redirecionamento irá lidar com isso
-  }
-
-  if (user && !user.emailVerified) {
-    router.push("/verify-email")
-    return null
-  };
-  if (user && userProfile && !userProfile.verifiedEmail) {
-    router.push("/verify-email")
-    return null
+  if (loading) {
+    return <DashboardSkeleton />;
   };
 
   // --- 6. HANDLERS ---
