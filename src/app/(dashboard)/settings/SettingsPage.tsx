@@ -18,6 +18,10 @@ import {
   CheckCircle,
   X,
   Info,
+  HelpCircle,
+  PlayCircle,
+  MessageCircle,
+  BookOpen,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { updateOwnProfile, softDeleteUser } from "@/services/userService";
@@ -89,9 +93,8 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDeleteAccount = async (): Promise<void> => {
+  const handleDeleteAccount = async () => {
     if (!user) return;
-    setIsDeleting(true);
 
     try {
       await softDeleteUser(user.uid);
@@ -119,11 +122,16 @@ export default function SettingsPage() {
     }
   };
 
+  const handleReplayTour = () => {
+    localStorage.removeItem("weven_onboarding_completed");
+    router.push("/dashboard");
+  };
+
   const currentPlan = userProfile?.plan || "free";
 
   return (
     <div className="font-sans p-4 md:p-8 pb-20">
-      
+
       {/* Background Decorativo */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-violet-500/5 rounded-full blur-[100px]" />
@@ -138,9 +146,9 @@ export default function SettingsPage() {
             <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Configurações</h1>
             <p className="text-zinc-500 dark:text-zinc-400">Gerencie sua conta, privacidade e assinatura.</p>
           </div>
-          <Button 
-            variant="destructive" 
-            onClick={logout} 
+          <Button
+            variant="destructive"
+            onClick={logout}
             className="gap-2 rounded-xl shadow-sm hover:shadow-red-500/20 transition-all hover:cursor-pointer hover:scale-105 duration-200"
           >
             <LogOut className="h-4 w-4" /> Sair da Conta
@@ -149,7 +157,7 @@ export default function SettingsPage() {
 
         {/* Navegação de Abas Personalizada */}
         <div className={`${fadeInUp} delay-150 space-y-6`}>
-          <div className="bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 grid grid-cols-3 w-full md:w-[480px] shadow-sm">
+          <div className="bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 grid grid-cols-2 md:grid-cols-4 w-full md:w-[640px] shadow-sm gap-1">
             <button onClick={() => setActiveTab("account")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "account" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <User className="h-4 w-4" /> Geral
             </button>
@@ -158,6 +166,9 @@ export default function SettingsPage() {
             </button>
             <button onClick={() => setActiveTab("security")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "security" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <ShieldCheck className="h-4 w-4" /> Privacidade
+            </button>
+            <button onClick={() => setActiveTab("help")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "help" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <HelpCircle className="h-4 w-4" /> Ajuda
             </button>
           </div>
 
@@ -470,6 +481,68 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* AJUDA & TUTORIAL */}
+          {activeTab === "help" && (
+            <div className={`${fadeInUp} delay-200 space-y-6`}>
+              {/* Card de Tutorial */}
+              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden hover:shadow-2xl transition-shadow">
+                <CardHeader className="bg-linear-to-r from-violet-500/10 to-indigo-500/10 p-4">
+                  <CardTitle className="flex items-center gap-2 text-violet-700 dark:text-violet-300">
+                    <PlayCircle className="h-6 w-6" /> Tutorial Interativo
+                  </CardTitle>
+                  <CardDescription className="text-zinc-600 dark:text-zinc-400">
+                    Reveja o guia passo a passo para aprender a usar todas as funcionalidades do painel.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="-mt-4">
+                  <div className="bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tour do Dashboard</h4>
+                      <p className="text-sm text-zinc-500">Navegação, cadastro de contas e gráficos.</p>
+                    </div>
+                    <Button 
+                      onClick={handleReplayTour} 
+                      className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700 text-white rounded-xl shadow-lg shadow-violet-500/20 hover:scale-105 transition-all"
+                    >
+                      Iniciar Tour Agora
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Card de Suporte */}
+              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200">
+                    <MessageCircle className="h-5 w-5" /> Canais de Suporte
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <a href="https://wa.me/5511992348613" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer">
+                    <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full text-green-600 group-hover:scale-110 transition-transform">
+                      <MessageCircle className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">WhatsApp Suporte</h4>
+                      <p className="text-sm text-zinc-500">Fale diretamente com nossa equipe técnica.</p>
+                    </div>
+                  </a>
+
+                  <div className="flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-not-allowed opacity-60" title="Em breve">
+                    <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full text-blue-600 group-hover:scale-110 transition-transform">
+                      <BookOpen className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Central de Ajuda (FAQ)</h4>
+                      <p className="text-sm text-zinc-500">Artigos e tutoriais detalhados.</p>
+                    </div>
+                    <Badge variant="secondary" className="ml-auto">Em breve</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
         </div>
 
