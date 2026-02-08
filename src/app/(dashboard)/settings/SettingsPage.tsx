@@ -22,6 +22,7 @@ import {
   PlayCircle,
   MessageCircle,
   BookOpen,
+  LifeBuoy,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { updateOwnProfile, softDeleteUser } from "@/services/userService";
@@ -30,6 +31,7 @@ import Link from "next/link";
 import { usePlans } from "@/hooks/usePlans";
 import { migrateCryptography } from "@/services/transactionService";
 import { useRouter } from "next/navigation";
+import { sendSupportRequest } from "@/hooks/supportService";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -53,6 +55,11 @@ export default function SettingsPage() {
   const [keyFingerprint, setKeyFingerprint] = useState("Carregando identificador seguro...");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Estados para Suporte
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
+  const [supportMessage, setSupportMessage] = useState("");
+  const [isSendingSupport, setIsSendingSupport] = useState(false);
 
   // Estado para feedback modal
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
@@ -96,6 +103,8 @@ export default function SettingsPage() {
   const handleDeleteAccount = async () => {
     if (!user) return;
 
+    setIsDeleting(true);
+
     try {
       await softDeleteUser(user.uid);
       router.push("/goodbye");
@@ -125,6 +134,33 @@ export default function SettingsPage() {
   const handleReplayTour = () => {
     localStorage.removeItem("weven_onboarding_completed");
     router.push("/dashboard");
+  };
+
+  const handleSendSupport = async () => {
+    if (!supportMessage.trim()) {
+      showFeedback('error', 'Mensagem Vazia', 'Por favor, descreva o motivo do contato.');
+      return;
+    }
+
+    if (!user) return;
+
+    setIsSendingSupport(true);
+    try {
+      await sendSupportRequest(
+        user.uid,
+        user.email || "E-mail não disponível",
+        userProfile?.displayName || "Usuário sem nome",
+        supportMessage
+      );
+      setIsSupportModalOpen(false);
+      setSupportMessage("");
+      showFeedback('success', 'Solicitação Enviada', 'Nossa equipe de suporte entrará em contato em breve.');
+    } catch (error) {
+      console.error("Erro ao enviar solicitação de suporte:", error);
+      showFeedback('error', 'Erro', 'Não foi possível enviar a solicitação. Tente novamente mais tarde.');
+    } finally {
+      setIsSendingSupport(false);
+    }
   };
 
   const currentPlan = userProfile?.plan || "free";
@@ -502,8 +538,8 @@ export default function SettingsPage() {
                       <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tour do Dashboard</h4>
                       <p className="text-sm text-zinc-500">Navegação, cadastro de contas e gráficos.</p>
                     </div>
-                    <Button 
-                      onClick={handleReplayTour} 
+                    <Button
+                      onClick={handleReplayTour}
                       className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700 text-white rounded-xl shadow-lg shadow-violet-500/20 hover:scale-105 transition-all"
                     >
                       Iniciar Tour Agora
@@ -520,6 +556,7 @@ export default function SettingsPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* WhatsApp */}
                   <a href="https://wa.me/5511992348613" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer">
                     <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full text-green-600 group-hover:scale-110 transition-transform">
                       <MessageCircle className="h-6 w-6" />
@@ -530,6 +567,21 @@ export default function SettingsPage() {
                     </div>
                   </a>
 
+                  {/* NOVO: Solicitar Suporte via Sistema */}
+                  <div
+                    onClick={() => setIsSupportModalOpen(true)}
+                    className="flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer"
+                  >
+                    <div className="p-3 bg-violet-100 dark:bg-violet-900/30 rounded-full text-violet-600 group-hover:scale-110 transition-transform">
+                      <LifeBuoy className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Abrir Chamado</h4>
+                      <p className="text-sm text-zinc-500">Envie uma mensagem detalhada para análise.</p>
+                    </div>
+                  </div>
+
+                  {/* FAQ (Desativado) */}
                   <div className="flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-not-allowed opacity-60" title="Em breve">
                     <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full text-blue-600 group-hover:scale-110 transition-transform">
                       <BookOpen className="h-6 w-6" />
@@ -545,6 +597,48 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
+
+        {/* Modal de Suporte */}
+        <Dialog open={isSupportModalOpen} onOpenChange={setIsSupportModalOpen}>
+          <DialogContent className="sm:max-w-[500px] rounded-3xl p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-violet-700 dark:text-violet-400">
+                <LifeBuoy className="h-6 w-6" /> Solicitar Suporte
+              </DialogTitle>
+              <DialogDescription className="pt-2">
+                Descreva seu problema ou dúvida abaixo. Nossa equipe analisará e retornará o contato.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="support-reason">Motivo do Contato</Label>
+                <textarea
+                  id="support-reason"
+                  className="flex min-h-[120px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:ring-offset-zinc-950 dark:placeholder:text-zinc-400 dark:focus-visible:ring-violet-800"
+                  placeholder="Ex: Não consigo editar uma transação parcelada..."
+                  value={supportMessage}
+                  onChange={(e) => setSupportMessage(e.target.value)}
+                />
+              </div>
+              <p className="text-xs text-zinc-500">
+                * Ao enviar, compartilharemos seu ID de usuário e email para facilitar o atendimento.
+              </p>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="ghost" onClick={() => setIsSupportModalOpen(false)} className="rounded-xl">Cancelar</Button>
+              <Button
+                onClick={handleSendSupport}
+                disabled={isSendingSupport}
+                className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl gap-2"
+              >
+                {isSendingSupport ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
+                Enviar Solicitação
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Modal de Confirmação de Exclusão */}
         <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
