@@ -14,6 +14,7 @@ import {
   updateUserPaymentStatus,
   normalizeDatabaseUsers,
   restoreUserAccount,
+  getStaffUsers,
 } from "@/services/userService";
 import { updatePlansConfig } from "@/services/systemService";
 import {
@@ -90,7 +91,11 @@ import {
   Info,
   History,
   Lock,
+  HeadphonesIcon,
+  Lightbulb,
+  MessageSquare,
 } from "lucide-react";
+import { subscribeToSupportTickets, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
 
 type UserWithCount = UserProfile & { transactionCount?: number };
 type DeletionSuccessData = { name: string; email: string } | null;
@@ -122,6 +127,11 @@ export default function AdminPage() {
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [isNormalizing, setIsNormalizing] = useState(false);
 
+  // Support Data
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [staffMembers, setStaffMembers] = useState<UserProfile[]>([]);
+  const [viewTicket, setViewTicket] = useState<SupportTicket | null>(null);
+
   // --- FILTROS ---
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState<UserRole | "all">("all");
@@ -140,13 +150,8 @@ export default function AdminPage() {
   const [userToReactivate, setUserToReactivate] = useState<UserProfile | null>(null);
   const [userToBlock, setUserToBlock] = useState<UserProfile | null>(null);
 
-  // Modal de Restauração
   const [userToRestore, setUserToRestore] = useState<{ user: UserProfile, withData: boolean } | null>(null);
-
-  // Modal de Normalização
   const [showNormalizeConfirm, setShowNormalizeConfirm] = useState(false);
-
-  // Modal de Feedback Genérico
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
 
   const [pendingPaymentChange, setPendingPaymentChange] = useState<{ uid: string; status: UserPaymentStatus } | null>(null);
@@ -166,62 +171,62 @@ export default function AdminPage() {
   const [editedPlans, setEditedPlans] = useState<PlansConfig | null>(null);
   const [isSavingPlans, setIsSavingPlans] = useState(false);
 
-  // --- PERMISSÕES (Lógica Refinada) ---
+  // --- PERMISSÕES ---
   const canManageSensitive = userProfile?.role === "admin";
   const canRestore = userProfile?.role === "admin" || userProfile?.role === "moderator";
 
-  // Lógica de Permissão de Visualização
+  // Permissão de Visualização na Tabela de Usuários
   const canViewRole = useCallback((targetRole: UserRole) => {
-    if (userProfile?.role === "admin") return true;
-    if (userProfile?.role === "moderator") return targetRole === "client";
-    return true;
-  }, [userProfile?.role]);
+    if (!userProfile) return false;
+    if (userProfile.role === "admin") return true;
 
-  // Lógica de Permissão para EDITAR CARGO
+    // Moderador vê Cliente e Suporte
+    if (userProfile.role === "moderator") {
+      return targetRole === "client" || targetRole === "support";
+    };
+
+    // Suporte não tem acesso à tabela de usuários
+    return false;
+  }, [userProfile]);
+
+  // Permissão de Edição de Cargo
   const canEditRole = useCallback((targetUser: UserProfile) => {
     if (!userProfile) return false;
+    if (targetUser.uid === userProfile.uid) return false; // Não edita a si mesmo
+    if (targetUser.uid === CREATOR_SUPREME) return false; // Não edita o Criador Supremo
 
-    // 1. Ninguém edita o próprio cargo
-    if (targetUser.uid === userProfile.uid) return false;
-
-    // 2. Ninguém edita o cargo do Criador Supremo
-    if (targetUser.uid === CREATOR_SUPREME) return false;
-
-    // 3. Moderador NÃO edita cargo de ninguém
-    if (userProfile.role === 'moderator') return false;
-
-    // 4. Admin
     if (userProfile.role === 'admin') {
-      // Se sou o Criador, posso editar qualquer um (exceto eu mesmo, já tratado acima)
-      if (userProfile.uid === CREATOR_SUPREME) return true;
-
-      // Se sou Admin Comum, NÃO posso editar outros Admins
-      if (targetUser.role === 'admin') return false;
-
-      // Admin Comum pode editar Moderadores e Clientes
+      if (userProfile.uid === CREATOR_SUPREME) return true; // Criador edita tudo
+      if (targetUser.role === 'admin') return false; // Admin comum não edita outro admin
       return true;
     }
+
+    if (userProfile.role === 'moderator') {
+      if (targetUser.role === 'admin' || targetUser.role === 'moderator') return false;
+      return true; // Moderador edita apenas Clientes e Suporte
+    };
 
     return false;
   }, [userProfile]);
 
-  // Lógica de Permissão para EDITAR PLANO
+  // Permissão de Edição de Plano/Status
   const canEditPlan = useCallback((targetUser: UserProfile) => {
     if (!userProfile) return false;
 
-    // Se o alvo é Admin ou Moderador, o plano é "Isento" (não editável via dropdown de plano)
-    if (targetUser.role === 'admin' || targetUser.role === 'moderator') return false;
+    const hierarchy = { admin: 3, moderator: 2, support: 1, client: 0 };
+    const myRank = hierarchy[userProfile.role];
+    const targetRank = hierarchy[targetUser.role];
 
-    // Admin e Moderador podem editar plano de Clientes
-    if (userProfile.role === 'admin' || userProfile.role === 'moderator') return true;
+    // Só pode editar se tiver hierarquia maior e não for o Criador Supremo
+    if (userProfile.email === CREATOR_SUPREME) return true;
 
-    return false;
+    return myRank > targetRank;
   }, [userProfile]);
 
   // --- Guards ---
   useEffect(() => {
     if (!loading) {
-      if (userProfile?.role !== "admin" && userProfile?.role !== "moderator") {
+      if (userProfile?.role !== "admin" && userProfile?.role !== "moderator" && userProfile?.role !== "support") {
         router.push("/");
       }
     }
@@ -250,21 +255,41 @@ export default function AdminPage() {
   useEffect(() => {
     if (loading) return;
     if (!userProfile) return;
-    if (userProfile.role !== "admin" && userProfile.role !== "moderator") return;
 
-    setIsLoadingUsers(true);
+    const shouldLoadUsers = userProfile.role === "admin" || userProfile.role === "moderator";
 
-    const unsubscribe = subscribeToAllUsers(
-      (list) => {
-        attachCounts(list).finally(() => setIsLoadingUsers(false));
-      },
-      () => {
-        setUsers([]);
-        setIsLoadingUsers(false);
-      }
+    let unsubscribeUsers = () => { };
+
+    if (shouldLoadUsers) {
+      setIsLoadingUsers(true);
+      unsubscribeUsers = subscribeToAllUsers(
+        (list) => {
+          attachCounts(list).finally(() => setIsLoadingUsers(false));
+        },
+        () => {
+          setUsers([]);
+          setIsLoadingUsers(false);
+        }
+      );
+    }
+
+    // Fetch de Tickets de Suporte (Todos carregam, filtrado pelo serviço)
+    const unsubscribeTickets = subscribeToSupportTickets(
+      userProfile.uid,
+      userProfile.role,
+      (data) => setTickets(data),
+      (err) => console.error(err)
     );
 
-    return () => unsubscribe();
+    // Fetch de Staff (Apenas Admin vê para atribuir)
+    if (userProfile.role === 'admin') {
+      getStaffUsers().then(setStaffMembers);
+    }
+
+    return () => {
+      unsubscribeUsers();
+      unsubscribeTickets();
+    };
   }, [loading, userProfile, attachCounts]);
 
   // --- Helper para Feedback ---
@@ -272,7 +297,30 @@ export default function AdminPage() {
     setFeedbackModal({ isOpen: true, type, title, message });
   };
 
-  // --- HANDLERS ---
+  // --- HANDLERS (SUPORTE) ---
+
+  const handleAssignTicket = async (ticketId: string, staffUid: string) => {
+    const staff = staffMembers.find(s => s.uid === staffUid);
+    try {
+      await updateTicket(ticketId, {
+        assignedTo: staffUid,
+        assignedToName: staff?.displayName || "Staff"
+      });
+      showFeedback('success', 'Atribuído', 'Chamado atribuído com sucesso.');
+    } catch {
+      showFeedback('error', 'Erro', 'Falha ao atribuir chamado.');
+    }
+  };
+
+  const handleChangeTicketStatus = async (ticketId: string, status: string) => {
+    try {
+      await updateTicket(ticketId, { status: status as SupportRequestStatus });
+    } catch {
+      showFeedback('error', 'Erro', 'Falha ao atualizar status.');
+    }
+  };
+
+  // --- HANDLERS (GERAIS) ---
 
   const confirmNormalizeDB = async () => {
     setShowNormalizeConfirm(false);
@@ -486,9 +534,6 @@ export default function AdminPage() {
         }
       }
 
-      // Filtragem visual: Moderador vê tudo, mas se quisermos esconder Admins dele, seria aqui.
-      // O requisito diz "não pode trocar cargo", mas não explicitamente "não pode ver".
-      // Vamos manter visível para transparência, mas com ações bloqueadas.
       const isVisible = canViewRole(u.role);
 
       let matchesStatus = true;
@@ -499,9 +544,13 @@ export default function AdminPage() {
       return matchesSearch && matchesRole && matchesPlan && matchesPayment && matchesStatus && isVisible;
     });
 
-    const rolePriority: Record<UserRole, number> = { admin: 1, moderator: 2, client: 3 };
+    const rolePriority: Record<UserRole, number> = {
+      admin: 1, moderator: 2, support: 3, client: 4
+    };
     return list.sort((a, b) => rolePriority[a.role] - rolePriority[b.role]);
-  }, [users, searchTerm, roleFilter, planFilter, paymentStatusFilter, statusFilter, canViewRole]);
+  }, [users, searchTerm, roleFilter, planFilter,
+    paymentStatusFilter, statusFilter, canViewRole
+  ]);
 
   const deletedUsers = useMemo(() => {
     return users.filter(u => u.status === 'deleted');
@@ -514,12 +563,7 @@ export default function AdminPage() {
     setCurrentPage(1);
   }, [searchTerm, roleFilter, planFilter, paymentStatusFilter, statusFilter]);
 
-  if (
-    loading ||
-    (userProfile?.role !== "admin" && userProfile?.role !== "moderator") ||
-    !editedPlans
-  )
-    return null;
+  if (loading || !editedPlans) return null;
 
   return (
     <div className="font-sans min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-8 pb-20 relative overflow-hidden">
@@ -556,38 +600,169 @@ export default function AdminPage() {
         <div className={`${fadeInUp} delay-150 space-y-6`}>
           {/* Navegação de Abas Moderna */}
           <div className="bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 w-full md:w-fit grid grid-cols-2 md:grid-flow-col gap-1 shadow-sm">
-            <button
-              onClick={() => setActiveTab("users")}
-              className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "users"
-                ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5"
-                : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                }`}
-            >
-              <UserIcon className="h-4 w-4" /> Gerenciar Usuários
+            {/* Aba Usuários: Apenas Admin e Moderator */}
+            {(userProfile?.role === 'admin' || userProfile?.role === 'moderator') && (
+              <button onClick={() => setActiveTab("users")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "users" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+                <UserIcon className="h-4 w-4" /> Gerenciar Usuários
+              </button>
+            )}
+
+            {/* Aba Suporte: Todos da Equipe */}
+            <button onClick={() => setActiveTab("support")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "support" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <HeadphonesIcon className="h-4 w-4" /> Suporte & Ideias
             </button>
 
             {canRestore && (
-              <button
-                onClick={() => setActiveTab("restore")}
-                className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "restore"
-                  ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5"
-                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                  }`}
-              >
+              <button onClick={() => setActiveTab("restore")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "restore" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <History className="h-4 w-4" /> Restaurar Dados
               </button>
             )}
 
-            <button
-              onClick={() => setActiveTab("plans")}
-              className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "plans"
-                ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5"
-                : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                }`}
-            >
-              <CreditCard className="h-4 w-4" /> Gerenciar Planos
-            </button>
+            {canManageSensitive && (
+              <button onClick={() => setActiveTab("plans")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "plans" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+                <CreditCard className="h-4 w-4" /> Gerenciar Planos
+              </button>
+            )}
           </div>
+
+          {/* --- SUPORTE TAB --- */}
+          {activeTab === "support" && (
+            <div className={`${fadeInUp} delay-200 space-y-4`}>
+              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
+                <CardHeader className="py-4 px-6 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+                  <CardTitle className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                    <HeadphonesIcon className="h-5 w-5 text-violet-600" /> Central de Atendimento
+                  </CardTitle>
+                  <CardDescription>
+                    {userProfile?.role === 'admin'
+                      ? "Gerencie a atribuição e status dos chamados de toda a plataforma."
+                      : "Visualize e atenda os chamados atribuídos a você."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-zinc-50 dark:bg-zinc-950">
+                        <TableRow className="border-zinc-100 dark:border-zinc-800 hover:bg-transparent">
+                          <TableHead className="pl-6 font-semibold">Data</TableHead>
+                          <TableHead className="font-semibold">Solicitante</TableHead>
+                          <TableHead className="font-semibold">Tipo</TableHead>
+                          <TableHead className="font-semibold">Mensagem (Resumo)</TableHead>
+                          <TableHead className="font-semibold text-center">Status</TableHead>
+                          <TableHead className="font-semibold">Responsável</TableHead>
+                          <TableHead className="text-right pr-6 font-semibold">Ação</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {tickets.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={7} className="h-32 text-center text-zinc-500">
+                              Nenhum chamado encontrado.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          tickets.map(ticket => {
+                            // Regra: Se finalizado, apenas Admin pode reabrir/editar
+                            const isFinished = ticket.status === 'resolved' || ticket.status === 'implemented' || ticket.status === 'rejected';
+                            const canEditStatus = userProfile?.role === 'admin' || !isFinished;
+
+                            return (
+                              <TableRow key={ticket.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-zinc-100 dark:border-zinc-800">
+                                <TableCell className="pl-6 text-xs text-zinc-500">
+                                  {ticket.createdAt ? new Date(ticket.createdAt as Date).toLocaleDateString() : "-"}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium text-sm">{ticket.name}</span>
+                                    <span className="text-xs text-zinc-500">{ticket.email}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {ticket.type === 'feature' ? (
+                                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 gap-1">
+                                      <Lightbulb className="h-3 w-3" /> Ideia
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="bg-violet-50 text-violet-700 border-violet-200 gap-1">
+                                      <MessageSquare className="h-3 w-3" /> Suporte
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell className="max-w-[200px]">
+                                  <p className="truncate text-sm text-zinc-600 dark:text-zinc-400 cursor-pointer hover:underline" onClick={() => setViewTicket(ticket)}>
+                                    {ticket.message}
+                                  </p>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <Badge className={`
+                                                        ${ticket.status === 'resolved' || ticket.status === 'implemented' || ticket.status === 'approved' ? 'bg-emerald-500' : ''}
+                                                        ${ticket.status === 'pending' || ticket.status === 'under_review' ? 'bg-amber-500' : ''}
+                                                        ${ticket.status === 'in_progress' ? 'bg-blue-500' : ''}
+                                                        ${ticket.status === 'rejected' ? 'bg-red-500' : ''}
+                                                    `}>
+                                    {ticket.status.replace('_', ' ')}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  {/* Admin vê seletor para atribuir, Outros apenas veem o nome */}
+                                  {userProfile?.role === 'admin' ? (
+                                    <Select
+                                      value={ticket.assignedTo || "unassigned"}
+                                      onValueChange={(val) => handleAssignTicket(ticket.id, val)}
+                                    >
+                                      <SelectTrigger className="w-[140px] h-8 text-xs">
+                                        <SelectValue placeholder="Atribuir" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="unassigned">-- Ninguém --</SelectItem>
+                                        {staffMembers.map(staff => (
+                                          <SelectItem key={staff.uid} value={staff.uid}>
+                                            {staff.displayName || staff.email} ({staff.role})
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <span className="text-xs font-medium text-zinc-600">
+                                      {ticket.assignedToName || (ticket.assignedTo ? "Staff" : "Ninguém")}
+                                    </span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right pr-6">
+                                  <Select
+                                    value={ticket.status}
+                                    onValueChange={(val) => handleChangeTicketStatus(ticket.id, val)}
+                                    disabled={!canEditStatus}
+                                  >
+                                    <SelectTrigger className="w-[110px] h-8 text-xs ml-auto">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="pending">Pendente</SelectItem>
+                                      <SelectItem value="in_progress">Em Progresso</SelectItem>
+                                      <SelectItem value="resolved">Resolvido</SelectItem>
+                                      <SelectItem value="rejected">Rejeitado</SelectItem>
+                                      {ticket.type === 'feature' && (
+                                        <>
+                                          <SelectItem value="under_review">Em Análise</SelectItem>
+                                          <SelectItem value="approved">Aprovado</SelectItem>
+                                          <SelectItem value="implemented">Implementado</SelectItem>
+                                        </>
+                                      )}
+                                    </SelectContent>
+                                  </Select>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* --- USERS TAB --- */}
           {activeTab === "users" && (
@@ -1255,6 +1430,55 @@ export default function AdminPage() {
           <DialogFooter>
             <Button variant="ghost" onClick={cancelBlockUser} className="rounded-xl hover:cursor-pointer">Cancelar</Button>
             <Button variant="destructive" onClick={confirmBlockUser} className="rounded-xl hover:cursor-pointer">Bloquear</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Detalhes do Chamado */}
+      <Dialog open={!!viewTicket} onOpenChange={(open) => !open && setViewTicket(null)}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {viewTicket?.type === 'feature' ? (
+                <Lightbulb className="h-5 w-5 text-amber-600" />
+              ) : (
+                <HeadphonesIcon className="h-5 w-5 text-violet-600" />
+              )}
+              Detalhes da Solicitação
+            </DialogTitle>
+          </DialogHeader>
+          {viewTicket && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-semibold block">Solicitante:</span>
+                  <span className="text-zinc-600">{viewTicket.name}</span>
+                </div>
+                <div>
+                  <span className="font-semibold block">Email:</span>
+                  <span className="text-zinc-600">{viewTicket.email}</span>
+                </div>
+                <div>
+                  <span className="font-semibold block">Data:</span>
+                  <span className="text-zinc-600">
+                    {viewTicket.createdAt ? new Date(viewTicket.createdAt as Date).toLocaleString() : "-"}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-semibold block">Status Atual:</span>
+                  <Badge variant="secondary" className="mt-1">{viewTicket.status.replace('_', ' ')}</Badge>
+                </div>
+              </div>
+              <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                <span className="font-semibold block text-sm mb-2">Mensagem:</span>
+                <p className="text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                  {viewTicket.message}
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setViewTicket(null)} className="w-full rounded-xl hover:cursor-pointer">Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
