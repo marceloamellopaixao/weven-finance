@@ -1,5 +1,5 @@
 export type UserPlan = 'free' | 'premium' | 'pro';
-export type UserRole = 'admin' | 'moderator' | 'client';
+export type UserRole = 'admin' | 'moderator' | 'support' | 'client';
 export type UserStatus = 'active' | 'inactive' | 'deleted' | 'blocked';
 export type UserPaymentStatus = 'free' | 'paid' | 'not_paid' | 'pending' | 'overdue' | 'canceled' ;
 

@@ -34,6 +34,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
 import Link from "next/link";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
+import { useDashboardTour } from "@/hooks/useDashboardTour";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -66,6 +67,7 @@ export default function DashboardPage() {
   const { transactions, loading } = useTransactions();
   const { plans } = usePlans();
   const { categories, addNewCategory } = useCategories();
+  const { startTour } = useDashboardTour();
 
   // --- 1. STATES ---
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -118,6 +120,13 @@ export default function DashboardPage() {
     if (privacyMode) return "R$ ••••••";
     return formatCurrency(value);
   };
+
+  // --- 2. INICIAR TOUR ---
+  useEffect(() => {
+    if (!loading && user) {
+      startTour();
+    }
+  })
 
   // --- 3. CHECK-IN DIÁRIO (Pop-up Inteligente) ---
   useEffect(() => {
@@ -554,7 +563,7 @@ export default function DashboardPage() {
 
         {/* TOP BAR: TÍTULO + CONTROLES + BOTÃO NOVA TRANSAÇÃO */}
         <div className={`${fadeInUp} flex flex-col md:flex-row md:items-center justify-between gap-4`}>
-          <div>
+          <div id="tour-welcome-header">
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Visão Geral</h1>
             <p className="text-sm md:text-base text-zinc-500 dark:text-zinc-400 mt-1">Gerencie seu fluxo de caixa e previsões.</p>
           </div>
@@ -562,6 +571,7 @@ export default function DashboardPage() {
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
             {/* Botão de Nova Transação (Visível em Mobile e Desktop) */}
             <Button
+              id="tour-new-transaction"
               onClick={() => setIsFormOpen(true)}
               className="h-11 rounded-xl bg-linear-to-r from-violet-600 to-indigo-600 text-white font-bold shadow-lg shadow-violet-500/25 active:scale-[0.98] transition-all w-full sm:w-auto hover:cursor-pointer duration-200"
             >
@@ -569,7 +579,7 @@ export default function DashboardPage() {
             </Button>
 
             {/* Seletor de Mês */}
-            <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm w-full sm:w-auto justify-between md:justify-start">
+            <div id="tour-month-select" className="flex items-center gap-2 bg-white dark:bg-zinc-900 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm w-full sm:w-auto justify-between md:justify-start">
               <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0 hover:cursor-pointer duration-200" onClick={() => changeMonth(-1)} disabled={!canGoBack}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -598,12 +608,12 @@ export default function DashboardPage() {
         {/* --- KPI Cards --- */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           {/* SALDO EM CAIXA */}
-          <Card className={`${fadeInUp} delay-150 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl group active:scale-[0.99] transition-transform`}>
+          <Card id="tour-balance-card" className={`${fadeInUp} delay-150 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl group active:scale-[0.99] transition-transform`}>
             <div className="absolute inset-0 bg-linear-to-br from-blue-500/5 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
               <div className="flex items-center gap-2">
                 <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Saldo Atual (Hoje)</CardTitle>
-                <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                <button id="tour-privacy-toggle" onClick={togglePrivacyMode} className="block text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
                   {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
                 <TooltipProvider>
@@ -624,7 +634,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* MOVIMENTAÇÃO */}
-          <Card className={`${fadeInUp} delay-300 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl`}>
+          <Card id="tour-movement-card" className={`${fadeInUp} delay-300 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl`}>
             <div className="absolute inset-0 bg-linear-to-br from-violet-500/5 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
@@ -653,7 +663,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* PREVISÃO */}
-          <Card className={`${fadeInUp} delay-500 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
+          <Card id="tour-forecast-card" className={`${fadeInUp} delay-500 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
                 <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Previsão de Fechamento</CardTitle>
@@ -693,7 +703,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Tabela de Transações */}
-          <Card className={`${fadeInUp} delay-700 border-none shadow-lg shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden`}>
+          <Card id="tour-transactions-table" className={`${fadeInUp} delay-700 border-none shadow-lg shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden`}>
             <CardHeader className="border-b border-zinc-100 dark:border-zinc-800 py-5 px-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
