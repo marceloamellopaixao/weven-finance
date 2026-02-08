@@ -72,5 +72,15 @@ export function useCategories() {
         await addCustomCategory(user.uid, name, type);
     };
 
+    /*
+    // Função para deletar categoria (deleta do Firestore e atualiza o estado local)
+    const deleteCategory = async (name: string) => {
+        if (!user) return;
+        // Aqui você precisaria implementar a lógica para deletar a categoria do Firestore
+        // e depois atualizar o estado local para remover a categoria da lista.
+    }
+    
+    */
+
     return { categories, loadingCategories, addNewCategory };
 }
