@@ -94,9 +94,11 @@ import {
   HeadphonesIcon,
   Lightbulb,
   MessageSquare,
+  Eye,
 } from "lucide-react";
-import { subscribeToSupportTickets, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
+import { deleteTicket, subscribeToSupportTickets, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
 import { Timestamp } from "firebase/firestore";
+import { DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@radix-ui/react-dropdown-menu";
 
 type UserWithCount = UserProfile & { transactionCount?: number };
 type DeletionSuccessData = { name: string; email: string } | null;
@@ -132,6 +134,7 @@ export default function AdminPage() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [staffMembers, setStaffMembers] = useState<UserProfile[]>([]);
   const [viewTicket, setViewTicket] = useState<SupportTicket | null>(null);
+  const [ticketToDelete, setTicketToDelete] = useState<SupportTicket | null>(null);
 
   // --- FILTROS ---
   const [searchTerm, setSearchTerm] = useState("");
@@ -339,8 +342,19 @@ export default function AdminPage() {
     }
   };
 
-  // --- HANDLERS (GERAIS) ---
+  const handleDeleteTicket = async () => {
+    if (!ticketToDelete) return;
+    try {
+      await deleteTicket(ticketToDelete.id);
+      showFeedback('success', 'Excluído', 'O chamado foi removido permanentemente.');
+    } catch {
+      showFeedback('error', 'Erro', 'Falha ao excluir chamado.');
+    } finally {
+      setTicketToDelete(null);
+    }
+  };
 
+  // --- HANDLERS (GERAIS) ---
   const confirmNormalizeDB = async () => {
     setShowNormalizeConfirm(false);
     setIsNormalizing(true);
@@ -652,8 +666,8 @@ export default function AdminPage() {
           {/* --- SUPORTE TAB --- */}
           {activeTab === "support" && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
-              <Card className="border-none shadow-xl shadow-violet-200/50 dark:shadow-black/20 bg-white dark:bg-violet-900 rounded-3xl overflow-hidden">
-                <CardHeader className="py-4 px-6 border-b border-violet-100 dark:border-violet-800 bg-violet-200/50 dark:bg-violet-900/50">
+              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
+                <CardHeader className="py-4 px-6 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
                   <CardTitle className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                     <HeadphonesIcon className="h-5 w-5 text-violet-600" /> Central de Atendimento
                   </CardTitle>
@@ -666,8 +680,8 @@ export default function AdminPage() {
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
                     <Table>
-                      <TableHeader className="bg-violet-100 dark:bg-violet-950">
-                        <TableRow className="border-violet-100 dark:border-violet-800 hover:bg-transparent">
+                      <TableHeader className="bg-zinc-50 dark:bg-zinc-950">
+                        <TableRow className="border-zinc-100 dark:border-zinc-800 hover:bg-transparent">
                           <TableHead className="pl-6 font-semibold">Data</TableHead>
                           <TableHead className="font-semibold">Solicitante</TableHead>
                           <TableHead className="font-semibold">Tipo</TableHead>
@@ -686,11 +700,8 @@ export default function AdminPage() {
                           </TableRow>
                         ) : (
                           tickets.map(ticket => {
-                            // Regra: Se finalizado, apenas Admin pode reabrir/editar
                             const isFinished = ticket.status === 'resolved' || ticket.status === 'implemented' || ticket.status === 'rejected';
                             const canEditStatus = userProfile?.role === 'admin' || !isFinished;
-
-                            // Formatação de Data Segura
                             const dateStr = ticket.createdAt instanceof Date
                               ? ticket.createdAt.toLocaleDateString()
                               : (ticket.createdAt as unknown as Timestamp)?.toDate
@@ -736,7 +747,6 @@ export default function AdminPage() {
                                   </Badge>
                                 </TableCell>
                                 <TableCell>
-                                  {/* Admin vê seletor para atribuir, Outros apenas veem o nome */}
                                   {userProfile?.role === 'admin' ? (
                                     <Select
                                       value={ticket.assignedTo || "unassigned"}
@@ -761,34 +771,115 @@ export default function AdminPage() {
                                   )}
                                 </TableCell>
                                 <TableCell className="text-right pr-6">
-                                  <Select
-                                    value={ticket.status}
-                                    onValueChange={(val) => handleChangeTicketStatus(ticket.id, val)}
-                                    disabled={!canEditStatus}
-                                  >
-                                    <SelectTrigger className="w-[110px] h-8 text-xs ml-auto">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {ticket.type === 'support' && (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg">
+                                        <MoreVertical className="h-4 w-4 text-zinc-500" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-48 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 shadow-xl">
+                                      <DropdownMenuItem onClick={() => setViewTicket(ticket)}>
+                                        <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
+                                      </DropdownMenuItem>
+
+                                      {canEditStatus && (
+                                        <DropdownMenuSub>
+                                          <DropdownMenuSubTrigger
+                                            className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200 focus:bg-zinc-100 dark:focus:bg-zinc-800 data-[state=open]:bg-zinc-100 dark:data-[state=open]:bg-zinc-800"
+                                          >
+                                            <span className="flex items-center">
+                                              <RefreshCcw className="mr-2 h-4 w-4 text-zinc-500" />
+                                              Alterar Status
+                                            </span>
+                                          </DropdownMenuSubTrigger>
+                                          <DropdownMenuSubContent className="w-56 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 shadow-xl">
+                                            {ticket.type === 'support' && (
+                                              <>
+                                                <DropdownMenuItem
+                                                  onClick={() => handleChangeTicketStatus(ticket.id, 'pending')}
+                                                  className="rounded-lg text-sm focus:bg-amber-50 focus:text-amber-900 dark:focus:bg-amber-950/30 dark:focus:text-amber-100"
+                                                >
+                                                  Pendente
+                                                </DropdownMenuItem>
+
+                                                <DropdownMenuItem
+                                                  onClick={() => handleChangeTicketStatus(ticket.id, 'in_progress')}
+                                                  className="rounded-lg text-sm focus:bg-blue-50 focus:text-blue-900 dark:focus:bg-blue-950/30 dark:focus:text-blue-100"
+                                                >
+                                                  Em Progresso
+                                                </DropdownMenuItem>
+
+                                                <DropdownMenuItem
+                                                  onClick={() => handleChangeTicketStatus(ticket.id, 'resolved')}
+                                                  className="rounded-lg text-sm focus:bg-emerald-50 focus:text-emerald-900 dark:focus:bg-emerald-950/30 dark:focus:text-emerald-100"
+                                                >
+                                                  Resolvido
+                                                </DropdownMenuItem>
+
+                                                <DropdownMenuItem
+                                                  onClick={() => handleChangeTicketStatus(ticket.id, 'rejected')}
+                                                  className="rounded-lg text-sm focus:bg-red-50 focus:text-red-900 dark:focus:bg-red-950/30 dark:focus:text-red-100"
+                                                >
+                                                  Rejeitado
+                                                </DropdownMenuItem>
+                                              </>
+                                            )}
+
+                                            {ticket.type === 'feature' && (
+                                              <>
+                                                <DropdownMenuItem
+                                                  onClick={() => handleChangeTicketStatus(ticket.id, 'pending')}
+                                                  className="rounded-lg text-sm focus:bg-amber-50 focus:text-amber-900 dark:focus:bg-amber-950/30 dark:focus:text-amber-100"
+                                                >
+                                                  Pendente
+                                                </DropdownMenuItem>
+
+                                                <DropdownMenuItem
+                                                  onClick={() => handleChangeTicketStatus(ticket.id, 'under_review')}
+                                                  className="rounded-lg text-sm focus:bg-amber-50 focus:text-amber-900 dark:focus:bg-amber-950/30 dark:focus:text-amber-100"
+                                                >
+                                                  Em Análise
+                                                </DropdownMenuItem>
+
+                                                <DropdownMenuItem
+                                                  onClick={() => handleChangeTicketStatus(ticket.id, 'approved')}
+                                                  className="rounded-lg text-sm focus:bg-emerald-50 focus:text-emerald-900 dark:focus:bg-emerald-950/30 dark:focus:text-emerald-100"
+                                                >
+                                                  Aprovado
+                                                </DropdownMenuItem>
+
+                                                <DropdownMenuItem
+                                                  onClick={() => handleChangeTicketStatus(ticket.id, 'rejected')}
+                                                  className="rounded-lg text-sm focus:bg-red-50 focus:text-red-900 dark:focus:bg-red-950/30 dark:focus:text-red-100"
+                                                >
+                                                  Rejeitado
+                                                </DropdownMenuItem>
+
+                                                <DropdownMenuItem
+                                                  onClick={() => handleChangeTicketStatus(ticket.id, 'implemented')}
+                                                  className="rounded-lg text-sm focus:bg-emerald-50 focus:text-emerald-900 dark:focus:bg-emerald-950/30 dark:focus:text-emerald-100"
+                                                >
+                                                  Implementado
+                                                </DropdownMenuItem>
+                                              </>
+                                            )}
+                                          </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                      )}
+
+                                      {userProfile?.role === 'admin' && (
                                         <>
-                                          <SelectItem value="pending">Pendente</SelectItem>
-                                          <SelectItem value="in_progress">Em Progresso</SelectItem>
-                                          <SelectItem value="resolved">Resolvido</SelectItem>
-                                          <SelectItem value="rejected">Rejeitado</SelectItem>
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem
+                                            onClick={() => setTicketToDelete(ticket)}
+                                            className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950 hover:cursor-pointer"
+                                          >
+                                            <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                                          </DropdownMenuItem>
                                         </>
                                       )}
-                                      {ticket.type === 'feature' && (
-                                        <>
-                                          <SelectItem value="pending">Pendente</SelectItem>
-                                          <SelectItem value="under_review">Em Análise</SelectItem>
-                                          <SelectItem value="approved">Aprovado</SelectItem>
-                                          <SelectItem value="rejected">Rejeitado</SelectItem>
-                                          <SelectItem value="implemented">Implementado</SelectItem>
-                                        </>
-                                      )}
-                                    </SelectContent>
-                                  </Select>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 </TableCell>
                               </TableRow>
                             );
@@ -1528,6 +1619,24 @@ export default function AdminPage() {
           )}
           <DialogFooter>
             <Button onClick={() => setViewTicket(null)} className="w-full rounded-xl hover:cursor-pointer">Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Excluir Ticket (NOVO) */}
+      <Dialog open={!!ticketToDelete} onOpenChange={(open) => !open && setTicketToDelete(null)}>
+        <DialogContent className="rounded-2xl sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" /> Excluir Chamado
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              Tem certeza que deseja apagar este registro de suporte? Essa ação é irreversível.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setTicketToDelete(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleDeleteTicket}>Excluir</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc, where } from "firebase/firestore";
 import { db } from "@/services/firebase/client";
 
 // --- TIPOS ---
@@ -109,3 +109,14 @@ export const updateTicket = async (ticketId: string, updates: Partial<SupportTic
     throw error;
   }
 }
+
+// Deletar chamado (Apenas Admin)
+export const deleteTicket = async (ticketId: string) => {
+  try {
+    const ref = doc(db, "support_requests", ticketId);
+    await deleteDoc(ref);
+  } catch (error) {
+    console.error("Erro ao deletar chamado:", error);
+    throw error;
+  }
+};
