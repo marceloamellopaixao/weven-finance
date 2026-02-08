@@ -297,19 +297,39 @@ export default function DashboardPage() {
         finalAmount = Math.round(finalAmount * 100) / 100;
       }
 
-      const finalDueDate = showDueDateInput ? dueDate : date;
+      let transactionDate = date; // Data do Registro (compra ou crédito)
+      let transactionDueDate = date; // Data de Vencimento (ou Credito)
+
+      // Lógica para definir as datas corretamente dependendo do tipo e método de pagamento
+      if (type === 'income') {
+        // Renda
+        transactionDate = dueDate; // Para rendas, a data do crédito é a data principal
+        transactionDueDate = dueDate;
+      } else {
+        // Gasto
+        if (showDueDateInput) {
+          // Cartao de Credito/Boleto: Data da Compra (date) != Data de Vencimento (dueDate)
+          transactionDate = date;
+          transactionDueDate = dueDate;
+        } else {
+          transactionDate = date;
+          transactionDueDate = date;
+        }
+      }
 
       await addTransaction(user!.uid, {
-        description: desc,
-        amount: finalAmount,
-        type: type,
-        category: category,
-        paymentMethod: paymentMethod,
-        date: type === 'income' ? finalDueDate : date,
-        dueDate: finalDueDate,
-        isInstallment,
-        installmentsCount: count
+        description: desc, // Descrição
+        amount: finalAmount, // Valor (ajustado para parcelas se necessário)
+        type: type, // Tipo (Despesa ou Renda)
+        category: category, // Categoria
+        paymentMethod: paymentMethod, // Método de Pagamento
+        date: transactionDate, // Data do Gasto (para despesas) ou Data de Crédito (para rendas)
+        dueDate: transactionDueDate, // Data de Vencimento (para despesas) ou Data de Crédito (para rendas)
+        isInstallment, // Flag de Parcela
+        installmentsCount: count // Número de Parcelas (se aplicável)
       });
+
+      // Resetar form após adicionar
       setDesc("");
       setAmount("");
       setIsInstallment(false);
@@ -339,13 +359,31 @@ export default function DashboardPage() {
 
   const handleConfirmEdit = async (updateGroup: boolean) => {
     if (!editingTx || !user || !editingTx.id) return;
+
+    // Normalização das datas na edição para manter consistência
+    const finalDate = editingTx.date;
+    let finalDueDate = editingTx.dueDate;
+
+    const method = PAYMENT_METHODS.find(pm => pm.value === editingTx.paymentMethod);
+    const hasDueDate = method ? method.hasDueDate : false;
+
+    if (editingTx.type === 'income') {
+      finalDueDate = finalDate;
+    } else {
+      if (!hasDueDate) {
+        finalDueDate = finalDate
+      }
+    }
+
     await updateTransaction(user.uid, editingTx.id, {
       description: editingTx.description,
       amount: Number(editingTx.amount),
       category: editingTx.category,
-      dueDate: editingTx.dueDate,
-      date: editingTx.date
+      paymentMethod: editingTx.paymentMethod,
+      dueDate: finalDueDate,
+      date: finalDate
     }, updateGroup);
+
     setIsEditOpen(false);
     setEditingTx(null);
   };
@@ -920,114 +958,113 @@ export default function DashboardPage() {
 
         {/* Modal de Edição */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent className="sm:max-w-[500px] w-full max-h-[90vh] overflow-y-auto rounded-2xl p-6">
-            <DialogHeader>
-              <DialogTitle className="text-xl">Editar Lançamento</DialogTitle>
-              <DialogDescription>
-                Faça ajustes na transação selecionada.
-                {editingTx?.groupId && (
-                  <span className="block mt-1 text-amber-600 font-medium text-xs">
-                    * Atenção: Este item faz parte de um parcelamento.
-                  </span>
-                )}
-              </DialogDescription>
-            </DialogHeader>
+          <DialogContent className="sm:max-w-[500px] w-full max-h-[90vh] overflow-y-auto rounded-2xl p-0 gap-0 overflow-hidden">
             {editingTx && (
-              <div className="space-y-5 py-4">
-                <div className="space-y-2">
-                  <Label>Titulo {type == 'expense' ? "do Gasto" : "da Renda"}</Label>
-                  <Input className="h-10 rounded-lg" value={editingTx.description} onChange={e => setEditingTx({ ...editingTx, description: e.target.value })} />
-                </div>
+              <>
+                <div className={`h-2 w-full ${editingTx.type === 'expense' ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                <div className="p-6">
+                  <DialogHeader className="mb-6">
+                    <div className="flex items-center justify-between">
+                      <DialogTitle className="text-xl flex items-center gap-2">
+                        {editingTx.type === 'expense' ?
+                          <div className="p-2 bg-red-100 text-red-600 rounded-full"><TrendingDown className="h-5 w-5" /></div> :
+                          <div className="p-2 bg-emerald-100 text-emerald-600 rounded-full"><TrendingUp className="h-5 w-5" /></div>
+                        }
+                        <span>Editar {editingTx.type === 'expense' ? 'Gasto' : 'Renda'}</span>
+                      </DialogTitle>
+                      {editingTx.groupId && (
+                        <span className="flex items-center text-[10px] bg-amber-50 text-amber-700 px-2 py-1 rounded-full border border-amber-200 font-medium">
+                          <Layers className="h-3 w-3 mr-1" /> Parcelado
+                        </span>
+                      )}
+                    </div>
+                    <DialogDescription className="mt-1 ml-1">
+                      {editingTx.groupId ? "Este item faz parte de um parcelamento/recorrência." : "Detalhes da transação única."}
+                    </DialogDescription>
+                  </DialogHeader>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Valor</Label>
-                    <div className="relative mt-1.5">
-                      <span className="absolute left-3.5 top-2 text-zinc-400 font-semibold">R$</span>
+                  <div className="space-y-5">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Descrição</Label>
                       <Input
-                        type="number"
-                        className="pl-10 h-10 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl font-semibold text-lg"
-                        placeholder="0,00"
-                        value={editingTx.amount}
-                        onChange={e => setEditingTx({ ...editingTx, amount: Number(e.target.value) })}
+                        className="h-11 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl"
+                        value={editingTx.description}
+                        onChange={e => setEditingTx({ ...editingTx, description: e.target.value })}
                       />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Categoria</Label>
-                    <Select value={editingTx.category} onValueChange={(v) => setEditingTx({ ...editingTx, category: v })}>
-                      <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {ALL_CATEGORIES.map((cat) => <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
 
-                <div className="col-span-2 space-y-2">
-                  <Label className="text-xs font-semibold text-zinc-500 uppercase">Método de Pagamento</Label>
-                  <Select value={editingTx.paymentMethod} onValueChange={(v) => setEditingTx({ ...editingTx, paymentMethod: v as PaymentMethod })}>
-                    <SelectTrigger className="h-9 bg-white"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {PAYMENT_METHODS.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {editingTx.type === 'income' ? (
-                  <div className="flex flex-col items-start gap-2">
-                    {editingTx.type === 'income' && (
-                      <div className="w-full space-y-2">
-                        <Label className="text-xs font-medium text-green-500 uppercase">Data de Crédito</Label>
-                        <Input
-                          type="date" className="h-9 bg-white border-green-200"
-                          value={editingTx.date}
-                          onChange={e => setEditingTx({ ...editingTx, date: e.target.value })}
-                        />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Valor</Label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-2.5 text-zinc-400 font-semibold">R$</span>
+                          <Input
+                            type="number"
+                            className="pl-10 h-11 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl font-semibold text-lg"
+                            placeholder="0,00"
+                            value={editingTx.amount}
+                            onChange={e => setEditingTx({ ...editingTx, amount: Number(e.target.value) })}
+                          />
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-start gap-2">
-                    {editingTx.dueDate && (
-                      <div className="w-full grid grid-cols-2 gap-4 p-4 rounded-xl border border-zinc-100">
-                        {editingTx.type === 'expense' && (
-                          <div className="space-y-2">
-                            <Label className="text-xs font-semibold text-zinc-500 uppercase">Data Compra</Label>
-                            <Input type="date" className="h-9 bg-white" value={editingTx.date} onChange={e => setEditingTx({ ...editingTx, date: e.target.value })} />
-                          </div>
-                        )}
-
-                        {(editingTx.type === 'expense' && (editingTx.paymentMethod === 'boleto' || editingTx.paymentMethod === 'credit_card')) && (
-                          <div className="space-y-2">
-                            <Label className="text-xs font-semibold text-red-500 uppercase">Vencimento</Label>
-                            <Input type="date" className="h-9 bg-white border-red-200" value={editingTx.dueDate} onChange={e => setEditingTx({ ...editingTx, dueDate: e.target.value })} />
-                          </div>
-                        )}
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Categoria</Label>
+                        <Select value={editingTx.category} onValueChange={(v) => setEditingTx({ ...editingTx, category: v })}>
+                          <SelectTrigger className="h-11 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {ALL_CATEGORIES.filter(cat => cat.type === editingTx.type || cat.type === 'both').map((cat) => (
+                              <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
-                    )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Método de Pagamento</Label>
+                      <Select value={editingTx.paymentMethod} onValueChange={(v) => setEditingTx({ ...editingTx, paymentMethod: v as PaymentMethod })}>
+                        <SelectTrigger className="h-11 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue /></SelectTrigger>
+                        <SelectContent>{PAYMENT_METHODS.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="bg-zinc-50/80 dark:bg-zinc-800/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                      {editingTx.type === 'income' ? (
+                        <div className="w-full space-y-2">
+                          <Label className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Data de Crédito</Label>
+                          <Input type="date" className="h-10 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={editingTx.date} onChange={e => setEditingTx({ ...editingTx, date: e.target.value })} />
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Data Compra</Label>
+                            <Input type="date" className="h-10 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={editingTx.date} onChange={e => setEditingTx({ ...editingTx, date: e.target.value })} />
+                          </div>
+                          {(editingTx.paymentMethod === 'boleto' || editingTx.paymentMethod === 'credit_card') && (
+                            <div className="space-y-2">
+                              <Label className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Vencimento</Label>
+                              <Input type="date" className="h-10 text-xs bg-white dark:bg-zinc-900 border-red-200 rounded-lg" value={editingTx.dueDate} onChange={e => setEditingTx({ ...editingTx, dueDate: e.target.value })} />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
+
+                  <DialogFooter className="mt-8 flex flex-col sm:flex-row gap-3">
+                    <Button variant="ghost" className="w-full sm:w-auto h-11 hover:bg-zinc-100 rounded-xl font-medium text-zinc-500" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
+                    {editingTx.groupId ? (
+                      <>
+                        <Button variant="outline" className="w-full sm:w-auto h-11 rounded-xl font-medium border-zinc-200" onClick={() => handleConfirmEdit(false)}>Salvar Apenas Esta</Button>
+                        <Button className="w-full sm:w-auto h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold shadow-lg shadow-violet-500/20" onClick={() => handleConfirmEdit(true)}>Salvar Todas</Button>
+                      </>
+                    ) : (
+                      <Button className="w-full sm:w-auto h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold shadow-lg shadow-violet-500/20" onClick={() => handleConfirmEdit(false)}>Salvar Alterações</Button>
+                    )}
+                  </DialogFooter>
+                </div>
+              </>
             )}
-            <DialogFooter className="flex flex-col sm:flex-row gap-3">
-              <Button variant="ghost" className="w-full sm:w-auto hover:cursor-pointer duration-200" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
-
-              {editingTx?.groupId ? (
-                <>
-                  <Button variant="outline" className="w-full sm:w-auto hover:cursor-pointer duration-200" onClick={() => handleConfirmEdit(false)}>
-                    Apenas Esta
-                  </Button>
-                  <Button className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700 hover:cursor-pointer duration-200" onClick={() => handleConfirmEdit(true)}>
-                    Todas as Parcelas
-                  </Button>
-                </>
-              ) : (
-                <Button className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700 hover:cursor-pointer duration-200" onClick={() => handleConfirmEdit(false)}>
-                  Salvar
-                </Button>
-              )}
-            </DialogFooter>
           </DialogContent>
         </Dialog>
 
