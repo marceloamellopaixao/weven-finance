@@ -21,8 +21,9 @@ import {
   HelpCircle,
   PlayCircle,
   MessageCircle,
-  BookOpen,
   LifeBuoy,
+  Lightbulb,
+  Sparkles,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { updateOwnProfile, softDeleteUser } from "@/services/userService";
@@ -31,7 +32,7 @@ import Link from "next/link";
 import { usePlans } from "@/hooks/usePlans";
 import { migrateCryptography } from "@/services/transactionService";
 import { useRouter } from "next/navigation";
-import { sendSupportRequest } from "@/hooks/supportService";
+import { sendFeatureRequest, sendSupportRequest } from "@/hooks/supportService";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -60,6 +61,11 @@ export default function SettingsPage() {
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const [supportMessage, setSupportMessage] = useState("");
   const [isSendingSupport, setIsSendingSupport] = useState(false);
+
+  // Estados para Ideias/Features
+  const [isFeatureModalOpen, setIsFeatureModalOpen] = useState(false);
+  const [featureMessage, setFeatureMessage] = useState("");
+  const [isSendingFeature, setIsSendingFeature] = useState(false);
 
   // Estado para feedback modal
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
@@ -160,6 +166,32 @@ export default function SettingsPage() {
       showFeedback('error', 'Erro', 'Não foi possível enviar a solicitação. Tente novamente mais tarde.');
     } finally {
       setIsSendingSupport(false);
+    }
+  };
+
+  const handleSendFeature = async () => {
+    if (!featureMessage.trim()) {
+      showFeedback('error', 'Campo Obrigatório', 'Por favor, descreva sua ideia.');
+      return;
+    }
+    if (!user) return;
+
+    setIsSendingFeature(true);
+    try {
+      await sendFeatureRequest(
+        user.uid, 
+        user.email || "Sem email", 
+        userProfile?.displayName || "Usuário", 
+        featureMessage
+      );
+      setIsFeatureModalOpen(false);
+      setFeatureMessage("");
+      showFeedback('success', 'Ideia Recebida!', 'Obrigado por contribuir! Sua sugestão foi enviada para nosso time de produto.');
+    } catch (error) {
+      console.error(error);
+      showFeedback('error', 'Erro', 'Não foi possível enviar sua sugestão. Tente novamente.');
+    } finally {
+      setIsSendingFeature(false);
     }
   };
 
@@ -548,11 +580,11 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
 
-              {/* Card de Suporte */}
+              {/* Card de Suporte e Ideias */}
               <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200">
-                    <MessageCircle className="h-5 w-5" /> Canais de Suporte
+                    <MessageCircle className="h-5 w-5" /> Fale Conosco
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -567,7 +599,7 @@ export default function SettingsPage() {
                     </div>
                   </a>
 
-                  {/* NOVO: Solicitar Suporte via Sistema */}
+                  {/* Solicitar Suporte via Sistema */}
                   <div
                     onClick={() => setIsSupportModalOpen(true)}
                     className="flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer"
@@ -577,20 +609,22 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Abrir Chamado</h4>
-                      <p className="text-sm text-zinc-500">Envie uma mensagem detalhada para análise.</p>
+                      <p className="text-sm text-zinc-500">Relate problemas ou tire dúvidas técnicas.</p>
                     </div>
                   </div>
 
-                  {/* FAQ (Desativado) */}
-                  <div className="flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-not-allowed opacity-60" title="Em breve">
-                    <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full text-blue-600 group-hover:scale-110 transition-transform">
-                      <BookOpen className="h-6 w-6" />
+                  {/* Enviar Ideia / Sugestão */}
+                  <div
+                    onClick={() => setIsFeatureModalOpen(true)}
+                    className="flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer"
+                  >
+                    <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-full text-amber-600 group-hover:scale-110 transition-transform">
+                      <Lightbulb className="h-6 w-6" />
                     </div>
                     <div>
-                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Central de Ajuda (FAQ)</h4>
-                      <p className="text-sm text-zinc-500">Artigos e tutoriais detalhados.</p>
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Enviar Ideia ou Sugestão</h4>
+                      <p className="text-sm text-zinc-500">Tem uma ideia incrível? Queremos ouvir você!</p>
                     </div>
-                    <Badge variant="secondary" className="ml-auto">Em breve</Badge>
                   </div>
                 </CardContent>
               </Card>
@@ -635,6 +669,45 @@ export default function SettingsPage() {
               >
                 {isSendingSupport ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
                 Enviar Solicitação
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Ideia / Feature */}
+        <Dialog open={isFeatureModalOpen} onOpenChange={setIsFeatureModalOpen}>
+          <DialogContent className="sm:max-w-[500px] rounded-3xl p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                <Sparkles className="h-6 w-6" /> Enviar Sugestão
+              </DialogTitle>
+              <DialogDescription className="pt-2">
+                Compartilhe suas ideias para tornar o WevenFinance ainda melhor. Adoramos inovar com você!
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="feature-idea">Sua Ideia Brilhante</Label>
+                <textarea
+                  id="feature-idea"
+                  className="flex min-h-[120px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:ring-offset-zinc-950 dark:placeholder:text-zinc-400 dark:focus-visible:ring-amber-600"
+                  placeholder="Ex: Gostaria de ver um gráfico de gastos por categoria..."
+                  value={featureMessage}
+                  onChange={(e) => setFeatureMessage(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="ghost" onClick={() => setIsFeatureModalOpen(false)} className="rounded-xl">Cancelar</Button>
+              <Button
+                onClick={handleSendFeature}
+                disabled={isSendingFeature}
+                className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl gap-2"
+              >
+                {isSendingFeature ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
+                Enviar Ideia
               </Button>
             </DialogFooter>
           </DialogContent>
