@@ -18,6 +18,12 @@ import {
   CheckCircle,
   X,
   Info,
+  HelpCircle,
+  PlayCircle,
+  MessageCircle,
+  LifeBuoy,
+  Lightbulb,
+  Sparkles,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { updateOwnProfile, softDeleteUser } from "@/services/userService";
@@ -26,6 +32,7 @@ import Link from "next/link";
 import { usePlans } from "@/hooks/usePlans";
 import { migrateCryptography } from "@/services/transactionService";
 import { useRouter } from "next/navigation";
+import { sendFeatureRequest, sendSupportRequest } from "@/hooks/supportService";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -49,6 +56,16 @@ export default function SettingsPage() {
   const [keyFingerprint, setKeyFingerprint] = useState("Carregando identificador seguro...");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Estados para Suporte
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
+  const [supportMessage, setSupportMessage] = useState("");
+  const [isSendingSupport, setIsSendingSupport] = useState(false);
+
+  // Estados para Ideias/Features
+  const [isFeatureModalOpen, setIsFeatureModalOpen] = useState(false);
+  const [featureMessage, setFeatureMessage] = useState("");
+  const [isSendingFeature, setIsSendingFeature] = useState(false);
 
   // Estado para feedback modal
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
@@ -89,8 +106,9 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDeleteAccount = async (): Promise<void> => {
+  const handleDeleteAccount = async () => {
     if (!user) return;
+
     setIsDeleting(true);
 
     try {
@@ -119,11 +137,69 @@ export default function SettingsPage() {
     }
   };
 
+  const handleReplayTour = () => {
+    localStorage.removeItem("weven_onboarding_completed");
+    router.push("/dashboard");
+  };
+
+  const handleSendSupport = async () => {
+    if (!supportMessage.trim()) {
+      showFeedback('error', 'Mensagem Vazia', 'Por favor, descreva o motivo do contato.');
+      return;
+    }
+
+    if (!user) return;
+
+    setIsSendingSupport(true);
+    try {
+      await sendSupportRequest(
+        user.uid,
+        user.email || "E-mail não disponível",
+        userProfile?.displayName || "Usuário sem nome",
+        supportMessage
+      );
+      setIsSupportModalOpen(false);
+      setSupportMessage("");
+      showFeedback('success', 'Solicitação Enviada', 'Nossa equipe de suporte entrará em contato em breve.');
+    } catch (error) {
+      console.error("Erro ao enviar solicitação de suporte:", error);
+      showFeedback('error', 'Erro', 'Não foi possível enviar a solicitação. Tente novamente mais tarde.');
+    } finally {
+      setIsSendingSupport(false);
+    }
+  };
+
+  const handleSendFeature = async () => {
+    if (!featureMessage.trim()) {
+      showFeedback('error', 'Campo Obrigatório', 'Por favor, descreva sua ideia.');
+      return;
+    }
+    if (!user) return;
+
+    setIsSendingFeature(true);
+    try {
+      await sendFeatureRequest(
+        user.uid, 
+        user.email || "Sem email", 
+        userProfile?.displayName || "Usuário", 
+        featureMessage
+      );
+      setIsFeatureModalOpen(false);
+      setFeatureMessage("");
+      showFeedback('success', 'Ideia Recebida!', 'Obrigado por contribuir! Sua sugestão foi enviada para nosso time de produto.');
+    } catch (error) {
+      console.error(error);
+      showFeedback('error', 'Erro', 'Não foi possível enviar sua sugestão. Tente novamente.');
+    } finally {
+      setIsSendingFeature(false);
+    }
+  };
+
   const currentPlan = userProfile?.plan || "free";
 
   return (
     <div className="font-sans p-4 md:p-8 pb-20">
-      
+
       {/* Background Decorativo */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-violet-500/5 rounded-full blur-[100px]" />
@@ -138,9 +214,9 @@ export default function SettingsPage() {
             <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Configurações</h1>
             <p className="text-zinc-500 dark:text-zinc-400">Gerencie sua conta, privacidade e assinatura.</p>
           </div>
-          <Button 
-            variant="destructive" 
-            onClick={logout} 
+          <Button
+            variant="destructive"
+            onClick={logout}
             className="gap-2 rounded-xl shadow-sm hover:shadow-red-500/20 transition-all hover:cursor-pointer hover:scale-105 duration-200"
           >
             <LogOut className="h-4 w-4" /> Sair da Conta
@@ -149,7 +225,7 @@ export default function SettingsPage() {
 
         {/* Navegação de Abas Personalizada */}
         <div className={`${fadeInUp} delay-150 space-y-6`}>
-          <div className="bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 grid grid-cols-3 w-full md:w-[480px] shadow-sm">
+          <div className="bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 grid grid-cols-2 md:grid-cols-4 w-full md:w-[640px] shadow-sm gap-1">
             <button onClick={() => setActiveTab("account")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "account" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <User className="h-4 w-4" /> Geral
             </button>
@@ -158,6 +234,9 @@ export default function SettingsPage() {
             </button>
             <button onClick={() => setActiveTab("security")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "security" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <ShieldCheck className="h-4 w-4" /> Privacidade
+            </button>
+            <button onClick={() => setActiveTab("help")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "help" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <HelpCircle className="h-4 w-4" /> Ajuda
             </button>
           </div>
 
@@ -471,7 +550,168 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* AJUDA & TUTORIAL */}
+          {activeTab === "help" && (
+            <div className={`${fadeInUp} delay-200 space-y-6`}>
+              {/* Card de Tutorial */}
+              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden hover:shadow-2xl transition-shadow">
+                <CardHeader className="bg-linear-to-r from-violet-500/10 to-indigo-500/10 p-4">
+                  <CardTitle className="flex items-center gap-2 text-violet-700 dark:text-violet-300">
+                    <PlayCircle className="h-6 w-6" /> Tutorial Interativo
+                  </CardTitle>
+                  <CardDescription className="text-zinc-600 dark:text-zinc-400">
+                    Reveja o guia passo a passo para aprender a usar todas as funcionalidades do painel.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="-mt-4">
+                  <div className="bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tour do Dashboard</h4>
+                      <p className="text-sm text-zinc-500">Navegação, cadastro de contas e gráficos.</p>
+                    </div>
+                    <Button
+                      onClick={handleReplayTour}
+                      className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700 text-white rounded-xl shadow-lg shadow-violet-500/20 hover:scale-105 transition-all"
+                    >
+                      Iniciar Tour Agora
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Card de Suporte e Ideias */}
+              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200">
+                    <MessageCircle className="h-5 w-5" /> Fale Conosco
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* WhatsApp */}
+                  <a href="https://wa.me/5511992348613" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer">
+                    <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full text-green-600 group-hover:scale-110 transition-transform">
+                      <MessageCircle className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">WhatsApp Suporte</h4>
+                      <p className="text-sm text-zinc-500">Fale diretamente com nossa equipe técnica.</p>
+                    </div>
+                  </a>
+
+                  {/* Solicitar Suporte via Sistema */}
+                  <div
+                    onClick={() => setIsSupportModalOpen(true)}
+                    className="flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer"
+                  >
+                    <div className="p-3 bg-violet-100 dark:bg-violet-900/30 rounded-full text-violet-600 group-hover:scale-110 transition-transform">
+                      <LifeBuoy className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Abrir Chamado</h4>
+                      <p className="text-sm text-zinc-500">Relate problemas ou tire dúvidas técnicas.</p>
+                    </div>
+                  </div>
+
+                  {/* Enviar Ideia / Sugestão */}
+                  <div
+                    onClick={() => setIsFeatureModalOpen(true)}
+                    className="flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer"
+                  >
+                    <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-full text-amber-600 group-hover:scale-110 transition-transform">
+                      <Lightbulb className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Enviar Ideia ou Sugestão</h4>
+                      <p className="text-sm text-zinc-500">Tem uma ideia incrível? Queremos ouvir você!</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
+
+        {/* Modal de Suporte */}
+        <Dialog open={isSupportModalOpen} onOpenChange={setIsSupportModalOpen}>
+          <DialogContent className="sm:max-w-[500px] rounded-3xl p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-violet-700 dark:text-violet-400">
+                <LifeBuoy className="h-6 w-6" /> Solicitar Suporte
+              </DialogTitle>
+              <DialogDescription className="pt-2">
+                Descreva seu problema ou dúvida abaixo. Nossa equipe analisará e retornará o contato.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="support-reason">Motivo do Contato</Label>
+                <textarea
+                  id="support-reason"
+                  className="flex min-h-[120px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:ring-offset-zinc-950 dark:placeholder:text-zinc-400 dark:focus-visible:ring-violet-800"
+                  placeholder="Ex: Não consigo editar uma transação parcelada..."
+                  value={supportMessage}
+                  onChange={(e) => setSupportMessage(e.target.value)}
+                />
+              </div>
+              <p className="text-xs text-zinc-500">
+                * Ao enviar, compartilharemos seu ID de usuário e email para facilitar o atendimento.
+              </p>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="ghost" onClick={() => setIsSupportModalOpen(false)} className="rounded-xl">Cancelar</Button>
+              <Button
+                onClick={handleSendSupport}
+                disabled={isSendingSupport}
+                className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl gap-2"
+              >
+                {isSendingSupport ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
+                Enviar Solicitação
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Ideia / Feature */}
+        <Dialog open={isFeatureModalOpen} onOpenChange={setIsFeatureModalOpen}>
+          <DialogContent className="sm:max-w-[500px] rounded-3xl p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                <Sparkles className="h-6 w-6" /> Enviar Sugestão
+              </DialogTitle>
+              <DialogDescription className="pt-2">
+                Compartilhe suas ideias para tornar o WevenFinance ainda melhor. Adoramos inovar com você!
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="feature-idea">Sua Ideia Brilhante</Label>
+                <textarea
+                  id="feature-idea"
+                  className="flex min-h-[120px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:ring-offset-zinc-950 dark:placeholder:text-zinc-400 dark:focus-visible:ring-amber-600"
+                  placeholder="Ex: Gostaria de ver um gráfico de gastos por categoria..."
+                  value={featureMessage}
+                  onChange={(e) => setFeatureMessage(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="ghost" onClick={() => setIsFeatureModalOpen(false)} className="rounded-xl">Cancelar</Button>
+              <Button
+                onClick={handleSendFeature}
+                disabled={isSendingFeature}
+                className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl gap-2"
+              >
+                {isSendingFeature ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
+                Enviar Ideia
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Modal de Confirmação de Exclusão */}
         <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>

@@ -8,6 +8,7 @@ import {
   writeBatch,
   getCountFromServer,
   onSnapshot,
+  where,
 } from "firebase/firestore";
 import { getAuth, updateProfile, signOut } from "firebase/auth";
 import { db } from "./firebase/client";
@@ -220,6 +221,26 @@ export const updateOwnProfile = async (
   }
 };
 
+// Busca apenas usuários da equipe (Admin e Moderator) para atribuição de tarefas
+export const getStaffUsers = async (): Promise<UserProfile[]> => {
+  try {
+    const usersRef = collection(db, "users");
+    
+    const qAdmin = query(usersRef, where("role", "==", "admin"));
+    const qMod = query(usersRef, where("role", "==", "moderator"));
+
+    const [adminSnap, modSnap] = await Promise.all([getDocs(qAdmin), getDocs(qMod)]);
+
+    const admins = adminSnap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
+    const mods = modSnap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
+
+    return [...admins, ...mods];
+  } catch (error) {
+    console.error("Erro ao buscar staff:", error);
+    return [];
+  }
+};
+
 // --- GESTÃO DE DADOS FINANCEIROS ---
 
 // 1. Resetar (Apagar) dados financeiros
@@ -303,6 +324,7 @@ export const softDeleteUser = async (uid: string): Promise<void> => {
       deletedAt: new Date().toISOString(),
     });
 
+    // Se o usuário deletado for o próprio, desloga para evitar inconsistências de permissão
     const auth = getAuth();
     if (auth.currentUser?.uid === uid) {
       await signOut(auth);
