@@ -96,6 +96,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { subscribeToSupportTickets, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
+import { Timestamp } from "firebase/firestore";
 
 type UserWithCount = UserProfile & { transactionCount?: number };
 type DeletionSuccessData = { name: string; email: string } | null;
@@ -218,8 +219,26 @@ export default function AdminPage() {
     const targetRank = hierarchy[targetUser.role];
 
     // Só pode editar se tiver hierarquia maior e não for o Criador Supremo
-    if (userProfile.email === CREATOR_SUPREME) return true;
+    if (userProfile.uid === CREATOR_SUPREME) return true;
 
+    return myRank > targetRank;
+  }, [userProfile]);
+
+  // Permissão genérica para ações no usuário (Bloquear, Resetar, Deletar)
+  const canEditUser = useCallback((targetUser: UserProfile) => {
+    if (!userProfile) return false;
+
+    // Ninguém edita a si mesmo nestas ações
+    if (targetUser.uid === userProfile.uid) return false;
+
+    const hierarchy: Record<UserRole, number> = { admin: 3, moderator: 2, support: 1, client: 0 };
+    const myRank = hierarchy[userProfile.role];
+    const targetRank = hierarchy[targetUser.role];
+
+    // Criador supremo edita todos
+    if (userProfile.uid === CREATOR_SUPREME) return true;
+
+    // Regra geral: Só edita quem está abaixo na hierarquia
     return myRank > targetRank;
   }, [userProfile]);
 
@@ -563,7 +582,12 @@ export default function AdminPage() {
     setCurrentPage(1);
   }, [searchTerm, roleFilter, planFilter, paymentStatusFilter, statusFilter]);
 
-  if (loading || !editedPlans) return null;
+  if (
+    loading ||
+    (userProfile?.role !== "admin" && userProfile?.role !== "moderator") ||
+    !editedPlans
+  )
+    return null;
 
   return (
     <div className="font-sans min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-8 pb-20 relative overflow-hidden">
@@ -584,7 +608,7 @@ export default function AdminPage() {
             <p className="text-zinc-500 dark:text-zinc-400">Controle total da plataforma.</p>
           </div>
 
-          {canManageSensitive && (
+          {canManageSensitive && activeTab === 'users' && (
             <Button
               onClick={() => setShowNormalizeConfirm(true)}
               disabled={isNormalizing}
@@ -628,8 +652,8 @@ export default function AdminPage() {
           {/* --- SUPORTE TAB --- */}
           {activeTab === "support" && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
-              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
-                <CardHeader className="py-4 px-6 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+              <Card className="border-none shadow-xl shadow-violet-200/50 dark:shadow-black/20 bg-white dark:bg-violet-900 rounded-3xl overflow-hidden">
+                <CardHeader className="py-4 px-6 border-b border-violet-100 dark:border-violet-800 bg-violet-200/50 dark:bg-violet-900/50">
                   <CardTitle className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                     <HeadphonesIcon className="h-5 w-5 text-violet-600" /> Central de Atendimento
                   </CardTitle>
@@ -642,8 +666,8 @@ export default function AdminPage() {
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
                     <Table>
-                      <TableHeader className="bg-zinc-50 dark:bg-zinc-950">
-                        <TableRow className="border-zinc-100 dark:border-zinc-800 hover:bg-transparent">
+                      <TableHeader className="bg-violet-100 dark:bg-violet-950">
+                        <TableRow className="border-violet-100 dark:border-violet-800 hover:bg-transparent">
                           <TableHead className="pl-6 font-semibold">Data</TableHead>
                           <TableHead className="font-semibold">Solicitante</TableHead>
                           <TableHead className="font-semibold">Tipo</TableHead>
@@ -666,10 +690,18 @@ export default function AdminPage() {
                             const isFinished = ticket.status === 'resolved' || ticket.status === 'implemented' || ticket.status === 'rejected';
                             const canEditStatus = userProfile?.role === 'admin' || !isFinished;
 
+                            // Formatação de Data Segura
+                            const dateStr = ticket.createdAt instanceof Date
+                              ? ticket.createdAt.toLocaleDateString()
+                              : (ticket.createdAt as unknown as Timestamp)?.toDate
+                                ? (ticket.createdAt as unknown as Timestamp).toDate().toLocaleDateString()
+                                : "Data Inválida";
+
+
                             return (
                               <TableRow key={ticket.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-zinc-100 dark:border-zinc-800">
                                 <TableCell className="pl-6 text-xs text-zinc-500">
-                                  {ticket.createdAt ? new Date(ticket.createdAt as Date).toLocaleDateString() : "-"}
+                                  {dateStr}
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex flex-col">
@@ -738,14 +770,20 @@ export default function AdminPage() {
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="pending">Pendente</SelectItem>
-                                      <SelectItem value="in_progress">Em Progresso</SelectItem>
-                                      <SelectItem value="resolved">Resolvido</SelectItem>
-                                      <SelectItem value="rejected">Rejeitado</SelectItem>
+                                      {ticket.type === 'support' && (
+                                        <>
+                                          <SelectItem value="pending">Pendente</SelectItem>
+                                          <SelectItem value="in_progress">Em Progresso</SelectItem>
+                                          <SelectItem value="resolved">Resolvido</SelectItem>
+                                          <SelectItem value="rejected">Rejeitado</SelectItem>
+                                        </>
+                                      )}
                                       {ticket.type === 'feature' && (
                                         <>
+                                          <SelectItem value="pending">Pendente</SelectItem>
                                           <SelectItem value="under_review">Em Análise</SelectItem>
                                           <SelectItem value="approved">Aprovado</SelectItem>
+                                          <SelectItem value="rejected">Rejeitado</SelectItem>
                                           <SelectItem value="implemented">Implementado</SelectItem>
                                         </>
                                       )}
@@ -780,6 +818,7 @@ export default function AdminPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Filtro: Plano */}
                   <Select value={planFilter} onValueChange={(val) => setPlanFilter(val as UserPlan | "all")}>
                     <SelectTrigger className="w-full h-11 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
                       <SelectValue placeholder="Plano" />
@@ -792,6 +831,7 @@ export default function AdminPage() {
                     </SelectContent>
                   </Select>
 
+                  {/* Filtro: Cargo */}
                   <Select value={roleFilter} onValueChange={(val) => setRoleFilter(val as UserRole | "all")}>
                     <SelectTrigger className="w-full h-11 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
                       <SelectValue placeholder="Cargo" />
@@ -804,6 +844,7 @@ export default function AdminPage() {
                     </SelectContent>
                   </Select>
 
+                  {/* Filtro: Status */}
                   <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val as UserStatus | "all")}>
                     <SelectTrigger className="w-full h-11 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
                       <SelectValue placeholder="Status" />
@@ -816,6 +857,7 @@ export default function AdminPage() {
                     </SelectContent>
                   </Select>
 
+                  {/* Filtro: Pagamento */}
                   <Select value={paymentStatusFilter} onValueChange={(val) => setPaymentStatusFilter(val as PaymentFilterType)}>
                     <SelectTrigger className="w-full h-11 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
                       <SelectValue placeholder="Pagamento" />
@@ -834,15 +876,15 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
-                <CardHeader className="py-4 px-6 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+              <Card className="border-none shadow-xl shadow-violet-400/50 dark:shadow-black/20 bg-white dark:bg-violet-900 rounded-3xl overflow-hidden">
+                <CardHeader className="py-4 px-6 border-b border-zinc-100 dark:border-zinc-800 bg-violet-200/50 dark:bg-violet-900/50">
                   <CardTitle className="text-lg font-semibold text-violet-600 dark:text-violet-400">Base de Usuários</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
                     <Table>
-                      <TableHeader className="bg-zinc-50 dark:bg-zinc-950">
-                        <TableRow className="border-zinc-100 dark:border-zinc-800 hover:bg-transparent">
+                      <TableHeader className="bg-violet-100 dark:bg-violet-950">
+                        <TableRow className="border-violet-100 dark:border-violet-800 hover:bg-transparent">
                           <TableHead className="pl-6 font-semibold">Usuário</TableHead>
                           <TableHead className="font-semibold">Cadastro</TableHead>
                           <TableHead className="font-semibold">Plano</TableHead>
@@ -870,9 +912,10 @@ export default function AdminPage() {
                             </TableCell>
                           </TableRow>
                         ) : paginatedUsers.map((u) => {
-                          const isTargetAdminOrMod = u.role === 'admin' || u.role === 'moderator';
+                          const isTargetAdminOrMod = u.role === 'admin' || u.role === 'moderator' || u.role === 'support';
                           const canChangeRole = canEditRole(u);
                           const canChangePlan = canEditPlan(u);
+                          const canEditThisUser = canEditUser(u);
 
                           return (
                             <TableRow key={u.uid} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-zinc-100 dark:border-zinc-800 transition-colors">
@@ -916,13 +959,14 @@ export default function AdminPage() {
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="client">Cliente</SelectItem>
+                                      <SelectItem value="support">Suporte</SelectItem>
                                       <SelectItem value="moderator">Moderador</SelectItem>
                                       <SelectItem value="admin">Admin</SelectItem>
                                     </SelectContent>
                                   </Select>
                                 ) : (
                                   <div className="flex items-center gap-1 text-xs text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-lg w-fit cursor-not-allowed">
-                                    <Lock className="h-3 w-3" /> {u.role === 'client' ? 'Cliente' : u.role === 'admin' ? 'Admin' : 'Moderador'}
+                                    <Lock className="h-3 w-3" /> {u.role === 'client' ? 'Cliente' : u.role === 'support' ? 'Suporte' : u.role === 'moderator' ? 'Moderador' : 'Admin'}
                                   </div>
                                 )}
                               </TableCell>
@@ -943,6 +987,7 @@ export default function AdminPage() {
                                   <Select
                                     value={u.paymentStatus || 'free'}
                                     onValueChange={(val) => handlePaymentStatusChange(u.uid, val)}
+                                    disabled={!canEditThisUser}
                                   >
                                     <SelectTrigger className={`w-[110px] h-8 text-xs border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 rounded-lg ${u.paymentStatus === 'overdue' || u.paymentStatus === 'not_paid' ? 'text-red-600 font-bold' :
                                       u.paymentStatus === 'paid' ? 'text-emerald-600 font-medium' : ''
@@ -972,12 +1017,12 @@ export default function AdminPage() {
 
                               <TableCell className="text-right pr-6">
                                 <div className="flex justify-end items-center gap-2">
-                                  {/* Botão de Bloqueio/Desbloqueio - Apenas Admin pode bloquear outros admins */}
+                                  {/* Botão de Bloqueio/Desbloqueio */}
                                   {u.status === "active" ? (
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      disabled={!canChangeRole && u.role !== 'client'} // Se não pode mudar cargo (ex: Mod tentando bloquear Admin), bloqueia botão
+                                      disabled={!canEditThisUser}
                                       className="h-8 w-8 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                                       title="Bloquear Usuário"
                                       onClick={() => handleStatusChange(u.uid, "blocked")}
@@ -988,7 +1033,7 @@ export default function AdminPage() {
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      disabled={!canChangeRole && u.role !== 'client'}
+                                      disabled={!canEditThisUser}
                                       className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
                                       title="Reativar Usuário"
                                       onClick={() => handleStatusChange(u.uid, "active")}
@@ -1010,21 +1055,21 @@ export default function AdminPage() {
                                         <>
                                           <DropdownMenuItem
                                             onClick={() => window.open(`/api/impersonate?uid=${u.uid}`, "_blank")}
-                                            disabled={!canChangeRole}
+                                            disabled={!canEditThisUser}
                                             className="cursor-pointer rounded-lg text-xs font-medium"
                                           >
                                             <User className="mr-2 h-4 w-4" /> Impersonar
                                           </DropdownMenuItem>
                                           <DropdownMenuItem
                                             onClick={() => setUserToReset(u)}
-                                            disabled={!canChangeRole}
+                                            disabled={!canEditThisUser}
                                             className="cursor-pointer rounded-lg text-xs font-medium disabled:opacity-50">
                                             <RefreshCcw className="mr-2 h-4 w-4" /> Resetar Dados
                                           </DropdownMenuItem>
                                           <DropdownMenuSeparator />
                                           <DropdownMenuItem
                                             onClick={() => setUserToDelete(u)}
-                                            disabled={!canChangeRole}
+                                            disabled={!canEditThisUser}
                                             className="text-red-600 focus:text-red-700 focus:bg-red-50 cursor-pointer rounded-lg text-xs font-medium dark:focus:bg-red-900/20 disabled:opacity-50"
                                           >
                                             <Trash2 className="mr-2 h-4 w-4" /> Excluir Conta
@@ -1128,7 +1173,7 @@ export default function AdminPage() {
           )}
 
           {/* --- PLANS TAB --- */}
-          {activeTab === "plans" && (
+          {activeTab === "plans" && canManageSensitive && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <div className="flex justify-end mb-4">
                 <Button
@@ -1461,7 +1506,11 @@ export default function AdminPage() {
                 <div>
                   <span className="font-semibold block">Data:</span>
                   <span className="text-zinc-600">
-                    {viewTicket.createdAt ? new Date(viewTicket.createdAt as Date).toLocaleString() : "-"}
+                    {viewTicket.createdAt instanceof Date
+                      ? viewTicket.createdAt.toLocaleDateString()
+                      : (viewTicket.createdAt as unknown as Timestamp)?.toDate
+                        ? (viewTicket.createdAt as unknown as Timestamp).toDate().toLocaleDateString()
+                        : "Data Inválida"}
                   </span>
                 </div>
                 <div>
