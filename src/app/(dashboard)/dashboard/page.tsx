@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTransactions } from "@/hooks/useTransactions";
 import { usePlans } from "@/hooks/usePlans";
+import { useCategories } from "@/hooks/useCategories";
 import {
   addTransaction,
   deleteTransaction,
@@ -26,27 +27,13 @@ import {
   DollarSign, CalendarDays, MoreHorizontal, Pencil, Trash2,
   AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown, Search, HelpCircle, CheckCircle2,
   Medal, Info, AlertTriangle,
-  Calculator
+  Calculator,
+  Tag
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
 import Link from "next/link";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
-
-// --- Configurações Visuais ---
-const ALL_CATEGORIES = [
-  { name: "Dízimo", type: "expense", color: "bg-violet-500/10 text-violet-600 border-violet-200/50 dark:text-violet-400 dark:border-violet-800/50" },
-  { name: "Casa", type: "expense", color: "bg-blue-500/10 text-blue-600 border-blue-200/50 dark:text-blue-400 dark:border-blue-800/50" },
-  { name: "Alimentação", type: "expense", color: "bg-orange-500/10 text-orange-600 border-orange-200/50 dark:text-orange-400 dark:border-orange-800/50" },
-  { name: "Investimento", type: "expense", color: "bg-emerald-500/10 text-emerald-600 border-emerald-200/50 dark:text-emerald-400 dark:border-emerald-800/50" },
-  { name: "Compras", type: "expense", color: "bg-pink-500/10 text-pink-600 border-pink-200/50 dark:text-pink-400 dark:border-pink-800/50" },
-  { name: "Streaming", type: "expense", color: "bg-indigo-500/10 text-indigo-600 border-indigo-200/50 dark:text-indigo-400 dark:border-indigo-800/50" },
-  { name: "Salário", type: "income", color: "bg-green-500/10 text-green-600 border-green-200/50 dark:text-green-400 dark:border-green-800/50" },
-  { name: "Rendimento", type: "income", color: "bg-green-500/10 text-green-600 border-green-200/50 dark:text-green-400 dark:border-green-800/50" },
-  { name: "Vendas", type: "income", color: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50" },
-  { name: "Serviços", type: "income", color: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50" },
-  { name: "Outros", type: "both", color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50" },
-];
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -78,6 +65,7 @@ export default function DashboardPage() {
   const { user, userProfile, privacyMode, togglePrivacyMode } = useAuth();
   const { transactions, loading } = useTransactions();
   const { plans } = usePlans();
+  const { categories, addNewCategory } = useCategories();
 
   // --- 1. STATES ---
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -109,17 +97,13 @@ export default function DashboardPage() {
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
   const [txToCancelSubscription, setTxToCancelSubscription] = useState<Transaction | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-
-  // MODAL DE FORMULÁRIO (Novo estado unificado)
   const [isFormOpen, setIsFormOpen] = useState(false);
-
-  // Modal de Check-in Diário
   const [pendingCheckins, setPendingCheckins] = useState<Transaction[]>([]);
   const [showCheckinModal, setShowCheckinModal] = useState(false);
   const [hasRunCheckin, setHasRunCheckin] = useState(false);
-
-  // Modal Genérico de Feedback (Sucesso/Erro)
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
+  const [isNewCategoryOpen, setIsNewCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   // Constantes de Animação (Padrão do Sistema)
   const fadeInUp = "animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both";
@@ -190,9 +174,10 @@ export default function DashboardPage() {
     return realCurrentBalance + pendingNet;
   }, [transactions, realCurrentBalance, selectedMonthEnd]);
 
+  // Filtra categorias baseado no estado (lista dinâmica do Hook)
   const availableCategories = useMemo(() => {
-    return ALL_CATEGORIES.filter(c => c.type === type || c.type === 'both');
-  }, [type]);
+    return categories.filter(c => c.type === type || c.type === 'both');
+  }, [type, categories]);
 
   const transactionsThisMonthCount = useMemo(() => {
     return transactions.filter(t => t.dueDate.startsWith(selectedMonth)).length;
@@ -230,9 +215,7 @@ export default function DashboardPage() {
 
   // --- 5. EFFECTS ---
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedMonth, filterType, filterStatus, filterCategory, searchTerm]);
+  useEffect(() => { setCurrentPage(1); }, [selectedMonth, filterType, filterStatus, filterCategory, searchTerm]);
 
   useEffect(() => {
     if (category === 'Streaming') {
@@ -242,12 +225,9 @@ export default function DashboardPage() {
   }, [category]);
 
   // --- RETORNO CONDICIONAL ---
-  if (loading) {
-    return <DashboardSkeleton />;
-  };
+  if (loading) return <DashboardSkeleton />;
 
   // --- 6. HANDLERS ---
-
   const changeType = (newType: TransactionType) => {
     setType(newType);
     if (newType === 'income') {
@@ -343,6 +323,19 @@ export default function DashboardPage() {
     }
   };
 
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) return;
+
+    try {
+      await addNewCategory(newCategoryName.trim(), type);
+      setCategory(newCategoryName.trim())
+      setNewCategoryName("");
+      setIsNewCategoryOpen(false);
+    } catch (error) {
+      console.error("Erro ao criar categoria:", error);
+    }
+  }
+
   const handleConfirmDelete = async (deleteGroup: boolean) => {
     if (!user || !txToDelete || !txToDelete.id) return;
     await deleteTransaction(user.uid, txToDelete.id, deleteGroup);
@@ -354,8 +347,6 @@ export default function DashboardPage() {
     await cancelFutureInstallments(user.uid, txToCancelSubscription.groupId, txToCancelSubscription.dueDate);
     setTxToCancelSubscription(null);
   };
-
-  const openEditModal = (tx: Transaction) => { setEditingTx({ ...tx }); setIsEditOpen(true); };
 
   const handleConfirmEdit = async (updateGroup: boolean) => {
     if (!editingTx || !user || !editingTx.id) return;
@@ -423,75 +414,70 @@ export default function DashboardPage() {
     }
   };
 
+  const openEditModal = (tx: Transaction) => { setEditingTx({ ...tx }); setIsEditOpen(true); };
+
   // --- COMPONENTE DO FORMULÁRIO ---
   const TransactionFormContent = (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-1 p-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl">
-        <button
-          onClick={() => changeType('expense')}
-          className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 hover:cursor-pointer ${type === 'expense' ? 'bg-white dark:bg-zinc-700 shadow-sm text-red-600' : 'text-zinc-500 hover:text-zinc-700'}`}
-        >
-          Gasto
-        </button>
-        <button
-          onClick={() => changeType('income')}
-          className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 hover:cursor-pointer ${type === 'income' ? 'bg-white dark:bg-zinc-700 shadow-sm text-emerald-600' : 'text-zinc-500 hover:text-zinc-700'}`}
-        >
-          Renda
-        </button>
+        <button onClick={() => changeType('expense')} className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 hover:cursor-pointer ${type === 'expense' ? 'bg-white dark:bg-zinc-700 shadow-sm text-red-600' : 'text-zinc-500 hover:text-zinc-700'}`}>Gasto</button>
+        <button onClick={() => changeType('income')} className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 hover:cursor-pointer ${type === 'income' ? 'bg-white dark:bg-zinc-700 shadow-sm text-emerald-600' : 'text-zinc-500 hover:text-zinc-700'}`}>Renda</button>
       </div>
-
       <div className="space-y-4">
         <div>
           <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Titulo {type === 'expense' ? 'do Gasto' : 'da Renda'}</Label>
-          <Input
-            className="mt-1.5 h-12 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl"
-            placeholder={type === 'expense' ? "Ex: Netflix" : "Ex: Salário"}
-            value={desc}
-            onChange={e => setDesc(e.target.value)}
-          />
+          <Input className="mt-1.5 h-12 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl" placeholder={type === 'expense' ? "Ex: Netflix" : "Ex: Salário"} value={desc} onChange={e => setDesc(e.target.value)} />
         </div>
         <div>
           <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Valor Total</Label>
           <div className="relative mt-1.5">
             <span className="absolute left-3.5 top-3 text-zinc-400 font-semibold">R$</span>
-            <Input
-              type="number"
-              className="pl-10 h-12 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl font-semibold text-lg"
-              placeholder="0,00"
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
-            />
+            <Input type="number" className="pl-10 h-12 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl font-semibold text-lg" placeholder="0,00" value={amount} onChange={e => setAmount(e.target.value)} />
           </div>
-          <p className="text-[10px] text-zinc-400 mt-1.5 text-right font-medium">
-            {isInstallment && type === 'expense'
-              ? (category === 'Streaming' ? "Valor Mensal (Assinatura)" : "O sistema dividirá este valor")
-              : "Valor único"}
-          </p>
+          <p className="text-[10px] text-zinc-400 mt-1.5 text-right font-medium">{isInstallment && type === 'expense' ? (category === 'Streaming' ? "Valor Mensal (Assinatura)" : "O sistema dividirá este valor") : "Valor único"}</p>
         </div>
       </div>
-
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label className="text-xs font-medium text-zinc-400 ml-1 uppercase">Categoria</Label>
-          <Select onValueChange={setCategory} value={category}>
-            <SelectTrigger className="h-12 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue placeholder="Selecione" /></SelectTrigger>
-            <SelectContent>
-              {availableCategories.map((cat) => <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <div className="flex gap-2">
+            <Select onValueChange={setCategory} value={category}>
+              <SelectTrigger className="h-12 rounded-xl bg-zinc-50 border-zinc-200 w-full">
+                <SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectContent>
+                {availableCategories.map((cat) => <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => setIsNewCategoryOpen(true)}
+                    className="h-12 w-12 rounded-xl shrink-0 p-0 bg-violet-100 hover:bg-violet-200 border-2 border-dashed border-violet-300 text-violet-600 hover:text-violet-800 transition-all shadow-sm group relative overflow-hidden"
+                  >
+                    <Plus className="h-5 w-5 group-hover:scale-125 transition-transform duration-300" />
+                    {/* Efeito de brilho/atenção */}
+                    <span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-500 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-600"></span>
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-violet-600 text-white border-violet-700 font-bold shadow-xl">
+                  <p>✨ Crie sua própria categoria!</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs font-medium text-zinc-400 ml-1 uppercase">Método</Label>
           <Select onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} value={paymentMethod}>
             <SelectTrigger className="h-12 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {PAYMENT_METHODS.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}
-            </SelectContent>
+            <SelectContent>{PAYMENT_METHODS.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
           </Select>
         </div>
       </div>
-
       <div className="bg-zinc-50/80 dark:bg-zinc-800/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800 space-y-4">
         <div className="grid grid-cols-2 gap-3">
           {type === 'expense' && (
@@ -500,7 +486,6 @@ export default function DashboardPage() {
               <Input type="date" className="h-10 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={date} onChange={e => setDate(e.target.value)} />
             </div>
           )}
-
           {(showDueDateInput || type === 'income') && (
             <div className={`space-y-1.5 ${type === 'income' ? 'col-span-2' : ''}`}>
               <Label className={`text-[10px] font-bold uppercase tracking-wider ${type === 'expense' ? 'text-red-500' : 'text-emerald-600'}`}>{type === 'expense' ? 'Vencimento' : 'Data Crédito'}</Label>
@@ -508,42 +493,19 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-
         <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
-          <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
-            <Layers className="h-3.5 w-3.5 text-violet-500" />
-            {type === 'expense'
-              ? (category === 'Streaming' ? 'Recorrência (Mensal)' : 'Compra Parcelada?')
-              : 'Recebimento Parcelado?'}
-          </Label>
+          <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300"><Layers className="h-3.5 w-3.5 text-violet-500" />{type === 'expense' ? (category === 'Streaming' ? 'Recorrência (Mensal)' : 'Compra Parcelada?') : 'Recebimento Parcelado?'}</Label>
           <Switch id="inst-switch" className="scale-100 data-[state=checked]:bg-violet-600" checked={isInstallment} onCheckedChange={setIsInstallment} />
         </div>
-
         {isInstallment && (
           <div className="animate-in slide-in-from-top-2 pt-1">
-            <Label className="text-xs font-medium text-zinc-500">
-              {category === 'Streaming' ? 'Meses de Assinatura (Previsão)' : 'Número de Parcelas'}
-            </Label>
+            <Label className="text-xs font-medium text-zinc-500">{category === 'Streaming' ? 'Meses de Assinatura (Previsão)' : 'Número de Parcelas'}</Label>
             <Input type="number" className="h-10 mt-1.5 bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" min="2" max="60" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
           </div>
         )}
       </div>
-
-      <Button
-        onClick={handleAdd}
-        className={`w-full h-12 font-bold text-white shadow-lg rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] hover:cursor-pointer duration-200 ${type === 'expense' ? 'bg-linear-to-r from-red-500 to-orange-500 shadow-red-500/25 hover:shadow-red-500/40' : 'bg-linear-to-r from-emerald-500 to-teal-500 shadow-emerald-500/25 hover:shadow-emerald-500/40'}`}
-        disabled={isSubmitting}
-      >
-        {isSubmitting ? "Processando..." : (type === 'expense' ? "Confirmar Despesa" : "Confirmar Receita")}
-      </Button>
-
-      <Button
-        variant="ghost"
-        onClick={() => setIsFormOpen(false)}
-        className="w-full h-12 font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-all hover:cursor-pointer duration-200"
-      >
-        Cancelar
-      </Button>
+      <Button onClick={handleAdd} className={`w-full h-12 font-bold text-white shadow-lg rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] hover:cursor-pointer duration-200 ${type === 'expense' ? 'bg-linear-to-r from-red-500 to-orange-500 shadow-red-500/25 hover:shadow-red-500/40' : 'bg-linear-to-r from-emerald-500 to-teal-500 shadow-emerald-500/25 hover:shadow-emerald-500/40'}`} disabled={isSubmitting}>{isSubmitting ? "Processando..." : (type === 'expense' ? "Confirmar Despesa" : "Confirmar Receita")}</Button>
+      <Button variant="ghost" onClick={() => setIsFormOpen(false)} className="w-full h-12 font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-all hover:cursor-pointer duration-200">Cancelar</Button>
     </div>
   );
 
@@ -575,8 +537,7 @@ export default function DashboardPage() {
   const monthExpense = monthTransactions.filter(t => t.type === 'expense').reduce((acc, curr) => acc + curr.amount, 0);
   const monthBalance = monthIncome - monthExpense;
 
-  const getCategoryStyle = (catName: string) =>
-    ALL_CATEGORIES.find(c => c.name === catName)?.color || "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200";
+  const getCategoryStyle = (catName: string) => categories.find(c => c.name === catName)?.color || "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200";
 
   const isOverdue = (tx: Transaction) => {
     if (tx.status === 'paid') return false;
@@ -674,11 +635,11 @@ export default function DashboardPage() {
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger><HelpCircle className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" /></TooltipTrigger>
-                    <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>Total de Receitas e Despesas agendadas para este mês (Pago + Pendente).</p></TooltipContent>
+                    <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>Total de Receitas e Despesas agendadas para este mês.</p></TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
-              <div className={`rounded-xl ${monthBalance >= 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
+              <div className={`p-2 rounded-xl ${monthBalance >= 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
                 {monthBalance >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
               </div>
             </CardHeader>
@@ -970,7 +931,7 @@ export default function DashboardPage() {
                           <div className="p-2 bg-red-100 text-red-600 rounded-full"><TrendingDown className="h-5 w-5" /></div> :
                           <div className="p-2 bg-emerald-100 text-emerald-600 rounded-full"><TrendingUp className="h-5 w-5" /></div>
                         }
-                        <span>Editar {editingTx.type === 'expense' ? 'Gasto' : 'Renda'}</span>
+                        <span>Editar {editingTx.type === 'expense' ? 'Despesa' : 'Receita'}</span>
                       </DialogTitle>
                       {editingTx.groupId && (
                         <span className="flex items-center text-[10px] bg-amber-50 text-amber-700 px-2 py-1 rounded-full border border-amber-200 font-medium">
@@ -1009,14 +970,24 @@ export default function DashboardPage() {
                       </div>
                       <div className="space-y-2">
                         <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Categoria</Label>
-                        <Select value={editingTx.category} onValueChange={(v) => setEditingTx({ ...editingTx, category: v })}>
-                          <SelectTrigger className="h-11 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {ALL_CATEGORIES.filter(cat => cat.type === editingTx.type || cat.type === 'both').map((cat) => (
-                              <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="flex gap-2">
+                          <Select value={editingTx.category} onValueChange={(v) => setEditingTx({ ...editingTx, category: v })}>
+                            <SelectTrigger className="h-11 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {categories.filter(cat => cat.type === editingTx.type || cat.type === 'both').map((cat) => (
+                                <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            onClick={() => setIsNewCategoryOpen(true)}
+                            variant="outline"
+                            className="h-11 w-11 rounded-xl shrink-0 p-0 border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+                            title="Criar nova categoria"
+                          >
+                            <Plus className="h-5 w-5 text-zinc-500" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
 
@@ -1220,6 +1191,38 @@ export default function DashboardPage() {
                   Continuar no Grátis
                 </Button>
               </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Nova Categoria */}
+        <Dialog open={isNewCategoryOpen} onOpenChange={setIsNewCategoryOpen}>
+          <DialogContent className="rounded-2xl sm:max-w-[400px]">
+            <DialogHeader>
+              <div className="mx-auto p-3 bg-violet-100 dark:bg-violet-900/30 rounded-full mb-2 w-fit">
+                <Tag className="h-6 w-6 text-violet-600 dark:text-violet-400" />
+              </div>
+              <DialogTitle className="text-center">Nova Categoria</DialogTitle>
+              <DialogDescription className="text-center pt-2">
+                Adicione uma nova categoria personalizada para seus lançamentos.
+                <br />
+                <span className="text-xs text-zinc-500 italic">(Dica: Use &quot;Categoria - Subcategoria&quot; para organizar melhor)</span>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>Nome da Categoria</Label>
+                <Input
+                  placeholder="Ex: Casa - Reforma"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  className="rounded-xl h-11"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setIsNewCategoryOpen(false)} className="rounded-xl">Cancelar</Button>
+              <Button onClick={handleCreateCategory} className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl">Criar</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
