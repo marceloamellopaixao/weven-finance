@@ -303,6 +303,7 @@ export const softDeleteUser = async (uid: string): Promise<void> => {
       deletedAt: new Date().toISOString(),
     });
 
+    // Se o usuário deletado for o próprio, desloga para evitar inconsistências de permissão
     const auth = getAuth();
     if (auth.currentUser?.uid === uid) {
       await signOut(auth);
