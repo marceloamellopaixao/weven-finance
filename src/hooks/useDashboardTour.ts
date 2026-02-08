@@ -1,17 +1,103 @@
 import { useEffect, useRef } from "react";
 import { driver } from "driver.js";
-import "driver.js/dist/driver.css";
 
 export function useDashboardTour() {
-  // Usamos ref para garantir que o driver não seja recriado desnecessariamente
   const driverObj = useRef<ReturnType<typeof driver> | null>(null);
 
   useEffect(() => {
+    // 1. Injeção do CSS Base
+    const linkId = "driver-js-css";
+    if (!document.getElementById(linkId)) {
+      const link = document.createElement("link");
+      link.id = linkId;
+      link.rel = "stylesheet";
+      link.href = "https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css";
+      document.head.appendChild(link);
+    }
+
+    // 2. Injeção de CSS Customizado (Tema WevenFinance)
+    const styleId = "driver-js-theme-weven";
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement("style");
+      style.id = styleId;
+      style.innerHTML = `
+        .driver-popover.driverjs-theme {
+          background-color: #ffffff;
+          color: #18181b;
+          border-radius: 16px;
+          border: 1px solid #e4e4e7;
+          box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+          padding: 16px;
+          font-family: var(--font-sans), system-ui, sans-serif;
+        }
+        
+        /* Título */
+        .driver-popover.driverjs-theme .driver-popover-title {
+          font-size: 18px;
+          font-weight: 700;
+          color: #7c3aed; /* Violet 600 */
+          margin-bottom: 8px;
+        }
+
+        /* Descrição */
+        .driver-popover.driverjs-theme .driver-popover-description {
+          font-size: 14px;
+          line-height: 1.5;
+          color: #52525b; /* Zinc 600 */
+          margin-bottom: 16px;
+        }
+
+        /* Botões */
+        .driver-popover.driverjs-theme button {
+          border-radius: 8px;
+          padding: 8px 16px;
+          font-size: 12px;
+          font-weight: 600;
+          transition: all 0.2s;
+          border: none;
+          cursor: pointer;
+        }
+
+        /* Botão Próximo/Concluir */
+        .driver-popover.driverjs-theme .driver-popover-next-btn {
+          background-color: #7c3aed !important; /* Violet 600 */
+          color: #ffffff !important;
+          text-shadow: none;
+        }
+        .driver-popover.driverjs-theme .driver-popover-next-btn:hover {
+          background-color: #6d28d9 !important; /* Violet 700 */
+        }
+
+        /* Botão Anterior */
+        .driver-popover.driverjs-theme .driver-popover-prev-btn {
+          background-color: #f4f4f5 !important; /* Zinc 100 */
+          color: #52525b !important;
+        }
+
+        /* Botão Fechar */
+        .driver-popover.driverjs-theme .driver-popover-close-btn {
+          color: #a1a1aa;
+        }
+        
+        /* Dark Mode Support (se o body tiver class dark) */
+        .dark .driver-popover.driverjs-theme {
+          background-color: #18181b;
+          border-color: #27272a;
+          color: #f4f4f5;
+        }
+        .dark .driver-popover.driverjs-theme .driver-popover-description {
+          color: #a1a1aa;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
     // Configuração do Driver
     driverObj.current = driver({
       showProgress: true,
       animate: true,
       allowClose: true,
+      popoverClass: 'driverjs-theme', // Classe para aplicar o tema acima
       doneBtnText: "Concluir",
       nextBtnText: "Próximo",
       prevBtnText: "Anterior",
@@ -62,7 +148,7 @@ export function useDashboardTour() {
           element: "#tour-forecast-card",
           popover: {
             title: "Previsão Inteligente",
-            description: "O sistema calcula como seu mês deve terminar se todas as transações pendentes forem concluídas.",
+            description: "O sistema calcula como seu mês deve terminar se todas as contas pendentes forem pagas.",
             side: "bottom",
           },
         },
@@ -84,7 +170,6 @@ export function useDashboardTour() {
         },
       ],
       onDestroyed: () => {
-        // Marca como visto quando o tour é fechado ou concluído
         localStorage.setItem("weven_onboarding_completed", "true");
       },
     });
@@ -93,7 +178,6 @@ export function useDashboardTour() {
   const startTour = (force = false) => {
     const hasSeen = localStorage.getItem("weven_onboarding_completed");
     
-    // Pequeno delay para garantir que a UI foi renderizada
     setTimeout(() => {
       if (force || !hasSeen) {
         driverObj.current?.drive();
