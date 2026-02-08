@@ -44,7 +44,7 @@ export const sendSupportRequest = async (uid: string, email: string, name: strin
 // Envia sugestão de funcionalidade/ideia para o Firestore
 export const sendFeatureRequest = async (uid: string, email: string, name: string, idea: string) => {
   try {
-    await addDoc(collection(db, "feature_requests"), {
+    await addDoc(collection(db, "support_requests"), {
       uid,
       email,
       name,
