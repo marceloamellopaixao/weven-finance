@@ -221,6 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  // Registro com e-mail e senha
   const registerWithEmail = async (name: string, completeName: string, email: string, pass: string, phone: string) => {
     try {
       if (!isValidRealEmail(email)) throw "Por favor, utilize um e-mail válido para cadastro.";
@@ -259,6 +260,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Login com Google
   const signInWithGoogle = async () => {
     try {
       const provider = new GoogleAuthProvider();
@@ -268,6 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
+      // Verifica e cria perfil no Firestore se necessário
       if (user) {
         if (user.email && !isValidRealEmail(user.email)) {
           await user.delete();
@@ -277,6 +280,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const userRef = doc(db, "users", user.uid);
         const snap = await getDoc(userRef);
 
+        // Se não existir, cria novo perfil
         if (!snap.exists()) {
           const newProfile: UserProfile = {
             uid: user.uid,
@@ -298,14 +302,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await sendPasswordResetEmail(auth, user.email);
             alert("Conta criada! Enviamos um e-mail para definir sua senha.");
           }
-        } else {
+        } // Se existir, verifica status e data de exclusão (vazia) 
+        else {
           const data = snap.data() as UserProfile;
           if (data.status === 'active' && data.deletedAt) {
             await setDoc(userRef, { deletedAt: null }, { merge: true });
           }
         }
       }
-      router.replace("/");
+      router.replace("/dashboard");
     } catch (error) {
       console.error("Erro no Google Login:", error);
       let message = "Erro ao entrar com Google.";
@@ -317,10 +322,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Login com e-mail e senha
   const loginWithEmail = async (email: string, pass: string) => {
     try {
       await signInWithEmailAndPassword(auth, email, pass);
-      router.replace("/");
+      router.replace("/dashboard");
     } catch (error) {
       let message = "Erro ao entrar.";
       if (error instanceof FirebaseError) {
@@ -331,6 +337,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Logout do usuário
   const logout = async () => {
     await signOut(auth);
     router.replace("/");
