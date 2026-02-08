@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { driver } from "driver.js";
-// @ts-expect-error - driver.js não tem tipos oficiais, então ignoramos os erros de tipo aqui
 import "driver.js/dist/driver.css";
 
 export function useDashboardTour() {
