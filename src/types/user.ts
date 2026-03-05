@@ -2,6 +2,25 @@ export type UserPlan = 'free' | 'premium' | 'pro';
 export type UserRole = 'admin' | 'moderator' | 'support' | 'client';
 export type UserStatus = 'active' | 'inactive' | 'deleted' | 'blocked';
 export type UserPaymentStatus = 'free' | 'paid' | 'not_paid' | 'pending' | 'overdue' | 'canceled' ;
+export type BillingSource = 'manual' | 'mercadopago_webhook' | 'system';
+
+export interface BillingInfo {
+  source?: BillingSource;
+  provider?: 'mercadopago';
+  gatewayStatus?: string;
+  gatewayStatusDetail?: string;
+  gatewayPlan?: UserPlan;
+  externalReference?: string;
+  paymentId?: string;
+  preapprovalId?: string;
+  merchantOrderId?: string;
+  lastEventType?: string;
+  lastEventAction?: string;
+  lastEventId?: string;
+  lastEventAt?: string; // ISO Date
+  lastSyncAt?: string; // ISO Date
+  lastError?: string;
+}
 
 export interface UserProfile {
   uid: string;
@@ -17,6 +36,7 @@ export interface UserProfile {
   createdAt: string; // ISO Date
   transactionCount: number;
   paymentStatus?: UserPaymentStatus;
+  billing?: BillingInfo;
   verifiedEmail: boolean;
   deletedAt?: string; // ISO Date
 }

@@ -1075,6 +1075,7 @@ export default function AdminPage() {
                                     Isento
                                   </div>
                                 ) : (
+                                  <div className="space-y-1">
                                   <Select
                                     value={u.paymentStatus || 'free'}
                                     onValueChange={(val) => handlePaymentStatusChange(u.uid, val)}
@@ -1094,6 +1095,15 @@ export default function AdminPage() {
                                       <SelectItem value="canceled">Cancelado</SelectItem>
                                     </SelectContent>
                                   </Select>
+                                  <p className="text-[10px] text-zinc-500 leading-none">
+                                    {u.billing?.source === "mercadopago_webhook" ? "Fonte: Webhook MP" : "Fonte: Manual"}
+                                  </p>
+                                  {u.billing?.lastSyncAt && (
+                                    <p className="text-[10px] text-zinc-400 leading-none">
+                                      Sync: {new Date(u.billing.lastSyncAt).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                  </div>
                                 )}
                               </TableCell>
 
@@ -1623,7 +1633,7 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Excluir Ticket (NOVO) */}
+      {/* Modal Excluir Ticket */}
       <Dialog open={!!ticketToDelete} onOpenChange={(open) => !open && setTicketToDelete(null)}>
         <DialogContent className="rounded-2xl sm:max-w-[400px]">
           <DialogHeader>
