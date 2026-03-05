@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/services/firebase/admin";
-import { UserPaymentStatus, UserPlan } from "@/types/user";
+import { UserPaymentStatus, UserPlan, UserRole, UserStatus } from "@/types/user";
 
 type MercadoPagoTopic = "payment" | "merchant_order" | "preapproval";
 
@@ -79,6 +79,19 @@ function mapPaymentStatus(gatewayStatus: string): UserPaymentStatus {
   return "pending";
 }
 
+const PAYMENT_BLOCK_REASON_REGEX = /(pagamento|inadimpl|assinatura|cancelamento|cobranca)/i;
+
+function isPaymentRelatedBlockReason(reason: unknown): boolean {
+  if (typeof reason !== "string") return false;
+  return PAYMENT_BLOCK_REASON_REGEX.test(reason.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+}
+
+function getBlockReasonFromPaymentStatus(status: UserPaymentStatus): string {
+  if (status === "overdue" || status === "not_paid") return "Falta de Pagamento";
+  if (status === "canceled") return "Cancelamento de Assinatura";
+  return "";
+}
+
 async function mpRequest(path: string): Promise<Record<string, unknown>> {
   assertToken();
   const controller = new AbortController();
@@ -151,6 +164,11 @@ export function parseWebhookInput(url: URL, body: Record<string, unknown>, heade
     requestIdHeader: headers.get("x-request-id"),
     rawBody,
   };
+}
+
+export function getBillingEventDocId(input: WebhookInput): string {
+  if (input.eventId) return `${input.topic}_${input.resourceId}_${input.eventId}`;
+  return `${input.topic}_${input.resourceId}`;
 }
 
 export function validateWebhookSignature(input: WebhookInput) {
@@ -295,7 +313,7 @@ export async function syncFromWebhook(input: WebhookInput) {
   const details = await fetchGatewayDetails(input.topic, input.resourceId);
   const userMatch = await findUserByWebhook(details);
 
-  const eventDocId = `${input.topic}_${input.resourceId}`;
+  const eventDocId = getBillingEventDocId(input);
   const baseEvent = {
     topic: input.topic,
     action: input.action ?? null,
@@ -322,15 +340,43 @@ export async function syncFromWebhook(input: WebhookInput) {
   }
 
   const currentPlan = (userMatch.userData.plan as UserPlan) || "free";
+  const currentRole = (userMatch.userData.role as UserRole) || "client";
+  const currentStatus = (userMatch.userData.status as UserStatus) || "active";
+  const currentBlockReason = userMatch.userData.blockReason;
+  const isBillingExemptRole = currentRole === "admin" || currentRole === "moderator";
   const paymentStatus = mapPaymentStatus(details.gatewayStatus);
   const gatewayPlan = resolvePlan(details, currentPlan);
-  const targetPlan = computeTargetPlan(currentPlan, paymentStatus, gatewayPlan);
+  const targetPlan = isBillingExemptRole
+    ? currentPlan
+    : computeTargetPlan(currentPlan, paymentStatus, gatewayPlan);
+  const targetPaymentStatus: UserPaymentStatus = isBillingExemptRole ? "free" : paymentStatus;
   const nowIso = new Date().toISOString();
+  const statusPatch: Partial<{ status: UserStatus; blockReason: string }> = {};
+
+  if (!isBillingExemptRole && currentStatus !== "deleted") {
+    if (targetPaymentStatus === "paid") {
+      if (
+        (currentStatus === "blocked" || currentStatus === "inactive") &&
+        (isPaymentRelatedBlockReason(currentBlockReason) || !currentBlockReason)
+      ) {
+        statusPatch.status = "active";
+        statusPatch.blockReason = "";
+      }
+    }
+
+    if (targetPaymentStatus === "overdue" || targetPaymentStatus === "not_paid" || targetPaymentStatus === "canceled") {
+      if (currentStatus === "active") {
+        statusPatch.status = "blocked";
+        statusPatch.blockReason = getBlockReasonFromPaymentStatus(targetPaymentStatus);
+      }
+    }
+  }
 
   await adminDb.collection("users").doc(userMatch.uid).set(
     {
       plan: targetPlan,
-      paymentStatus,
+      paymentStatus: targetPaymentStatus,
+      ...statusPatch,
       billing: {
         source: "mercadopago_webhook",
         provider: "mercadopago",
@@ -359,7 +405,8 @@ export async function syncFromWebhook(input: WebhookInput) {
       matchedBy: userMatch.matchedBy,
       uid: userMatch.uid,
       targetPlan,
-      targetPaymentStatus: paymentStatus,
+      targetPaymentStatus,
+      statusPatch,
     },
     { merge: true }
   );
@@ -369,7 +416,7 @@ export async function syncFromWebhook(input: WebhookInput) {
     matched: true,
     uid: userMatch.uid,
     targetPlan,
-    targetPaymentStatus: paymentStatus,
+    targetPaymentStatus,
   };
 }
 
