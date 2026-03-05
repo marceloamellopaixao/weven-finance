@@ -156,6 +156,16 @@ export const updateUserPlan = async (uid: string, plan: UserPlan) => {
 export const updateUserRole = async (uid: string, role: UserRole) => {
   try {
     const userRef = doc(db, "users", uid);
+    const isBillingExemptRole = role === "admin" || role === "moderator";
+    if (isBillingExemptRole) {
+      await updateDoc(userRef, {
+        role,
+        paymentStatus: "free",
+        "billing.source": "system",
+        "billing.lastSyncAt": new Date().toISOString(),
+      });
+      return;
+    }
     await updateDoc(userRef, { role });
   } catch (error) {
     console.error(`Erro ao atualizar role do usuário ${uid}:`, error);
