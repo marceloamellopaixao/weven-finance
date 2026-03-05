@@ -28,11 +28,11 @@ import {
 import { useState, useEffect } from "react";
 import { updateOwnProfile, softDeleteUser } from "@/services/userService";
 import { getKeyFingerprint } from "@/lib/crypto";
-import Link from "next/link";
 import { usePlans } from "@/hooks/usePlans";
 import { migrateCryptography } from "@/services/transactionService";
 import { useRouter } from "next/navigation";
 import { sendFeatureRequest, sendSupportRequest } from "@/hooks/supportService";
+import { getCheckoutLink } from "@/services/billingService";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -56,6 +56,7 @@ export default function SettingsPage() {
   const [keyFingerprint, setKeyFingerprint] = useState("Carregando identificador seguro...");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
 
   // Estados para Suporte
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
@@ -192,6 +193,25 @@ export default function SettingsPage() {
       showFeedback('error', 'Erro', 'Não foi possível enviar sua sugestão. Tente novamente.');
     } finally {
       setIsSendingFeature(false);
+    }
+  };
+
+  const handleStartCheckout = async (plan: "premium" | "pro") => {
+    if (!user) {
+      showFeedback("error", "Sessao expirada", "Faca login novamente para continuar.");
+      return;
+    }
+
+    setIsOpeningCheckout(plan);
+    try {
+      const token = await user.getIdToken();
+      const checkoutUrl = await getCheckoutLink(plan, token);
+      window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      console.error(error);
+      showFeedback("error", "Falha no checkout", "Nao foi possivel abrir o pagamento agora.");
+    } finally {
+      setIsOpeningCheckout(null);
     }
   };
 
@@ -404,7 +424,25 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="z-10 relative">{currentPlan === 'free' && (<div className="mt-4"><p className="text-sm text-zinc-300 mb-6">Faça o upgrade para remover limites e desbloquear todo o potencial.</p></div>)}</CardContent>
+                <CardContent className="z-10 relative space-y-3">
+                  {currentPlan === "free" && (
+                    <div className="mt-4">
+                      <p className="text-sm text-zinc-300 mb-2">Faça o upgrade para remover limites e desbloquear todo o potencial.</p>
+                    </div>
+                  )}
+                  <div className="rounded-xl border border-white/15 bg-black/10 p-3 text-xs text-white/85 space-y-1">
+                    <p>
+                      Fonte do plano:{" "}
+                      <strong>
+                        {userProfile?.billing?.source === "mercadopago_webhook" ? "Webhook Mercado Pago" : "Administracao manual"}
+                      </strong>
+                    </p>
+                    <p>
+                      Ultima sincronizacao:{" "}
+                      <strong>{userProfile?.billing?.lastSyncAt ? new Date(userProfile.billing.lastSyncAt).toLocaleString() : "Sem sincronizacao"}</strong>
+                    </p>
+                  </div>
+                </CardContent>
               </Card>
               {currentPlan !== 'pro' && (
                 <div className="grid gap-6 md:grid-cols-2">
@@ -437,11 +475,13 @@ export default function SettingsPage() {
                         </nav>
                       </CardHeader>
                       <CardFooter>
-                        <Link href={plans.premium.paymentLink} target="_blank" className="w-full">
-                          <Button className="w-full rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-lg shadow-slate-500/20 hover:cursor-pointer transition-all active:scale-[0.98]">
-                            Fazer Upgrade Premium
-                          </Button>
-                        </Link>
+                        <Button
+                          onClick={() => handleStartCheckout("premium")}
+                          disabled={isOpeningCheckout === "premium"}
+                          className="w-full rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-lg shadow-slate-500/20 hover:cursor-pointer transition-all active:scale-[0.98]"
+                        >
+                          {isOpeningCheckout === "premium" ? "Abrindo checkout..." : "Fazer Upgrade Premium"}
+                        </Button>
                       </CardFooter>
                     </Card>
                   )}
@@ -473,14 +513,14 @@ export default function SettingsPage() {
                       </nav>
                     </CardHeader>
                     <CardFooter>
-                      <Link href={plans.pro.paymentLink} target="_blank" className="w-full">
-                        <Button
-                          variant="outline"
-                          className="w-full rounded-xl border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 hover:cursor-pointer transition-all active:scale-[0.98]"
-                        >
-                          Fazer Upgrade Pro
-                        </Button>
-                      </Link>
+                      <Button
+                        onClick={() => handleStartCheckout("pro")}
+                        disabled={isOpeningCheckout === "pro"}
+                        variant="outline"
+                        className="w-full rounded-xl border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 hover:cursor-pointer transition-all active:scale-[0.98]"
+                      >
+                        {isOpeningCheckout === "pro" ? "Abrindo checkout..." : "Fazer Upgrade Pro"}
+                      </Button>
                     </CardFooter>
                   </Card>
                 </div>
