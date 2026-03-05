@@ -144,6 +144,7 @@ export default function DashboardPage() {
     toggleDefaultCategoryVisibility,
   } = useCategories();
   const { startTour } = useDashboardTour();
+  const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
 
   // --- 1. STATES ---
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -410,7 +411,7 @@ export default function DashboardPage() {
   const handleAdd = async () => {
     const limit = plans.free.limit || FREE_PLAN_LIMIT;
 
-    if (userProfile?.plan !== 'pro' && userProfile?.plan !== 'premium' && transactionsThisMonthCount >= limit) {
+    if (!isBillingExemptRole && userProfile?.plan !== 'pro' && userProfile?.plan !== 'premium' && transactionsThisMonthCount >= limit) {
       setShowUpgradeModal(true);
       return;
     }
@@ -780,6 +781,15 @@ export default function DashboardPage() {
 
   const handleStartCheckout = async (plan: "premium" | "pro") => {
     if (!user) return;
+    if (isBillingExemptRole) {
+      setFeedbackModal({
+        isOpen: true,
+        type: "info",
+        title: "Conta isenta",
+        message: "Administradores e moderadores nao precisam de pagamento.",
+      });
+      return;
+    }
 
     setIsOpeningCheckout(plan);
     try {
