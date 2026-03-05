@@ -258,6 +258,12 @@ export default function AdminPage() {
     if (plans) setEditedPlans(plans);
   }, [plans]);
 
+  useEffect(() => {
+    if (userProfile?.role === "support") {
+      setActiveTab("support");
+    }
+  }, [userProfile?.role]);
+
   // --- Contagem ---
   const attachCounts = useCallback(async (list: UserProfile[]) => {
     const withCounts = await Promise.all(
@@ -598,7 +604,7 @@ export default function AdminPage() {
 
   if (
     loading ||
-    (userProfile?.role !== "admin" && userProfile?.role !== "moderator") ||
+    (userProfile?.role !== "admin" && userProfile?.role !== "moderator" && userProfile?.role !== "support") ||
     !editedPlans
   )
     return null;
@@ -1003,7 +1009,7 @@ export default function AdminPage() {
                             </TableCell>
                           </TableRow>
                         ) : paginatedUsers.map((u) => {
-                          const isTargetAdminOrMod = u.role === 'admin' || u.role === 'moderator' || u.role === 'support';
+                          const isTargetAdminOrMod = u.role === 'admin' || u.role === 'moderator';
                           const canChangeRole = canEditRole(u);
                           const canChangePlan = canEditPlan(u);
                           const canEditThisUser = canEditUser(u);
