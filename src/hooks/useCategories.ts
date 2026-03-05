@@ -65,7 +65,7 @@ export function useCategories() {
                     .map((cat) => ({ ...cat, isDefault: true }))
                     .filter((cat) => cat.name === "Outros" || !hiddenSet.has(cat.name));
 
-                const allCats = [...visibleDefaultCats];
+                const allCats: Category[] = [...visibleDefaultCats];
                 formattedCustom.forEach((fc) => {
                     if (!allCats.some((ac) => ac.name === fc.name)) {
                         allCats.push(fc);
