@@ -32,9 +32,9 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
-import Link from "next/link";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { useDashboardTour } from "@/hooks/useDashboardTour";
+import { getCheckoutLink } from "@/services/billingService";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -175,6 +175,7 @@ export default function DashboardPage() {
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
   const [txToCancelSubscription, setTxToCancelSubscription] = useState<Transaction | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [pendingCheckins, setPendingCheckins] = useState<Transaction[]>([]);
   const [showCheckinModal, setShowCheckinModal] = useState(false);
@@ -775,6 +776,27 @@ export default function DashboardPage() {
     if (direct) return direct.color;
     const root = getCategoryRoot(catName);
     return categories.find(c => c.name === root)?.color || "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200";
+  };
+
+  const handleStartCheckout = async (plan: "premium" | "pro") => {
+    if (!user) return;
+
+    setIsOpeningCheckout(plan);
+    try {
+      const token = await user.getIdToken();
+      const checkoutUrl = await getCheckoutLink(plan, token);
+      window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      console.error(error);
+      setFeedbackModal({
+        isOpen: true,
+        type: "error",
+        title: "Falha no checkout",
+        message: "Nao foi possivel abrir o pagamento agora.",
+      });
+    } finally {
+      setIsOpeningCheckout(null);
+    }
   };
 
   const isOverdue = (tx: Transaction) => {
@@ -1424,20 +1446,22 @@ export default function DashboardPage() {
 
             <DialogFooter className="mt-6 w-full">
               <div className="grid grid-cols-2 gap-3 w-full">
-                <Link href={plans.premium.paymentLink} target="_blank" className="block w-full">
-                  <Button
-                    variant="outline"
-                    className="w-full h-12 rounded-xl  sm:text-lg font-bold border-violet-200 text-violet-700 hover:bg-violet-50 shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
-                  >
-                    <Medal className="inline-block h-6 w-6 text-violet-600 dark:text-violet-400" /> Premium
-                  </Button>
-                </Link>
+                <Button
+                  onClick={() => handleStartCheckout("premium")}
+                  disabled={isOpeningCheckout === "premium"}
+                  variant="outline"
+                  className="w-full h-12 rounded-xl  sm:text-lg font-bold border-violet-200 text-violet-700 hover:bg-violet-50 shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
+                >
+                  <Medal className="inline-block h-6 w-6 text-violet-600 dark:text-violet-400" /> {isOpeningCheckout === "premium" ? "Abrindo..." : "Premium"}
+                </Button>
 
-                <Link href={plans.pro.paymentLink} target="_blank" className="block w-full">
-                  <Button className="w-full h-12 rounded-xl bg-violet-600 hover:bg-violet-700  sm:text-lg font-bold shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer">
-                    <Medal className="inline-block h-6 w-6 text-zinc-100 dark:text-zinc-200" /> Pro
-                  </Button>
-                </Link>
+                <Button
+                  onClick={() => handleStartCheckout("pro")}
+                  disabled={isOpeningCheckout === "pro"}
+                  className="w-full h-12 rounded-xl bg-violet-600 hover:bg-violet-700  sm:text-lg font-bold shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
+                >
+                  <Medal className="inline-block h-6 w-6 text-zinc-100 dark:text-zinc-200" /> {isOpeningCheckout === "pro" ? "Abrindo..." : "Pro"}
+                </Button>
 
                 <Button
                   variant="ghost"
