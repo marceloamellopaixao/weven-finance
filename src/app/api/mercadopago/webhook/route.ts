@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseWebhookInput, syncFromWebhook, validateWebhookSignature } from "@/lib/billing/mercadopago";
+import { getBillingEventDocId, parseWebhookInput, syncFromWebhook, validateWebhookSignature } from "@/lib/billing/mercadopago";
 import { adminDb } from "@/services/firebase/admin";
 
 export const runtime = "nodejs";
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_signature" }, { status: 401 });
     }
 
-    const eventDocId = `${input.topic}_${input.resourceId}`;
+    const eventDocId = getBillingEventDocId(input);
     await adminDb.collection("billing_events").doc(eventDocId).set(
       {
         topic: input.topic,
