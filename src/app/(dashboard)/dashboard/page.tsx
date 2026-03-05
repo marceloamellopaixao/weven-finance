@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTransactions } from "@/hooks/useTransactions";
 import { usePlans } from "@/hooks/usePlans";
-import { useCategories } from "@/hooks/useCategories";
+import { CATEGORY_PATH_SEPARATOR, useCategories } from "@/hooks/useCategories";
 import {
   addTransaction,
   deleteTransaction,
@@ -28,13 +28,13 @@ import {
   AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown, Search, HelpCircle, CheckCircle2,
   Medal, Info, AlertTriangle,
   Calculator,
-  Tag
+  Tag, Settings
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
-import Link from "next/link";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { useDashboardTour } from "@/hooks/useDashboardTour";
+import { getCheckoutLink } from "@/services/billingService";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -53,6 +53,7 @@ const formatDateDisplay = (dateString: string, options: Intl.DateTimeFormatOptio
 
 const ITEMS_PER_PAGE = 10;
 const FREE_PLAN_LIMIT = 20;
+const CHECKIN_MODAL_COOLDOWN_MS = 60 * 60 * 1000; // 1 hora
 
 // Tipo para feedback genérico (VALIDAÇÃO DE PAGAMENTO)
 type FeedbackData = {
@@ -62,12 +63,88 @@ type FeedbackData = {
   message: string;
 };
 
+const LEGACY_SUB_PREFIX = /^\s*[\*\-•]\s*/;
+
+const isLegacySubcategory = (value: string) => LEGACY_SUB_PREFIX.test(value) && !value.includes(CATEGORY_PATH_SEPARATOR);
+const isLinkedSubcategory = (value: string) => value.includes(CATEGORY_PATH_SEPARATOR);
+const isSubcategory = (value: string) => isLinkedSubcategory(value) || isLegacySubcategory(value);
+const isOthersCategory = (value: string) => value === "Outros";
+
+const getSubcategoryName = (value: string) => {
+  if (isLinkedSubcategory(value)) {
+    const parts = value.split(CATEGORY_PATH_SEPARATOR);
+    return parts.slice(1).join(CATEGORY_PATH_SEPARATOR);
+  }
+  return value.replace(LEGACY_SUB_PREFIX, "");
+};
+
+const getCategoryRoot = (value: string) => {
+  if (isLinkedSubcategory(value)) return value.split(CATEGORY_PATH_SEPARATOR)[0];
+  if (isLegacySubcategory(value)) return "";
+  return value;
+};
+
+const formatCategoryLabel = (value: string) => {
+  if (isLinkedSubcategory(value)) {
+    return `${getCategoryRoot(value)} > ${getSubcategoryName(value)}`;
+  }
+  if (isLegacySubcategory(value)) {
+    return `• ${getSubcategoryName(value)}`;
+  }
+  return value;
+};
+
+const orderCategoryNames = (names: string[]) => {
+  const unique = Array.from(new Set(names));
+  const roots = unique.filter((name) => !isSubcategory(name));
+  const linkedSubs = unique.filter((name) => isLinkedSubcategory(name));
+  const legacySubs = unique.filter((name) => isLegacySubcategory(name));
+
+  const groupedRootSet = new Set(linkedSubs.map((sub) => getCategoryRoot(sub)));
+
+  const simpleRoots = roots
+    .filter((root) => !isOthersCategory(root) && !groupedRootSet.has(root))
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  const groupedRoots = roots
+    .filter((root) => !isOthersCategory(root) && groupedRootSet.has(root))
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  const groupedTree = groupedRoots.flatMap((root) => {
+    const children = linkedSubs
+      .filter((sub) => getCategoryRoot(sub) === root)
+      .sort((a, b) => getSubcategoryName(a).localeCompare(getSubcategoryName(b), "pt-BR"));
+    return [root, ...children];
+  });
+
+  const orphanLinked = linkedSubs
+    .filter((sub) => !roots.includes(getCategoryRoot(sub)))
+    .sort((a, b) => {
+      const rootCompare = getCategoryRoot(a).localeCompare(getCategoryRoot(b), "pt-BR");
+      if (rootCompare !== 0) return rootCompare;
+      return getSubcategoryName(a).localeCompare(getSubcategoryName(b), "pt-BR");
+    });
+
+  const orphanLegacy = legacySubs.sort((a, b) => getSubcategoryName(a).localeCompare(getSubcategoryName(b), "pt-BR"));
+  const others = roots.filter((root) => isOthersCategory(root));
+
+  return [...simpleRoots, ...groupedTree, ...orphanLinked, ...orphanLegacy, ...others];
+};
+
 export default function DashboardPage() {
   const { user, userProfile, privacyMode, togglePrivacyMode } = useAuth();
   const { transactions, loading } = useTransactions();
   const { plans } = usePlans();
-  const { categories, addNewCategory } = useCategories();
+  const {
+    categories,
+    defaultCategories,
+    addNewCategory,
+    deleteCategory,
+    renameCategory,
+    toggleDefaultCategoryVisibility,
+  } = useCategories();
   const { startTour } = useDashboardTour();
+  const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
 
   // --- 1. STATES ---
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -99,6 +176,7 @@ export default function DashboardPage() {
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
   const [txToCancelSubscription, setTxToCancelSubscription] = useState<Transaction | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [pendingCheckins, setPendingCheckins] = useState<Transaction[]>([]);
   const [showCheckinModal, setShowCheckinModal] = useState(false);
@@ -106,6 +184,18 @@ export default function DashboardPage() {
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
   const [isNewCategoryOpen, setIsNewCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryMode, setNewCategoryMode] = useState<"root" | "sub">("root");
+  const [newCategoryParent, setNewCategoryParent] = useState("");
+  const [deletingCategoryName, setDeletingCategoryName] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState<string | null>(null);
+  const [editingCategoryInput, setEditingCategoryInput] = useState("");
+  const [editingCategoryParent, setEditingCategoryParent] = useState("");
+  const [renamingCategoryName, setRenamingCategoryName] = useState<string | null>(null);
+  const [customParentFilter, setCustomParentFilter] = useState<string>("all");
+
+  const checkinStorageKey = useMemo(() => (
+    user ? `wevenfinance:last-checkin-modal:${user.uid}` : "wevenfinance:last-checkin-modal:anonymous"
+  ), [user]);
 
   // Constantes de Animação (Padrão do Sistema)
   const fadeInUp = "animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both";
@@ -139,13 +229,21 @@ export default function DashboardPage() {
       });
 
       if (toCheck.length > 0) {
-        setPendingCheckins(toCheck);
-        setShowCheckinModal(true);
+        const now = Date.now();
+        const lastShownRaw = window.localStorage.getItem(checkinStorageKey);
+        const lastShown = lastShownRaw ? Number(lastShownRaw) : 0;
+        const canShowModal = !lastShown || Number.isNaN(lastShown) || (now - lastShown) >= CHECKIN_MODAL_COOLDOWN_MS;
+
+        if (canShowModal) {
+          setPendingCheckins(toCheck);
+          setShowCheckinModal(true);
+          window.localStorage.setItem(checkinStorageKey, String(now));
+        }
       }
 
       setHasRunCheckin(true);
     }
-  }, [transactions, loading, user, hasRunCheckin]);
+  }, [transactions, loading, user, hasRunCheckin, checkinStorageKey]);
 
   // --- 4. MEMOS ---
 
@@ -188,6 +286,39 @@ export default function DashboardPage() {
     return categories.filter(c => c.type === type || c.type === 'both');
   }, [type, categories]);
 
+  const orderedAvailableCategories = useMemo(() => {
+    const byName = new Map(availableCategories.map((cat) => [cat.name, cat]));
+    return orderCategoryNames(availableCategories.map((cat) => cat.name))
+      .map((name) => byName.get(name))
+      .filter((cat): cat is NonNullable<typeof cat> => Boolean(cat));
+  }, [availableCategories]);
+
+  const allRootCategories = useMemo(() => {
+    return categories
+      .filter((cat) => !isSubcategory(cat.name))
+      .sort((a, b) => {
+        if (isOthersCategory(a.name)) return 1;
+        if (isOthersCategory(b.name)) return -1;
+        return a.name.localeCompare(b.name, "pt-BR");
+      });
+  }, [categories]);
+
+  const customCategories = useMemo(() => {
+    const custom = categories.filter((cat) => cat.isCustom);
+    const byName = new Map(custom.map((cat) => [cat.name, cat]));
+    return orderCategoryNames(custom.map((cat) => cat.name))
+      .map((name) => byName.get(name))
+      .filter((cat): cat is NonNullable<typeof cat> => Boolean(cat));
+  }, [categories]);
+
+  const filteredCustomCategories = useMemo(() => {
+    if (customParentFilter === "all") return customCategories;
+    return customCategories.filter((cat) => {
+      if (!isSubcategory(cat.name)) return cat.name === customParentFilter;
+      return getCategoryRoot(cat.name) === customParentFilter;
+    });
+  }, [customCategories, customParentFilter]);
+
   const transactionsThisMonthCount = useMemo(() => {
     return transactions.filter(t => t.dueDate.startsWith(selectedMonth)).length;
   }, [transactions, selectedMonth]);
@@ -227,11 +358,23 @@ export default function DashboardPage() {
   useEffect(() => { setCurrentPage(1); }, [selectedMonth, filterType, filterStatus, filterCategory, searchTerm]);
 
   useEffect(() => {
-    if (category === 'Streaming') {
+    const categoryRoot = getCategoryRoot(category);
+    if (categoryRoot === 'Streaming' || categoryRoot === 'Salário') {
       setIsInstallment(true);
       setInstallmentsCount("12");
     }
   }, [category]);
+
+  useEffect(() => {
+    if (!isNewCategoryOpen) return;
+    setNewCategoryName("");
+    setNewCategoryMode("root");
+    setNewCategoryParent("");
+    setCustomParentFilter("all");
+    setEditingCategoryName(null);
+    setEditingCategoryInput("");
+    setEditingCategoryParent("");
+  }, [isNewCategoryOpen]);
 
   // --- RETORNO CONDICIONAL ---
   if (loading) return <DashboardSkeleton />;
@@ -268,7 +411,7 @@ export default function DashboardPage() {
   const handleAdd = async () => {
     const limit = plans.free.limit || FREE_PLAN_LIMIT;
 
-    if (userProfile?.plan !== 'pro' && userProfile?.plan !== 'premium' && transactionsThisMonthCount >= limit) {
+    if (!isBillingExemptRole && userProfile?.plan !== 'pro' && userProfile?.plan !== 'premium' && transactionsThisMonthCount >= limit) {
       setShowUpgradeModal(true);
       return;
     }
@@ -278,9 +421,10 @@ export default function DashboardPage() {
     try {
       let finalAmount = Number(amount);
       const count = Number(installmentsCount);
+      const categoryRoot = getCategoryRoot(category);
 
       if (isInstallment && count > 1) {
-        if (category !== 'Streaming') {
+        if (categoryRoot !== 'Streaming' && categoryRoot !== 'Salário') {
           finalAmount = finalAmount / count;
         }
         finalAmount = Math.round(finalAmount * 100) / 100;
@@ -334,16 +478,92 @@ export default function DashboardPage() {
 
   const handleCreateCategory = async () => {
     if (!newCategoryName.trim()) return;
+    if (newCategoryMode === "sub" && !newCategoryParent) return;
+
+    const categoryName = newCategoryName.trim();
+    const parentName = newCategoryMode === "sub" ? newCategoryParent : undefined;
+    const fullCategoryName = parentName
+      ? `${parentName}${CATEGORY_PATH_SEPARATOR}${categoryName}`
+      : categoryName;
 
     try {
-      await addNewCategory(newCategoryName.trim(), type);
-      setCategory(newCategoryName.trim())
+      await addNewCategory(categoryName, type, parentName);
+      setCategory(fullCategoryName);
       setNewCategoryName("");
+      setNewCategoryParent("");
+      setNewCategoryMode("root");
       setIsNewCategoryOpen(false);
     } catch (error) {
       console.error("Erro ao criar categoria:", error);
     }
   }
+
+  const handleDeleteCategory = async (categoryName: string) => {
+    setDeletingCategoryName(categoryName);
+    try {
+      await deleteCategory(categoryName);
+      if (category === categoryName || category.startsWith(`${categoryName}${CATEGORY_PATH_SEPARATOR}`)) {
+        setCategory("Outros");
+      }
+      if (editingTx?.category === categoryName || editingTx?.category.startsWith(`${categoryName}${CATEGORY_PATH_SEPARATOR}`)) {
+        setEditingTx({ ...editingTx, category: "Outros" });
+      }
+    } catch (error) {
+      console.error("Erro ao excluir categoria:", error);
+    } finally {
+      setDeletingCategoryName(null);
+    }
+  };
+
+  const handleStartEditCategory = (categoryName: string) => {
+    setEditingCategoryName(categoryName);
+    setEditingCategoryInput(getSubcategoryName(categoryName));
+    setEditingCategoryParent(isSubcategory(categoryName)
+      ? (isLinkedSubcategory(categoryName) ? getCategoryRoot(categoryName) : "Outros")
+      : "");
+  };
+
+  const handleCancelEditCategory = () => {
+    setEditingCategoryName(null);
+    setEditingCategoryInput("");
+    setEditingCategoryParent("");
+  };
+
+  const handleSaveEditCategory = async (targetName: string) => {
+    if (!editingCategoryInput.trim()) return;
+
+    const isTargetSub = isSubcategory(targetName);
+    const nextName = isTargetSub
+      ? (editingCategoryParent
+        ? `${editingCategoryParent}${CATEGORY_PATH_SEPARATOR}${editingCategoryInput.trim()}`
+        : editingCategoryInput.trim())
+      : editingCategoryInput.trim();
+
+    if (nextName === targetName) {
+      handleCancelEditCategory();
+      return;
+    }
+
+    setRenamingCategoryName(targetName);
+    try {
+      await renameCategory(targetName, nextName);
+
+      if (category === targetName || category.startsWith(`${targetName}${CATEGORY_PATH_SEPARATOR}`)) {
+        const suffix = category.slice(targetName.length);
+        setCategory(`${nextName}${suffix}`);
+      }
+      if (editingTx && (editingTx.category === targetName || editingTx.category.startsWith(`${targetName}${CATEGORY_PATH_SEPARATOR}`))) {
+        const suffix = editingTx.category.slice(targetName.length);
+        setEditingTx({ ...editingTx, category: `${nextName}${suffix}` });
+      }
+
+      handleCancelEditCategory();
+    } catch (error) {
+      console.error("Erro ao editar categoria:", error);
+    } finally {
+      setRenamingCategoryName(null);
+    }
+  };
 
   const handleConfirmDelete = async (deleteGroup: boolean) => {
     if (!user || !txToDelete || !txToDelete.id) return;
@@ -443,10 +663,10 @@ export default function DashboardPage() {
             <span className="absolute left-3.5 top-3 text-zinc-400 font-semibold">R$</span>
             <Input type="number" className="pl-10 h-12 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl font-semibold text-lg" placeholder="0,00" value={amount} onChange={e => setAmount(e.target.value)} />
           </div>
-          <p className="text-[10px] text-zinc-400 mt-1.5 text-right font-medium">{isInstallment && type === 'expense' ? (category === 'Streaming' ? "Valor Mensal (Assinatura)" : "O sistema dividirá este valor") : "Valor único"}</p>
+          <p className="text-[10px] text-zinc-400 mt-1.5 text-right font-medium">{isInstallment && type === 'expense' ? (getCategoryRoot(category) === 'Streaming' ? "Valor Mensal (Assinatura)" : "O sistema dividirá este valor") : "Valor único"}</p>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label className="text-xs font-medium text-zinc-400 ml-1 uppercase">Categoria</Label>
           <div className="flex gap-2">
@@ -454,7 +674,11 @@ export default function DashboardPage() {
               <SelectTrigger className="h-12 rounded-xl bg-zinc-50 border-zinc-200 w-full">
                 <SelectValue placeholder="Selecione" /></SelectTrigger>
               <SelectContent>
-                {availableCategories.map((cat) => <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>)}
+                {orderedAvailableCategories.map((cat) => (
+                  <SelectItem key={cat.name} value={cat.name}>
+                    {isSubcategory(cat.name) ? `* ${getSubcategoryName(cat.name)}` : cat.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <TooltipProvider delayDuration={0}>
@@ -462,18 +686,14 @@ export default function DashboardPage() {
                 <TooltipTrigger asChild>
                   <Button
                     onClick={() => setIsNewCategoryOpen(true)}
-                    className="h-12 w-12 rounded-xl shrink-0 p-0 bg-violet-100 hover:bg-violet-200 border-2 border-dashed border-violet-300 text-violet-600 hover:text-violet-800 transition-all shadow-sm group relative overflow-hidden"
+                    variant="outline"
+                    className="h-12 w-12 rounded-xl shrink-0 p-0 border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
                   >
-                    <Plus className="h-5 w-5 group-hover:scale-125 transition-transform duration-300" />
-                    {/* Efeito de brilho/atenção */}
-                    <span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-500 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-600"></span>
-                    </span>
+                    <Settings className="h-5 w-5 text-violet-600" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="bg-violet-600 text-white border-violet-700 font-bold shadow-xl">
-                  <p>✨ Crie sua própria categoria!</p>
+                  <p>Gerenciar Categorias</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -503,12 +723,18 @@ export default function DashboardPage() {
           )}
         </div>
         <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
-          <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300"><Layers className="h-3.5 w-3.5 text-violet-500" />{type === 'expense' ? (category === 'Streaming' ? 'Recorrência (Mensal)' : 'Compra Parcelada?') : 'Recebimento Parcelado?'}</Label>
+          <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
+            <Layers className="h-3.5 w-3.5 text-violet-500" />
+            {type === 'expense' && (getCategoryRoot(category) === 'Streaming' ? 'Recorrência (Mensal)' : 'Compra Parcelada?')}
+            {type === 'income' && (getCategoryRoot(category) === 'Salário' ? 'Recorrência (Mensal)' : 'Recebimento Parcelado?')}
+          </Label>
           <Switch id="inst-switch" className="scale-100 data-[state=checked]:bg-violet-600" checked={isInstallment} onCheckedChange={setIsInstallment} />
         </div>
         {isInstallment && (
           <div className="animate-in slide-in-from-top-2 pt-1">
-            <Label className="text-xs font-medium text-zinc-500">{category === 'Streaming' ? 'Meses de Assinatura (Previsão)' : 'Número de Parcelas'}</Label>
+            <Label className="text-xs font-medium text-zinc-500">
+              {getCategoryRoot(category) === 'Streaming' ? 'Meses de Assinatura (Previsão)' : 'Número de Parcelas'}
+            </Label>
             <Input type="number" className="h-10 mt-1.5 bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" min="2" max="60" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
           </div>
         )}
@@ -546,7 +772,42 @@ export default function DashboardPage() {
   const monthExpense = monthTransactions.filter(t => t.type === 'expense').reduce((acc, curr) => acc + curr.amount, 0);
   const monthBalance = monthIncome - monthExpense;
 
-  const getCategoryStyle = (catName: string) => categories.find(c => c.name === catName)?.color || "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200";
+  const getCategoryStyle = (catName: string) => {
+    const direct = categories.find(c => c.name === catName);
+    if (direct) return direct.color;
+    const root = getCategoryRoot(catName);
+    return categories.find(c => c.name === root)?.color || "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200";
+  };
+
+  const handleStartCheckout = async (plan: "premium" | "pro") => {
+    if (!user) return;
+    if (isBillingExemptRole) {
+      setFeedbackModal({
+        isOpen: true,
+        type: "info",
+        title: "Conta isenta",
+        message: "Administradores e moderadores nao precisam de pagamento.",
+      });
+      return;
+    }
+
+    setIsOpeningCheckout(plan);
+    try {
+      const token = await user.getIdToken();
+      const checkoutUrl = await getCheckoutLink(plan, token);
+      window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      console.error(error);
+      setFeedbackModal({
+        isOpen: true,
+        type: "error",
+        title: "Falha no checkout",
+        message: "Nao foi possivel abrir o pagamento agora.",
+      });
+    } finally {
+      setIsOpeningCheckout(null);
+    }
+  };
 
   const isOverdue = (tx: Transaction) => {
     if (tx.status === 'paid') return false;
@@ -554,7 +815,7 @@ export default function DashboardPage() {
     return tx.dueDate < today;
   };
 
-  const uniqueCategories = Array.from(new Set(transactions.map(t => t.category))).sort();
+  const uniqueCategories = orderCategoryNames(transactions.map(t => t.category));
 
   return (
     <div className="min-h-screen font-sans selection:bg-primary/20 selection:text-primary pb-20">
@@ -744,7 +1005,7 @@ export default function DashboardPage() {
                       <SelectTrigger className="w-full h-9 text-xs rounded-lg bg-zinc-50"><SelectValue placeholder="Categoria" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todas Categ.</SelectItem>
-                        {uniqueCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        {uniqueCategories.map(c => <SelectItem key={c} value={c}>{isSubcategory(c) ? `* ${getSubcategoryName(c)}` : c}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -784,11 +1045,11 @@ export default function DashboardPage() {
 
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getCategoryStyle(tx.category)}`}>
-                                  {tx.category}
+                                  {formatCategoryLabel(tx.category)}
                                 </span>
                                 {tx.groupId && (
                                   <span className="flex items-center text-[10px] bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
-                                    {tx.category === 'Streaming' ? <Tv className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
+                                    {getCategoryRoot(tx.category) === 'Streaming' ? <Tv className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
                                     {(tx.installmentCurrent || 0)}/{(tx.installmentTotal || 0)}
                                   </span>
                                 )}
@@ -854,7 +1115,7 @@ export default function DashboardPage() {
                                     <Pencil className="mr-2 h-3.5 w-3.5" /> Editar
                                   </DropdownMenuItem>
 
-                                  {tx.groupId && tx.category === 'Streaming' && (
+                                  {tx.groupId && getCategoryRoot(tx.category) === 'Streaming' && (
                                     <>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem onClick={() => setTxToCancelSubscription(tx)} className="text-amber-600 focus:text-amber-700 cursor-pointer rounded-lg text-xs font-medium focus:bg-amber-50 dark:focus:bg-amber-900/20">
@@ -984,19 +1245,36 @@ export default function DashboardPage() {
                           <Select value={editingTx.category} onValueChange={(v) => setEditingTx({ ...editingTx, category: v })}>
                             <SelectTrigger className="h-11 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {categories.filter(cat => cat.type === editingTx.type || cat.type === 'both').map((cat) => (
-                                <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
-                              ))}
+                              {(() => {
+                                const availableForEdit = categories.filter(cat => cat.type === editingTx.type || cat.type === 'both');
+                                const byName = new Map(availableForEdit.map((cat) => [cat.name, cat]));
+                                return orderCategoryNames(availableForEdit.map((cat) => cat.name))
+                                  .map((name) => byName.get(name))
+                                  .filter((cat): cat is NonNullable<typeof cat> => Boolean(cat))
+                                  .map((cat) => (
+                                    <SelectItem key={cat.name} value={cat.name}>
+                                      {isSubcategory(cat.name) ? `* ${getSubcategoryName(cat.name)}` : cat.name}
+                                    </SelectItem>
+                                  ));
+                              })()}
                             </SelectContent>
                           </Select>
-                          <Button
-                            onClick={() => setIsNewCategoryOpen(true)}
-                            variant="outline"
-                            className="h-11 w-11 rounded-xl shrink-0 p-0 border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
-                            title="Criar nova categoria"
-                          >
-                            <Plus className="h-5 w-5 text-zinc-500" />
-                          </Button>
+                          <TooltipProvider delayDuration={0}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  onClick={() => setIsNewCategoryOpen(true)}
+                                  variant="outline"
+                                  className="h-11 w-11 rounded-xl shrink-0 p-0 border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+                                >
+                                  <Settings className="h-4 w-4 text-violet-600" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="bg-violet-600 text-white border-violet-700 font-bold shadow-xl">
+                                <p>Gerenciar Categorias</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
                       </div>
                     </div>
@@ -1178,20 +1456,22 @@ export default function DashboardPage() {
 
             <DialogFooter className="mt-6 w-full">
               <div className="grid grid-cols-2 gap-3 w-full">
-                <Link href={plans.premium.paymentLink} target="_blank" className="block w-full">
-                  <Button
-                    variant="outline"
-                    className="w-full h-12 rounded-xl  sm:text-lg font-bold border-violet-200 text-violet-700 hover:bg-violet-50 shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
-                  >
-                    <Medal className="inline-block h-6 w-6 text-violet-600 dark:text-violet-400" /> Premium
-                  </Button>
-                </Link>
+                <Button
+                  onClick={() => handleStartCheckout("premium")}
+                  disabled={isOpeningCheckout === "premium"}
+                  variant="outline"
+                  className="w-full h-12 rounded-xl  sm:text-lg font-bold border-violet-200 text-violet-700 hover:bg-violet-50 shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
+                >
+                  <Medal className="inline-block h-6 w-6 text-violet-600 dark:text-violet-400" /> {isOpeningCheckout === "premium" ? "Abrindo..." : "Premium"}
+                </Button>
 
-                <Link href={plans.pro.paymentLink} target="_blank" className="block w-full">
-                  <Button className="w-full h-12 rounded-xl bg-violet-600 hover:bg-violet-700  sm:text-lg font-bold shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer">
-                    <Medal className="inline-block h-6 w-6 text-zinc-100 dark:text-zinc-200" /> Pro
-                  </Button>
-                </Link>
+                <Button
+                  onClick={() => handleStartCheckout("pro")}
+                  disabled={isOpeningCheckout === "pro"}
+                  className="w-full h-12 rounded-xl bg-violet-600 hover:bg-violet-700  sm:text-lg font-bold shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
+                >
+                  <Medal className="inline-block h-6 w-6 text-zinc-100 dark:text-zinc-200" /> {isOpeningCheckout === "pro" ? "Abrindo..." : "Pro"}
+                </Button>
 
                 <Button
                   variant="ghost"
@@ -1207,32 +1487,165 @@ export default function DashboardPage() {
 
         {/* Modal de Nova Categoria */}
         <Dialog open={isNewCategoryOpen} onOpenChange={setIsNewCategoryOpen}>
-          <DialogContent className="rounded-2xl sm:max-w-[400px]">
+          <DialogContent className="rounded-2xl w-[calc(100vw-1rem)] max-w-[680px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <div className="mx-auto p-3 bg-violet-100 dark:bg-violet-900/30 rounded-full mb-2 w-fit">
                 <Tag className="h-6 w-6 text-violet-600 dark:text-violet-400" />
               </div>
-              <DialogTitle className="text-center">Nova Categoria</DialogTitle>
+              <DialogTitle className="text-center">Gerenciar Categorias</DialogTitle>
               <DialogDescription className="text-center pt-2">
                 Adicione uma nova categoria personalizada para seus lançamentos.
-                <br />
-                <span className="text-xs text-zinc-500 italic">(Dica: Use &quot;Categoria - Subcategoria&quot; para organizar melhor)</span>
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-2">
-                <Label>Nome da Categoria</Label>
+                <Label>Tipo</Label>
+                <Select value={newCategoryMode} onValueChange={(v) => setNewCategoryMode(v as "root" | "sub")}>
+                  <SelectTrigger className="rounded-xl h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="root">Categoria principal</SelectItem>
+                    <SelectItem value="sub">Subcategoria</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {newCategoryMode === "sub" && (
+                <div className="space-y-2">
+                  <Label>Categoria pai</Label>
+                  <Select value={newCategoryParent} onValueChange={setNewCategoryParent}>
+                    <SelectTrigger className="rounded-xl h-11">
+                      <SelectValue placeholder="Selecione a categoria pai" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allRootCategories.map((cat) => (
+                        <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>{newCategoryMode === "sub" ? "Nome da Subcategoria" : "Nome da Categoria"}</Label>
                 <Input
-                  placeholder="Ex: Casa - Reforma"
+                  placeholder={newCategoryMode === "sub" ? "Ex: Reforma" : "Ex: Casa"}
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
                   className="rounded-xl h-11"
                 />
               </div>
+              <div className="space-y-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                <Label>Categorias padrão</Label>
+                <p className="text-xs text-zinc-500">Você pode ocultar as categorias padrão sem apagar.</p>
+                <div className="max-h-32 overflow-y-auto space-y-2 pr-1">
+                  {defaultCategories
+                    .slice()
+                    .sort((a, b) => {
+                      if (a.name === "Outros") return 1;
+                      if (b.name === "Outros") return -1;
+                      return a.name.localeCompare(b.name, "pt-BR");
+                    })
+                    .map((cat) => {
+                      const hidden = cat.name !== "Outros" && !categories.some((c) => c.name === cat.name);
+                      return (
+                        <div key={`default-${cat.name}`} className="rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <p className="text-sm font-medium truncate">{cat.name}</p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className={`h-8 px-2 shrink-0 w-full sm:w-auto text-white ${
+                              cat.name === "Outros"
+                                ? "bg-zinc-500 hover:bg-zinc-600"
+                                : hidden
+                                  ? "bg-emerald-600 hover:bg-emerald-700"
+                                  : "bg-amber-500 hover:bg-amber-600"
+                            }`}
+                            disabled={cat.name === "Outros"}
+                            onClick={() => toggleDefaultCategoryVisibility(cat.name, !hidden)}
+                          >
+                            {cat.name === "Outros" ? "Sempre visível" : hidden ? "Mostrar" : "Ocultar"}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+              <div className="space-y-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                <Label>Gerenciar categorias personalizadas</Label>
+                <p className="text-xs text-zinc-500">Ao excluir, lançamentos vinculados são movidos para <strong>Outros</strong>.</p>
+                <Select value={customParentFilter} onValueChange={setCustomParentFilter}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Filtrar por categoria pai" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    {allRootCategories.map((root) => (
+                      <SelectItem key={`filter-${root.name}`} value={root.name}>{root.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                  {filteredCustomCategories.length === 0 && (
+                    <p className="text-sm text-zinc-400 py-2">Nenhuma categoria personalizada criada ainda.</p>
+                  )}
+                  {filteredCustomCategories.map((cat) => {
+                    const isEditing = editingCategoryName === cat.name;
+                    const sub = isSubcategory(cat.name);
+                    const linked = isLinkedSubcategory(cat.name);
+                    return (
+                      <div key={cat.name} className="rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 space-y-2">
+                        {isEditing ? (
+                          <>
+                            <div className="grid grid-cols-1 gap-2">
+                              {sub && (
+                                <Select value={editingCategoryParent} onValueChange={setEditingCategoryParent}>
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Escolha o pai" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {allRootCategories.map((root) => (
+                                      <SelectItem key={root.name} value={root.name}>{root.name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                              <Input value={editingCategoryInput} onChange={(e) => setEditingCategoryInput(e.target.value)} className="h-9" />
+                            </div>
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
+                              <Button type="button" size="sm" className="h-8 w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white" onClick={handleCancelEditCategory}>Cancelar</Button>
+                              <Button type="button" size="sm" className="h-8 w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white" disabled={renamingCategoryName === cat.name || (sub && !editingCategoryParent)} onClick={() => handleSaveEditCategory(cat.name)}>
+                                {renamingCategoryName === cat.name ? "Salvando..." : "Salvar"}
+                              </Button>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{formatCategoryLabel(cat.name)}</p>
+                              {sub && !linked && (
+                                <p className="text-[11px] text-amber-600">Sem pai vinculado</p>
+                              )}
+                            </div>
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1 shrink-0 sm:justify-end">
+                              <Button type="button" size="sm" className="h-8 px-2 w-full sm:w-auto justify-center bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleStartEditCategory(cat.name)}>
+                                <Pencil className="h-3.5 w-3.5 mr-1" />Editar
+                              </Button>
+                              <Button type="button" size="sm" className="h-8 px-2 w-full sm:w-auto justify-center bg-red-600 hover:bg-red-700 text-white" disabled={deletingCategoryName === cat.name} onClick={() => handleDeleteCategory(cat.name)}>
+                                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                                {deletingCategoryName === cat.name ? "Excluindo..." : "Excluir"}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setIsNewCategoryOpen(false)} className="rounded-xl">Cancelar</Button>
-              <Button onClick={handleCreateCategory} className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl">Criar</Button>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button onClick={() => setIsNewCategoryOpen(false)} className="rounded-xl w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white">Cancelar</Button>
+              <Button onClick={handleCreateCategory} disabled={!newCategoryName.trim() || (newCategoryMode === "sub" && !newCategoryParent)} className="rounded-xl w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white">Criar</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1259,3 +1672,6 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+
+

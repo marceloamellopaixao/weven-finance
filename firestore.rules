@@ -1,0 +1,131 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasUserDoc() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserData() {
+      return hasUserDoc() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data : null;
+    }
+
+    function getUserRole() {
+      return hasUserDoc() ? getUserData().role : null;
+    }
+
+    function getUserStatus() {
+      return hasUserDoc() ? getUserData().status : null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && getUserRole() == 'admin';
+    }
+
+    function isModerator() {
+      return isAuthenticated() && getUserRole() == 'moderator';
+    }
+
+    function isSupport() {
+      return isAuthenticated() && getUserRole() == 'support';
+    }
+
+    function isManager() {
+      return isAdmin() || isModerator();
+    }
+
+    function isStaff() {
+      return isManager() || isSupport();
+    }
+
+    function isUserActive() {
+      let status = getUserStatus();
+      return status == 'active';
+    }
+
+    // Usuário só pode editar campos básicos do próprio perfil.
+    function ownerCanOnlyEditBasicProfileFields() {
+      return request.resource.data
+        .diff(resource.data)
+        .changedKeys()
+        .hasOnly(['displayName', 'completeName', 'phone', 'photoURL']);
+    }
+
+    match /users/{userId} {
+      allow list: if isManager();
+      allow get: if isOwner(userId) || isStaff();
+      allow create: if
+        (isOwner(userId) && request.resource.data.uid == request.auth.uid)
+        || isAdmin();
+
+      allow update: if
+        (isOwner(userId) && isUserActive() && ownerCanOnlyEditBasicProfileFields())
+        || isManager();
+
+      allow delete: if isAdmin();
+
+      match /transactions/{transactionId} {
+        allow read: if isOwner(userId) || isManager();
+        allow create: if isOwner(userId) && isUserActive();
+        allow update, delete: if
+          isManager()
+          || (isOwner(userId) && isUserActive() && resource.data.isArchived != true);
+      }
+
+      match /categories/{categoryId} {
+        allow read: if isOwner(userId) || isStaff();
+        allow create, update, delete: if isOwner(userId) && isUserActive();
+      }
+
+      match /accounts/{accountId} {
+        allow read: if isOwner(userId) || isManager();
+        allow create, update, delete: if isOwner(userId) && isUserActive();
+      }
+
+      match /installments/{installmentId} {
+        allow read: if isOwner(userId) || isManager();
+        allow create, update, delete: if isOwner(userId) && isUserActive();
+      }
+
+      // Configuracoes do usuario (ex.: categories/settings/categories)
+      match /settings/{settingId} {
+        allow read: if isOwner(userId) || isManager();
+        allow create, update, delete: if isOwner(userId) && isUserActive();
+      }
+    }
+
+    match /support_requests/{ticketId} {
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow read: if isStaff() || (isAuthenticated() && resource.data.uid == request.auth.uid);
+      allow update: if
+        isAdmin()
+        || isModerator()
+        || (isSupport()
+          && (
+            resource.data.assignedTo == request.auth.uid
+            || request.resource.data.assignedTo == request.auth.uid
+          ));
+      allow delete: if isAdmin();
+    }
+
+    // Auditoria de billing não deve ser acessível pelo client comum.
+    match /billing_events/{eventId} {
+      allow read: if isManager();
+      allow write: if false;
+    }
+
+    match /system/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

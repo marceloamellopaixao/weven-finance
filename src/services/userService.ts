@@ -45,6 +45,7 @@ export const subscribeToAllUsers = (
           createdAt: data.createdAt || new Date().toISOString(),
           transactionCount: data.transactionCount || 0,
           paymentStatus: data.paymentStatus || 'pending',
+          billing: data.billing || {},
           verifiedEmail: data.verifiedEmail || false,
           blockReason: data.blockReason || ""
         } as UserProfile;
@@ -140,7 +141,11 @@ export const updateUserStatus = async (
 export const updateUserPlan = async (uid: string, plan: UserPlan) => {
   try {
     const userRef = doc(db, "users", uid);
-    await updateDoc(userRef, { plan });
+    await updateDoc(userRef, {
+      plan,
+      "billing.source": "manual",
+      "billing.lastSyncAt": new Date().toISOString(),
+    });
   } catch (error) {
     console.error(`Erro ao atualizar plano do usuário ${uid}:`, error);
     throw error;
@@ -151,6 +156,16 @@ export const updateUserPlan = async (uid: string, plan: UserPlan) => {
 export const updateUserRole = async (uid: string, role: UserRole) => {
   try {
     const userRef = doc(db, "users", uid);
+    const isBillingExemptRole = role === "admin" || role === "moderator";
+    if (isBillingExemptRole) {
+      await updateDoc(userRef, {
+        role,
+        paymentStatus: "free",
+        "billing.source": "system",
+        "billing.lastSyncAt": new Date().toISOString(),
+      });
+      return;
+    }
     await updateDoc(userRef, { role });
   } catch (error) {
     console.error(`Erro ao atualizar role do usuário ${uid}:`, error);
@@ -165,7 +180,11 @@ export const updateUserPaymentStatus = async (
 ) => {
   try {
     const userRef = doc(db, "users", uid);
-    await updateDoc(userRef, { paymentStatus });
+    await updateDoc(userRef, {
+      paymentStatus,
+      "billing.source": "manual",
+      "billing.lastSyncAt": new Date().toISOString(),
+    });
   } catch (error) {
     console.error(`Erro ao atualizar status de pagamento do usuário ${uid}:`, error);
     throw error;

@@ -240,6 +240,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status: "active",
         createdAt: new Date().toISOString(),
         paymentStatus: "pending",
+        billing: {
+          source: "system",
+          lastSyncAt: new Date().toISOString(),
+        },
         transactionCount: 0,
         verifiedEmail: false,
       } as UserProfile;
@@ -293,6 +297,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             status: "active",
             createdAt: new Date().toISOString(),
             paymentStatus: "pending",
+            billing: {
+              source: "system",
+              lastSyncAt: new Date().toISOString(),
+            },
             transactionCount: 0,
             verifiedEmail: true,
           } as UserProfile;

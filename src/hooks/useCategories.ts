@@ -2,9 +2,28 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "./useAuth";
-import { getCustomCategories, addCustomCategory } from "@/services/categoryService";
+import {
+    getCustomCategories,
+    addCustomCategory,
+    deleteCustomCategoryByName,
+    renameCustomCategoryByName,
+    getHiddenDefaultCategories,
+    setDefaultCategoryHidden,
+} from "@/services/categoryService";
 
-const INITIAL_CATEGORIES = [
+export const CATEGORY_PATH_SEPARATOR = "::";
+
+export type CategoryType = "income" | "expense" | "both";
+
+export interface Category {
+    name: string;
+    type: CategoryType;
+    color: string;
+    isCustom?: boolean;
+    isDefault?: boolean;
+}
+
+const INITIAL_CATEGORIES: Category[] = [
     { name: "Dízimo", type: "expense", color: "bg-violet-500/10 text-violet-600 border-violet-200/50 dark:text-violet-400 dark:border-violet-800/50" },
     { name: "Casa", type: "expense", color: "bg-blue-500/10 text-blue-600 border-blue-200/50 dark:text-blue-400 dark:border-blue-800/50" },
     { name: "Alimentação", type: "expense", color: "bg-orange-500/10 text-orange-600 border-orange-200/50 dark:text-orange-400 dark:border-orange-800/50" },
@@ -16,71 +35,141 @@ const INITIAL_CATEGORIES = [
     { name: "Vendas", type: "income", color: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50" },
     { name: "Serviços", type: "income", color: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50" },
     { name: "Outros", type: "both", color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50" },
-]
+];
 
 export function useCategories() {
     const { user } = useAuth();
-    const [categories, setCategories] = useState(INITIAL_CATEGORIES);
+    const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
     const [loadingCategories, setLoadingCategories] = useState(true);
+    const [hiddenDefaultCategories, setHiddenDefaultCategories] = useState<string[]>([]);
 
-    // Carrega as categorias customizadas do Firestore ao iniciar
     useEffect(() => {
         if (!user) return;
 
         const loadCategories = async () => {
             try {
-                const customCats = await getCustomCategories(user.uid);
+                const [customCats, hiddenDefaults] = await Promise.all([
+                    getCustomCategories(user.uid),
+                    getHiddenDefaultCategories(user.uid),
+                ]);
 
-                // Formata as categorias vindas do banco para o formato visual esperado
-                const formattedCustom = customCats.map(cat => ({
+                const formattedCustom: Category[] = customCats.map((cat) => ({
                     name: cat.name,
                     type: cat.type,
-                    color: cat.color
-                }))
+                    color: cat.color,
+                    isCustom: true,
+                }));
 
-                // Junta as categorias iniciais com as customizadas (evitando duplicatas pelo nome)
-                const allCats = [...INITIAL_CATEGORIES]
-                formattedCustom.forEach(fc => {
-                    if (!allCats.some(ac => ac.name === fc.name)) {
+                const hiddenSet = new Set(hiddenDefaults);
+                const visibleDefaultCats = INITIAL_CATEGORIES
+                    .map((cat) => ({ ...cat, isDefault: true }))
+                    .filter((cat) => cat.name === "Outros" || !hiddenSet.has(cat.name));
+
+                const allCats: Category[] = [...visibleDefaultCats];
+                formattedCustom.forEach((fc) => {
+                    if (!allCats.some((ac) => ac.name === fc.name)) {
                         allCats.push(fc);
                     }
-                })
+                });
 
+                setHiddenDefaultCategories(hiddenDefaults);
                 setCategories(allCats);
             } catch (error) {
                 console.error("Erro ao carregar categorias:", error);
             } finally {
                 setLoadingCategories(false);
-            };
+            }
         };
 
         loadCategories();
     }, [user]);
 
-    // Função para adicionar nova categoria (salva no Firestore e atualiza o estado local)
-    const addNewCategory = async (name: string, type: "income" | "expense" | "both") => {
+    const addNewCategory = async (
+        name: string,
+        type: CategoryType,
+        parentName?: string
+    ) => {
         if (!user) return;
 
-        // Otimisticamente atualiza a UI
-        const newCat = { 
-            name, 
-            type, 
-            color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50"
-        };
-        setCategories(prev => [...prev, newCat]);
+        const finalName = parentName
+            ? `${parentName}${CATEGORY_PATH_SEPARATOR}${name}`
+            : name;
 
-        await addCustomCategory(user.uid, name, type);
+        const newCat: Category = {
+            name: finalName,
+            type,
+            color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50",
+            isCustom: true,
+        };
+
+        setCategories((prev) => [...prev, newCat]);
+
+        await addCustomCategory(user.uid, finalName, type);
     };
 
-    /*
-    // Função para deletar categoria (deleta do Firestore e atualiza o estado local)
     const deleteCategory = async (name: string) => {
         if (!user) return;
-        // Aqui você precisaria implementar a lógica para deletar a categoria do Firestore
-        // e depois atualizar o estado local para remover a categoria da lista.
-    }
-    
-    */
 
-    return { categories, loadingCategories, addNewCategory };
+        setCategories((prev) => prev.filter((cat) => cat.name !== name && !cat.name.startsWith(`${name}${CATEGORY_PATH_SEPARATOR}`)));
+        await deleteCustomCategoryByName(user.uid, name, "Outros");
+    };
+
+    const renameCategory = async (oldName: string, newName: string) => {
+        if (!user) return;
+
+        const trimmed = newName.trim();
+        if (!trimmed) return;
+
+        setCategories((prev) =>
+            prev.map((cat) => {
+                if (cat.name === oldName || cat.name.startsWith(`${oldName}${CATEGORY_PATH_SEPARATOR}`)) {
+                    const suffix = cat.name.slice(oldName.length);
+                    return { ...cat, name: `${trimmed}${suffix}` };
+                }
+                return cat;
+            })
+        );
+
+        await renameCustomCategoryByName(user.uid, oldName, trimmed);
+    };
+
+    const toggleDefaultCategoryVisibility = async (name: string, hidden: boolean) => {
+        if (!user) return;
+        if (name === "Outros") return;
+
+        const defaultCategory = INITIAL_CATEGORIES.find((cat) => cat.name === name);
+        if (!defaultCategory) return;
+
+        setHiddenDefaultCategories((prev) =>
+            hidden ? Array.from(new Set([...prev, name])) : prev.filter((n) => n !== name)
+        );
+
+        setCategories((prev) => {
+            if (hidden) {
+                return prev.filter((cat) => cat.name !== name);
+            }
+
+            if (prev.some((cat) => cat.name === name)) return prev;
+            return [{ ...defaultCategory, isDefault: true }, ...prev];
+        });
+
+        await setDefaultCategoryHidden(user.uid, name, hidden);
+    };
+
+    const defaultCategories = INITIAL_CATEGORIES.map((cat) => ({
+        ...cat,
+        isDefault: true,
+        hidden: cat.name === "Outros" ? false : hiddenDefaultCategories.includes(cat.name),
+    }));
+
+    return {
+        categories,
+        defaultCategories,
+        hiddenDefaultCategories,
+        loadingCategories,
+        addNewCategory,
+        deleteCategory,
+        renameCategory,
+        toggleDefaultCategoryVisibility,
+    };
 }
