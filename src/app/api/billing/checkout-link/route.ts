@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/services/firebase/admin";
 import { buildCheckoutUrl } from "@/lib/billing/mercadopago";
 import { DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
-import { UserPlan } from "@/types/user";
+import { UserPlan, UserRole } from "@/types/user";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +29,13 @@ export async function GET(request: NextRequest) {
     }
 
     const userSnap = await adminDb.collection("users").doc(decoded.uid).get();
-    const userEmail = (userSnap.data()?.email as string | undefined) ?? decoded.email;
+    const userData = userSnap.data() ?? {};
+    const userEmail = (userData.email as string | undefined) ?? decoded.email;
+    const userRole = (userData.role as UserRole | undefined) ?? "client";
+    const isBillingExemptRole = userRole === "admin" || userRole === "moderator";
+    if (isBillingExemptRole) {
+      return NextResponse.json({ ok: false, error: "role_billing_exempt" }, { status: 409 });
+    }
 
     const plansDoc = await adminDb.collection("system").doc("plans").get();
     const plans = (plansDoc.exists ? (plansDoc.data() as PlansConfig) : DEFAULT_PLANS_CONFIG) ?? DEFAULT_PLANS_CONFIG;
