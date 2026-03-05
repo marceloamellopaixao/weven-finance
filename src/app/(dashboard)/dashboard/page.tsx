@@ -227,7 +227,7 @@ export default function DashboardPage() {
   useEffect(() => { setCurrentPage(1); }, [selectedMonth, filterType, filterStatus, filterCategory, searchTerm]);
 
   useEffect(() => {
-    if (category === 'Streaming') {
+    if (category === 'Streaming' || category === 'Salário') {
       setIsInstallment(true);
       setInstallmentsCount("12");
     }
@@ -280,7 +280,7 @@ export default function DashboardPage() {
       const count = Number(installmentsCount);
 
       if (isInstallment && count > 1) {
-        if (category !== 'Streaming') {
+        if (category !== 'Streaming' && category !== 'Salário') {
           finalAmount = finalAmount / count;
         }
         finalAmount = Math.round(finalAmount * 100) / 100;
@@ -462,13 +462,13 @@ export default function DashboardPage() {
                 <TooltipTrigger asChild>
                   <Button
                     onClick={() => setIsNewCategoryOpen(true)}
-                    className="h-12 w-12 rounded-xl shrink-0 p-0 bg-violet-100 hover:bg-violet-200 border-2 border-dashed border-violet-300 text-violet-600 hover:text-violet-800 transition-all shadow-sm group relative overflow-hidden"
+                    className="h-8.5 w-12 rounded-xl shrink-0 p-0 bg-violet-100 hover:bg-violet-200 border-2 border-dashed border-violet-300 text-violet-600 hover:text-violet-800 transition-all shadow-sm group relative overflow-hidden"
                   >
                     <Plus className="h-5 w-5 group-hover:scale-125 transition-transform duration-300" />
                     {/* Efeito de brilho/atenção */}
-                    <span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5">
+                    <span className="absolute top-1 right-1 flex h-1.5 w-1.5">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-500 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-600"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-violet-600"></span>
                     </span>
                   </Button>
                 </TooltipTrigger>
@@ -503,12 +503,18 @@ export default function DashboardPage() {
           )}
         </div>
         <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
-          <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300"><Layers className="h-3.5 w-3.5 text-violet-500" />{type === 'expense' ? (category === 'Streaming' ? 'Recorrência (Mensal)' : 'Compra Parcelada?') : 'Recebimento Parcelado?'}</Label>
+          <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
+            <Layers className="h-3.5 w-3.5 text-violet-500" />
+            {type === 'expense' && (category === 'Streaming' ? 'Recorrência (Mensal)' : 'Compra Parcelada?')}
+            {type === 'income' && (category === 'Salário' ? 'Recorrência (Mensal)' : 'Recebimento Parcelado?')}
+          </Label>
           <Switch id="inst-switch" className="scale-100 data-[state=checked]:bg-violet-600" checked={isInstallment} onCheckedChange={setIsInstallment} />
         </div>
         {isInstallment && (
           <div className="animate-in slide-in-from-top-2 pt-1">
-            <Label className="text-xs font-medium text-zinc-500">{category === 'Streaming' ? 'Meses de Assinatura (Previsão)' : 'Número de Parcelas'}</Label>
+            <Label className="text-xs font-medium text-zinc-500">
+              {category === 'Streaming' ? 'Meses de Assinatura (Previsão)' : 'Número de Parcelas'}
+            </Label>
             <Input type="number" className="h-10 mt-1.5 bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" min="2" max="60" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
           </div>
         )}

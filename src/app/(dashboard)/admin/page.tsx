@@ -1623,7 +1623,7 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Excluir Ticket (NOVO) */}
+      {/* Modal Excluir Ticket */}
       <Dialog open={!!ticketToDelete} onOpenChange={(open) => !open && setTicketToDelete(null)}>
         <DialogContent className="rounded-2xl sm:max-w-[400px]">
           <DialogHeader>
