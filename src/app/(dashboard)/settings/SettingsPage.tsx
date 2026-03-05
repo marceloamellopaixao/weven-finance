@@ -201,6 +201,10 @@ export default function SettingsPage() {
       showFeedback("error", "Sessao expirada", "Faca login novamente para continuar.");
       return;
     }
+    if (isBillingExemptRole) {
+      showFeedback("info", "Conta isenta", "Administradores e moderadores nao precisam de pagamento.");
+      return;
+    }
 
     setIsOpeningCheckout(plan);
     try {
@@ -216,6 +220,10 @@ export default function SettingsPage() {
   };
 
   const currentPlan = userProfile?.plan || "free";
+  const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
+  const effectivePlan = isBillingExemptRole ? "pro" : currentPlan;
+  const effectivePaymentStatus = isBillingExemptRole ? "free" : (userProfile?.paymentStatus || "pending");
+  const canUpgrade = !isBillingExemptRole && effectivePlan !== "pro";
 
   return (
     <div className="font-sans p-4 md:p-8 pb-20">
@@ -282,7 +290,9 @@ export default function SettingsPage() {
                     <h3 className="font-bold text-2xl text-zinc-900 dark:text-zinc-100">{displayName || "Usuário"}</h3>
                     <p className="text-sm text-zinc-500 font-medium">{user?.email}</p>
                     <div className="flex flex-wrap justify-center sm:justify-start gap-2 pt-2">
-                      <Badge variant="secondary" className={`uppercase text-[10px] tracking-wider border ${currentPlan === 'free' ? 'bg-zinc-100 text-zinc-600 border-zinc-200' : 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300'}`}>Plano {currentPlan}</Badge>
+                      <Badge variant="secondary" className={`uppercase text-[10px] tracking-wider border ${effectivePlan === 'free' ? 'bg-zinc-100 text-zinc-600 border-zinc-200' : 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300'}`}>
+                        {isBillingExemptRole ? "Plano Staff (Isento)" : `Plano ${effectivePlan}`}
+                      </Badge>
                       <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 gap-1">
                         {user?.emailVerified ?
                           <><CheckCircle2 className="h-3 w-3" /> Verificado</> :
@@ -325,9 +335,9 @@ export default function SettingsPage() {
             <div className={`${fadeInUp} delay-200 space-y-6`}>
               <Card
                 className={`border-none shadow-xl rounded-3xl relative overflow-hidden text-white flex flex-col justify-center min-h-[10px]"
-                  ${currentPlan === 'free'
+                  ${effectivePlan === 'free'
                     ? 'bg-linear-to-br from-amber-700 to-amber-900 shadow-amber-700/30'
-                    : currentPlan === 'premium'
+                    : effectivePlan === 'premium'
                       ? 'bg-linear-to-br from-slate-600 to-slate-800 shadow-slate-500/30'
                       : 'bg-linear-to-br from-yellow-500 to-amber-600 shadow-yellow-500/30'
                   }`}
@@ -339,29 +349,29 @@ export default function SettingsPage() {
                     {/* BLOCO PRINCIPAL */}
                     <div className="space-y-3">
                       <CardTitle className="text-3xl font-bold flex items-center gap-3">
-                        {currentPlan === 'free' && <Medal className="h-8 w-8 text-amber-400" />}
-                        {currentPlan === 'premium' && <Medal className="h-8 w-8 text-slate-200" />}
-                        {currentPlan === 'pro' && <Medal className="h-8 w-8 text-yellow-300" />}
+                        {effectivePlan === 'free' && <Medal className="h-8 w-8 text-amber-400" />}
+                        {effectivePlan === 'premium' && <Medal className="h-8 w-8 text-slate-200" />}
+                        {effectivePlan === 'pro' && <Medal className="h-8 w-8 text-yellow-300" />}
                         <span>
                           Weven{' '}
                           <span className="opacity-90">
-                            {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}
+                            {isBillingExemptRole ? "Staff" : effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)}
                           </span>
                         </span>
                       </CardTitle>
 
                       <CardDescription className="text-base text-white/75 max-w-md leading-relaxed">
-                        {currentPlan === 'free'
+                        {effectivePlan === 'free'
                           ? plans.free.description
-                          : 'Obrigado por apoiar nosso desenvolvimento!'}
+                          : isBillingExemptRole ? 'Conta da equipe com acesso isento de cobranca.' : 'Obrigado por apoiar nosso desenvolvimento!'}
                       </CardDescription>
                     </div>
 
                     {/* FEATURES */}
-                    {plans[currentPlan].features && (
+                    {plans[effectivePlan].features && (
                       <nav className="lg:pt-0">
                         <ul className="space-y-2 text-sm text-white/70">
-                          {plans[currentPlan].features.map((feature, index) => (
+                          {plans[effectivePlan].features.map((feature, index) => (
                             <li key={index} className="flex items-start gap-2">
                               <CheckCircle2 className="h-4 w-4 mt-0.5 text-white/60" />
                               <span>{feature}</span>
@@ -376,21 +386,28 @@ export default function SettingsPage() {
 
                       {/* Status pagamento */}
                       <Badge className="bg-white/15 backdrop-blur-md text-white border-none flex gap-2 items-center px-3 py-1.5 text-xs">
-                        {userProfile?.paymentStatus === 'paid' && (
+                        {isBillingExemptRole && (
+                          <>
+                            <ShieldCheck className="h-4 w-4 text-emerald-300" />
+                            Isento de Pagamento
+                          </>
+                        )}
+
+                        {!isBillingExemptRole && effectivePaymentStatus === 'paid' && (
                           <>
                             <CheckCircle className="h-4 w-4 text-emerald-300" />
                             Pagamento Confirmado
                           </>
                         )}
 
-                        {userProfile?.paymentStatus === 'pending' && (
+                        {!isBillingExemptRole && effectivePaymentStatus === 'pending' && (
                           <>
                             <Clock className="h-4 w-4 text-amber-300" />
                             Pagamento Pendente
                           </>
                         )}
 
-                        {userProfile?.paymentStatus === 'overdue' && (
+                        {!isBillingExemptRole && effectivePaymentStatus === 'overdue' && (
                           <>
                             <AlertTriangle className="h-4 w-4 text-red-300" />
                             Pagamento Atrasado
@@ -401,16 +418,16 @@ export default function SettingsPage() {
                       {/* Plano ativo */}
                       <Badge className="bg-white/10 backdrop-blur-md text-white border-none flex gap-2 items-center px-3 py-1.5 text-xs">
                         {userProfile?.status === 'active' ? (
-                          <><CheckCircle className="h-4 w-4 text-white/70" />Plano {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Ativo</>
+                          <><CheckCircle className="h-4 w-4 text-white/70" />Plano {effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)} Ativo</>
                         ) : (
-                          <><AlertTriangle className="h-4 w-4 text-white/70" />Plano {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Inativo</>
+                          <><AlertTriangle className="h-4 w-4 text-white/70" />Plano {effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)} Inativo</>
                         )}
 
                       </Badge>
 
                       {/* Renovação */}
                       <Badge className="bg-white/10 backdrop-blur-md text-white border-none flex gap-2 items-center px-3 py-1.5 text-xs">
-                        {userProfile?.paymentStatus === 'paid' ? (
+                        {(isBillingExemptRole || effectivePaymentStatus === 'paid') ? (
                           <>
                             <RefreshCw className="h-4 w-4 text-white/70" /> Renovação Automática
                           </>
@@ -425,12 +442,17 @@ export default function SettingsPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="z-10 relative space-y-3">
-                  {currentPlan === "free" && (
+                  {!isBillingExemptRole && effectivePlan === "free" && (
                     <div className="mt-4">
                       <p className="text-sm text-zinc-300 mb-2">Faça o upgrade para remover limites e desbloquear todo o potencial.</p>
                     </div>
                   )}
                   <div className="rounded-xl border border-white/15 bg-black/10 p-3 text-xs text-white/85 space-y-1">
+                    {isBillingExemptRole && (
+                      <p>
+                        Regra de cobranca: <strong>Isento para {userProfile?.role === "admin" ? "Admin" : "Moderador"}</strong>
+                      </p>
+                    )}
                     <p>
                       Fonte do plano:{" "}
                       <strong>
@@ -444,12 +466,12 @@ export default function SettingsPage() {
                   </div>
                 </CardContent>
               </Card>
-              {currentPlan !== 'pro' && (
+              {canUpgrade && (
                 <div className="grid gap-6 md:grid-cols-2">
-                  {currentPlan !== 'premium' && (
-                    <Card className="border-2 border-slate-300/40 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all bg-white dark:bg-zinc-900 rounded-3xl group transform hover:-translate-y-1 duration-300">
+                  {effectivePlan !== 'premium' && (
+                    <Card className="relative overflow-hidden h-full flex flex-col border-2 border-slate-300/40 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all bg-white dark:bg-zinc-900 rounded-3xl group transform hover:-translate-y-1 duration-300">
                       <div className="absolute top-0 left-0 w-full h-1 bg-slate-400" />
-                      <CardHeader>
+                      <CardHeader className="flex-1">
                         <CardTitle className="flex justify-between items-center">
                           <span className="flex items-center gap-2">
                             <Medal className="h-5 w-5 text-slate-500" /> Weven Premium
@@ -474,20 +496,20 @@ export default function SettingsPage() {
                             )}
                         </nav>
                       </CardHeader>
-                      <CardFooter>
+                      <CardFooter className="mt-auto">
                         <Button
                           onClick={() => handleStartCheckout("premium")}
                           disabled={isOpeningCheckout === "premium"}
-                          className="w-full rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-lg shadow-slate-500/20 hover:cursor-pointer transition-all active:scale-[0.98]"
+                          className="w-full h-11 rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-lg shadow-slate-500/20 hover:cursor-pointer transition-all active:scale-[0.98]"
                         >
                           {isOpeningCheckout === "premium" ? "Abrindo checkout..." : "Fazer Upgrade Premium"}
                         </Button>
                       </CardFooter>
                     </Card>
                   )}
-                  <Card className="border-2 border-yellow-300/40 dark:border-yellow-700/30 shadow-lg hover:shadow-xl transition-all bg-white dark:bg-zinc-900 rounded-3xl group transform hover:-translate-y-1 duration-300">
+                  <Card className="relative overflow-hidden h-full flex flex-col border-2 border-yellow-300/40 dark:border-yellow-700/30 shadow-lg hover:shadow-xl transition-all bg-white dark:bg-zinc-900 rounded-3xl group transform hover:-translate-y-1 duration-300">
                     <div className="absolute top-0 left-0 w-full h-1 bg-yellow-400" />
-                    <CardHeader>
+                    <CardHeader className="flex-1">
                       <CardTitle className="flex justify-between items-center">
                         <span className="flex items-center gap-2">
                           <Medal className="h-5 w-5 text-yellow-500" /> Weven Pro
@@ -512,12 +534,12 @@ export default function SettingsPage() {
                           )}
                       </nav>
                     </CardHeader>
-                    <CardFooter>
+                    <CardFooter className="mt-auto">
                       <Button
                         onClick={() => handleStartCheckout("pro")}
                         disabled={isOpeningCheckout === "pro"}
                         variant="outline"
-                        className="w-full rounded-xl border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 hover:cursor-pointer transition-all active:scale-[0.98]"
+                        className="w-full h-11 rounded-xl border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 hover:cursor-pointer transition-all active:scale-[0.98]"
                       >
                         {isOpeningCheckout === "pro" ? "Abrindo checkout..." : "Fazer Upgrade Pro"}
                       </Button>
