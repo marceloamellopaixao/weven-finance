@@ -81,6 +81,29 @@ Quando webhook chega:
   - Mostra `Fonte: Webhook MP` ou `Fonte: Manual`
   - Mostra data de `Sync`
 
+## 6.1) Automacoes de status (novo)
+
+No processamento do webhook:
+
+- `paymentStatus = paid`:
+  - atualiza `plan` para o plano pago
+  - reativa conta (`status = active`) se estava `blocked/inactive` por motivo de pagamento
+- `paymentStatus = overdue | not_paid | canceled`:
+  - rebaixa `plan` para `free` quando aplicavel
+  - bloqueia conta ativa com motivo automatico
+
+Observacao: contas `deleted` nao sao reativadas automaticamente.
+
+## 6.2) Regras por cargo
+
+- `admin` e `moderator`:
+  - isentos de cobranca
+  - nao recebem bloqueio por inadimplencia no webhook
+  - checkout de pagamento retorna `role_billing_exempt`
+- `support`:
+  - nao isento
+  - segue regra de plano como usuario comum (limite do plano free: 20)
+
 ## 7) Fluxo recomendado de operacao
 
 1. Usuario clica em upgrade (dashboard/configuracoes).
@@ -100,4 +123,3 @@ Quando webhook chega:
    - documento `users/{uid}` atualizado
    - documento em `billing_events`
    - badges/status no Admin e Settings
-

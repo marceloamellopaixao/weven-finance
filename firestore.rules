@@ -11,16 +11,20 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function hasUserDoc() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return hasUserDoc() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data : null;
     }
 
     function getUserRole() {
-      return getUserData().role;
+      return hasUserDoc() ? getUserData().role : null;
     }
 
     function getUserStatus() {
-      return getUserData().status;
+      return hasUserDoc() ? getUserData().status : null;
     }
 
     function isAdmin() {
@@ -49,28 +53,22 @@ service cloud.firestore {
     }
 
     // Usuário só pode editar campos básicos do próprio perfil.
-    function isOwnerProfileUpdateSafe() {
-      return request.resource.data.uid == resource.data.uid
-        && request.resource.data.email == resource.data.email
-        && request.resource.data.role == resource.data.role
-        && request.resource.data.plan == resource.data.plan
-        && request.resource.data.status == resource.data.status
-        && request.resource.data.paymentStatus == resource.data.paymentStatus
-        && request.resource.data.verifiedEmail == resource.data.verifiedEmail
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.deletedAt == resource.data.deletedAt
-        && request.resource.data.blockReason == resource.data.blockReason
-        && request.resource.data.transactionCount == resource.data.transactionCount
-        && request.resource.data.billing == resource.data.billing;
+    function ownerCanOnlyEditBasicProfileFields() {
+      return request.resource.data
+        .diff(resource.data)
+        .changedKeys()
+        .hasOnly(['displayName', 'completeName', 'phone', 'photoURL']);
     }
 
     match /users/{userId} {
       allow list: if isManager();
       allow get: if isOwner(userId) || isStaff();
-      allow create: if isOwner(userId) || isAdmin();
+      allow create: if
+        (isOwner(userId) && request.resource.data.uid == request.auth.uid)
+        || isAdmin();
 
       allow update: if
-        (isOwner(userId) && isUserActive() && isOwnerProfileUpdateSafe())
+        (isOwner(userId) && isUserActive() && ownerCanOnlyEditBasicProfileFields())
         || isManager();
 
       allow delete: if isAdmin();
@@ -94,6 +92,12 @@ service cloud.firestore {
       }
 
       match /installments/{installmentId} {
+        allow read: if isOwner(userId) || isManager();
+        allow create, update, delete: if isOwner(userId) && isUserActive();
+      }
+
+      // Configuracoes do usuario (ex.: categories/settings/categories)
+      match /settings/{settingId} {
         allow read: if isOwner(userId) || isManager();
         allow create, update, delete: if isOwner(userId) && isUserActive();
       }
