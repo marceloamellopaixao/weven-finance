@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home, UserCog, CreditCard } from "lucide-react";
+import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home, UserCog, CreditCard, PiggyBank } from "lucide-react";
 import Link from "next/link";
 import { useImpersonation } from "@/hooks/useImpersonation";
 
@@ -160,6 +160,13 @@ export function Header() {
               <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
                 <CreditCard className="mr-2 h-4 w-4" />
                 <span>Cartões</span>
+              </DropdownMenuItem>
+            </Link>
+
+            <Link href="/porquinho" className="cursor-pointer">
+              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
+                <PiggyBank className="mr-2 h-4 w-4" />
+                <span>Porquinho</span>
               </DropdownMenuItem>
             </Link>
 
