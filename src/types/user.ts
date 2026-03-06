@@ -2,7 +2,7 @@ export type UserPlan = 'free' | 'premium' | 'pro';
 export type UserRole = 'admin' | 'moderator' | 'support' | 'client';
 export type UserStatus = 'active' | 'inactive' | 'deleted' | 'blocked';
 export type UserPaymentStatus = 'free' | 'paid' | 'not_paid' | 'pending' | 'overdue' | 'canceled' ;
-export type BillingSource = 'manual' | 'mercadopago_webhook' | 'system';
+export type BillingSource = 'manual' | 'mercadopago_webhook' | 'mercadopago_confirm' | 'system';
 
 export interface BillingInfo {
   source?: BillingSource;
@@ -20,6 +20,9 @@ export interface BillingInfo {
   lastEventAt?: string; // ISO Date
   lastSyncAt?: string; // ISO Date
   lastError?: string;
+  pendingPreapprovalId?: string;
+  pendingPlan?: UserPlan;
+  pendingCheckoutAt?: string; // ISO Date
 }
 
 export interface UserProfile {

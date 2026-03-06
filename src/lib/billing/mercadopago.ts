@@ -25,12 +25,13 @@ type GatewayDetails = {
   externalReference?: string;
   payerEmail?: string;
   plan?: UserPlan;
+  preapprovalPlanId?: string;
 };
 
 type UserMatch = {
   uid: string;
   userData: Record<string, unknown>;
-  matchedBy: "external_reference" | "email";
+  matchedBy: "external_reference" | "email" | "pending_checkout";
 };
 
 const MERCADO_PAGO_API_BASE = "https://api.mercadopago.com";
@@ -116,6 +117,7 @@ async function mpRequest(path: string): Promise<Record<string, unknown>> {
 
 function parseTopic(value: string | null | undefined): MercadoPagoTopic | null {
   if (!value) return null;
+  if (value.includes("authorized_payment")) return "payment";
   if (value === "payment" || value === "merchant_order" || value === "preapproval") {
     return value;
   }
@@ -127,6 +129,7 @@ function parseTopic(value: string | null | undefined): MercadoPagoTopic | null {
 
 function extractTopicFromAction(action: string | null | undefined): MercadoPagoTopic | null {
   if (!action) return null;
+  if (action.includes("authorized_payment")) return "payment";
   if (action.startsWith("payment.")) return "payment";
   if (action.startsWith("merchant_order.")) return "merchant_order";
   if (action.startsWith("subscription_") || action.startsWith("preapproval.")) return "preapproval";
@@ -205,20 +208,54 @@ async function fetchGatewayDetails(topic: MercadoPagoTopic, resourceId: string):
       metadata.plan === "free" || metadata.plan === "pro" || metadata.plan === "premium"
         ? (metadata.plan as UserPlan)
         : undefined;
+    const preapprovalId =
+      typeof payload.preapproval_id === "string"
+        ? payload.preapproval_id
+        : typeof payload.preapproval_id === "number"
+          ? String(payload.preapproval_id)
+          : undefined;
+    let paymentPlan = parsedReference.plan ?? parsedMetadataPlan;
+    let paymentPayerEmail =
+      typeof payload.payer === "object" &&
+      payload.payer !== null &&
+      typeof (payload.payer as { email?: unknown }).email === "string"
+        ? ((payload.payer as { email: string }).email ?? undefined)
+        : undefined;
+    let paymentExternalReference = externalReference;
+    let gatewayStatusDetail = typeof payload.status_detail === "string" ? payload.status_detail : undefined;
+
+    if (preapprovalId && (!paymentPlan || !paymentPayerEmail || !paymentExternalReference)) {
+      try {
+        const preapprovalPayload = await mpRequest(`/preapproval/${preapprovalId}`);
+        const preapprovalPlanId =
+          typeof preapprovalPayload.preapproval_plan_id === "string" ? preapprovalPayload.preapproval_plan_id : "";
+        const mappedPlan = PLAN_BY_PREAPPROVAL_ID[preapprovalPlanId];
+        const preapprovalExternalReference =
+          typeof preapprovalPayload.external_reference === "string" ? preapprovalPayload.external_reference : undefined;
+        const parsedPreapprovalReference = parseExternalReference(preapprovalExternalReference);
+
+        paymentPlan = paymentPlan ?? parsedPreapprovalReference.plan ?? mappedPlan;
+        paymentPayerEmail =
+          paymentPayerEmail ??
+          (typeof preapprovalPayload.payer_email === "string" ? preapprovalPayload.payer_email : undefined);
+        paymentExternalReference = paymentExternalReference ?? preapprovalExternalReference;
+        gatewayStatusDetail =
+          gatewayStatusDetail ??
+          (typeof preapprovalPayload.reason === "string" ? preapprovalPayload.reason : undefined);
+      } catch {
+        // Best effort: keep processing with payment payload only.
+      }
+    }
 
     return {
       topic,
       gatewayStatus: String(payload.status ?? "pending"),
-      gatewayStatusDetail: typeof payload.status_detail === "string" ? payload.status_detail : undefined,
+      gatewayStatusDetail,
       paymentId: String(payload.id ?? resourceId),
-      externalReference,
-      payerEmail:
-        typeof payload.payer === "object" &&
-        payload.payer !== null &&
-        typeof (payload.payer as { email?: unknown }).email === "string"
-          ? ((payload.payer as { email: string }).email ?? undefined)
-          : undefined,
-      plan: parsedReference.plan ?? parsedMetadataPlan,
+      preapprovalId,
+      externalReference: paymentExternalReference,
+      payerEmail: paymentPayerEmail,
+      plan: paymentPlan,
     };
   }
 
@@ -291,11 +328,65 @@ async function findUserByWebhook(details: GatewayDetails): Promise<UserMatch | n
     }
   }
 
+  const pendingPlan = details.plan === "pro" || details.plan === "premium" ? details.plan : null;
+  if (pendingPlan) {
+    const now = Date.now();
+    const windowMs = 6 * 60 * 60 * 1000; // 6 hours
+    const pendingUsers = await adminDb
+      .collection("users")
+      .where("billing.pendingPlan", "==", pendingPlan)
+      .limit(25)
+      .get();
+
+    const candidates: Array<{ uid: string; userData: Record<string, unknown>; distanceMs: number }> = [];
+
+    for (const doc of pendingUsers.docs) {
+      const data = doc.data() as Record<string, unknown>;
+      const pendingCheckoutAt =
+        typeof data.billing === "object" &&
+        data.billing !== null &&
+        typeof (data.billing as { pendingCheckoutAt?: unknown }).pendingCheckoutAt === "string"
+          ? (data.billing as { pendingCheckoutAt: string }).pendingCheckoutAt
+          : null;
+      if (!pendingCheckoutAt) continue;
+
+      const pendingAtMs = new Date(pendingCheckoutAt).getTime();
+      if (!pendingAtMs) continue;
+
+      const distanceMs = Math.abs(now - pendingAtMs);
+      if (distanceMs > windowMs) continue;
+
+      candidates.push({ uid: doc.id, userData: data, distanceMs });
+    }
+
+    if (candidates.length === 1) {
+      return {
+        uid: candidates[0].uid,
+        userData: candidates[0].userData,
+        matchedBy: "pending_checkout",
+      };
+    }
+
+    if (candidates.length > 1) {
+      candidates.sort((a, b) => a.distanceMs - b.distanceMs);
+      const closest = candidates[0];
+      const second = candidates[1];
+      if (second.distanceMs - closest.distanceMs > 15 * 60 * 1000) {
+        return {
+          uid: closest.uid,
+          userData: closest.userData,
+          matchedBy: "pending_checkout",
+        };
+      }
+    }
+  }
+
   return null;
 }
 
-function resolvePlan(details: GatewayDetails, currentPlan: UserPlan): UserPlan {
+function resolvePlan(details: GatewayDetails, currentPlan: UserPlan, pendingPlan?: UserPlan): UserPlan {
   if (details.plan) return details.plan;
+  if (pendingPlan && pendingPlan !== "free") return pendingPlan;
   return currentPlan;
 }
 
@@ -340,12 +431,19 @@ export async function syncFromWebhook(input: WebhookInput) {
   }
 
   const currentPlan = (userMatch.userData.plan as UserPlan) || "free";
+  const pendingPlan =
+    typeof userMatch.userData.billing === "object" &&
+    userMatch.userData.billing !== null &&
+    ((userMatch.userData.billing as { pendingPlan?: unknown }).pendingPlan === "pro" ||
+      (userMatch.userData.billing as { pendingPlan?: unknown }).pendingPlan === "premium")
+      ? ((userMatch.userData.billing as { pendingPlan: UserPlan }).pendingPlan as UserPlan)
+      : undefined;
   const currentRole = (userMatch.userData.role as UserRole) || "client";
   const currentStatus = (userMatch.userData.status as UserStatus) || "active";
   const currentBlockReason = userMatch.userData.blockReason;
   const isBillingExemptRole = currentRole === "admin" || currentRole === "moderator";
   const paymentStatus = mapPaymentStatus(details.gatewayStatus);
-  const gatewayPlan = resolvePlan(details, currentPlan);
+  const gatewayPlan = resolvePlan(details, currentPlan, pendingPlan);
   const targetPlan = isBillingExemptRole
     ? currentPlan
     : computeTargetPlan(currentPlan, paymentStatus, gatewayPlan);
@@ -420,12 +518,226 @@ export async function syncFromWebhook(input: WebhookInput) {
   };
 }
 
-export function buildCheckoutUrl(baseUrl: string, opts: { uid: string; plan: UserPlan; email?: string }) {
+export function buildCheckoutUrl(baseUrl: string, opts: { uid: string; plan: UserPlan; returnUrl?: string }) {
   const url = new URL(baseUrl);
-  url.searchParams.set("external_reference", `uid:${opts.uid}|plan:${opts.plan}`);
-  url.searchParams.set("client_reference_id", opts.uid);
-  if (opts.email) {
-    url.searchParams.set("payer_email", opts.email);
+  // Mercado Pago subscription checkout (`/subscriptions/checkout`) may fail with
+  // generic SUB03 errors when custom query params (like external_reference) are appended.
+  // Keep the URL clean for this flow.
+  if (!url.pathname.includes("/subscriptions/checkout")) {
+    url.searchParams.set("external_reference", `uid:${opts.uid}|plan:${opts.plan}`);
+  } else if (opts.returnUrl) {
+    url.searchParams.set("back_url", opts.returnUrl);
   }
   return url.toString();
+}
+
+function normalizeGatewayDetailsFromPreapproval(payload: Record<string, unknown>, preapprovalId: string): GatewayDetails {
+  const externalReference = typeof payload.external_reference === "string" ? payload.external_reference : undefined;
+  const preapprovalPlanId =
+    typeof payload.preapproval_plan_id === "string" ? payload.preapproval_plan_id : "";
+  const mappedPlan = PLAN_BY_PREAPPROVAL_ID[preapprovalPlanId];
+  const parsedReference = parseExternalReference(externalReference);
+
+  return {
+    topic: "preapproval",
+    gatewayStatus: String(payload.status ?? "pending"),
+    gatewayStatusDetail: typeof payload.reason === "string" ? payload.reason : undefined,
+    preapprovalId,
+    preapprovalPlanId,
+    externalReference,
+    payerEmail: typeof payload.payer_email === "string" ? payload.payer_email : undefined,
+    plan: parsedReference.plan ?? mappedPlan,
+  };
+}
+
+export async function confirmPreapprovalForUser(params: {
+  uid: string;
+  preapprovalId: string;
+  expectedPlan?: UserPlan;
+  userEmail?: string;
+}) {
+  const payload = await mpRequest(`/preapproval/${params.preapprovalId}`);
+  const details = normalizeGatewayDetailsFromPreapproval(payload, params.preapprovalId);
+
+  if (params.userEmail && details.payerEmail && params.userEmail.toLowerCase() !== details.payerEmail.toLowerCase()) {
+    throw new Error("payer_email_mismatch");
+  }
+
+  if (params.expectedPlan && details.plan && params.expectedPlan !== details.plan) {
+    throw new Error("plan_mismatch");
+  }
+
+  const userRef = adminDb.collection("users").doc(params.uid);
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) {
+    throw new Error("user_not_found");
+  }
+
+  const userData = userSnap.data() ?? {};
+  const currentPlan = (userData.plan as UserPlan) || "free";
+  const currentRole = (userData.role as UserRole) || "client";
+  const currentStatus = (userData.status as UserStatus) || "active";
+  const currentBlockReason = userData.blockReason;
+  const isBillingExemptRole = currentRole === "admin" || currentRole === "moderator";
+  const paymentStatus = mapPaymentStatus(details.gatewayStatus);
+  const gatewayPlan = resolvePlan(details, currentPlan);
+  const targetPlan = isBillingExemptRole ? currentPlan : computeTargetPlan(currentPlan, paymentStatus, gatewayPlan);
+  const targetPaymentStatus: UserPaymentStatus = isBillingExemptRole ? "free" : paymentStatus;
+  const nowIso = new Date().toISOString();
+  const statusPatch: Partial<{ status: UserStatus; blockReason: string }> = {};
+
+  if (!isBillingExemptRole && currentStatus !== "deleted") {
+    if (targetPaymentStatus === "paid") {
+      if (
+        (currentStatus === "blocked" || currentStatus === "inactive") &&
+        (isPaymentRelatedBlockReason(currentBlockReason) || !currentBlockReason)
+      ) {
+        statusPatch.status = "active";
+        statusPatch.blockReason = "";
+      }
+    }
+
+    if (targetPaymentStatus === "overdue" || targetPaymentStatus === "not_paid" || targetPaymentStatus === "canceled") {
+      if (currentStatus === "active") {
+        statusPatch.status = "blocked";
+        statusPatch.blockReason = getBlockReasonFromPaymentStatus(targetPaymentStatus);
+      }
+    }
+  }
+
+  await userRef.set(
+    {
+      plan: targetPlan,
+      paymentStatus: targetPaymentStatus,
+      ...statusPatch,
+      billing: {
+        source: "mercadopago_confirm",
+        provider: "mercadopago",
+        gatewayStatus: details.gatewayStatus,
+        gatewayStatusDetail: details.gatewayStatusDetail ?? null,
+        gatewayPlan,
+        externalReference: details.externalReference ?? null,
+        preapprovalId: details.preapprovalId ?? null,
+        lastEventType: "preapproval_confirm",
+        lastEventAction: "manual_confirm",
+        lastEventId: details.preapprovalId ?? null,
+        lastEventAt: nowIso,
+        lastSyncAt: nowIso,
+        lastError: null,
+        pendingPreapprovalId: null,
+        pendingPlan: null,
+        pendingCheckoutAt: null,
+      },
+    },
+    { merge: true }
+  );
+
+  await adminDb.collection("billing_events").doc(`confirm_preapproval_${params.preapprovalId}_${params.uid}`).set(
+    {
+      topic: "preapproval_confirm",
+      action: "manual_confirm",
+      resourceId: params.preapprovalId,
+      uid: params.uid,
+      status: "processed",
+      targetPlan,
+      targetPaymentStatus,
+      details,
+      processedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  return {
+    ok: true,
+    uid: params.uid,
+    targetPlan,
+    targetPaymentStatus,
+    gatewayStatus: details.gatewayStatus,
+  };
+}
+
+export async function confirmLatestPreapprovalForUser(params: {
+  uid: string;
+  userEmail: string;
+  expectedPlan?: Exclude<UserPlan, "free">;
+  checkoutStartedAt?: string;
+}) {
+  const searchPayload = await mpRequest(`/preapproval/search?payer_email=${encodeURIComponent(params.userEmail)}&limit=30&offset=0`);
+  const results = Array.isArray(searchPayload.results) ? (searchPayload.results as Record<string, unknown>[]) : [];
+
+  const expectedPlanId =
+    params.expectedPlan === "pro"
+      ? process.env.MERCADOPAGO_PLAN_PRO_ID
+      : params.expectedPlan === "premium"
+        ? process.env.MERCADOPAGO_PLAN_PREMIUM_ID
+        : undefined;
+  const minStartedAt = params.checkoutStartedAt ? new Date(params.checkoutStartedAt).getTime() - 10 * 60 * 1000 : null;
+
+  const baseCandidates = results.filter((item) => {
+    const payerEmail = typeof item.payer_email === "string" ? item.payer_email.toLowerCase() : "";
+    if (payerEmail !== params.userEmail.toLowerCase()) return false;
+
+    if (expectedPlanId && item.preapproval_plan_id !== expectedPlanId) return false;
+    return true;
+  });
+
+  const candidates = baseCandidates.filter((item) => {
+    if (minStartedAt) {
+      const createdAt = typeof item.date_created === "string" ? new Date(item.date_created).getTime() : 0;
+      if (!createdAt || createdAt < minStartedAt) return false;
+    }
+    return true;
+  });
+  const candidatesToSort = candidates.length > 0 ? candidates : baseCandidates;
+
+  const selected = candidatesToSort.sort((a, b) => {
+    const aStatus = mapPaymentStatus(typeof a.status === "string" ? a.status : "pending");
+    const bStatus = mapPaymentStatus(typeof b.status === "string" ? b.status : "pending");
+    const aPaidWeight = aStatus === "paid" ? 1 : 0;
+    const bPaidWeight = bStatus === "paid" ? 1 : 0;
+    if (aPaidWeight !== bPaidWeight) return bPaidWeight - aPaidWeight;
+
+    const aTime = typeof a.date_created === "string" ? new Date(a.date_created).getTime() : 0;
+    const bTime = typeof b.date_created === "string" ? new Date(b.date_created).getTime() : 0;
+    return bTime - aTime;
+  })[0];
+
+  const selectedId = typeof selected?.id === "string" ? selected.id : null;
+  let resolvedPreapprovalId = selectedId;
+  if (!resolvedPreapprovalId && expectedPlanId && params.checkoutStartedAt) {
+    const planSearchPayload = await mpRequest(
+      `/preapproval/search?preapproval_plan_id=${encodeURIComponent(expectedPlanId)}&limit=30&offset=0`
+    );
+    const planResults = Array.isArray(planSearchPayload.results)
+      ? (planSearchPayload.results as Record<string, unknown>[])
+      : [];
+    const checkoutStartedAtMs = new Date(params.checkoutStartedAt).getTime();
+    const fallbackWindowStart = checkoutStartedAtMs - 10 * 60 * 1000;
+    const fallbackWindowEnd = checkoutStartedAtMs + 6 * 60 * 60 * 1000;
+
+    const fallbackCandidates = planResults.filter((item) => {
+      const createdAt = typeof item.date_created === "string" ? new Date(item.date_created).getTime() : 0;
+      if (!createdAt) return false;
+      if (createdAt < fallbackWindowStart || createdAt > fallbackWindowEnd) return false;
+      const status = mapPaymentStatus(typeof item.status === "string" ? item.status : "pending");
+      return status === "paid";
+    });
+
+    if (fallbackCandidates.length === 1 && typeof fallbackCandidates[0].id === "string") {
+      resolvedPreapprovalId = fallbackCandidates[0].id as string;
+    } else if (fallbackCandidates.length > 1) {
+      throw new Error("preapproval_ambiguous_match");
+    }
+  }
+
+  if (!resolvedPreapprovalId) {
+    throw new Error("preapproval_not_found_for_user");
+  }
+
+  return confirmPreapprovalForUser({
+    uid: params.uid,
+    preapprovalId: resolvedPreapprovalId,
+    expectedPlan: params.expectedPlan,
+    userEmail: params.userEmail,
+  });
 }

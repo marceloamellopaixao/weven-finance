@@ -28,9 +28,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_plan" }, { status: 400 });
     }
 
-    const userSnap = await adminDb.collection("users").doc(decoded.uid).get();
+    const userRef = adminDb.collection("users").doc(decoded.uid);
+    const userSnap = await userRef.get();
     const userData = userSnap.data() ?? {};
-    const userEmail = (userData.email as string | undefined) ?? decoded.email;
     const userRole = (userData.role as UserRole | undefined) ?? "client";
     const isBillingExemptRole = userRole === "admin" || userRole === "moderator";
     if (isBillingExemptRole) {
@@ -49,13 +49,35 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "plan_missing_payment_link" }, { status: 422 });
     }
 
+    const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+    const runtimeBaseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+    const selectedBaseUrl = configuredAppUrl || runtimeBaseUrl;
+    const isPublicHttpsUrl =
+      selectedBaseUrl.startsWith("https://") &&
+      !selectedBaseUrl.includes("localhost") &&
+      !selectedBaseUrl.includes("127.0.0.1");
+    const returnUrl = isPublicHttpsUrl
+      ? `${selectedBaseUrl}/settings?billing_return=1&plan=${plan}`
+      : undefined;
     const checkoutUrl = buildCheckoutUrl(selectedPlan.paymentLink, {
       uid: decoded.uid,
       plan,
-      email: userEmail,
+      returnUrl,
     });
 
-    return NextResponse.json({ ok: true, checkoutUrl }, { status: 200 });
+    await userRef.set(
+      {
+        billing: {
+          pendingPreapprovalId: null,
+          pendingPlan: plan,
+          pendingCheckoutAt: new Date().toISOString(),
+          lastError: null,
+        },
+      },
+      { merge: true }
+    );
+
+    return NextResponse.json({ ok: true, checkoutUrl, preapprovalId: null }, { status: 200 });
   } catch (error) {
     console.error("Checkout link API error:", error);
     return NextResponse.json(
