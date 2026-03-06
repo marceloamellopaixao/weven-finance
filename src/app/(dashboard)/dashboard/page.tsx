@@ -333,7 +333,7 @@ export default function DashboardPage() {
   }, [customCategories, customParentFilter]);
 
   const transactionsThisMonthCount = useMemo(() => {
-    return transactions.filter(t => t.dueDate.startsWith(selectedMonth)).length;
+    return transactions.filter((t) => typeof t.dueDate === "string" && t.dueDate.startsWith(selectedMonth)).length;
   }, [transactions, selectedMonth]);
 
   const showDueDateInput = useMemo(() => {
@@ -351,10 +351,43 @@ export default function DashboardPage() {
     [paymentCards, selectedPaymentCardId]
   );
 
+  const selectedCardIndicator = useMemo(() => {
+    if (!selectedPaymentCard) return null;
+
+    const linkedTransactions = transactions.filter((tx) => {
+      if (tx.type !== "expense") return false;
+      if (tx.cardId && tx.cardId === selectedPaymentCard.id) return true;
+      const label = String(tx.cardLabel || "").toLowerCase();
+      return label.includes(selectedPaymentCard.last4) && label.includes(selectedPaymentCard.bankName.toLowerCase());
+    });
+
+    if (paymentMethod === "debit_card") {
+      return {
+        kind: "debit" as const,
+        label: "Saldo disponivel para debito",
+        value: realCurrentBalance,
+      };
+    }
+
+    const pendingCredit = linkedTransactions.filter((tx) => tx.paymentMethod === "credit_card" && tx.status === "pending");
+    const used = pendingCredit.reduce((acc, tx) => acc + Number(tx.amountForLimit ?? tx.amount ?? 0), 0);
+    const limit = Number(selectedPaymentCard.creditLimit || 0);
+    const remaining = limit - used;
+
+    return {
+      kind: "credit" as const,
+      label: "Limite restante deste cartao",
+      value: remaining,
+      used,
+      limit,
+    };
+  }, [selectedPaymentCard, paymentMethod, transactions, realCurrentBalance]);
+
   const chartData = useMemo(() => {
     const monthlyGroups: Record<string, number> = {};
 
     transactions.forEach(t => {
+      if (!t.dueDate || typeof t.dueDate !== "string") return;
       const monthKey = t.dueDate.slice(0, 7);
       const val = t.type === 'expense' ? -t.amount : t.amount;
 
@@ -868,6 +901,24 @@ export default function DashboardPage() {
             <p className="text-[11px] text-amber-600">
               Cadastre o cartão na página `/cards` para vincular este lançamento.
             </p>
+          )}
+          {selectedPaymentCard && selectedCardIndicator && (
+            <div
+              className={`rounded-xl border px-3 py-2 text-xs ${
+                selectedCardIndicator.kind === "debit"
+                  ? "border-blue-200 bg-blue-50 text-blue-700"
+                  : selectedCardIndicator.value < 0
+                    ? "border-red-200 bg-red-50 text-red-700"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
+              }`}
+            >
+              <p className="font-semibold">{selectedCardIndicator.label}: {formatCurrency(selectedCardIndicator.value)}</p>
+              {selectedCardIndicator.kind === "credit" && (
+                <p className="mt-0.5 opacity-90">
+                  Limite: {formatCurrency(selectedCardIndicator.limit)} • Usado: {formatCurrency(selectedCardIndicator.used)}
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}
