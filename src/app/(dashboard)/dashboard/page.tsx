@@ -794,8 +794,8 @@ export default function DashboardPage() {
     setIsOpeningCheckout(plan);
     try {
       const token = await user.getIdToken();
-      const checkoutUrl = await getCheckoutLink(plan, token);
-      window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+      const session = await getCheckoutLink(plan, token);
+      window.open(session.checkoutUrl, "_blank", "noopener,noreferrer");
     } catch (error) {
       console.error(error);
       setFeedbackModal({
