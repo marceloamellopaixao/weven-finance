@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
@@ -395,7 +395,7 @@ export default function DashboardPage() {
     if (paymentMethod === "debit_card") {
       return {
         kind: "debit" as const,
-        label: "Saldo disponivel para debito",
+        label: "Saldo disponivel para débito",
         value: realCurrentBalance,
       };
     }
@@ -407,7 +407,7 @@ export default function DashboardPage() {
 
     return {
       kind: "credit" as const,
-      label: "Limite restante deste cartao",
+      label: "Limite restante deste cartão",
       value: remaining,
       used,
       limit,
@@ -556,8 +556,8 @@ export default function DashboardPage() {
       setFeedbackModal({
         isOpen: true,
         type: "error",
-        title: "Selecione um cartao",
-        message: "Cadastre um cartao em /cards e selecione antes de confirmar.",
+        title: "Selecione um cartão",
+        message: "Cadastre um cartão em /cards e selecione antes de confirmar.",
       });
       return;
     }
@@ -575,7 +575,7 @@ export default function DashboardPage() {
       }
 
       let transactionDate = date; // Data do Registro (compra ou crédito)
-      let transactionDueDate = date; // Data de Vencimento (ou Credito)
+      let transactionDueDate = date; // Data de Vencimento (ou Crédito)
 
       // Lógica para definir as datas corretamente dependendo do tipo e método de pagamento
       if (type === 'income') {
@@ -585,7 +585,7 @@ export default function DashboardPage() {
       } else {
         // Gasto
         if (showDueDateInput) {
-          // Cartao de Credito/Boleto: Data da Compra (date) != Data de Vencimento (dueDate)
+          // Cartão de Crédito/Boleto: Data da Compra (date) != Data de Vencimento (dueDate)
           transactionDate = date;
           transactionDueDate = dueDate;
         } else {
@@ -732,8 +732,8 @@ export default function DashboardPage() {
       setFeedbackModal({
         isOpen: true,
         type: "error",
-        title: "Selecione um cartao",
-        message: "Cadastre um cartao em /cards e selecione antes de salvar.",
+        title: "Selecione um cartão",
+        message: "Cadastre um cartão em /cards e selecione antes de salvar.",
       });
       return;
     }
@@ -1038,7 +1038,7 @@ export default function DashboardPage() {
         isOpen: true,
         type: "info",
         title: "Conta isenta",
-        message: "Administradores e moderadores nao precisam de pagamento.",
+        message: "Administradores e moderadores não precisam de pagamento.",
       });
       return;
     }
@@ -1054,7 +1054,7 @@ export default function DashboardPage() {
         isOpen: true,
         type: "error",
         title: "Falha no checkout",
-        message: "Nao foi possivel abrir o pagamento agora.",
+        message: "Não foi possível abrir o pagamento agora.",
       });
     } finally {
       setIsOpeningCheckout(null);
@@ -1306,11 +1306,11 @@ export default function DashboardPage() {
                                       onClick={() => handleOpenCardFromTransaction(tx.cardId as string)}
                                       className="text-[10px] px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700 font-medium transition-colors hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/35"
                                     >
-                                      Cartao: {tx.cardLabel}
+                                      Cartão: {tx.cardLabel}
                                     </button>
                                   ) : (
                                     <span className="text-[10px] px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700 font-medium dark:border-violet-900 dark:bg-violet-900/20 dark:text-violet-300">
-                                      Cartao: {tx.cardLabel}
+                                      Cartão: {tx.cardLabel}
                                     </span>
                                   )
                                 )}

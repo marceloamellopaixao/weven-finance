@@ -5,7 +5,7 @@ const AUTO_BLOCK_REASON = "AUTO_CARD_LIMIT_EXCEEDED";
 
 export const defaultCreditCardSettings: CreditCardSettings = {
   enabled: false,
-  cardName: "Cartao principal",
+  cardName: "Cartão principal",
   limit: 0,
   alertThresholdPct: 80,
   blockOnLimitExceeded: true,
@@ -254,7 +254,7 @@ export async function enforceCreditCardPolicy(uid: string) {
       return acc + Math.max(0, data.used - data.limit);
     }, 0);
     patch.status = "blocked";
-    patch.blockReason = `${AUTO_BLOCK_REASON}: limite excedido em R$ ${overflow.toFixed(2)} (${exceededCardIds.length} cartao(oes))`;
+    patch.blockReason = `${AUTO_BLOCK_REASON}: limite excedido em R$ ${overflow.toFixed(2)} (${exceededCardIds.length} cartão(oes))`;
   } else if (
     settings.autoUnblockWhenBelowLimit &&
     !summary.isExceeded &&

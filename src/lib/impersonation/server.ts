@@ -78,7 +78,7 @@ async function getUserProfileSummary(uid: string) {
   const data = snap.data() as Record<string, unknown>;
   return {
     uid,
-    displayName: String(data.displayName || "Usuario"),
+    displayName: String(data.displayName || "Usuário"),
     email: String(data.email || ""),
     role: toUserRole(data.role),
   };
@@ -101,7 +101,7 @@ export async function getAuthContextFromRequest(request: NextRequest): Promise<A
     return {
       uid: decoded.uid,
       role: "client",
-      displayName: String(decoded.name || "Usuario"),
+      displayName: String(decoded.name || "Usuário"),
       email: String(decoded.email || ""),
     };
   }
@@ -110,7 +110,7 @@ export async function getAuthContextFromRequest(request: NextRequest): Promise<A
   return {
     uid: decoded.uid,
     role: toUserRole(data.role),
-    displayName: String(data.displayName || decoded.name || "Usuario"),
+    displayName: String(data.displayName || decoded.name || "Usuário"),
     email: String(data.email || decoded.email || ""),
   };
 }

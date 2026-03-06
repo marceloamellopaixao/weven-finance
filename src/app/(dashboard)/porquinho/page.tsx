@@ -99,7 +99,7 @@ export default function PiggyBankWizardPage() {
         }
       } catch (error) {
         if (!mounted) return;
-        setFeedback(error instanceof Error ? error.message : "Nao foi possivel carregar os dados do porquinho.");
+        setFeedback(error instanceof Error ? error.message : "Não foi possível carregar os dados do porquinho.");
       }
     })();
     return () => { mounted = false; };

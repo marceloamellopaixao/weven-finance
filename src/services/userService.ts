@@ -92,7 +92,7 @@ export const subscribeToAllUsers = (
     try {
       const response = await apiFetch("/api/admin/users", { method: "GET" });
       const payload = (await response.json()) as { ok: boolean; error?: string; users?: UserProfile[] };
-      if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao buscar usuarios");
+      if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao buscar usuários");
       if (!cancelled) onChange(payload.users || []);
     } catch (error) {
       if (!cancelled) onError?.(error as Error);
@@ -140,7 +140,7 @@ export const normalizeDatabaseUsers = async () => {
   });
   const payload = (await response.json()) as { ok: boolean; error?: string; count?: number };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Erro ao normalizar usuarios");
+    throw new Error(payload.error || "Erro ao normalizar usuários");
   }
   return payload.count || 0;
 };
@@ -247,7 +247,7 @@ export const updateOwnProfile = async (
     }),
   });
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || `Erro ao atualizar perfil do usuario ${uid}`);
+    throw new Error(payload.error || `Erro ao atualizar perfil do usuário ${uid}`);
   }
 };
 
@@ -277,7 +277,7 @@ export const softDeleteUser = async (uid: string): Promise<void> => {
     body: JSON.stringify({ action: "softDelete", uid }),
   });
   const payload = (await response.json()) as { ok: boolean; error?: string };
-  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao deletar usuario");
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao deletar usuário");
 
   const auth = getAuth();
   if (auth.currentUser?.uid === uid) {
@@ -291,7 +291,7 @@ export const restoreUserAccount = async (uid: string, restoreData: boolean = tru
     body: JSON.stringify({ action: "restore", uid, restoreData }),
   });
   const payload = (await response.json()) as { ok: boolean; error?: string };
-  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao restaurar usuario");
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao restaurar usuário");
 };
 
 export const requestOwnAccountDeletion = async (idToken: string): Promise<void> => {
@@ -305,6 +305,6 @@ export const requestOwnAccountDeletion = async (idToken: string): Promise<void> 
 
   const payload = (await response.json()) as { ok: boolean; error?: string };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel excluir a conta");
+    throw new Error(payload.error || "Não foi possível excluir a conta");
   }
 };

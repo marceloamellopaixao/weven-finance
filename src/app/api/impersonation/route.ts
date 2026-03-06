@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
         requesterEmail: auth.email,
         requesterRole: auth.role,
         targetUid,
-        targetDisplayName: String(targetData.displayName || "Usuario"),
+        targetDisplayName: String(targetData.displayName || "Usuário"),
         targetEmail: String(targetData.email || ""),
         targetRole: toUserRole(targetData.role),
         status: "pending",

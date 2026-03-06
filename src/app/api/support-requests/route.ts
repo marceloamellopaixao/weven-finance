@@ -15,7 +15,7 @@ async function getAuthContext(request: NextRequest) {
   return {
     uid: decoded.uid,
     email: decoded.email || userData.email || "",
-    name: userData.displayName || userData.completeName || decoded.email || "Usuario",
+    name: userData.displayName || userData.completeName || decoded.email || "Usuário",
     role: userData.role || "client",
   };
 }

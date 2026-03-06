@@ -30,7 +30,7 @@ Nenhum acesso direto ao Firestore identificado em `src/app`, `src/hooks` e `src/
 - Status: concluido.
 - Rotas: `GET/POST/PATCH/DELETE /api/categories` e `POST /api/categories/default-visibility`.
 
-2. Transacoes
+2. Transações
 - Status: concluido.
 - Rotas: `GET/POST/PATCH/DELETE /api/transactions`.
 
@@ -38,11 +38,11 @@ Nenhum acesso direto ao Firestore identificado em `src/app`, `src/hooks` e `src/
 - Status: concluido.
 - Rotas: `GET/POST/PATCH/DELETE /api/support-requests`.
 
-4. Perfil / usuarios
+4. Perfil / usuários
 - Status: concluido.
 - Rotas: `GET/PUT /api/profile/me`, `POST /api/profile/bootstrap`, `POST /api/profile/verify-email`, `GET/PATCH/POST /api/admin/users`.
 
-5. Configuracoes de sistema
+5. Configurações de sistema
 - Status: concluido.
 - Rotas: `GET/PUT /api/system/plans`.
 

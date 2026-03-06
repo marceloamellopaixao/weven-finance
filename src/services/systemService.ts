@@ -26,7 +26,7 @@ export const getPlansConfig = async (): Promise<PlansConfig> => {
     const response = await fetch("/api/system/plans", { method: "GET" });
     const payload = (await response.json()) as { ok: boolean; error?: string; plans?: PlansConfig };
     if (!response.ok || !payload.ok || !payload.plans) {
-      throw new Error(payload.error || "Nao foi possivel buscar planos");
+      throw new Error(payload.error || "Não foi possível buscar planos");
     }
     lastPlansCache = { at: Date.now(), value: payload.plans };
     return payload.plans;
@@ -47,7 +47,7 @@ export const updatePlansConfig = async (config: PlansConfig) => {
   });
   const payload = (await response.json()) as { ok: boolean; error?: string };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel atualizar planos");
+    throw new Error(payload.error || "Não foi possível atualizar planos");
   }
 };
 

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -45,7 +45,7 @@ function getBankTheme(bankName: string) {
   return BANK_THEMES.find((theme) => theme.matcher.test(bankName || "")) || BANK_THEMES[BANK_THEMES.length - 1];
 }
 
-const defaultSettings: CreditCardSettings = { enabled: false, cardName: "Cartao principal", limit: 0, alertThresholdPct: 80, blockOnLimitExceeded: true, autoUnblockWhenBelowLimit: true };
+const defaultSettings: CreditCardSettings = { enabled: false, cardName: "Cartão principal", limit: 0, alertThresholdPct: 80, blockOnLimitExceeded: true, autoUnblockWhenBelowLimit: true };
 
 export default function CreditCardPage() {
   const { user, userProfile, loading: authLoading } = useAuth();
@@ -129,7 +129,7 @@ export default function CreditCardPage() {
         setPaymentCards(cards);
       } catch (error) {
         if (!mounted) return;
-        setFeedback({ type: "error", message: error instanceof Error ? error.message : "Falha ao carregar cartao." });
+        setFeedback({ type: "error", message: error instanceof Error ? error.message : "Falha ao carregar cartão." });
       } finally {
         if (mounted) setIsLoadingState(false);
       }
@@ -197,7 +197,7 @@ export default function CreditCardPage() {
 
   const handleSave = async () => {
     if (!activeCard || activeCard.type === "debit_card") {
-      setFeedback({ type: "info", message: "Cartao de debito usa o saldo disponivel. Nao ha limite de fatura." });
+      setFeedback({ type: "info", message: "Cartão de débito usa o saldo disponivel. Não ha limite de fatura." });
       return;
     }
     setIsSaving(true);
@@ -211,7 +211,7 @@ export default function CreditCardPage() {
       });
       const cards = await getPaymentCards();
       setPaymentCards(cards);
-      setFeedback({ type: "success", message: "Regras salvas para este cartao." });
+      setFeedback({ type: "success", message: "Regras salvas para este cartão." });
       setShowSettings(false);
     } catch (error) {
       setFeedback({ type: "error", message: error instanceof Error ? error.message : "Falha ao salvar configurações." });
@@ -627,17 +627,17 @@ export default function CreditCardPage() {
                 <h2 className="text-lg font-bold flex items-center gap-2">
                   <ShieldAlert className="h-5 w-5 text-zinc-400" /> Limite Inteligente
                 </h2>
-                <Badge variant="secondary" className="bg-zinc-100 text-zinc-600 font-medium">Por Cartao</Badge>
+                <Badge variant="secondary" className="bg-zinc-100 text-zinc-600 font-medium">Por Cartão</Badge>
               </div>
 
               {activeCard?.type === "debit_card" ? (
                 <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-                  Cartao de debito: as compras devem respeitar seu saldo disponivel (Pix, transferencias e entradas).
+                  Cartão de débito: as compras devem respeitar seu saldo disponivel (Pix, transferencias e entradas).
                 </div>
               ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
                 <div>
-                  <p className="text-sm font-medium text-zinc-500 mb-1">Limite do Cartao</p>
+                  <p className="text-sm font-medium text-zinc-500 mb-1">Limite do Cartão</p>
                   <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{formatCurrency(activeCardCreditSummary?.limit || 0)}</p>
                 </div>
                 <div>
@@ -727,19 +727,19 @@ export default function CreditCardPage() {
         {showSettings && (
           <Card className="rounded-3xl border-none shadow-lg animate-in fade-in slide-in-from-top-4 bg-zinc-800 text-white">
             <CardHeader>
-              <CardTitle className="text-zinc-100">Configuracoes do Cartao Selecionado</CardTitle>
-              <CardDescription className="text-zinc-400">As regras abaixo valem somente para o cartao ativo.</CardDescription>
+              <CardTitle className="text-zinc-100">Configurações do Cartão Selecionado</CardTitle>
+              <CardDescription className="text-zinc-400">As regras abaixo valem somente para o cartão ativo.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {activeCard?.type === "debit_card" ? (
                 <div className="rounded-2xl border border-zinc-700 bg-zinc-800/50 p-4 text-sm text-zinc-300">
-                  Cartao de debito nao usa limite de fatura. O controle ocorre pelo saldo disponivel da conta.
+                  Cartão de débito não usa limite de fatura. O controle ocorre pelo saldo disponivel da conta.
                 </div>
               ) : (
               <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <Label className="text-zinc-300">Limite deste cartao (R$)</Label>
+                  <Label className="text-zinc-300">Limite deste cartão (R$)</Label>
                   <Input type="number" min={0} step="0.01" value={settings.limit} onChange={(e) => setSettings((prev) => ({ ...prev, limit: Number(e.target.value || 0) }))} className="bg-zinc-900 border-zinc-700 text-white" />
                 </div>
                 <div className="space-y-2">
@@ -752,7 +752,7 @@ export default function CreditCardPage() {
                 <div className="flex items-center justify-between rounded-2xl border border-zinc-700 bg-zinc-800/50 p-4">
                   <div>
                     <p className="font-medium text-sm text-zinc-100">Ativar controle por limite</p>
-                    <p className="text-xs text-zinc-400">Monitorar compras para nao estourar o limite deste cartao.</p>
+                    <p className="text-xs text-zinc-400">Monitorar compras para não estourar o limite deste cartão.</p>
                   </div>
                   <Switch checked={settings.enabled} onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, enabled: checked }))} />
                 </div>

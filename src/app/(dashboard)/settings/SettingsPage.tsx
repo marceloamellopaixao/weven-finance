@@ -151,7 +151,7 @@ export default function SettingsPage() {
       showFeedback("success", "Assinatura cancelada", "Seu plano foi alterado para Free.");
     } catch (error) {
       console.error(error);
-      showFeedback("error", "Falha no cancelamento", "Nao foi possivel cancelar a assinatura agora.");
+      showFeedback("error", "Falha no cancelamento", "Não foi possível cancelar a assinatura agora.");
     } finally {
       setIsCancelingSubscription(false);
     }
@@ -185,7 +185,7 @@ export default function SettingsPage() {
       showFeedback("success", "Token copiado", "Cole no Authorize do Swagger sem o prefixo Bearer.");
     } catch (error) {
       console.error("Erro ao copiar token para Swagger:", error);
-      showFeedback("error", "Falha ao copiar token", "Nao foi possivel copiar o token agora.");
+      showFeedback("error", "Falha ao copiar token", "Não foi possível copiar o token agora.");
     } finally {
       setIsCopyingSwaggerToken(false);
     }
@@ -250,7 +250,7 @@ export default function SettingsPage() {
       return;
     }
     if (isBillingExemptRole) {
-      showFeedback("info", "Conta isenta", "Administradores e moderadores nao precisam de pagamento.");
+      showFeedback("info", "Conta isenta", "Administradores e moderadores não precisam de pagamento.");
       return;
     }
 
@@ -261,7 +261,7 @@ export default function SettingsPage() {
       window.open(session.checkoutUrl, "_blank", "noopener,noreferrer");
     } catch (error) {
       console.error(error);
-      showFeedback("error", "Falha no checkout", "Nao foi possivel abrir o pagamento agora.");
+      showFeedback("error", "Falha no checkout", "Não foi possível abrir o pagamento agora.");
     } finally {
       setIsOpeningCheckout(null);
     }
@@ -279,7 +279,7 @@ export default function SettingsPage() {
       setManualPreapprovalId("");
     } catch (error) {
       console.error(error);
-      showFeedback("error", "Falha na confirmacao", "Nao foi possivel validar a assinatura agora.");
+      showFeedback("error", "Falha na confirmação", "Não foi possível validar a assinatura agora.");
     } finally {
       setIsConfirmingPreapproval(false);
     }
@@ -583,7 +583,7 @@ export default function SettingsPage() {
                         {userProfile?.billing?.source === "mercadopago_webhook"
                           ? "Webhook Mercado Pago"
                           : userProfile?.billing?.source === "mercadopago_confirm"
-                            ? "Confirmacao Mercado Pago"
+                            ? "Confirmação Mercado Pago"
                             : userProfile?.billing?.source === "mercadopago_cancel"
                               ? "Cancelamento Mercado Pago"
                               : userProfile?.billing?.source === "system"
@@ -903,7 +903,7 @@ export default function SettingsPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Modal de Confirmacao de Cancelamento de Assinatura */}
+        {/* Modal de Confirmação de Cancelamento de Assinatura */}
         <Dialog open={showCancelSubscriptionModal} onOpenChange={setShowCancelSubscriptionModal}>
           <DialogContent className="sm:max-w-[425px] rounded-3xl p-6">
             <DialogHeader>

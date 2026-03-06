@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
         role: "client",
         plan: "free",
         paymentStatus: "canceled",
-        blockReason: "Conta excluida pelo usuario",
+        blockReason: "Conta excluida pelo usuário",
         deletedAt: new Date().toISOString(),
         billing: {
           source: "system",

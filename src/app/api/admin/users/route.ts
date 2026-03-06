@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
           status: "deleted",
           role: "client",
           paymentStatus: "canceled",
-          blockReason: "Usuario solicitado exclusao",
+          blockReason: "Usuário solicitado exclusão",
           deletedAt: new Date().toISOString(),
         },
         { merge: true }

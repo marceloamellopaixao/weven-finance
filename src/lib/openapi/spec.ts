@@ -13,19 +13,19 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
     },
     servers,
     tags: [
-      { name: "Billing", description: "Fluxos de checkout, confirmacao e cancelamento de assinatura" },
-      { name: "Account", description: "Gestao de conta do proprio usuario" },
-      { name: "Profile", description: "Perfil do usuario autenticado e bootstrap de conta" },
-      { name: "AdminUsers", description: "Gestao administrativa de usuarios e operacoes de manutencao" },
-      { name: "Impersonation", description: "Solicitacao e aprovacao de acesso da equipe ao ambiente do usuario" },
-      { name: "Categories", description: "Gestao de categorias personalizadas e visibilidade das padrao" },
-      { name: "Transactions", description: "CRUD e operacoes em lote de transacoes" },
-      { name: "UserSettings", description: "Configuracoes financeiras do usuario" },
-      { name: "CreditCard", description: "Controle de limite e politicas de cartao de credito" },
-      { name: "PaymentCards", description: "Cadastro de cartoes sem dados sensiveis (banco, final e tipo)" },
-      { name: "PiggyBanks", description: "Gestao de cofrinhos/porquinhos e aportes com reflexo no extrato" },
+      { name: "Billing", description: "Fluxos de checkout, confirmação e cancelamento de assinatura" },
+      { name: "Account", description: "Gestão de conta do proprio usuário" },
+      { name: "Profile", description: "Perfil do usuário autenticado e bootstrap de conta" },
+      { name: "AdminUsers", description: "Gestão administrativa de usuários e operacoes de manutencao" },
+      { name: "Impersonation", description: "Solicitacao e aprovacao de acesso da equipe ao ambiente do usuário" },
+      { name: "Categories", description: "Gestão de categorias personalizadas e visibilidade das padrao" },
+      { name: "Transactions", description: "CRUD e operacoes em lote de transações" },
+      { name: "UserSettings", description: "Configurações financeiras do usuário" },
+      { name: "CreditCard", description: "Controle de limite e politicas de cartão de crédito" },
+      { name: "PaymentCards", description: "Cadastro de cartões sem dados sensiveis (banco, final e tipo)" },
+      { name: "PiggyBanks", description: "Gestão de cofrinhos/porquinhos e aportes com reflexo no extrato" },
       { name: "Support", description: "Chamados de suporte e solicitacoes de feature" },
-      { name: "System", description: "Configuracoes globais do sistema" },
+      { name: "System", description: "Configurações globais do sistema" },
       { name: "MercadoPago", description: "Webhook e sincronizacao com gateway" },
     ],
     components: {
@@ -81,7 +81,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             400: { description: "Plano invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             409: { description: "Plano inativo/isento", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            422: { description: "Link nao configurado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            422: { description: "Link não configurado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -133,7 +133,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/billing/cancel-subscription": {
         post: {
           tags: ["Billing"],
-          summary: "Cancelar assinatura ativa do usuario autenticado",
+          summary: "Cancelar assinatura ativa do usuário autenticado",
           security: [{ BearerAuth: [] }],
           responses: {
             200: {
@@ -185,7 +185,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/profile/me": {
         get: {
           tags: ["Profile"],
-          summary: "Ler perfil do usuario autenticado",
+          summary: "Ler perfil do usuário autenticado",
           security: [{ BearerAuth: [] }],
           responses: {
             200: { description: "Perfil retornado (ou null)" },
@@ -247,7 +247,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/profile/verify-email": {
         post: {
           tags: ["Profile"],
-          summary: "Marcar verifiedEmail=true no perfil do usuario autenticado",
+          summary: "Marcar verifiedEmail=true no perfil do usuário autenticado",
           security: [{ BearerAuth: [] }],
           responses: {
             200: { description: "Perfil atualizado" },
@@ -259,13 +259,13 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/admin/users": {
         get: {
           tags: ["AdminUsers"],
-          summary: "Listar usuarios (opcional scope=staff)",
+          summary: "Listar usuários (opcional scope=staff)",
           security: [{ BearerAuth: [] }],
           parameters: [
             { name: "scope", in: "query", required: false, schema: { type: "string", enum: ["staff"] } },
           ],
           responses: {
-            200: { description: "Usuarios retornados" },
+            200: { description: "Usuários retornados" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
@@ -273,7 +273,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
         },
         patch: {
           tags: ["AdminUsers"],
-          summary: "Atualizar campos de usuario (admin/moderator)",
+          summary: "Atualizar campos de usuário (admin/moderator)",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -292,7 +292,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             },
           },
           responses: {
-            200: { description: "Usuario atualizado" },
+            200: { description: "Usuário atualizado" },
             400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
@@ -301,7 +301,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
         },
         post: {
           tags: ["AdminUsers"],
-          summary: "Executar acao administrativa de usuarios",
+          summary: "Executar acao administrativa de usuários",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -350,7 +350,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
         },
         post: {
           tags: ["Impersonation"],
-          summary: "Solicitar acesso (staff) ou responder solicitacao (usuario)",
+          summary: "Solicitar acesso (staff) ou responder solicitacao (usuário)",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -374,7 +374,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            404: { description: "Recurso nao encontrado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            404: { description: "Recurso não encontrado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             409: { description: "Conflito de estado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
@@ -472,7 +472,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
         },
         delete: {
           tags: ["Categories"],
-          summary: "Excluir categoria e subcategorias, movendo transacoes para fallback",
+          summary: "Excluir categoria e subcategorias, movendo transações para fallback",
           security: [{ BearerAuth: [] }],
           parameters: [
             { name: "name", in: "query", required: true, schema: { type: "string" } },
@@ -515,13 +515,13 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/transactions": {
         get: {
           tags: ["Transactions"],
-          summary: "Listar transacoes do usuario (opcional por groupId)",
+          summary: "Listar transações do usuário (opcional por groupId)",
           security: [{ BearerAuth: [] }],
           parameters: [
             { name: "groupId", in: "query", required: false, schema: { type: "string" } },
           ],
           responses: {
-            200: { description: "Transacoes listadas" },
+            200: { description: "Transações listadas" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -552,7 +552,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
         },
         patch: {
           tags: ["Transactions"],
-          summary: "Atualizar transacao por ID",
+          summary: "Atualizar transação por ID",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -570,21 +570,21 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             },
           },
           responses: {
-            200: { description: "Transacao atualizada" },
+            200: { description: "Transação atualizada" },
             400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
         delete: {
           tags: ["Transactions"],
-          summary: "Excluir transacao por ID ou grupo",
+          summary: "Excluir transação por ID ou grupo",
           security: [{ BearerAuth: [] }],
           parameters: [
             { name: "transactionId", in: "query", required: false, schema: { type: "string" } },
             { name: "groupId", in: "query", required: false, schema: { type: "string" } },
           ],
           responses: {
-            200: { description: "Transacao/grupo excluido" },
+            200: { description: "Transação/grupo excluido" },
             400: { description: "Parametros invalidos", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
@@ -628,17 +628,17 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/credit-card": {
         get: {
           tags: ["CreditCard"],
-          summary: "Ler configuracoes e resumo de limite do cartao de credito",
+          summary: "Ler configurações e resumo de limite do cartão de crédito",
           security: [{ BearerAuth: [] }],
           responses: {
-            200: { description: "Configuracoes e resumo retornados" },
+            200: { description: "Configurações e resumo retornados" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
         put: {
           tags: ["CreditCard"],
-          summary: "Atualizar configuracoes do cartao e reavaliar bloqueio por limite",
+          summary: "Atualizar configurações do cartão e reavaliar bloqueio por limite",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -659,7 +659,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             },
           },
           responses: {
-            200: { description: "Configuracoes salvas" },
+            200: { description: "Configurações salvas" },
             400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
@@ -670,17 +670,17 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/payment-cards": {
         get: {
           tags: ["PaymentCards"],
-          summary: "Listar cartoes cadastrados do usuario",
+          summary: "Listar cartões cadastrados do usuário",
           security: [{ BearerAuth: [] }],
           responses: {
-            200: { description: "Cartoes retornados" },
+            200: { description: "Cartões retornados" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
         post: {
           tags: ["PaymentCards"],
-          summary: "Cadastrar cartao (somente banco, final e tipo)",
+          summary: "Cadastrar cartão (somente banco, final e tipo)",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -699,7 +699,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             },
           },
           responses: {
-            200: { description: "Cartao criado" },
+            200: { description: "Cartão criado" },
             400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
@@ -708,7 +708,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
         },
         patch: {
           tags: ["PaymentCards"],
-          summary: "Atualizar cartao cadastrado",
+          summary: "Atualizar cartão cadastrado",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -733,7 +733,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             },
           },
           responses: {
-            200: { description: "Cartao atualizado" },
+            200: { description: "Cartão atualizado" },
             400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
@@ -742,13 +742,13 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
         },
         delete: {
           tags: ["PaymentCards"],
-          summary: "Excluir cartao cadastrado",
+          summary: "Excluir cartão cadastrado",
           security: [{ BearerAuth: [] }],
           parameters: [
             { name: "cardId", in: "query", required: true, schema: { type: "string" } },
           ],
           responses: {
-            200: { description: "Cartao excluido" },
+            200: { description: "Cartão excluido" },
             400: { description: "Parametro invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
@@ -775,7 +775,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/piggy-banks": {
         get: {
           tags: ["PiggyBanks"],
-          summary: "Listar porquinhos do usuario autenticado",
+          summary: "Listar porquinhos do usuário autenticado",
           security: [{ BearerAuth: [] }],
           responses: {
             200: { description: "Porquinhos retornados" },
@@ -785,7 +785,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
         },
         post: {
           tags: ["PiggyBanks"],
-          summary: "Guardar valor no porquinho (e opcionalmente aumentar limite do cartao)",
+          summary: "Guardar valor no porquinho (e opcionalmente aumentar limite do cartão)",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -815,7 +815,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             200: { description: "Aporte registrado" },
             400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            404: { description: "Cartao nao encontrado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            404: { description: "Cartão não encontrado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
@@ -824,7 +824,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/piggy-banks/{slug}": {
         get: {
           tags: ["PiggyBanks"],
-          summary: "Ler porquinho por slug com historico",
+          summary: "Ler porquinho por slug com histórico",
           security: [{ BearerAuth: [] }],
           parameters: [
             { name: "slug", in: "path", required: true, schema: { type: "string" } },
@@ -833,7 +833,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             200: { description: "Porquinho retornado" },
             400: { description: "Slug invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            404: { description: "Porquinho nao encontrado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            404: { description: "Porquinho não encontrado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },

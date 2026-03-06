@@ -111,7 +111,7 @@ async function fetchTransactions(uid: string, groupId?: string): Promise<Transac
   const response = await apiFetch(`/api/transactions${query}`, { method: "GET" });
   const payload = (await response.json()) as { ok: boolean; error?: string; transactions?: ApiTransaction[] };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel carregar transacoes");
+    throw new Error(payload.error || "Não foi possível carregar transações");
   }
 
   const transactions = payload.transactions || [];
@@ -192,7 +192,7 @@ export const migrateCryptography = async (uid: string) => {
       body: JSON.stringify({ action: "updateMany", updates }),
     });
     if (!response.ok || !payload.ok) {
-      throw new Error(payload.error || "Nao foi possivel migrar criptografia");
+      throw new Error(payload.error || "Não foi possível migrar criptografia");
     }
   }
 
@@ -265,7 +265,7 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
     body: JSON.stringify({ action: "createMany", transactions }),
   });
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel adicionar transacao");
+    throw new Error(payload.error || "Não foi possível adicionar transação");
   }
 };
 
@@ -283,7 +283,7 @@ export const deleteTransaction = async (
       method: "DELETE",
     });
     if (!response.ok || !payload.ok) {
-      throw new Error(payload.error || "Nao foi possivel excluir grupo de transacoes");
+      throw new Error(payload.error || "Não foi possível excluir grupo de transações");
     }
     return;
   }
@@ -292,7 +292,7 @@ export const deleteTransaction = async (
     method: "DELETE",
   });
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel excluir transacao");
+    throw new Error(payload.error || "Não foi possível excluir transação");
   }
 };
 
@@ -310,7 +310,7 @@ export const cancelFutureInstallments = async (
     }),
   });
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel cancelar parcelas futuras");
+    throw new Error(payload.error || "Não foi possível cancelar parcelas futuras");
   }
 };
 
@@ -338,7 +338,7 @@ export const updateTransaction = async (
       body: JSON.stringify({ transactionId, updates }),
     });
     if (!response.ok || !payload.ok) {
-      throw new Error(payload.error || "Nao foi possivel atualizar transacao");
+      throw new Error(payload.error || "Não foi possível atualizar transação");
     }
     return;
   }
@@ -375,7 +375,7 @@ export const updateTransaction = async (
     body: JSON.stringify({ action: "updateMany", updates: bulkUpdates }),
   });
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel atualizar grupo de transacoes");
+    throw new Error(payload.error || "Não foi possível atualizar grupo de transações");
   }
 };
 
@@ -389,7 +389,7 @@ export const toggleTransactionStatus = async (
     body: JSON.stringify({ action: "toggleStatus", transactionId, currentStatus }),
   });
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel atualizar status da transacao");
+    throw new Error(payload.error || "Não foi possível atualizar status da transação");
   }
 };
 
@@ -412,7 +412,7 @@ export const syncCreditCardAmountForLimit = async (uid: string, transactions: Tr
     body: JSON.stringify({ action: "updateMany", updates }),
   });
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel sincronizar valores do cartao");
+    throw new Error(payload.error || "Não foi possível sincronizar valores do cartão");
   }
   return updates.length;
 };
@@ -421,7 +421,7 @@ async function fetchUserSettings(): Promise<UserSettings> {
   const response = await apiFetch("/api/user-settings/finance", { method: "GET" });
   const payload = (await response.json()) as { ok: boolean; error?: string; currentBalance?: number };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel carregar configuracoes financeiras");
+    throw new Error(payload.error || "Não foi possível carregar configurações financeiras");
   }
   return { currentBalance: Number(payload.currentBalance || 0) };
 }
@@ -463,6 +463,6 @@ export const updateUserBalance = async (uid: string, newBalance: number) => {
     body: JSON.stringify({ currentBalance: newBalance }),
   });
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel atualizar saldo");
+    throw new Error(payload.error || "Não foi possível atualizar saldo");
   }
 };

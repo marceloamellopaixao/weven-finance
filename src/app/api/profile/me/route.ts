@@ -29,7 +29,7 @@ export async function PUT(request: NextRequest) {
       request,
       acting,
       actionType: "profile:update",
-      actionLabel: "Editar perfil do usuario",
+      actionLabel: "Editar perfil do usuário",
     });
     if (!approval.allowed) {
       return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });

@@ -40,7 +40,7 @@ export default function PiggyBankDetailPage() {
         setDetail(data);
       } catch (err) {
         if (!mounted) return;
-        setError(err instanceof Error ? err.message : "Nao foi possivel carregar o porquinho.");
+        setError(err instanceof Error ? err.message : "Não foi possível carregar o porquinho.");
       } finally {
         if (mounted) setLoading(false);
       }

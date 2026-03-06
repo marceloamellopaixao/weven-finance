@@ -96,7 +96,7 @@ service cloud.firestore {
         allow create, update, delete: if isOwner(userId) && isUserActive();
       }
 
-      // Configuracoes do usuario (ex.: categories/settings/categories)
+      // Configurações do usuário (ex.: categories/settings/categories)
       match /settings/{settingId} {
         allow read: if isOwner(userId) || isManager();
         allow create, update, delete: if isOwner(userId) && isUserActive();

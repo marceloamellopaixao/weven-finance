@@ -29,7 +29,7 @@ export async function PUT(request: NextRequest) {
       request,
       acting,
       actionType: "credit-card:update-settings",
-      actionLabel: "Atualizar configuracoes de cartao de credito",
+      actionLabel: "Atualizar configurações de cartão de crédito",
     });
     if (!approval.allowed) {
       return NextResponse.json(

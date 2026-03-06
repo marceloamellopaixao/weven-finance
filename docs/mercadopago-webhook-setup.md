@@ -48,7 +48,7 @@ MERCADOPAGO_PLAN_PREMIUM_ID=
    - `merchant_order`
 3. Copie a chave de assinatura (webhook secret) para `MERCADOPAGO_WEBHOOK_SECRET`.
 
-## 4) Como o vinculo com usuario funciona
+## 4) Como o vinculo com usuário funciona
 
 O checkout e gerado por `GET /api/billing/checkout-link?plan=pro|premium` e inclui:
 
@@ -56,7 +56,7 @@ O checkout e gerado por `GET /api/billing/checkout-link?plan=pro|premium` e incl
 - `client_reference_id={UID}`
 - `payer_email={EMAIL}`
 
-No webhook, o backend tenta localizar usuario por:
+No webhook, o backend tenta localizar usuário por:
 
 1. `external_reference` (preferencial)
 2. `payer_email` (fallback)
@@ -74,10 +74,10 @@ Quando webhook chega:
 
 ## 6) Como ADMIN e USUARIO validam status
 
-- Usuario: `Configuracoes > Planos`
+- Usuário: `Configurações > Planos`
   - Mostra origem (`Webhook Mercado Pago` ou `Administracao manual`)
   - Mostra ultima sincronizacao
-- Admin: tabela de usuarios
+- Admin: tabela de usuários
   - Mostra `Fonte: Webhook MP` ou `Fonte: Manual`
   - Mostra data de `Sync`
 
@@ -92,23 +92,23 @@ No processamento do webhook:
   - rebaixa `plan` para `free` quando aplicavel
   - bloqueia conta ativa com motivo automatico
 
-Observacao: contas `deleted` nao sao reativadas automaticamente.
+Observacao: contas `deleted` não sao reativadas automaticamente.
 
 ## 6.2) Regras por cargo
 
 - `admin` e `moderator`:
   - isentos de cobranca
-  - nao recebem bloqueio por inadimplencia no webhook
+  - não recebem bloqueio por inadimplencia no webhook
   - checkout de pagamento retorna `role_billing_exempt`
 - `support`:
-  - nao isento
-  - segue regra de plano como usuario comum (limite do plano free: 20)
+  - não isento
+  - segue regra de plano como usuário comum (limite do plano free: 20)
 
 ## 7) Fluxo recomendado de operacao
 
-1. Usuario clica em upgrade (dashboard/configuracoes).
+1. Usuário clica em upgrade (dashboard/configurações).
 2. Front chama `/api/billing/checkout-link`.
-3. Usuario paga no MercadoPago.
+3. Usuário paga no MercadoPago.
 4. MercadoPago notifica `/api/mercadopago/webhook`.
 5. Backend sincroniza Firestore.
 6. UI atualiza em tempo real via snapshot de `users/{uid}`.

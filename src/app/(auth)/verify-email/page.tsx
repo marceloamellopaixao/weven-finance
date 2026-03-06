@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,7 +63,7 @@ export default function VerifyEmailPage() {
         router.refresh();
         router.replace("/");
       } else {
-        toast.error("Ainda nao detectamos a verificacao. Aguarde alguns segundos e tente novamente.");
+        toast.error("Ainda não detectamos a verificacao. Aguarde alguns segundos e tente novamente.");
       }
     } catch (error) {
       console.error("Erro na verificacao:", error);
@@ -90,7 +90,7 @@ export default function VerifyEmailPage() {
             </div>
             <CardTitle className={`${fadeInUp} delay-200 text-2xl font-bold text-zinc-900 dark:text-zinc-100`}>Verifique seu E-mail</CardTitle>
             <CardDescription className={`${fadeInUp} delay-300 text-base mt-2 text-zinc-600 dark:text-zinc-400`}>
-              Enviamos um link de confirmacao para <strong className="text-zinc-900 dark:text-zinc-200">{user?.email}</strong>.
+              Enviamos um link de confirmação para <strong className="text-zinc-900 dark:text-zinc-200">{user?.email}</strong>.
               <br className="mb-2" />
               Clique nele para ativar sua conta.
             </CardDescription>
@@ -104,13 +104,13 @@ export default function VerifyEmailPage() {
               <div className="space-y-1">
                 <h4 className="font-semibold text-emerald-900 dark:text-emerald-100 text-sm">Conta Segura</h4>
                 <p className="text-xs text-emerald-700 dark:text-emerald-300 leading-relaxed">
-                  Apos verificar o e-mail, voce tera acesso imediato ao painel. Seus dados ja estao criptografados e protegidos.
+                  Apos verificar o e-mail, você tera acesso imediato ao painel. Seus dados ja estao criptografados e protegidos.
                 </p>
               </div>
             </div>
 
             <div className={`${fadeInUp} delay-700 text-center text-sm text-zinc-500 dark:text-zinc-400`}>
-              <p>Nao recebeu? Verifique a pasta de <strong>Spam</strong> ou <strong>Lixo Eletronico</strong>.</p>
+              <p>Não recebeu? Verifique a pasta de <strong>Spam</strong> ou <strong>Lixo Eletrônico</strong>.</p>
             </div>
           </CardContent>
 

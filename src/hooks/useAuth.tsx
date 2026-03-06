@@ -158,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUserProfile(null);
         }
       } catch (error) {
-        console.error("Erro na busca do perfil do usuario:", error);
+        console.error("Erro na busca do perfil do usuário:", error);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -270,13 +270,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       const bootstrapPayload = (await bootstrapResponse.json()) as { ok: boolean };
       if (!bootstrapResponse.ok || !bootstrapPayload.ok) {
-        throw new Error("Falha ao inicializar perfil do usuario.");
+        throw new Error("Falha ao inicializar perfil do usuário.");
       }
 
       await sendEmailVerification(userCredential.user);
       router.push("/verify-email");
     } catch (error) {
-      let message = "Erro ao registrar usuario.";
+      let message = "Erro ao registrar usuário.";
       if (error instanceof FirebaseError) {
         if (error.code === AuthErrorCodes.EMAIL_EXISTS) message = "E-mail ja em uso.";
         if (error.code === AuthErrorCodes.WEAK_PASSWORD) message = "Senha muito fraca.";
@@ -298,13 +298,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (user) {
         if (user.email && !isValidRealEmail(user.email)) {
           await user.delete();
-          throw new Error("E-mail nao aceito.");
+          throw new Error("E-mail não aceito.");
         }
 
         const bootstrapProfile: Partial<UserProfile> = {
           uid: user.uid,
           email: user.email || "",
-          displayName: user.displayName || "Usuario",
+          displayName: user.displayName || "Usuário",
           completeName: user.displayName || "",
           phone: "",
           role: "client",
@@ -357,7 +357,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let message = "Erro ao entrar.";
       if (error instanceof FirebaseError) {
         if (error.code === AuthErrorCodes.INVALID_LOGIN_CREDENTIALS) message = "Credenciais invalidas.";
-        if (error.code === AuthErrorCodes.USER_DELETED) message = "Usuario nao encontrado.";
+        if (error.code === AuthErrorCodes.USER_DELETED) message = "Usuário não encontrado.";
       }
       throw message;
     }

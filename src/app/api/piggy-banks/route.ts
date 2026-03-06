@@ -55,7 +55,7 @@ function slugifyGoalName(value: string) {
 }
 
 function getDefaultGoalName(goalType: PiggyBankGoalType) {
-  if (goalType === "card_limit") return "Cofrinho do Cartao";
+  if (goalType === "card_limit") return "Cofrinho do Cartão";
   if (goalType === "emergency_reserve") return "Reserva de Emergencia";
   if (goalType === "travel") return "Fazer uma Viagem";
   if (goalType === "home_renovation") return "Reformar a Casa";
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
       const cardData = cardSnap.data() as Record<string, unknown>;
       const currentLimit = Number(cardData.creditLimit || 0);
       const nextLimit = currentLimit + amount;
-      cardLabel = `${String(cardData.bankName || "Cartao")} •••• ${String(cardData.last4 || "")}`;
+      cardLabel = `${String(cardData.bankName || "Cartão")} •••• ${String(cardData.last4 || "")}`;
       await cardRef.set(
         {
           creditLimit: nextLimit,

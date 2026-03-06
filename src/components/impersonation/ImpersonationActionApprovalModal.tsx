@@ -71,7 +71,7 @@ export function ImpersonationActionApprovalModal() {
           </DialogDescription>
         </DialogHeader>
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700">
-          Apenas aprove se voce reconhece esta acao. Toda tentativa fica registrada em log.
+          Apenas aprove se você reconhece esta acao. Toda tentativa fica registrada em log.
         </div>
         <DialogFooter className="gap-2 sm:justify-end">
           <Button

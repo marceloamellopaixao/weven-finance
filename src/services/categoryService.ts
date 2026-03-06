@@ -82,7 +82,7 @@ export const getCategoriesData = async (
   const response = await fetchWithAuth("/api/categories", idToken, { method: "GET" });
   const payload = (await response.json()) as CategoriesResponse;
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel carregar categorias");
+    throw new Error(payload.error || "Não foi possível carregar categorias");
   }
   return {
     customCategories: payload.customCategories || [],
@@ -100,7 +100,7 @@ export const addCustomCategory = async (
     body: JSON.stringify({ name, type }),
   });
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel adicionar categoria");
+    throw new Error(payload.error || "Não foi possível adicionar categoria");
   }
 };
 
@@ -114,7 +114,7 @@ export const deleteCustomCategoryByName = async (
     method: "DELETE",
   });
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel excluir categoria");
+    throw new Error(payload.error || "Não foi possível excluir categoria");
   }
 };
 
@@ -128,7 +128,7 @@ export const renameCustomCategoryByName = async (
     body: JSON.stringify({ oldName, newName }),
   });
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel renomear categoria");
+    throw new Error(payload.error || "Não foi possível renomear categoria");
   }
 };
 
@@ -142,6 +142,6 @@ export const setDefaultCategoryHidden = async (
     body: JSON.stringify({ categoryName, hidden }),
   });
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel atualizar visibilidade da categoria");
+    throw new Error(payload.error || "Não foi possível atualizar visibilidade da categoria");
   }
 };

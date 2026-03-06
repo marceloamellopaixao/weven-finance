@@ -18,7 +18,7 @@ export async function getCheckoutLink(
     error?: string;
   };
   if (!response.ok || !payload.ok || !payload.checkoutUrl) {
-    throw new Error(payload.error || "Nao foi possivel gerar o link de pagamento");
+    throw new Error(payload.error || "Não foi possível gerar o link de pagamento");
   }
 
   return {
@@ -52,7 +52,7 @@ export async function confirmPreapproval(
   };
 
   if (!response.ok || !payload.ok || !payload.targetPlan || !payload.targetPaymentStatus) {
-    throw new Error(payload.error || "Nao foi possivel confirmar a assinatura");
+    throw new Error(payload.error || "Não foi possível confirmar a assinatura");
   }
 
   return {
@@ -80,7 +80,7 @@ export async function cancelSubscription(
   };
 
   if (!response.ok || !payload.ok || !payload.targetPlan || !payload.targetPaymentStatus) {
-    throw new Error(payload.error || "Nao foi possivel cancelar a assinatura");
+    throw new Error(payload.error || "Não foi possível cancelar a assinatura");
   }
 
   return {

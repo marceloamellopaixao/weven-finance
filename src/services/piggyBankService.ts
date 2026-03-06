@@ -26,7 +26,7 @@ export async function getPiggyBanks(): Promise<PiggyBank[]> {
   const response = await fetchWithAuth("/api/piggy-banks", { method: "GET" });
   const payload = (await response.json()) as { ok: boolean; error?: string; piggyBanks?: PiggyBank[] };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel carregar porquinhos");
+    throw new Error(payload.error || "Não foi possível carregar porquinhos");
   }
   return payload.piggyBanks || [];
 }
@@ -35,7 +35,7 @@ export async function getPiggyBankBySlug(slug: string): Promise<PiggyBankDetail>
   const response = await fetchWithAuth(`/api/piggy-banks/${encodeURIComponent(slug)}`, { method: "GET" });
   const payload = (await response.json()) as { ok: boolean; error?: string; piggyBank?: PiggyBankDetail };
   if (!response.ok || !payload.ok || !payload.piggyBank) {
-    throw new Error(payload.error || "Porquinho nao encontrado");
+    throw new Error(payload.error || "Porquinho não encontrado");
   }
   return payload.piggyBank;
 }
@@ -60,7 +60,7 @@ export async function savePiggyDeposit(input: SavePiggyDepositInput) {
   });
   const payload = (await response.json()) as { ok: boolean; error?: string; slug?: string };
   if (!response.ok || !payload.ok || !payload.slug) {
-    throw new Error(payload.error || "Nao foi possivel guardar o valor");
+    throw new Error(payload.error || "Não foi possível guardar o valor");
   }
   return payload.slug;
 }

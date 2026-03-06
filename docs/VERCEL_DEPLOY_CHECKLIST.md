@@ -66,7 +66,7 @@ firebase deploy --only firestore:rules
 
 ### Billing API
 
-1. Logar como usuario `client`.
+1. Logar como usuário `client`.
 2. Ir em `/settings` > Planos.
 3. Clicar upgrade.
 4. Verificar no browser/network:
@@ -82,16 +82,16 @@ firebase deploy --only firestore:rules
 - `admin` e `moderator` sao isentos de pagamento:
   - endpoint `checkout-link` deve retornar `409 role_billing_exempt`.
 - `support` segue regra de limite configurado (plano free com limite).
-- Fonte da verdade do plano: documento `users/{uid}` atualizado por webhook/confirmacao.
+- Fonte da verdade do plano: documento `users/{uid}` atualizado por webhook/confirmação.
 
 ## 6) Troubleshooting rapido
 
 - `Missing MERCADOPAGO_ACCESS_TOKEN`:
-  - token nao configurado na Vercel.
+  - token não configurado na Vercel.
 - `invalid_signature` no webhook:
   - `MERCADOPAGO_WEBHOOK_SECRET` incorreto ou webhook sem header de assinatura.
 - Timeout em simulacao do MP:
   - endpoint deve responder rapido; verificar logs do Vercel function.
 - `Missing or insufficient permissions` no client:
-  - publicar `firestore.rules` novamente e validar role/status do usuario.
+  - publicar `firestore.rules` novamente e validar role/status do usuário.
 

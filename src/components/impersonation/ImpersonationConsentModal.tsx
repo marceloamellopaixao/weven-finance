@@ -69,7 +69,7 @@ export function ImpersonationConsentModal() {
     <Dialog open={!!currentRequest} onOpenChange={() => {}}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Voce solicitou acesso do suporte tecnico?</DialogTitle>
+          <DialogTitle>Você solicitou acesso do suporte técnico?</DialogTitle>
           <DialogDescription>
             {currentRequest
               ? `${currentRequest.requesterDisplayName} (${currentRequest.requesterRole}) solicitou acesso temporario para auxiliar sua conta.`
@@ -77,7 +77,7 @@ export function ImpersonationConsentModal() {
           </DialogDescription>
         </DialogHeader>
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700">
-          Se voce aprovar, a equipe podera visualizar e operar sua tela por tempo limitado com auditoria em log.
+          Se você aprovar, a equipe podera visualizar e operar sua tela por tempo limitado com auditoria em log.
         </div>
         <DialogFooter className="gap-2 sm:justify-end">
           <Button
@@ -86,7 +86,7 @@ export function ImpersonationConsentModal() {
             onClick={() => void handleRespond(false)}
             className="hover:cursor-pointer"
           >
-            Nao solicitei
+            Não solicitei
           </Button>
           <Button
             disabled={isResponding}

@@ -26,7 +26,7 @@ export async function getPaymentCards() {
   const response = await fetchWithAuth("/api/payment-cards", { method: "GET" });
   const payload = (await response.json()) as { ok: boolean; error?: string; cards?: PaymentCard[] };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel carregar cartoes");
+    throw new Error(payload.error || "Não foi possível carregar cartões");
   }
   return payload.cards || [];
 }
@@ -40,7 +40,7 @@ export async function createPaymentCard(
   });
   const payload = (await response.json()) as { ok: boolean; error?: string; id?: string };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel criar cartao");
+    throw new Error(payload.error || "Não foi possível criar cartão");
   }
   return payload.id;
 }
@@ -55,7 +55,7 @@ export async function updatePaymentCard(
   });
   const payload = (await response.json()) as { ok: boolean; error?: string };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel atualizar cartao");
+    throw new Error(payload.error || "Não foi possível atualizar cartão");
   }
 }
 
@@ -65,7 +65,7 @@ export async function deletePaymentCard(cardId: string) {
   });
   const payload = (await response.json()) as { ok: boolean; error?: string };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel excluir cartao");
+    throw new Error(payload.error || "Não foi possível excluir cartão");
   }
 }
 
@@ -86,7 +86,7 @@ export async function identifyPaymentCard(bin: string): Promise<PaymentCardIdent
   };
 
   if (!response.ok || !payload.ok || !payload.identification) {
-    throw new Error(payload.error || "Nao foi possivel identificar cartao");
+    throw new Error(payload.error || "Não foi possível identificar cartão");
   }
 
   return payload.identification;
