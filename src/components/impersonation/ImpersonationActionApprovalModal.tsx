@@ -17,7 +17,7 @@ import {
   type ImpersonationActionRequest,
 } from "@/services/impersonationService";
 
-const POLLING_INTERVAL_MS = 6000;
+const POLLING_INTERVAL_MS = 20000;
 
 export function ImpersonationActionApprovalModal() {
   const { user, userProfile } = useAuth();
@@ -31,6 +31,7 @@ export function ImpersonationActionApprovalModal() {
 
     let cancelled = false;
     const run = async () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       try {
         const data = await getPendingImpersonationActionRequests();
         if (!cancelled) setPending(data);
@@ -93,4 +94,3 @@ export function ImpersonationActionApprovalModal() {
     </Dialog>
   );
 }
-
