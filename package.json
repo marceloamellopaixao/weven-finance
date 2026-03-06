@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "health:check": "powershell -ExecutionPolicy Bypass -File scripts/health-check.ps1 -BaseUrl http://localhost:3000"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",

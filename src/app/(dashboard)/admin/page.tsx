@@ -25,7 +25,7 @@ import {
   UserPaymentStatus,
 } from "@/types/user";
 import { PlansConfig, PlanDetails } from "@/types/system";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -99,6 +99,11 @@ import {
 import { deleteTicket, subscribeToSupportTickets, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
 import { Timestamp } from "firebase/firestore";
 import { DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@radix-ui/react-dropdown-menu";
+import {
+  activateImpersonation,
+  getMyImpersonationStatus,
+  requestImpersonationAccess,
+} from "@/services/impersonationService";
 
 type UserWithCount = UserProfile & { transactionCount?: number };
 type DeletionSuccessData = { name: string; email: string } | null;
@@ -118,12 +123,15 @@ export default function AdminPage() {
   const { userProfile, loading } = useAuth();
   const { plans } = usePlans();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   // --- Constantes de Animação ---
   const fadeInUp = "animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both";
 
   // UI - Abas
   const [activeTab, setActiveTab] = useState<string>("users");
+  const [isTabBootstrapped, setIsTabBootstrapped] = useState(false);
 
   // Users Data
   const [users, setUsers] = useState<UserWithCount[]>([]);
@@ -159,6 +167,7 @@ export default function AdminPage() {
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
 
   const [pendingPaymentChange, setPendingPaymentChange] = useState<{ uid: string; status: UserPaymentStatus } | null>(null);
+  const [impersonationPollingTargetUid, setImpersonationPollingTargetUid] = useState<string | null>(null);
 
   // Block reason
   const [selectedReason, setSelectedReason] = useState("");
@@ -178,6 +187,28 @@ export default function AdminPage() {
   // --- PERMISSÕES ---
   const canManageSensitive = userProfile?.role === "admin";
   const canRestore = userProfile?.role === "admin" || userProfile?.role === "moderator";
+  const canImpersonateUsers =
+    userProfile?.role === "admin" || userProfile?.role === "moderator" || userProfile?.role === "support";
+
+  const allowedTabs = useMemo(() => {
+    if (!userProfile) return ["users", "support"];
+    const tabs = ["support"];
+    if (userProfile.role === "admin" || userProfile.role === "moderator") {
+      tabs.unshift("users");
+      tabs.push("restore");
+    }
+    if (userProfile.role === "admin") {
+      tabs.push("plans");
+    }
+    return tabs;
+  }, [userProfile]);
+
+  const setActiveTabAndPersist = useCallback((tab: string) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", tab);
+    router.replace(`${pathname}?${params.toString()}`);
+  }, [pathname, router, searchParams]);
 
   // Permissão de Visualização na Tabela de Usuários
   const canViewRole = useCallback((targetRole: UserRole) => {
@@ -259,10 +290,25 @@ export default function AdminPage() {
   }, [plans]);
 
   useEffect(() => {
-    if (userProfile?.role === "support") {
+    if (loading || !userProfile || isTabBootstrapped) return;
+    const tabFromUrl = searchParams.get("tab");
+    if (tabFromUrl && allowedTabs.includes(tabFromUrl)) {
+      setActiveTab(tabFromUrl);
+    } else if (userProfile.role === "support") {
       setActiveTab("support");
     }
-  }, [userProfile?.role]);
+    setIsTabBootstrapped(true);
+  }, [allowedTabs, isTabBootstrapped, loading, searchParams, userProfile]);
+
+  useEffect(() => {
+    if (!isTabBootstrapped || !allowedTabs.includes(activeTab)) return;
+    const tabFromUrl = searchParams.get("tab");
+    if (tabFromUrl !== activeTab) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", activeTab);
+      router.replace(`${pathname}?${params.toString()}`);
+    }
+  }, [activeTab, allowedTabs, isTabBootstrapped, pathname, router, searchParams]);
 
   // --- Contagem ---
   const attachCounts = useCallback(async (list: UserProfile[]) => {
@@ -326,6 +372,80 @@ export default function AdminPage() {
   };
 
   // --- HANDLERS (SUPORTE) ---
+  const formatTicketStatus = (status: SupportTicket["status"]): string => {
+    const labels: Record<string, string> = {
+      pending: "Pendente",
+      in_progress: "Em Progresso",
+      resolved: "Resolvido",
+      rejected: "Rejeitado",
+      under_review: "Em Análise",
+      approved: "Aprovado",
+      implemented: "Implementado",
+    };
+    return labels[status] || String(status);
+  };
+
+  const handleRequestImpersonation = async (targetUser: UserProfile) => {
+    try {
+      const result = await requestImpersonationAccess(targetUser.uid);
+      setImpersonationPollingTargetUid(targetUser.uid);
+      const message = result.alreadyPending
+        ? "Já existe uma solicitação pendente para este usuário."
+        : "Solicitação enviada. Aguarde o usuário aprovar no modal.";
+      showFeedback("info", "Impersonação", message);
+    } catch {
+      showFeedback("error", "Erro", "Não foi possível iniciar a solicitação de impersonação.");
+    }
+  };
+
+  useEffect(() => {
+    if (!impersonationPollingTargetUid) return;
+
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 30;
+
+    const run = async () => {
+      try {
+        const status = await getMyImpersonationStatus(impersonationPollingTargetUid);
+        if (cancelled) return;
+
+        if (status.approved) {
+          activateImpersonation(impersonationPollingTargetUid);
+          setImpersonationPollingTargetUid(null);
+          showFeedback("success", "Impersonação ativa", "Aprovação recebida. Entrando na tela do usuário.");
+          router.push("/dashboard");
+          return;
+        }
+
+        const requestStatus = status.request?.status;
+        if (requestStatus === "rejected" || requestStatus === "revoked" || requestStatus === "expired") {
+          setImpersonationPollingTargetUid(null);
+          showFeedback("info", "Solicitação finalizada", "O usuário não aprovou o acesso.");
+          return;
+        }
+
+        attempts += 1;
+        if (attempts >= maxAttempts) {
+          setImpersonationPollingTargetUid(null);
+          showFeedback("info", "Tempo esgotado", "O usuário ainda não aprovou a solicitação de acesso.");
+        }
+      } catch {
+        // polling best effort
+      }
+    };
+
+    const timer = setInterval(() => {
+      void run();
+    }, 3000);
+
+    void run();
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [impersonationPollingTargetUid, router]);
 
   const handleAssignTicket = async (ticketId: string, staffUid: string) => {
     const staff = staffMembers.find(s => s.uid === staffUid);
@@ -646,24 +766,24 @@ export default function AdminPage() {
           <div className="bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 w-full md:w-fit grid grid-cols-2 md:grid-flow-col gap-1 shadow-sm">
             {/* Aba Usuários: Apenas Admin e Moderator */}
             {(userProfile?.role === 'admin' || userProfile?.role === 'moderator') && (
-              <button onClick={() => setActiveTab("users")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "users" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button onClick={() => setActiveTabAndPersist("users")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "users" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <UserIcon className="h-4 w-4" /> Gerenciar Usuários
               </button>
             )}
 
             {/* Aba Suporte: Todos da Equipe */}
-            <button onClick={() => setActiveTab("support")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "support" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button onClick={() => setActiveTabAndPersist("support")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "support" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <HeadphonesIcon className="h-4 w-4" /> Suporte & Ideias
             </button>
 
             {canRestore && (
-              <button onClick={() => setActiveTab("restore")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "restore" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button onClick={() => setActiveTabAndPersist("restore")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "restore" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <History className="h-4 w-4" /> Restaurar Dados
               </button>
             )}
 
             {canManageSensitive && (
-              <button onClick={() => setActiveTab("plans")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "plans" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button onClick={() => setActiveTabAndPersist("plans")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "plans" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <CreditCard className="h-4 w-4" /> Gerenciar Planos
               </button>
             )}
@@ -749,7 +869,7 @@ export default function AdminPage() {
                                                         ${ticket.status === 'in_progress' ? 'bg-blue-500' : ''}
                                                         ${ticket.status === 'rejected' ? 'bg-red-500' : ''}
                                                     `}>
-                                    {ticket.status.replace('_', ' ')}
+                                    {formatTicketStatus(ticket.status)}
                                   </Badge>
                                 </TableCell>
                                 <TableCell>
@@ -1158,15 +1278,19 @@ export default function AdminPage() {
                                     <DropdownMenuContent align="end" className="rounded-xl p-1 shadow-xl border-zinc-200 dark:border-zinc-800">
                                       <DropdownMenuLabel className="text-xs">Ações</DropdownMenuLabel>
                                       <DropdownMenuSeparator />
-                                      {canManageSensitive && (
+                                      {canImpersonateUsers && (
                                         <>
                                           <DropdownMenuItem
-                                            onClick={() => window.open(`/api/impersonate?uid=${u.uid}`, "_blank")}
+                                            onClick={() => handleRequestImpersonation(u)}
                                             disabled={!canEditThisUser}
                                             className="cursor-pointer rounded-lg text-xs font-medium"
                                           >
                                             <User className="mr-2 h-4 w-4" /> Impersonar
                                           </DropdownMenuItem>
+                                        </>
+                                      )}
+                                      {canManageSensitive && (
+                                        <>
                                           <DropdownMenuItem
                                             onClick={() => setUserToReset(u)}
                                             disabled={!canEditThisUser}
@@ -1183,7 +1307,7 @@ export default function AdminPage() {
                                           </DropdownMenuItem>
                                         </>
                                       )}
-                                      {!canManageSensitive && <p className="p-2 text-xs text-zinc-400 italic">Somente administradores.</p>}
+                                      {!canImpersonateUsers && <p className="p-2 text-xs text-zinc-400 italic">Somente administradores.</p>}
                                     </DropdownMenuContent>
                                   </DropdownMenu>
                                 </div>
@@ -1622,7 +1746,7 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <span className="font-semibold block">Status Atual:</span>
-                  <Badge variant="secondary" className="mt-1">{viewTicket.status.replace('_', ' ')}</Badge>
+                  <Badge variant="secondary" className="mt-1">{formatTicketStatus(viewTicket.status)}</Badge>
                 </div>
               </div>
               <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">

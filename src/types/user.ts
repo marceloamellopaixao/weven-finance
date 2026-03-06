@@ -2,7 +2,7 @@ export type UserPlan = 'free' | 'premium' | 'pro';
 export type UserRole = 'admin' | 'moderator' | 'support' | 'client';
 export type UserStatus = 'active' | 'inactive' | 'deleted' | 'blocked';
 export type UserPaymentStatus = 'free' | 'paid' | 'not_paid' | 'pending' | 'overdue' | 'canceled' ;
-export type BillingSource = 'manual' | 'mercadopago_webhook' | 'mercadopago_confirm' | 'system';
+export type BillingSource = 'manual' | 'mercadopago_webhook' | 'mercadopago_confirm' | 'mercadopago_cancel' | 'system';
 
 export interface BillingInfo {
   source?: BillingSource;

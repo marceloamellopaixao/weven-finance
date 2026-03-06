@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -10,18 +10,25 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home } from "lucide-react";
+import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home, UserCog } from "lucide-react";
 import Link from "next/link";
+import { useImpersonation } from "@/hooks/useImpersonation";
 
 export function Header() {
   const { user, userProfile, logout } = useAuth();
+  const { isImpersonating, impersonationTargetUid, stopImpersonation } = useImpersonation();
 
-  // Considera logado se houver usuário OU se o perfil já foi carregado
+  const handleStopImpersonation = () => {
+    stopImpersonation();
+    window.location.href = "/admin";
+  };
+
+  // Considera logado se houver usuário OU se o perfil já foi carregado.
   const isAuthenticated = !!user || !!userProfile;
 
-  // SE NÃO TIVER USUÁRIO LOGADO, MOSTRA O HEADER DA LANDING PAGE
+  // Se não tiver usuário logado, mostra o header da landing page.
   if (!isAuthenticated) {
     return (
       <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-zinc-100 dark:bg-zinc-950/80 dark:border-zinc-800 transition-all duration-300">
@@ -49,7 +56,7 @@ export function Header() {
     );
   }
 
-  // SE ESTIVER LOGADO (OU BLOQUEADO), MOSTRA O HEADER DA APLICAÇÃO
+  // Se estiver logado (ou bloqueado), mostra o header da aplicação.
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/80 backdrop-blur-xl px-4 md:px-8 h-16 flex items-center justify-between dark:bg-zinc-950/80 transition-all duration-300">
       <div className="flex items-center gap-3">
@@ -64,17 +71,46 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
+        {isImpersonating && (
+          <>
+            <Button
+              variant="outline"
+              size="icon"
+              className="md:hidden h-9 w-9 rounded-full border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:cursor-pointer"
+              onClick={handleStopImpersonation}
+              title="Encerrar impersonação"
+            >
+              <UserCog className="h-4 w-4" />
+            </Button>
+            <div className="hidden md:flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-700">
+              <UserCog className="h-3.5 w-3.5" />
+              <span>Impersonando {userProfile?.email || impersonationTargetUid}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-amber-700 hover:bg-amber-100 hover:cursor-pointer"
+                onClick={handleStopImpersonation}
+              >
+                Encerrar
+              </Button>
+            </div>
+          </>
+        )}
 
         {/* Informações do Usuário (Desktop) */}
         <div className="text-right hidden md:block">
           <p className="text-sm font-semibold leading-none text-zinc-900 dark:text-zinc-100">
-            {user?.displayName || userProfile?.displayName || "Usuário"}
+            {userProfile?.displayName || user?.displayName || "Usuário"}
           </p>
           <div className="flex justify-end mt-1">
-            <Badge variant="secondary" className={`text-[10px] uppercase border h-5 px-1.5 ${userProfile?.plan === 'pro' || userProfile?.plan === 'premium'
-                ? 'bg-violet-100 text-violet-600 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400'
-                : 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400'
-              }`}>
+            <Badge
+              variant="secondary"
+              className={`text-[10px] uppercase border h-5 px-1.5 ${
+                userProfile?.plan === "pro" || userProfile?.plan === "premium"
+                  ? "bg-violet-100 text-violet-600 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400"
+                  : "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
+              }`}
+            >
               {userProfile?.plan || "Free"}
             </Badge>
           </div>
@@ -86,15 +122,15 @@ export function Header() {
             <Avatar className="h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 ring-transparent hover:ring-violet-200 transition-all cursor-pointer">
               <AvatarImage src={user?.photoURL || userProfile?.photoURL || ""} />
               <AvatarFallback className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600 font-bold">
-                {(user?.displayName || userProfile?.displayName || "U").charAt(0).toUpperCase()}
+                {(userProfile?.displayName || user?.displayName || "U").charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 rounded-xl shadow-xl border-zinc-200 dark:border-zinc-800 p-2">
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none truncate">{user?.displayName || "Minha Conta"}</p>
-                <p className="text-xs leading-none text-zinc-500 truncate">{user?.email}</p>
+                <p className="text-sm font-medium leading-none truncate">{userProfile?.displayName || user?.displayName || "Minha Conta"}</p>
+                <p className="text-xs leading-none text-zinc-500 truncate">{userProfile?.email || user?.email}</p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
@@ -102,7 +138,7 @@ export function Header() {
             <Link href="/" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
                 <Home className="mr-2 h-4 w-4" />
-                <span>Inicio</span>
+                <span>Início</span>
               </DropdownMenuItem>
             </Link>
 
@@ -120,17 +156,19 @@ export function Header() {
               </DropdownMenuItem>
             </Link>
 
-            {/* Item Condicional de Admin */}
-            {(userProfile?.role === 'admin' || userProfile?.role === 'moderator') && (
+            {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
               <>
                 <DropdownMenuSeparator />
                 <Link href="/admin" className="cursor-pointer">
-                  <DropdownMenuItem className={`cursor-pointer rounded-lg font-medium ${userProfile.role === 'admin'
-                      ? "text-red-600 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-900/10"
-                      : "text-amber-600 focus:text-amber-700 focus:bg-amber-50 dark:focus:bg-amber-900/10"
-                    }`}>
+                  <DropdownMenuItem
+                    className={`cursor-pointer rounded-lg font-medium ${
+                      userProfile.role === "admin"
+                        ? "text-red-600 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-900/10"
+                        : "text-amber-600 focus:text-amber-700 focus:bg-amber-50 dark:focus:bg-amber-900/10"
+                    }`}
+                  >
                     <ShieldAlert className="mr-2 h-4 w-4" />
-                    <span>Painel {userProfile.role === 'admin' ? 'Admin' : 'Moderador'}</span>
+                    <span>Painel {userProfile.role === "admin" ? "Admin" : "Moderador"}</span>
                   </DropdownMenuItem>
                 </Link>
               </>

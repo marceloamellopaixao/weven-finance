@@ -1,27 +1,11 @@
-import {
-  addDoc,
-  serverTimestamp,
-  onSnapshot,
-  query,
-  orderBy,
-  updateDoc,
-  doc,
-  getDoc,
-  setDoc,
-  deleteDoc,
-  where,
-  getDocs,
-  writeBatch,
-  Timestamp,
-  increment,
-} from "firebase/firestore";
-
-import { transactionsCol, userDoc } from "./firebase/collections";
-import { db } from "./firebase/client";
+import { getAuth } from "firebase/auth";
 import { Transaction, UserSettings, CreateTransactionDTO } from "@/types/transaction";
 import { encryptData, decryptData, decryptLegacy } from "@/lib/crypto";
+import { getImpersonationHeader, getImpersonationTargetUid } from "@/lib/impersonation/client";
+import { getImpersonationActionStatus } from "@/services/impersonationService";
 
-// --- Helper de Data Seguro (UTC) ---
+const POLLING_INTERVAL_MS = 15000;
+
 const addMonthsUTC = (dateStr: string, monthsToAdd: number): string => {
   const [year, month, day] = dateStr.split("-").map(Number);
   const targetMonthDate = new Date(Date.UTC(year, month - 1 + monthsToAdd, 1));
@@ -30,155 +14,232 @@ const addMonthsUTC = (dateStr: string, monthsToAdd: number): string => {
   );
   const maxDays = lastDayOfTargetMonth.getUTCDate();
   const finalDay = Math.min(day, maxDays);
-
   const finalDate = new Date(
     Date.UTC(targetMonthDate.getUTCFullYear(), targetMonthDate.getUTCMonth(), finalDay)
   );
-
   return finalDate.toISOString().split("T")[0];
 };
 
-// --- Helper: contador realtime no documento do usuário ---
-const bumpUserTransactionCount = async (uid: string, delta: number) => {
-  const ref = doc(db, "users", uid);
-  await updateDoc(ref, { transactionCount: increment(delta) });
+async function getIdTokenOrThrow() {
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("missing_auth_user");
+  }
+  return currentUser.getIdToken();
+}
+
+async function apiFetch(path: string, init?: RequestInit) {
+  const idToken = await getIdTokenOrThrow();
+  const response = await fetch(path, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+      ...getImpersonationHeader(),
+      ...(init?.headers || {}),
+    },
+  });
+  return response;
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForActionApproval(actionRequestId: string, timeoutMs = 120000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const status = await getImpersonationActionStatus(actionRequestId);
+    const request = status.request;
+    if (request?.status === "approved") return;
+    if (request?.status === "rejected" || request?.status === "expired") {
+      throw new Error("impersonation_action_rejected");
+    }
+    await sleep(2500);
+  }
+  throw new Error("impersonation_action_timeout");
+}
+
+async function apiFetchWithOptionalApproval(path: string, init?: RequestInit) {
+  const first = await apiFetch(path, init);
+  const firstPayload = (await first.json()) as {
+    ok?: boolean;
+    error?: string;
+    actionRequestId?: string;
+  };
+
+  if (
+    first.status === 409 &&
+    firstPayload.error === "impersonation_write_confirmation_required" &&
+    firstPayload.actionRequestId
+  ) {
+    await waitForActionApproval(firstPayload.actionRequestId);
+    const retry = await apiFetch(path, {
+      ...init,
+      headers: {
+        ...(init?.headers || {}),
+        "x-impersonation-action-id": firstPayload.actionRequestId,
+      },
+    });
+    const retryPayload = (await retry.json()) as { ok?: boolean; error?: string };
+    return { response: retry, payload: retryPayload };
+  }
+
+  return { response: first, payload: firstPayload };
+}
+
+function resolveCryptoUid(uid: string) {
+  return getImpersonationTargetUid() || uid;
+}
+
+type ApiTransaction = Omit<Transaction, "createdAt" | "amount" | "description"> & {
+  createdAt?: string | null;
+  amount: number | string;
+  description: string;
+  isEncrypted?: boolean;
 };
 
-// --- MIGRAÇÃO DE CRIPTOGRAFIA ---
+async function fetchTransactions(uid: string, groupId?: string): Promise<Transaction[]> {
+  const cryptoUid = resolveCryptoUid(uid);
+  const query = groupId ? `?groupId=${encodeURIComponent(groupId)}` : "";
+  const response = await apiFetch(`/api/transactions${query}`, { method: "GET" });
+  const payload = (await response.json()) as { ok: boolean; error?: string; transactions?: ApiTransaction[] };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel carregar transacoes");
+  }
+
+  const transactions = payload.transactions || [];
+  const parsed = await Promise.all(
+    transactions.map(async (tx) => {
+      let decryptedDesc = tx.description;
+      let decryptedAmount = String(tx.amount);
+
+      if (tx.isEncrypted) {
+        decryptedDesc = await decryptData(tx.description, cryptoUid);
+        decryptedAmount = await decryptData(String(tx.amount), cryptoUid);
+      }
+
+      const parsedAmount = Number(decryptedAmount);
+      const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
+      const isDecryptionFailed =
+        tx.isEncrypted &&
+        decryptedDesc === tx.description &&
+        typeof tx.description === "string" &&
+        tx.description.length > 50;
+
+      return {
+        ...tx,
+        description: isDecryptionFailed
+          ? "Dados Protegidos (Migracao Necessaria)"
+          : decryptedDesc,
+        amount: safeAmount,
+        createdAt: tx.createdAt ? new Date(tx.createdAt) : new Date(),
+      } as Transaction;
+    })
+  );
+
+  return parsed.filter((t) => !t.isArchived);
+}
+
 export const migrateCryptography = async (uid: string) => {
-  const q = query(transactionsCol(uid));
-  const snapshot = await getDocs(q);
-  const batch = writeBatch(db);
-  let count = 0;
+  const cryptoUid = resolveCryptoUid(uid);
+  const all = await fetchTransactions(uid);
+  const updates: Array<{ id: string; updates: Record<string, unknown> }> = [];
 
-  for (const docSnap of snapshot.docs) {
-    const data = docSnap.data();
+  for (const tx of all) {
+    if (!tx.id) continue;
+    const rawDescription = tx.description;
+    const rawAmount = tx.amount;
 
-    const legDesc = await decryptLegacy(data.description, uid);
-    const legAmount = await decryptLegacy(data.amount, uid);
+    const legDesc = await decryptLegacy(String(rawDescription), cryptoUid);
+    const legAmount = await decryptLegacy(String(rawAmount), cryptoUid);
 
     if (legDesc !== null || legAmount !== null) {
-      const descToSave = legDesc !== null ? legDesc : data.description;
-      const amountToSave = legAmount !== null ? legAmount : data.amount;
-
-      const newDesc = await encryptData(descToSave, uid);
-      const newAmount = await encryptData(amountToSave, uid);
-
-      batch.update(docSnap.ref, {
-        description: newDesc,
-        amount: newAmount,
-        isEncrypted: true,
+      const descToSave = legDesc !== null ? legDesc : rawDescription;
+      const amountToSave = legAmount !== null ? Number(legAmount) : rawAmount;
+      updates.push({
+        id: tx.id,
+        updates: {
+          description: await encryptData(descToSave, cryptoUid),
+          amount: await encryptData(amountToSave, cryptoUid),
+          isEncrypted: true,
+        },
       });
-      count++;
-    } else if (!data.isEncrypted) {
-      const newDesc = await encryptData(data.description, uid);
-      const newAmount = await encryptData(data.amount, uid);
+      continue;
+    }
 
-      batch.update(docSnap.ref, {
-        description: newDesc,
-        amount: newAmount,
-        isEncrypted: true,
+    if (!tx.isEncrypted) {
+      updates.push({
+        id: tx.id,
+        updates: {
+          description: await encryptData(rawDescription, cryptoUid),
+          amount: await encryptData(rawAmount, cryptoUid),
+          isEncrypted: true,
+        },
       });
-      count++;
     }
   }
 
-  if (count > 0) await batch.commit();
+  if (updates.length > 0) {
+    const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
+      method: "POST",
+      body: JSON.stringify({ action: "updateMany", updates }),
+    });
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "Nao foi possivel migrar criptografia");
+    }
+  }
 
-  await bumpUserTransactionCount(uid, 0);
-  return count;
+  return updates.length;
 };
 
-// --- Transações (Realtime) ---
 export const subscribeToTransactions = (
   uid: string,
   onChange: (data: Transaction[]) => void,
   onError?: (error: Error) => void
 ) => {
-  const q = query(transactionsCol(uid), orderBy("dueDate", "desc"));
+  let cancelled = false;
 
-  return onSnapshot(
-    q,
-    async (snapshot) => {
-      try {
-        const allTransactions = await Promise.all(
-          snapshot.docs.map(async (docSnap) => {
-            const data = docSnap.data();
-
-            let decryptedDesc = data.description;
-            let decryptedAmount = data.amount;
-
-            if (data.isEncrypted) {
-              decryptedDesc = await decryptData(data.description, uid);
-              decryptedAmount = await decryptData(data.amount, uid);
-            }
-
-            const parsedAmount = Number(decryptedAmount);
-            const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
-
-            const isDecryptionFailed =
-              data.isEncrypted &&
-              decryptedDesc === data.description &&
-              typeof data.description === "string" &&
-              data.description.length > 50;
-
-            return {
-              id: docSnap.id,
-              ...data,
-              description: isDecryptionFailed
-                ? "🔒 Dados Protegidos (Migração Necessária)"
-                : decryptedDesc,
-              amount: safeAmount,
-              createdAt:
-                data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
-            } as Transaction;
-          })
-        );
-
-        // Filtro de Segurança: Remove transações arquivadas da visualização do usuário
-        const activeTransactions = allTransactions.filter(t => !t.isArchived);
-
-        onChange(activeTransactions);
-      } catch (err) {
-        console.error("Erro ao processar transações:", err);
-        onError?.(err as Error);
-      }
-    },
-    (error) => {
-      console.error("Erro ao buscar transações:", error);
-      onError?.(error as Error);
+  const run = async () => {
+    try {
+      const data = await fetchTransactions(uid);
+      if (!cancelled) onChange(data);
+    } catch (error) {
+      if (!cancelled) onError?.(error as Error);
     }
-  );
+  };
+
+  void run();
+  const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
+
+  return () => {
+    cancelled = true;
+    clearInterval(interval);
+  };
 };
 
-// Adicionar nova transação (com suporte a parcelas)
 export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
-  const batchPromises: Promise<unknown>[] = [];
+  const cryptoUid = resolveCryptoUid(uid);
   const groupId = crypto.randomUUID();
   const count = tx.isInstallment ? Math.max(1, Math.floor(tx.installmentsCount)) : 1;
-
-  const basePurchaseDate = tx.date;
-  const baseDueDate = tx.dueDate;
-
-  const encryptedAmount = await encryptData(tx.amount, uid);
+  const encryptedAmount = await encryptData(tx.amount, cryptoUid);
+  const transactions: Record<string, unknown>[] = [];
 
   for (let i = 0; i < count; i++) {
-    const currentDueDate = addMonthsUTC(baseDueDate, i);
-
+    const currentDueDate = addMonthsUTC(tx.dueDate, i);
     const descText = tx.isInstallment ? `${tx.description} (${i + 1}/${count})` : tx.description;
-    const encryptedDesc = await encryptData(descText, uid);
+    const encryptedDesc = await encryptData(descText, cryptoUid);
 
-    const newTx: Record<string, unknown> = {
-      userId: uid,
+    transactions.push({
       description: encryptedDesc,
       amount: encryptedAmount,
       type: tx.type,
       category: tx.category,
       paymentMethod: tx.paymentMethod,
       status: "pending",
-      date: basePurchaseDate,
+      date: tx.date,
       dueDate: currentDueDate,
-      createdAt: serverTimestamp(),
       isEncrypted: true,
       isArchived: false,
       ...(tx.isInstallment && {
@@ -186,177 +247,186 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
         installmentCurrent: i + 1,
         installmentTotal: count,
       }),
-    };
-
-    batchPromises.push(addDoc(transactionsCol(uid), newTx));
+    });
   }
 
-  await Promise.all(batchPromises);
-  await bumpUserTransactionCount(uid, count);
+  const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
+    method: "POST",
+    body: JSON.stringify({ action: "createMany", transactions }),
+  });
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel adicionar transacao");
+  }
 };
 
-// Deletar transação (com opção de deletar todo o grupo)
 export const deleteTransaction = async (
   uid: string,
   transactionId: string,
   deleteGroup: boolean = false
 ) => {
   if (deleteGroup) {
-    const txRef = doc(transactionsCol(uid), transactionId);
-    const txSnap = await getDoc(txRef);
-    if (!txSnap.exists()) return;
+    const all = await fetchTransactions(uid);
+    const selected = all.find((tx) => tx.id === transactionId);
+    if (!selected?.groupId) return;
 
-    const txData = txSnap.data();
-
-    if (txData.groupId) {
-      const q = query(transactionsCol(uid), where("groupId", "==", txData.groupId));
-      const querySnapshot = await getDocs(q);
-
-      const batch = writeBatch(db);
-      querySnapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
-      await batch.commit();
-
-      await bumpUserTransactionCount(uid, -querySnapshot.size);
-      return;
+    const { response, payload } = await apiFetchWithOptionalApproval(`/api/transactions?groupId=${encodeURIComponent(selected.groupId)}`, {
+      method: "DELETE",
+    });
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "Nao foi possivel excluir grupo de transacoes");
     }
+    return;
   }
 
-  await deleteDoc(doc(transactionsCol(uid), transactionId));
-  await bumpUserTransactionCount(uid, -1);
+  const { response, payload } = await apiFetchWithOptionalApproval(`/api/transactions?transactionId=${encodeURIComponent(transactionId)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel excluir transacao");
+  }
 };
 
-// Cancelar parcelas futuras de um grupo de transações
 export const cancelFutureInstallments = async (
-  uid: string,
+  _uid: string,
   groupId: string,
   lastInstallmentDate: string
 ) => {
-  const q = query(
-    transactionsCol(uid),
-    where("groupId", "==", groupId),
-    where("dueDate", ">", lastInstallmentDate)
-  );
-
-  const querySnapshot = await getDocs(q);
-  if (querySnapshot.empty) return;
-
-  const batch = writeBatch(db);
-  querySnapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
-  await batch.commit();
-  await bumpUserTransactionCount(uid, -querySnapshot.size);
+  const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "cancelFuture",
+      groupId,
+      lastInstallmentDate,
+    }),
+  });
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel cancelar parcelas futuras");
+  }
 };
 
-// Atualizar transação (com opção de atualizar todo o grupo)
 export const updateTransaction = async (
   uid: string,
   transactionId: string,
   data: Partial<Transaction>,
   updateGroup: boolean = false
 ) => {
-  const txRef = doc(transactionsCol(uid), transactionId);
+  const cryptoUid = resolveCryptoUid(uid);
   const updates: Record<string, unknown> = { ...data };
-
   if (data.amount !== undefined) {
-    updates.amount = await encryptData(data.amount, uid);
+    updates.amount = await encryptData(data.amount, cryptoUid);
     updates.isEncrypted = true;
   }
 
   if (!updateGroup) {
     if (data.description) {
-      updates.description = await encryptData(data.description, uid);
+      updates.description = await encryptData(data.description, cryptoUid);
       updates.isEncrypted = true;
     }
-    await updateDoc(txRef, updates);
+    const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
+      method: "PATCH",
+      body: JSON.stringify({ transactionId, updates }),
+    });
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "Nao foi possivel atualizar transacao");
+    }
     return;
   }
 
-  const txSnap = await getDoc(txRef);
-  if (!txSnap.exists()) return;
+  const all = await fetchTransactions(uid);
+  const currentTx = all.find((tx) => tx.id === transactionId);
+  if (!currentTx?.groupId) return;
 
-  const currentTx = txSnap.data();
+  const groupItems = all.filter((tx) => tx.groupId === currentTx.groupId);
+  const bulkUpdates: Array<{ id: string; updates: Record<string, unknown> }> = [];
 
-  if (currentTx.groupId) {
-    const q = query(transactionsCol(uid), where("groupId", "==", currentTx.groupId));
-    const querySnapshot = await getDocs(q);
-    const batch = writeBatch(db);
+  for (const tx of groupItems) {
+    if (!tx.id) continue;
+    const batchUpdates: Record<string, unknown> = { ...updates };
+    const isTarget = tx.id === transactionId;
 
-    for (const docSnap of querySnapshot.docs) {
-      const docData = docSnap.data();
-      const isTargetDoc = docSnap.id === transactionId;
-
-      const batchUpdates: Record<string, unknown> = { ...updates };
-
-      if (data.description) {
-        const cleanDesc = data.description;
-        const descWithSuffix = `${cleanDesc} (${docData.installmentCurrent}/${docData.installmentTotal})`;
-        batchUpdates.description = await encryptData(descWithSuffix, uid);
-        batchUpdates.isEncrypted = true;
-      }
-
-      if (!isTargetDoc) {
-        delete batchUpdates.date;
-        delete batchUpdates.dueDate;
-        delete batchUpdates.status;
-      }
-
-      batch.update(docSnap.ref, batchUpdates);
-    }
-
-    await batch.commit();
-  } else {
     if (data.description) {
-      updates.description = await encryptData(data.description, uid);
-      updates.isEncrypted = true;
+      const descWithSuffix = `${data.description} (${tx.installmentCurrent}/${tx.installmentTotal})`;
+      batchUpdates.description = await encryptData(descWithSuffix, cryptoUid);
+      batchUpdates.isEncrypted = true;
     }
-    await updateDoc(txRef, updates);
+
+    if (!isTarget) {
+      delete batchUpdates.date;
+      delete batchUpdates.dueDate;
+      delete batchUpdates.status;
+    }
+
+    bulkUpdates.push({ id: tx.id, updates: batchUpdates });
+  }
+
+  const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
+    method: "POST",
+    body: JSON.stringify({ action: "updateMany", updates: bulkUpdates }),
+  });
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel atualizar grupo de transacoes");
   }
 };
 
-// Alternar status da transação (paid <-> pending)
 export const toggleTransactionStatus = async (
-  uid: string,
+  _uid: string,
   transactionId: string,
   currentStatus: "paid" | "pending"
 ) => {
-  const newStatus = currentStatus === "paid" ? "pending" : "paid";
-  const ref = doc(transactionsCol(uid), transactionId);
-  await updateDoc(ref, { status: newStatus });
+  const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
+    method: "POST",
+    body: JSON.stringify({ action: "toggleStatus", transactionId, currentStatus }),
+  });
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel atualizar status da transacao");
+  }
 };
 
-// --- Configurações do Usuário ---
+async function fetchUserSettings(): Promise<UserSettings> {
+  const response = await apiFetch("/api/user-settings/finance", { method: "GET" });
+  const payload = (await response.json()) as { ok: boolean; error?: string; currentBalance?: number };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel carregar configuracoes financeiras");
+  }
+  return { currentBalance: Number(payload.currentBalance || 0) };
+}
+
 export const getUserSettings = async (uid: string): Promise<UserSettings> => {
-  const ref = doc(userDoc(uid), "settings", "finance");
-  const snap = await getDoc(ref);
-  if (snap.exists()) return snap.data() as UserSettings;
-  return { currentBalance: 0 };
+  void uid;
+  return fetchUserSettings();
 };
 
-// --- User Settings (Realtime) ---
 export const subscribeToUserSettings = (
   uid: string,
   onChange: (data: UserSettings) => void,
   onError?: (error: Error) => void
 ) => {
-  const ref = doc(userDoc(uid), "settings", "finance");
-
-  return onSnapshot(
-    ref,
-    (snapshot) => {
-      if (snapshot.exists()) {
-        onChange(snapshot.data() as UserSettings);
-      } else {
-        onChange({ currentBalance: 0 });
-      }
-    },
-    (error) => {
-      console.error("Erro realtime user settings:", error);
-      onError?.(error as Error);
+  void uid;
+  let cancelled = false;
+  const run = async () => {
+    try {
+      const data = await fetchUserSettings();
+      if (!cancelled) onChange(data);
+    } catch (error) {
+      if (!cancelled) onError?.(error as Error);
     }
-  );
+  };
+
+  void run();
+  const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
+  return () => {
+    cancelled = true;
+    clearInterval(interval);
+  };
 };
 
-// Atualizar saldo atual do usuário
 export const updateUserBalance = async (uid: string, newBalance: number) => {
-  const ref = doc(userDoc(uid), "settings", "finance");
-  await setDoc(ref, { currentBalance: newBalance }, { merge: true });
+  void uid;
+  const { response, payload } = await apiFetchWithOptionalApproval("/api/user-settings/finance", {
+    method: "PUT",
+    body: JSON.stringify({ currentBalance: newBalance }),
+  });
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel atualizar saldo");
+  }
 };

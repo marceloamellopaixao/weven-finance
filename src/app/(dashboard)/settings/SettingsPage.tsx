@@ -24,15 +24,16 @@ import {
   LifeBuoy,
   Lightbulb,
   Sparkles,
+  Copy,
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { updateOwnProfile, softDeleteUser } from "@/services/userService";
+import { requestOwnAccountDeletion, updateOwnProfile } from "@/services/userService";
 import { getKeyFingerprint } from "@/lib/crypto";
 import { usePlans } from "@/hooks/usePlans";
 import { migrateCryptography } from "@/services/transactionService";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { sendFeatureRequest, sendSupportRequest } from "@/hooks/supportService";
-import { confirmPreapproval, getCheckoutLink } from "@/services/billingService";
+import { cancelSubscription, confirmPreapproval, getCheckoutLink } from "@/services/billingService";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -46,10 +47,12 @@ export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode } = useAuth();
   const { plans } = usePlans();
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [isMigrating, setIsMigrating] = useState(false);
   const [activeTab, setActiveTab] = useState("account");
+  const [isTabBootstrapped, setIsTabBootstrapped] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [completeName, setCompleteName] = useState("");
   const [phone, setPhone] = useState("");
@@ -60,6 +63,8 @@ export default function SettingsPage() {
   const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
   const [manualPreapprovalId, setManualPreapprovalId] = useState("");
   const [isConfirmingPreapproval, setIsConfirmingPreapproval] = useState(false);
+  const [isCancelingSubscription, setIsCancelingSubscription] = useState(false);
+  const [showCancelSubscriptionModal, setShowCancelSubscriptionModal] = useState(false);
 
   // Estados para Suporte
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
@@ -70,6 +75,7 @@ export default function SettingsPage() {
   const [isFeatureModalOpen, setIsFeatureModalOpen] = useState(false);
   const [featureMessage, setFeatureMessage] = useState("");
   const [isSendingFeature, setIsSendingFeature] = useState(false);
+  const [isCopyingSwaggerToken, setIsCopyingSwaggerToken] = useState(false);
 
   // Estado para feedback modal
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
@@ -96,6 +102,13 @@ export default function SettingsPage() {
     setFeedbackModal({ isOpen: true, type, title, message });
   };
 
+  const handleTabChange = (tab: "account" | "billing" | "security" | "help") => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", tab);
+    router.replace(`${pathname}?${params.toString()}`);
+  };
+
   const handleSaveProfile = async () => {
     if (!user) return;
     setIsSaving(true);
@@ -116,7 +129,9 @@ export default function SettingsPage() {
     setIsDeleting(true);
 
     try {
-      await softDeleteUser(user.uid);
+      const token = await user.getIdToken();
+      await requestOwnAccountDeletion(token);
+      await logout();
       router.push("/goodbye");
     } catch (error) {
       let errorMessage = "Ocorreu um erro ao tentar excluir sua conta.";
@@ -124,6 +139,21 @@ export default function SettingsPage() {
       showFeedback('error', 'Erro na Exclusão', errorMessage);
       setIsDeleting(false);
       setShowDeleteModal(false);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!user) return;
+    setIsCancelingSubscription(true);
+    try {
+      const token = await user.getIdToken();
+      await cancelSubscription(token);
+      showFeedback("success", "Assinatura cancelada", "Seu plano foi alterado para Free.");
+    } catch (error) {
+      console.error(error);
+      showFeedback("error", "Falha no cancelamento", "Nao foi possivel cancelar a assinatura agora.");
+    } finally {
+      setIsCancelingSubscription(false);
     }
   };
 
@@ -144,6 +174,21 @@ export default function SettingsPage() {
   const handleReplayTour = () => {
     localStorage.removeItem("weven_onboarding_completed");
     router.push("/dashboard");
+  };
+
+  const handleCopySwaggerToken = async () => {
+    if (!user) return;
+    setIsCopyingSwaggerToken(true);
+    try {
+      const token = await user.getIdToken(true);
+      await navigator.clipboard.writeText(token);
+      showFeedback("success", "Token copiado", "Cole no Authorize do Swagger sem o prefixo Bearer.");
+    } catch (error) {
+      console.error("Erro ao copiar token para Swagger:", error);
+      showFeedback("error", "Falha ao copiar token", "Nao foi possivel copiar o token agora.");
+    } finally {
+      setIsCopyingSwaggerToken(false);
+    }
   };
 
   const handleSendSupport = async () => {
@@ -242,10 +287,32 @@ export default function SettingsPage() {
 
   const currentPlan = userProfile?.plan || "free";
   const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
+  const showSwaggerTokenButton =
+    process.env.NODE_ENV === "development" &&
+    (userProfile?.role === "admin" || userProfile?.role === "moderator");
   const effectivePlan = isBillingExemptRole ? "pro" : currentPlan;
   const effectivePaymentStatus = isBillingExemptRole ? "free" : (userProfile?.paymentStatus || "pending");
   const canUpgrade = !isBillingExemptRole && effectivePlan !== "pro";
   const pendingPreapprovalId = userProfile?.billing?.pendingPreapprovalId;
+
+  useEffect(() => {
+    if (isTabBootstrapped) return;
+    const tab = searchParams.get("tab");
+    if (tab === "account" || tab === "billing" || tab === "security" || tab === "help") {
+      setActiveTab(tab);
+    }
+    setIsTabBootstrapped(true);
+  }, [isTabBootstrapped, searchParams]);
+
+  useEffect(() => {
+    if (!isTabBootstrapped) return;
+    const tab = searchParams.get("tab");
+    if (tab !== activeTab) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", activeTab);
+      router.replace(`${pathname}?${params.toString()}`);
+    }
+  }, [activeTab, isTabBootstrapped, pathname, router, searchParams]);
 
   useEffect(() => {
     const preapprovalId = searchParams.get("preapproval_id") || searchParams.get("preapprovalId");
@@ -257,7 +324,13 @@ export default function SettingsPage() {
     if (!preapprovalId && !billingReturn) return;
 
     void handleConfirmPreapproval(preapprovalId || undefined, expectedPlan).finally(() => {
-      router.replace("/settings");
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("preapproval_id");
+      params.delete("preapprovalId");
+      params.delete("billing_return");
+      params.delete("plan");
+      params.set("tab", "billing");
+      router.replace(`${pathname}?${params.toString()}`);
     });
   }, [searchParams, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -290,16 +363,16 @@ export default function SettingsPage() {
         {/* Navegação de Abas Personalizada */}
         <div className={`${fadeInUp} delay-150 space-y-6`}>
           <div className="bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 grid grid-cols-2 md:grid-cols-4 w-full md:w-[640px] shadow-sm gap-1">
-            <button onClick={() => setActiveTab("account")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "account" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button onClick={() => handleTabChange("account")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "account" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <User className="h-4 w-4" /> Geral
             </button>
-            <button onClick={() => setActiveTab("billing")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "billing" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button onClick={() => handleTabChange("billing")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "billing" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <CreditCard className="h-4 w-4" /> Planos
             </button>
-            <button onClick={() => setActiveTab("security")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "security" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button onClick={() => handleTabChange("security")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "security" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <ShieldCheck className="h-4 w-4" /> Privacidade
             </button>
-            <button onClick={() => setActiveTab("help")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "help" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button onClick={() => handleTabChange("help")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "help" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <HelpCircle className="h-4 w-4" /> Ajuda
             </button>
           </div>
@@ -358,7 +431,22 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </CardContent>
-              <CardFooter className="flex justify-end border-t border-zinc-50 dark:border-zinc-800/50 pt-6 bg-zinc-50/50 dark:bg-zinc-900/50 rounded-b-3xl">
+              <CardFooter className="flex flex-wrap justify-end gap-2 border-t border-zinc-50 dark:border-zinc-800/50 pt-6 bg-zinc-50/50 dark:bg-zinc-900/50 rounded-b-3xl">
+                {showSwaggerTokenButton && (
+                  <Button
+                    variant="outline"
+                    onClick={handleCopySwaggerToken}
+                    disabled={isCopyingSwaggerToken}
+                    className="rounded-xl px-4 h-11 hover:cursor-pointer"
+                  >
+                    {isCopyingSwaggerToken ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Copy className="mr-2 h-4 w-4" />
+                    )}
+                    Copiar Token Swagger
+                  </Button>
+                )}
                 <Button onClick={handleSaveProfile} disabled={isSaving} className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-8 h-11 shadow-lg shadow-violet-500/20 transition-all active:scale-95 hover:cursor-pointer duration-200">
                   {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Salvar Alterações"}
                 </Button>
@@ -492,7 +580,15 @@ export default function SettingsPage() {
                     <p>
                       Fonte do plano:{" "}
                       <strong>
-                        {userProfile?.billing?.source === "mercadopago_webhook" ? "Webhook Mercado Pago" : "Administracao manual"}
+                        {userProfile?.billing?.source === "mercadopago_webhook"
+                          ? "Webhook Mercado Pago"
+                          : userProfile?.billing?.source === "mercadopago_confirm"
+                            ? "Confirmacao Mercado Pago"
+                            : userProfile?.billing?.source === "mercadopago_cancel"
+                              ? "Cancelamento Mercado Pago"
+                              : userProfile?.billing?.source === "system"
+                                ? "Sistema"
+                                : "Administracao manual"}
                       </strong>
                     </p>
                     <p>
@@ -522,6 +618,17 @@ export default function SettingsPage() {
                       {pendingPreapprovalId && (
                         <p className="text-[11px] text-white/80">Assinatura pendente detectada. ID interno: {pendingPreapprovalId}</p>
                       )}
+                    </div>
+                  )}
+                  {!isBillingExemptRole && effectivePlan !== "free" && (
+                    <div className="pt-1">
+                      <Button
+                        onClick={() => setShowCancelSubscriptionModal(true)}
+                        disabled={isCancelingSubscription}
+                        className="h-9 bg-red-600 hover:bg-red-700 text-white"
+                      >
+                        {isCancelingSubscription ? "Cancelando assinatura..." : "Cancelar Assinatura"}
+                      </Button>
                     </div>
                   )}
                 </CardContent>
@@ -665,7 +772,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <h3 className="text-red-600 font-bold text-sm flex items-center gap-2 mb-3"><AlertTriangle className="h-4 w-4" /> Zona de Perigo</h3>
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-950/10 rounded-2xl">
-                    <p className="text-xs text-red-600/80 dark:text-red-400">A exclusão da conta é <strong>irreversível</strong>. Todos os dados serão apagados.</p>
+                    <p className="text-xs text-red-600/80 dark:text-red-400">A exclusão da conta é <strong>irreversível</strong>. Seu acesso será removido e os dados serão arquivados.</p>
                     <Button variant="outline" onClick={() => setShowDeleteModal(true)} className="text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 dark:hover:bg-red-900/40 dark:border-red-900 whitespace-nowrap rounded-xl hover:cursor-pointer transition-all active:scale-95">Excluir Minha Conta</Button>
                   </div>
                 </div>
@@ -796,6 +903,43 @@ export default function SettingsPage() {
           </DialogContent>
         </Dialog>
 
+        {/* Modal de Confirmacao de Cancelamento de Assinatura */}
+        <Dialog open={showCancelSubscriptionModal} onOpenChange={setShowCancelSubscriptionModal}>
+          <DialogContent className="sm:max-w-[425px] rounded-3xl p-6">
+            <DialogHeader>
+              <DialogTitle className="text-red-600 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" /> Cancelar assinatura?
+              </DialogTitle>
+              <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
+                Sua assinatura recorrente no Mercado Pago sera cancelada.
+              </DialogDescription>
+              <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
+                O plano voltara para Free e os recursos premium/pro serao removidos.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowCancelSubscriptionModal(false)}
+                className="rounded-xl h-10 w-full sm:w-auto hover:cursor-pointer transition-all duration-200"
+              >
+                Manter assinatura
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  await handleCancelSubscription();
+                  setShowCancelSubscriptionModal(false);
+                }}
+                disabled={isCancelingSubscription}
+                className="rounded-xl h-10 w-full sm:w-auto bg-red-600 hover:bg-red-700 hover:cursor-pointer transition-all duration-200"
+              >
+                {isCancelingSubscription ? "Cancelando..." : "Sim, cancelar"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Modal de Ideia / Feature */}
         <Dialog open={isFeatureModalOpen} onOpenChange={setIsFeatureModalOpen}>
           <DialogContent className="sm:max-w-[500px] rounded-3xl p-6">
@@ -846,7 +990,7 @@ export default function SettingsPage() {
                 Esta ação não pode ser desfeita.
               </DialogDescription>
               <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
-                Realizando a exclusão, todos os seus dados serão permanentemente removidos dos nossos servidores.
+                Sua conta será desativada imediatamente e os dados financeiros ficarão arquivados.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 mt-4">

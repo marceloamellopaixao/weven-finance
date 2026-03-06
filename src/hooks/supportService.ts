@@ -1,7 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc, where } from "firebase/firestore";
-import { db } from "@/services/firebase/client";
-
-// --- TIPOS ---
+import { getAuth } from "firebase/auth";
 
 export type SupportRequestStatus = "pending" | "in_progress" | "resolved" | "rejected";
 export type FeatureRequestStatus = "pending" | "under_review" | "approved" | "rejected" | "implemented";
@@ -14,109 +11,132 @@ export interface SupportTicket {
   message: string;
   type: "support" | "feature";
   status: SupportRequestStatus | FeatureRequestStatus;
-  createdAt: Date | Timestamp;
+  createdAt: Date;
   platform: string;
-  assignedTo?: string; // UID do funcionário responsável
-  assignedToName?: string; // Nome cacheado para facilitar
+  assignedTo?: string;
+  assignedToName?: string;
 }
 
-// --- FUNÇÕES DE SERVIÇO ---
+const POLLING_INTERVAL_MS = 15000;
 
-// Envia solicitação de suporte técnico
-export const sendSupportRequest = async (uid: string, email: string, name: string, reason: string) => {
-  try {
-    await addDoc(collection(db, "support_requests"), {
-      uid,
-      email,
-      name,
-      message: reason,
+async function getIdTokenOrThrow() {
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error("missing_auth_user");
+  return currentUser.getIdToken();
+}
+
+async function fetchWithAuth(path: string, init?: RequestInit) {
+  const idToken = await getIdTokenOrThrow();
+  return fetch(path, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+      ...(init?.headers || {}),
+    },
+  });
+}
+
+export const sendSupportRequest = async (_uid: string, _email: string, _name: string, reason: string) => {
+  const response = await fetchWithAuth("/api/support-requests", {
+    method: "POST",
+    body: JSON.stringify({
       type: "support",
-      status: "pending" as SupportRequestStatus,
-      createdAt: serverTimestamp(),
-      platform: "web"
-    });
-  } catch (error) {
-    console.error("Erro ao enviar solicitação de suporte:", error);
-    throw error;
-  }
-};
-
-// Envia sugestão de funcionalidade/ideia para o Firestore
-export const sendFeatureRequest = async (uid: string, email: string, name: string, idea: string) => {
-  try {
-    await addDoc(collection(db, "support_requests"), {
-      uid,
-      email,
-      name,
-      message: idea,
-      type: "feature",
-      status: "pending" as FeatureRequestStatus, // Status inicial padrão
-      createdAt: serverTimestamp(),
+      message: reason,
+      status: "pending",
       platform: "web",
-      votes: 0 // Campo futuro para votação de features
-    });
-  } catch (error) {
-    console.error("Erro ao enviar sugestão:", error);
-    throw error;
+    }),
+  });
+
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Erro ao enviar solicitacao de suporte");
   }
 };
 
-// Realtime: Buscar chamados de suporte e sugestões de funcionalidades
+export const sendFeatureRequest = async (_uid: string, _email: string, _name: string, idea: string) => {
+  const response = await fetchWithAuth("/api/support-requests", {
+    method: "POST",
+    body: JSON.stringify({
+      type: "feature",
+      message: idea,
+      status: "pending",
+      platform: "web",
+    }),
+  });
+
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Erro ao enviar sugestao");
+  }
+};
+
+async function getTickets(): Promise<SupportTicket[]> {
+  const response = await fetchWithAuth("/api/support-requests", {
+    method: "GET",
+  });
+  const payload = (await response.json()) as {
+    ok: boolean;
+    error?: string;
+    tickets?: Array<Omit<SupportTicket, "createdAt"> & { createdAt?: string | null }>;
+  };
+
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Erro ao buscar tickets de suporte");
+  }
+
+  return (payload.tickets || []).map((ticket) => ({
+    ...ticket,
+    createdAt: ticket.createdAt ? new Date(ticket.createdAt) : new Date(),
+  }));
+}
+
 export const subscribeToSupportTickets = (
-  userUid: string,
-  userRole: string,
+  _userUid: string,
+  _userRole: string,
   onChange: (tickets: SupportTicket[]) => void,
   onError?: (error: Error) => void
 ) => {
-  const colRef = collection(db, "support_requests");
+  let cancelled = false;
+  const run = async () => {
+    try {
+      const tickets = await getTickets();
+      if (!cancelled) onChange(tickets);
+    } catch (error) {
+      if (!cancelled) onError?.(error as Error);
+    }
+  };
 
-  let q;
+  void run();
+  const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
 
-  if (userRole === 'admin' || userRole === 'moderator') {
-    q = query(colRef, orderBy("createdAt", "desc"));
-  } else {
-    q = query(
-      colRef,
-      where("assignedTo", "==", userUid), // Somente tickets atribuídos ao usuário
-      orderBy("createdAt", "desc")
-    );
-  }
-
-  return onSnapshot(q, (snapshot) => {
-    const tickets = snapshot.docs.map((doc) => {
-      const data = doc.data();
-
-      return {
-        id: doc.id,
-        ...data,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(),
-      } as SupportTicket;
-    });
-    onChange(tickets);
-  }, (error) => {
-    console.error("Erro ao buscar tickets de suporte:", error);
-    onError?.(error as Error);
-  });
+  return () => {
+    cancelled = true;
+    clearInterval(interval);
+  };
 };
 
-// Atualizar status ou responsável do chamado
 export const updateTicket = async (ticketId: string, updates: Partial<SupportTicket>) => {
-  try {
-    const ref = doc(db, "support_requests", ticketId);
-    await updateDoc(ref, updates);
-  } catch (error) {
-    console.error("Erro ao atualizar ticket:", error);
-    throw error;
+  const response = await fetchWithAuth("/api/support-requests", {
+    method: "PATCH",
+    body: JSON.stringify({
+      ticketId,
+      updates,
+    }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Erro ao atualizar ticket");
   }
-}
+};
 
-// Deletar chamado (Apenas Admin)
 export const deleteTicket = async (ticketId: string) => {
-  try {
-    const ref = doc(db, "support_requests", ticketId);
-    await deleteDoc(ref);
-  } catch (error) {
-    console.error("Erro ao deletar chamado:", error);
-    throw error;
+  const response = await fetchWithAuth(`/api/support-requests?ticketId=${encodeURIComponent(ticketId)}`, {
+    method: "DELETE",
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Erro ao deletar chamado");
   }
 };

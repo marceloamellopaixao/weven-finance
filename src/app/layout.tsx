@@ -7,6 +7,8 @@ import { Header } from "@/components/layout/Header";
 import { BlockedGuard } from "@/components/guards/BlockedGuard";
 import { ToastContainer } from "react-toastify";
 import { Footer } from "@/components/layout/Footer";
+import { ImpersonationConsentModal } from "@/components/impersonation/ImpersonationConsentModal";
+import { ImpersonationActionApprovalModal } from "@/components/impersonation/ImpersonationActionApprovalModal";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -32,6 +34,8 @@ export default function RootLayout({
               <Header />
               <main className="flex-1">
                 {children}
+                <ImpersonationConsentModal />
+                <ImpersonationActionApprovalModal />
                 <ToastContainer
                   position="top-right"
                   autoClose={3000}

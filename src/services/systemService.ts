@@ -1,61 +1,64 @@
-import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
-import { db } from "./firebase/client";
+import { getAuth } from "firebase/auth";
 import { DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
 
-const SYSTEM_DOC_REF = doc(db, "system", "plans");
+const POLLING_INTERVAL_MS = 20000;
 
-/**
- * Fetch pontual (one-shot)
- * Útil para SSR, fallback ou chamadas manuais
- */
+async function getIdTokenOrThrow() {
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error("missing_auth_user");
+  return currentUser.getIdToken();
+}
+
 export const getPlansConfig = async (): Promise<PlansConfig> => {
   try {
-    const snap = await getDoc(SYSTEM_DOC_REF);
-
-    if (snap.exists()) {
-      return snap.data() as PlansConfig;
+    const response = await fetch("/api/system/plans", { method: "GET" });
+    const payload = (await response.json()) as { ok: boolean; error?: string; plans?: PlansConfig };
+    if (!response.ok || !payload.ok || !payload.plans) {
+      throw new Error(payload.error || "Nao foi possivel buscar planos");
     }
-
-    return DEFAULT_PLANS_CONFIG;
-  } catch (error) {
-    console.error("Erro ao buscar os planos:", error);
+    return payload.plans;
+  } catch {
     return DEFAULT_PLANS_CONFIG;
   }
 };
 
-/**
- * Atualização dos planos
- * Dispara automaticamente updates para quem estiver em realtime
- */
 export const updatePlansConfig = async (config: PlansConfig) => {
-  try {
-    await setDoc(SYSTEM_DOC_REF, config, { merge: true });
-  } catch (error) {
-    console.error("Erro ao atualizar os planos:", error);
-    throw error;
+  const idToken = await getIdTokenOrThrow();
+  const response = await fetch("/api/system/plans", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ plans: config }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel atualizar planos");
   }
 };
 
-/**
- * Subscription em tempo real
- * Retorna função de unsubscribe (OBRIGATÓRIO usar)
- */
 export const subscribeToPlansConfig = (
   onChange: (data: PlansConfig) => void,
   onError?: (error: Error) => void
 ) => {
-  return onSnapshot(
-    SYSTEM_DOC_REF,
-    (snapshot) => {
-      if (snapshot.exists()) {
-        onChange(snapshot.data() as PlansConfig);
-      } else {
-        onChange(DEFAULT_PLANS_CONFIG);
+  let cancelled = false;
+  const run = async () => {
+    try {
+      const data = await getPlansConfig();
+      if (!cancelled) onChange(data);
+    } catch (error) {
+      if (!cancelled) {
+        onError?.(error as Error);
       }
-    },
-    (error) => {
-      console.error("Erro realtime planos:", error);
-      onError?.(error);
     }
-  );
+  };
+
+  void run();
+  const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
+  return () => {
+    cancelled = true;
+    clearInterval(interval);
+  };
 };

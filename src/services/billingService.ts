@@ -60,3 +60,31 @@ export async function confirmPreapproval(
     targetPaymentStatus: payload.targetPaymentStatus,
   };
 }
+
+export async function cancelSubscription(
+  idToken: string
+): Promise<{ targetPlan: UserPlan; targetPaymentStatus: string }> {
+  const response = await fetch("/api/billing/cancel-subscription", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+
+  const payload = (await response.json()) as {
+    ok: boolean;
+    error?: string;
+    targetPlan?: UserPlan;
+    targetPaymentStatus?: string;
+  };
+
+  if (!response.ok || !payload.ok || !payload.targetPlan || !payload.targetPaymentStatus) {
+    throw new Error(payload.error || "Nao foi possivel cancelar a assinatura");
+  }
+
+  return {
+    targetPlan: payload.targetPlan,
+    targetPaymentStatus: payload.targetPaymentStatus,
+  };
+}

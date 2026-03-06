@@ -1,208 +1,147 @@
-import { addDoc, deleteDoc, doc, getDoc, getDocs, query, setDoc, where, writeBatch } from "firebase/firestore";
-import { categoriesCol, transactionsCol, userDoc } from "./firebase/collections";
-import { db } from "./firebase/client";
+import { getImpersonationHeader } from "@/lib/impersonation/client";
+import { getImpersonationActionStatus } from "@/services/impersonationService";
 
 export interface CustomCategory {
-    id?: string;
-    name: string;
-    type: "income" | "expense" | "both";
-    color: string;
-    userId: string;
+  id?: string;
+  name: string;
+  type: "income" | "expense" | "both";
+  color: string;
+  userId: string;
 }
 
-export const addCustomCategory = async (uid: string, name: string, type: "income" | "expense" | "both"): Promise<void> => {
-    try {
-        // Verifica se já existe para evitar duplicatas (considerando o mesmo nome para o mesmo usuário)
-        const q = query(categoriesCol(uid), where("name", "==", name));
-        const querySnapshot = await getDocs(q);
-
-        if (!querySnapshot.empty) {
-            throw new Error("Já existe uma categoria com esse nome.");
-        }
-
-        await addDoc(categoriesCol(uid), {
-            name,
-            type,
-            color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50",
-            userId: uid
-        })
-    } catch (error) {
-        console.error("Erro ao adicionar categoria personalizada:", error);
-        throw error;
-    }
+type CategoriesResponse = {
+  ok: boolean;
+  error?: string;
+  customCategories?: CustomCategory[];
+  hiddenDefaultCategories?: string[];
 };
 
-export const getCustomCategories = async (uid: string): Promise<CustomCategory[]> => {
-    try {
-        const q = await getDocs(categoriesCol(uid));
-        return q.docs.map(doc => ({ id: doc.id, ...doc.data() } as CustomCategory));
-    } catch (error) {
-        console.error("Erro ao obter categorias personalizadas:", error);
-        return [];
-    }
+async function fetchWithAuth(path: string, idToken: string, init?: RequestInit) {
+  const response = await fetch(path, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+      ...getImpersonationHeader(),
+      ...(init?.headers || {}),
+    },
+  });
+  return response;
 }
 
-export const deleteCustomCategory = async (uid: string, categoryId: string) => {
-    try {
-        await deleteDoc(doc(categoriesCol(uid), categoryId));
-    } catch (error) {
-        console.error("Erro ao deletar categoria personalizada:", error);
-        throw error;
-    }
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const categoriesSettingsDoc = (uid: string) => doc(userDoc(uid), "settings", "categories");
+async function waitForActionApproval(actionRequestId: string, timeoutMs = 120000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const status = await getImpersonationActionStatus(actionRequestId);
+    const request = status.request;
+    if (request?.status === "approved") return;
+    if (request?.status === "rejected" || request?.status === "expired") {
+      throw new Error("impersonation_action_rejected");
+    }
+    await sleep(2500);
+  }
+  throw new Error("impersonation_action_timeout");
+}
+
+async function fetchWithOptionalApproval(path: string, idToken: string, init?: RequestInit) {
+  const firstResponse = await fetchWithAuth(path, idToken, init);
+  const firstPayload = (await firstResponse.json()) as {
+    ok?: boolean;
+    error?: string;
+    actionRequestId?: string;
+  };
+
+  if (
+    firstResponse.status === 409 &&
+    firstPayload.error === "impersonation_write_confirmation_required" &&
+    firstPayload.actionRequestId
+  ) {
+    await waitForActionApproval(firstPayload.actionRequestId);
+    const retryHeaders = {
+      ...(init?.headers || {}),
+      "x-impersonation-action-id": firstPayload.actionRequestId,
+    };
+    const retryResponse = await fetchWithAuth(path, idToken, {
+      ...init,
+      headers: retryHeaders,
+    });
+    const retryPayload = (await retryResponse.json()) as { ok?: boolean; error?: string };
+    return { response: retryResponse, payload: retryPayload };
+  }
+
+  return { response: firstResponse, payload: firstPayload };
+}
+
+export const getCategoriesData = async (
+  idToken: string
+): Promise<{ customCategories: CustomCategory[]; hiddenDefaultCategories: string[] }> => {
+  const response = await fetchWithAuth("/api/categories", idToken, { method: "GET" });
+  const payload = (await response.json()) as CategoriesResponse;
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel carregar categorias");
+  }
+  return {
+    customCategories: payload.customCategories || [],
+    hiddenDefaultCategories: payload.hiddenDefaultCategories || [],
+  };
+};
+
+export const addCustomCategory = async (
+  idToken: string,
+  name: string,
+  type: "income" | "expense" | "both"
+): Promise<void> => {
+  const { response, payload } = await fetchWithOptionalApproval("/api/categories", idToken, {
+    method: "POST",
+    body: JSON.stringify({ name, type }),
+  });
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel adicionar categoria");
+  }
+};
 
 export const deleteCustomCategoryByName = async (
-    uid: string,
-    categoryName: string,
-    fallbackCategory: string = "Outros"
+  idToken: string,
+  categoryName: string,
+  fallbackCategory: string = "Outros"
 ) => {
-    try {
-        const allCustomCategoriesSnapshot = await getDocs(categoriesCol(uid));
-
-        const affectedCategoryNames = allCustomCategoriesSnapshot.docs
-            .map((docSnap) => ({
-                id: docSnap.id,
-                name: String(docSnap.data().name || ""),
-            }))
-            .filter((item) => item.name === categoryName || item.name.startsWith(`${categoryName}::`));
-
-        const batch = writeBatch(db);
-        let hasWrites = false;
-
-        affectedCategoryNames.forEach((item) => {
-            batch.delete(doc(categoriesCol(uid), item.id));
-            hasWrites = true;
-        });
-
-        const txSnapshots = await Promise.all(
-            affectedCategoryNames.map((item) =>
-                getDocs(query(transactionsCol(uid), where("category", "==", item.name)))
-            )
-        );
-
-        txSnapshots.forEach((txSnapshot) => {
-            txSnapshot.docs.forEach((docSnap) => {
-                batch.update(docSnap.ref, { category: fallbackCategory });
-                hasWrites = true;
-            });
-        });
-
-        if (hasWrites) {
-            await batch.commit();
-        }
-    } catch (error) {
-        console.error("Erro ao deletar categoria personalizada e reclassificar transações:", error);
-        throw error;
-    }
+  const params = new URLSearchParams({ name: categoryName, fallbackCategory });
+  const { response, payload } = await fetchWithOptionalApproval(`/api/categories?${params.toString()}`, idToken, {
+    method: "DELETE",
+  });
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel excluir categoria");
+  }
 };
 
 export const renameCustomCategoryByName = async (
-    uid: string,
-    oldName: string,
-    newName: string
+  idToken: string,
+  oldName: string,
+  newName: string
 ) => {
-    try {
-        const trimmedNewName = newName.trim();
-        if (!trimmedNewName) {
-            throw new Error("Nome da categoria não pode ser vazio.");
-        }
-
-        const allCustomCategoriesSnapshot = await getDocs(categoriesCol(uid));
-        const allCustomCategories = allCustomCategoriesSnapshot.docs.map((docSnap) => ({
-            id: docSnap.id,
-            name: String(docSnap.data().name || ""),
-        }));
-
-        const affected = allCustomCategories.filter(
-            (item) => item.name === oldName || item.name.startsWith(`${oldName}::`)
-        );
-
-        if (affected.length === 0) return;
-
-        const renameMap = new Map<string, string>();
-        affected.forEach((item) => {
-            const suffix = item.name.slice(oldName.length);
-            renameMap.set(item.name, `${trimmedNewName}${suffix}`);
-        });
-
-        const existingNames = new Set(
-            allCustomCategories
-                .filter((item) => !renameMap.has(item.name))
-                .map((item) => item.name)
-        );
-
-        for (const newTargetName of renameMap.values()) {
-            if (existingNames.has(newTargetName)) {
-                throw new Error("Já existe uma categoria com esse nome.");
-            }
-        }
-
-        const batch = writeBatch(db);
-        let hasWrites = false;
-
-        for (const item of affected) {
-            const renamed = renameMap.get(item.name);
-            if (!renamed || renamed === item.name) continue;
-            batch.update(doc(categoriesCol(uid), item.id), { name: renamed });
-            hasWrites = true;
-        }
-
-        const txSnapshots = await Promise.all(
-            Array.from(renameMap.entries()).map(([currentName]) =>
-                getDocs(query(transactionsCol(uid), where("category", "==", currentName)))
-            )
-        );
-
-        Array.from(renameMap.entries()).forEach(([, renamedName], index) => {
-            txSnapshots[index].docs.forEach((docSnap) => {
-                batch.update(docSnap.ref, { category: renamedName });
-                hasWrites = true;
-            });
-        });
-
-        if (hasWrites) {
-            await batch.commit();
-        }
-    } catch (error) {
-        console.error("Erro ao renomear categoria personalizada:", error);
-        throw error;
-    }
-};
-
-export const getHiddenDefaultCategories = async (uid: string): Promise<string[]> => {
-    try {
-        const snap = await getDoc(categoriesSettingsDoc(uid));
-        if (!snap.exists()) return [];
-        const data = snap.data() as { hiddenDefaultCategories?: unknown };
-        return Array.isArray(data.hiddenDefaultCategories)
-            ? data.hiddenDefaultCategories.filter((item): item is string => typeof item === "string")
-            : [];
-    } catch (error) {
-        console.error("Erro ao obter categorias padrão ocultas:", error);
-        return [];
-    }
+  const { response, payload } = await fetchWithOptionalApproval("/api/categories", idToken, {
+    method: "PATCH",
+    body: JSON.stringify({ oldName, newName }),
+  });
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel renomear categoria");
+  }
 };
 
 export const setDefaultCategoryHidden = async (
-    uid: string,
-    categoryName: string,
-    hidden: boolean
+  idToken: string,
+  categoryName: string,
+  hidden: boolean
 ): Promise<void> => {
-    try {
-        const currentHidden = await getHiddenDefaultCategories(uid);
-        const next = hidden
-            ? Array.from(new Set([...currentHidden, categoryName]))
-            : currentHidden.filter((name) => name !== categoryName);
-
-        await setDoc(
-            categoriesSettingsDoc(uid),
-            { hiddenDefaultCategories: next },
-            { merge: true }
-        );
-    } catch (error) {
-        console.error("Erro ao atualizar visibilidade da categoria padrão:", error);
-        throw error;
-    }
+  const { response, payload } = await fetchWithOptionalApproval("/api/categories/default-visibility", idToken, {
+    method: "POST",
+    body: JSON.stringify({ categoryName, hidden }),
+  });
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel atualizar visibilidade da categoria");
+  }
 };

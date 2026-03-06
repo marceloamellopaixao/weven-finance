@@ -115,6 +115,30 @@ async function mpRequest(path: string): Promise<Record<string, unknown>> {
   return (await response.json()) as Record<string, unknown>;
 }
 
+async function mpPut(path: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  assertToken();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  const response = await fetch(`${MERCADO_PAGO_API_BASE}${path}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeout));
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`MercadoPago PUT failed (${response.status}): ${body}`);
+  }
+
+  return (await response.json()) as Record<string, unknown>;
+}
+
 function parseTopic(value: string | null | undefined): MercadoPagoTopic | null {
   if (!value) return null;
   if (value.includes("authorized_payment")) return "payment";
@@ -740,4 +764,116 @@ export async function confirmLatestPreapprovalForUser(params: {
     expectedPlan: params.expectedPlan,
     userEmail: params.userEmail,
   });
+}
+
+export async function cancelSubscriptionForUser(params: {
+  uid: string;
+  userEmail: string;
+}) {
+  const userRef = adminDb.collection("users").doc(params.uid);
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) {
+    throw new Error("user_not_found");
+  }
+
+  const userData = userSnap.data() ?? {};
+  const currentRole = (userData.role as UserRole) || "client";
+  const currentStatus = (userData.status as UserStatus) || "active";
+  const currentPlan = (userData.plan as UserPlan) || "free";
+  const isBillingExemptRole = currentRole === "admin" || currentRole === "moderator";
+  if (isBillingExemptRole) {
+    throw new Error("role_billing_exempt");
+  }
+
+  let preapprovalId =
+    typeof userData.billing === "object" &&
+    userData.billing !== null &&
+    typeof (userData.billing as { preapprovalId?: unknown }).preapprovalId === "string"
+      ? (userData.billing as { preapprovalId: string }).preapprovalId
+      : "";
+
+  if (!preapprovalId) {
+    const expectedPlanId =
+      currentPlan === "pro"
+        ? process.env.MERCADOPAGO_PLAN_PRO_ID
+        : currentPlan === "premium"
+          ? process.env.MERCADOPAGO_PLAN_PREMIUM_ID
+          : undefined;
+    const searchPayload = await mpRequest(`/preapproval/search?payer_email=${encodeURIComponent(params.userEmail)}&limit=30&offset=0`);
+    const results = Array.isArray(searchPayload.results) ? (searchPayload.results as Record<string, unknown>[]) : [];
+
+    const activeCandidates = results.filter((item) => {
+      const status = typeof item.status === "string" ? item.status.toLowerCase() : "";
+      const isActiveStatus = status === "authorized" || status === "pending" || status === "paused";
+      if (!isActiveStatus) return false;
+      if (expectedPlanId && item.preapproval_plan_id !== expectedPlanId) return false;
+      return true;
+    });
+
+    const selected = activeCandidates.sort((a, b) => {
+      const aTime = typeof a.date_created === "string" ? new Date(a.date_created).getTime() : 0;
+      const bTime = typeof b.date_created === "string" ? new Date(b.date_created).getTime() : 0;
+      return bTime - aTime;
+    })[0];
+
+    preapprovalId = typeof selected?.id === "string" ? selected.id : "";
+  }
+
+  if (!preapprovalId) {
+    throw new Error("subscription_not_found");
+  }
+
+  const payload = await mpPut(`/preapproval/${preapprovalId}`, { status: "cancelled" });
+  const details = normalizeGatewayDetailsFromPreapproval(payload, preapprovalId);
+  const nowIso = new Date().toISOString();
+
+  await userRef.set(
+    {
+      plan: "free" as UserPlan,
+      paymentStatus: "canceled" as UserPaymentStatus,
+      status: currentStatus === "deleted" ? "deleted" : "active",
+      blockReason: "",
+      billing: {
+        source: "mercadopago_cancel",
+        provider: "mercadopago",
+        gatewayStatus: details.gatewayStatus,
+        gatewayStatusDetail: details.gatewayStatusDetail ?? null,
+        gatewayPlan: "free",
+        preapprovalId,
+        lastEventType: "preapproval_cancel",
+        lastEventAction: "manual_cancel",
+        lastEventId: preapprovalId,
+        lastEventAt: nowIso,
+        lastSyncAt: nowIso,
+        lastError: null,
+        pendingPreapprovalId: null,
+        pendingPlan: null,
+        pendingCheckoutAt: null,
+      },
+    },
+    { merge: true }
+  );
+
+  await adminDb.collection("billing_events").doc(`cancel_preapproval_${preapprovalId}_${params.uid}`).set(
+    {
+      topic: "preapproval_cancel",
+      action: "manual_cancel",
+      resourceId: preapprovalId,
+      uid: params.uid,
+      status: "processed",
+      targetPlan: "free",
+      targetPaymentStatus: "canceled",
+      details,
+      processedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  return {
+    ok: true,
+    uid: params.uid,
+    preapprovalId,
+    targetPlan: "free" as UserPlan,
+    targetPaymentStatus: "canceled" as UserPaymentStatus,
+  };
 }

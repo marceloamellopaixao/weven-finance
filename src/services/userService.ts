@@ -1,17 +1,4 @@
-import {
-  collection,
-  getDocs,
-  doc,
-  updateDoc,
-  query,
-  orderBy,
-  writeBatch,
-  getCountFromServer,
-  onSnapshot,
-  where,
-} from "firebase/firestore";
-import { getAuth, updateProfile, signOut } from "firebase/auth";
-import { db } from "./firebase/client";
+import { getAuth, signOut, updateProfile } from "firebase/auth";
 import {
   UserProfile,
   UserStatus,
@@ -19,366 +6,298 @@ import {
   UserRole,
   UserPaymentStatus,
 } from "@/types/user";
+import { getImpersonationHeader } from "@/lib/impersonation/client";
+import { getImpersonationActionStatus } from "@/services/impersonationService";
 
-// Realtime: Buscar todos os usuários (Admin)
+const POLLING_INTERVAL_MS = 15000;
+
+async function getIdTokenOrThrow() {
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error("missing_auth_user");
+  return currentUser.getIdToken();
+}
+
+async function apiFetch(path: string, init?: RequestInit) {
+  const idToken = await getIdTokenOrThrow();
+  return fetch(path, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+      ...getImpersonationHeader(),
+      ...(init?.headers || {}),
+    },
+  });
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForActionApproval(actionRequestId: string, timeoutMs = 120000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const status = await getImpersonationActionStatus(actionRequestId);
+    const request = status.request;
+    if (request?.status === "approved") return;
+    if (request?.status === "rejected" || request?.status === "expired") {
+      throw new Error("impersonation_action_rejected");
+    }
+    await sleep(2500);
+  }
+  throw new Error("impersonation_action_timeout");
+}
+
+async function apiFetchWithOptionalApproval(path: string, init?: RequestInit) {
+  const first = await apiFetch(path, init);
+  const firstPayload = (await first.json()) as {
+    ok?: boolean;
+    error?: string;
+    actionRequestId?: string;
+  };
+
+  if (
+    first.status === 409 &&
+    firstPayload.error === "impersonation_write_confirmation_required" &&
+    firstPayload.actionRequestId
+  ) {
+    await waitForActionApproval(firstPayload.actionRequestId);
+    const retry = await apiFetch(path, {
+      ...init,
+      headers: {
+        ...(init?.headers || {}),
+        "x-impersonation-action-id": firstPayload.actionRequestId,
+      },
+    });
+    const retryPayload = (await retry.json()) as { ok?: boolean; error?: string };
+    return { response: retry, payload: retryPayload };
+  }
+
+  return { response: first, payload: firstPayload };
+}
+
 export const subscribeToAllUsers = (
   onChange: (users: UserProfile[]) => void,
   onError?: (error: Error) => void
 ) => {
-  const usersRef = collection(db, "users");
-  const q = query(usersRef, orderBy("createdAt", "desc"));
-
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const users = snapshot.docs.map((d) => {
-        const data = d.data();
-        return {
-          uid: d.id,
-          email: data.email || "",
-          displayName: data.displayName || "Sem Nome",
-          completeName: data.completeName || data.displayName || "",
-          phone: data.phone || "",
-          role: data.role || 'client',
-          plan: data.plan || 'free',
-          status: data.status || 'active',
-          createdAt: data.createdAt || new Date().toISOString(),
-          transactionCount: data.transactionCount || 0,
-          paymentStatus: data.paymentStatus || 'pending',
-          billing: data.billing || {},
-          verifiedEmail: data.verifiedEmail || false,
-          blockReason: data.blockReason || ""
-        } as UserProfile;
-      });
-      onChange(users);
-    },
-    (error) => {
-      console.error("Erro ao buscar usuários:", error);
-      onError?.(error as Error);
+  let cancelled = false;
+  const run = async () => {
+    try {
+      const response = await apiFetch("/api/admin/users", { method: "GET" });
+      const payload = (await response.json()) as { ok: boolean; error?: string; users?: UserProfile[] };
+      if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao buscar usuarios");
+      if (!cancelled) onChange(payload.users || []);
+    } catch (error) {
+      if (!cancelled) onError?.(error as Error);
     }
-  );
+  };
+
+  void run();
+  const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
+  return () => {
+    cancelled = true;
+    clearInterval(interval);
+  };
 };
 
-// Realtime: Buscar um usuário específico
 export const subscribeToUserProfile = (
-  uid: string,
+  _uid: string,
   onChange: (profile: UserProfile | null) => void,
   onError?: (error: Error) => void
 ) => {
-  const userRef = doc(db, "users", uid);
-
-  return onSnapshot(
-    userRef,
-    (snap) => {
-      onChange(snap.exists() ? ({ ...(snap.data() as UserProfile), uid: snap.id }) : null);
-    },
-    (error) => {
-      console.error(`Erro ao buscar usuário (${uid}):`, error);
-      onError?.(error as Error);
+  let cancelled = false;
+  const run = async () => {
+    try {
+      const response = await apiFetch("/api/profile/me", { method: "GET" });
+      const payload = (await response.json()) as { ok: boolean; error?: string; profile?: UserProfile | null };
+      if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao buscar perfil");
+      if (!cancelled) onChange(payload.profile ?? null);
+    } catch (error) {
+      if (!cancelled) onError?.(error as Error);
     }
-  );
+  };
+
+  void run();
+  const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
+  return () => {
+    cancelled = true;
+    clearInterval(interval);
+  };
 };
 
-// --- FUNÇÃO DE MIGRAÇÃO/CORREÇÃO DE DADOS ---
 export const normalizeDatabaseUsers = async () => {
-  const usersRef = collection(db, "users");
-  const snapshot = await getDocs(usersRef);
-
-  // O Firestore permite até 500 operações por batch
-  const batch = writeBatch(db);
-  let updateCount = 0;
-
-  snapshot.docs.forEach((docSnap) => {
-    const data = docSnap.data();
-    const updates: Record<string, unknown> = {};
-    let needsUpdate = false;
-
-    // Verifica cada campo novo
-    if (data.phone === undefined) { updates.phone = ""; needsUpdate = true; }
-    if (data.completeName === undefined) { updates.completeName = data.displayName || ""; needsUpdate = true; }
-    if (data.transactionCount === undefined) { updates.transactionCount = 0; needsUpdate = true; }
-    if (data.paymentStatus === undefined) { updates.paymentStatus = 'pending'; needsUpdate = true; }
-    if (data.verifiedEmail === undefined) { updates.verifiedEmail = false; needsUpdate = true; }
-    if (data.blockReason === undefined) { updates.blockReason = ""; needsUpdate = true; }
-
-    // Garante campos antigos essenciais
-    if (data.role === undefined) { updates.role = 'client'; needsUpdate = true; }
-    if (data.plan === undefined) { updates.plan = 'free'; needsUpdate = true; }
-    if (data.status === undefined) { updates.status = 'active'; needsUpdate = true; }
-
-    if (needsUpdate) {
-      batch.update(docSnap.ref, updates);
-      updateCount++;
-    }
+  const response = await apiFetch("/api/admin/users", {
+    method: "POST",
+    body: JSON.stringify({ action: "normalize" }),
   });
-
-  if (updateCount > 0) {
-    await batch.commit();
+  const payload = (await response.json()) as { ok: boolean; error?: string; count?: number };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Erro ao normalizar usuarios");
   }
-
-  return updateCount;
+  return payload.count || 0;
 };
 
-// Atualizar status do usuário
 export const updateUserStatus = async (
   uid: string,
   status: UserStatus,
   reason?: string
 ) => {
-  try {
-    const userRef = doc(db, "users", uid);
-    await updateDoc(userRef, {
-      status,
-      blockReason: reason || "",
-    });
-  } catch (error) {
-    console.error(`Erro ao atualizar status do usuário ${uid}:`, error);
-    throw error;
-  }
+  const response = await apiFetch("/api/admin/users", {
+    method: "PATCH",
+    body: JSON.stringify({
+      uid,
+      updates: {
+        status,
+        blockReason: reason || "",
+      },
+    }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao atualizar status");
 };
 
-// Atualizar plano
 export const updateUserPlan = async (uid: string, plan: UserPlan) => {
-  try {
-    const userRef = doc(db, "users", uid);
-    await updateDoc(userRef, {
-      plan,
-      "billing.source": "manual",
-      "billing.lastSyncAt": new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error(`Erro ao atualizar plano do usuário ${uid}:`, error);
-    throw error;
-  }
-};
-
-// Atualizar Role
-export const updateUserRole = async (uid: string, role: UserRole) => {
-  try {
-    const userRef = doc(db, "users", uid);
-    const isBillingExemptRole = role === "admin" || role === "moderator";
-    if (isBillingExemptRole) {
-      await updateDoc(userRef, {
-        role,
-        paymentStatus: "free",
-        "billing.source": "system",
+  const response = await apiFetch("/api/admin/users", {
+    method: "PATCH",
+    body: JSON.stringify({
+      uid,
+      updates: {
+        plan,
+        "billing.source": "manual",
         "billing.lastSyncAt": new Date().toISOString(),
-      });
-      return;
-    }
-    await updateDoc(userRef, { role });
-  } catch (error) {
-    console.error(`Erro ao atualizar role do usuário ${uid}:`, error);
-    throw error;
-  }
+      },
+    }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao atualizar plano");
 };
 
-// Atualizar status de pagamento
+export const updateUserRole = async (uid: string, role: UserRole) => {
+  const updates: Record<string, unknown> = { role };
+  if (role === "admin" || role === "moderator") {
+    updates.paymentStatus = "free";
+    updates["billing.source"] = "system";
+    updates["billing.lastSyncAt"] = new Date().toISOString();
+  }
+  const response = await apiFetch("/api/admin/users", {
+    method: "PATCH",
+    body: JSON.stringify({
+      uid,
+      updates,
+      requiresAdmin: true,
+    }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao atualizar role");
+};
+
 export const updateUserPaymentStatus = async (
   uid: string,
   paymentStatus: UserPaymentStatus
 ) => {
-  try {
-    const userRef = doc(db, "users", uid);
-    await updateDoc(userRef, {
-      paymentStatus,
-      "billing.source": "manual",
-      "billing.lastSyncAt": new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error(`Erro ao atualizar status de pagamento do usuário ${uid}:`, error);
-    throw error;
-  }
+  const response = await apiFetch("/api/admin/users", {
+    method: "PATCH",
+    body: JSON.stringify({
+      uid,
+      updates: {
+        paymentStatus,
+        "billing.source": "manual",
+        "billing.lastSyncAt": new Date().toISOString(),
+      },
+    }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao atualizar pagamento");
 };
 
-// Obter contagem de transações
 export const getUserTransactionCount = async (uid: string): Promise<number> => {
-  try {
-    const transactionsRef = collection(db, "users", uid, "transactions");
-    const snapshot = await getCountFromServer(transactionsRef);
-    const total = snapshot.data().count;
-
-    const userRef = doc(db, "users", uid);
-    await updateDoc(userRef, { transactionCount: total });
-
-    return total;
-  } catch (error) {
-    console.error(`Erro ao contar transações para o usuário ${uid}:`, error);
-    return 0;
-  }
+  const response = await apiFetch("/api/admin/users", {
+    method: "POST",
+    body: JSON.stringify({ action: "recountTransactionCount", uid }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string; count?: number };
+  if (!response.ok || !payload.ok) return 0;
+  return payload.count || 0;
 };
 
-// Atualizar próprio perfil
 export const updateOwnProfile = async (
   uid: string,
   data: { displayName: string; completeName: string; phone: string }
 ) => {
   const auth = getAuth();
   const user = auth.currentUser;
-
   if (user) {
-    try {
-      await updateProfile(user, {
-        displayName: data.displayName,
-      });
-    } catch (error) {
-      console.error("Erro ao atualizar displayName no Auth:", error);
-      throw error;
-    }
+    await updateProfile(user, { displayName: data.displayName });
   }
 
-  const userRef = doc(db, "users", uid);
-  try {
-    await updateDoc(userRef, {
+  const { response, payload } = await apiFetchWithOptionalApproval("/api/profile/me", {
+    method: "PUT",
+    body: JSON.stringify({
       displayName: data.displayName,
       completeName: data.completeName,
       phone: data.phone,
-    });
-  } catch (error) {
-    console.error(`Erro ao atualizar perfil do usuário ${uid}:`, error);
-    throw error;
+    }),
+  });
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || `Erro ao atualizar perfil do usuario ${uid}`);
   }
 };
 
-// Busca apenas usuários da equipe (Admin e Moderator) para atribuição de tarefas
 export const getStaffUsers = async (): Promise<UserProfile[]> => {
   try {
-    const usersRef = collection(db, "users");
-    
-    const qAdmin = query(usersRef, where("role", "==", "admin"));
-    const qMod = query(usersRef, where("role", "==", "moderator"));
-
-    const [adminSnap, modSnap] = await Promise.all([getDocs(qAdmin), getDocs(qMod)]);
-
-    const admins = adminSnap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
-    const mods = modSnap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
-
-    return [...admins, ...mods];
-  } catch (error) {
-    console.error("Erro ao buscar staff:", error);
+    const response = await apiFetch("/api/admin/users?scope=staff", { method: "GET" });
+    const payload = (await response.json()) as { ok: boolean; error?: string; users?: UserProfile[] };
+    if (!response.ok || !payload.ok) return [];
+    return payload.users || [];
+  } catch {
     return [];
   }
 };
 
-// --- GESTÃO DE DADOS FINANCEIROS ---
-
-// 1. Resetar (Apagar) dados financeiros
 export const resetUserFinancialData = async (uid: string) => {
-  const transactionsRef = collection(db, "users", uid, "transactions");
-  const snapshot = await getDocs(transactionsRef);
-
-  // Firestore batch limit is 500
-  const CHUNK_SIZE = 450; 
-  const chunks = [];
-  
-  for (let i = 0; i < snapshot.docs.length; i += CHUNK_SIZE) {
-    chunks.push(snapshot.docs.slice(i, i + CHUNK_SIZE));
-  }
-
-  for (const chunk of chunks) {
-    const batch = writeBatch(db);
-    chunk.forEach((d) => batch.delete(d.ref));
-    await batch.commit();
-  }
+  const response = await apiFetch("/api/admin/users", {
+    method: "POST",
+    body: JSON.stringify({ action: "resetFinancialData", uid }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao resetar dados financeiros");
 };
 
-// 2. Arquivar dados financeiros (Define isArchived = true)
-export const archiveUserFinancialData = async (uid: string) => {
-  const transactionsRef = collection(db, "users", uid, "transactions");
-  const snapshot = await getDocs(transactionsRef);
-
-  const CHUNK_SIZE = 450;
-  const chunks = [];
-  for (let i = 0; i < snapshot.docs.length; i += CHUNK_SIZE) {
-    chunks.push(snapshot.docs.slice(i, i + CHUNK_SIZE));
-  }
-
-  for (const chunk of chunks) {
-    const batch = writeBatch(db);
-    chunk.forEach((d) => {
-      // Não alteramos o status, apenas marcamos como arquivado
-      batch.update(d.ref, { 
-        isArchived: true
-      });
-    });
-    await batch.commit();
-  }
-};
-
-// 3. Desarquivar dados financeiros (Define isArchived = false)
-export const unarchiveUserFinancialData = async (uid: string) => {
-  const transactionsRef = collection(db, "users", uid, "transactions");
-  const snapshot = await getDocs(transactionsRef);
-
-  const CHUNK_SIZE = 450;
-  const chunks = [];
-  for (let i = 0; i < snapshot.docs.length; i += CHUNK_SIZE) {
-    chunks.push(snapshot.docs.slice(i, i + CHUNK_SIZE));
-  }
-
-  for (const chunk of chunks) {
-    const batch = writeBatch(db);
-    chunk.forEach((d) => {
-      batch.update(d.ref, { 
-        isArchived: false
-      });
-    });
-    await batch.commit();
-  }
-};
-
-// 4. Exclusão Lógica
 export const softDeleteUser = async (uid: string): Promise<void> => {
-  try {
-    // Arquiva transações (esconde do painel)
-    await archiveUserFinancialData(uid);
+  const response = await apiFetch("/api/admin/users", {
+    method: "POST",
+    body: JSON.stringify({ action: "softDelete", uid }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao deletar usuario");
 
-    // Marca usuário como deletado
-    const userRef = doc(db, "users", uid);
-    await updateDoc(userRef, {
-      status: 'deleted' as UserStatus,
-      role: 'client' as UserRole,
-      paymentStatus: 'canceled' as UserPaymentStatus,
-      blockReason: "Usuário solicitou exclusão (Dados Arquivados)",
-      deletedAt: new Date().toISOString(),
-    });
-
-    // Se o usuário deletado for o próprio, desloga para evitar inconsistências de permissão
-    const auth = getAuth();
-    if (auth.currentUser?.uid === uid) {
-      await signOut(auth);
-    }
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      console.error("Erro ao arquivar/deletar usuário:", error.message);
-      throw error;
-    }
-    throw new Error("Erro desconhecido ao deletar usuário.");
+  const auth = getAuth();
+  if (auth.currentUser?.uid === uid) {
+    await signOut(auth);
   }
 };
 
-// 5. Restauração (Admin restaura conta)
 export const restoreUserAccount = async (uid: string, restoreData: boolean = true): Promise<void> => {
-  try {
-    // Se solicitado, desarquiva transações (mostra no painel novamente)
-    if (restoreData) {
-      await unarchiveUserFinancialData(uid);
-    }
+  const response = await apiFetch("/api/admin/users", {
+    method: "POST",
+    body: JSON.stringify({ action: "restore", uid, restoreData }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao restaurar usuario");
+};
 
-    // Reativa usuário
-    const userRef = doc(db, "users", uid);
-    await updateDoc(userRef, {
-      status: 'active' as UserStatus,
-      // Define como pending para que o admin verifique o pagamento depois
-      paymentStatus: 'pending' as UserPaymentStatus, 
-      blockReason: "", 
-      deletedAt: null
-    });
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      console.error("Erro ao restaurar usuário:", error.message);
-      throw error;
-    }
-    throw new Error("Erro ao restaurar usuário.");
+export const requestOwnAccountDeletion = async (idToken: string): Promise<void> => {
+  const response = await fetch("/api/account/delete", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel excluir a conta");
   }
 };

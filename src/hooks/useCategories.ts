@@ -3,11 +3,10 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "./useAuth";
 import {
-    getCustomCategories,
+    getCategoriesData,
     addCustomCategory,
     deleteCustomCategoryByName,
     renameCustomCategoryByName,
-    getHiddenDefaultCategories,
     setDefaultCategoryHidden,
 } from "@/services/categoryService";
 
@@ -48,10 +47,8 @@ export function useCategories() {
 
         const loadCategories = async () => {
             try {
-                const [customCats, hiddenDefaults] = await Promise.all([
-                    getCustomCategories(user.uid),
-                    getHiddenDefaultCategories(user.uid),
-                ]);
+                const token = await user.getIdToken();
+                const { customCategories: customCats, hiddenDefaultCategories: hiddenDefaults } = await getCategoriesData(token);
 
                 const formattedCustom: Category[] = customCats.map((cat) => ({
                     name: cat.name,
@@ -104,14 +101,14 @@ export function useCategories() {
 
         setCategories((prev) => [...prev, newCat]);
 
-        await addCustomCategory(user.uid, finalName, type);
+        await addCustomCategory(await user.getIdToken(), finalName, type);
     };
 
     const deleteCategory = async (name: string) => {
         if (!user) return;
 
         setCategories((prev) => prev.filter((cat) => cat.name !== name && !cat.name.startsWith(`${name}${CATEGORY_PATH_SEPARATOR}`)));
-        await deleteCustomCategoryByName(user.uid, name, "Outros");
+        await deleteCustomCategoryByName(await user.getIdToken(), name, "Outros");
     };
 
     const renameCategory = async (oldName: string, newName: string) => {
@@ -130,7 +127,7 @@ export function useCategories() {
             })
         );
 
-        await renameCustomCategoryByName(user.uid, oldName, trimmed);
+        await renameCustomCategoryByName(await user.getIdToken(), oldName, trimmed);
     };
 
     const toggleDefaultCategoryVisibility = async (name: string, hidden: boolean) => {
@@ -153,7 +150,7 @@ export function useCategories() {
             return [{ ...defaultCategory, isDefault: true }, ...prev];
         });
 
-        await setDefaultCategoryHidden(user.uid, name, hidden);
+        await setDefaultCategoryHidden(await user.getIdToken(), name, hidden);
     };
 
     const defaultCategories = INITIAL_CATEGORIES.map((cat) => ({
