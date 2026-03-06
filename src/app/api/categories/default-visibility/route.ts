@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/services/firebase/admin";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
+import { resolveApiErrorStatus } from "@/lib/api/error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,10 +49,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, hiddenDefaultCategories: next }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status =
-      message === "missing_auth_token" ? 401
-        : message.startsWith("impersonation_") ? 403
-          : 500;
+    const status = resolveApiErrorStatus(message);
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
