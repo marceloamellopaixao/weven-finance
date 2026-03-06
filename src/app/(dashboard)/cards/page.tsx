@@ -45,7 +45,7 @@ function getBankTheme(bankName: string) {
   return BANK_THEMES.find((theme) => theme.matcher.test(bankName || "")) || BANK_THEMES[BANK_THEMES.length - 1];
 }
 
-const defaultSettings: CreditCardSettings = { enabled: false, cardName: "Cartão principal", limit: 0, alertThresholdPct: 80, blockOnLimitExceeded: true, autoUnblockWhenBelowLimit: true };
+const defaultSettings: CreditCardSettings = { enabled: false, cardName: "Cartão principal", limit: 0, alertThresholdPct: 80, blockOnLimitExceeded: false, autoUnblockWhenBelowLimit: true };
 
 export default function CreditCardPage() {
   const { user, userProfile, loading: authLoading } = useAuth();
@@ -147,7 +147,7 @@ export default function CreditCardPage() {
       enabled: activeCard.limitEnabled ?? true,
       limit: Number(activeCard.creditLimit ?? 0),
       alertThresholdPct: Number(activeCard.alertThresholdPct ?? 80),
-      blockOnLimitExceeded: activeCard.blockOnLimitExceeded ?? true,
+      blockOnLimitExceeded: false,
     }));
   }, [activeCard]);
 
@@ -207,7 +207,6 @@ export default function CreditCardPage() {
         limitEnabled: settings.enabled,
         creditLimit: Number(settings.limit || 0),
         alertThresholdPct: Number(settings.alertThresholdPct || 80),
-        blockOnLimitExceeded: settings.blockOnLimitExceeded,
       });
       const cards = await getPaymentCards();
       setPaymentCards(cards);
@@ -305,7 +304,6 @@ export default function CreditCardPage() {
         limitEnabled: isCreditFunction ? true : undefined,
         creditLimit: isCreditFunction ? 0 : undefined,
         alertThresholdPct: isCreditFunction ? 80 : undefined,
-        blockOnLimitExceeded: isCreditFunction ? true : undefined,
       };
 
       if (editingCardId) {
@@ -755,13 +753,6 @@ export default function CreditCardPage() {
                     <p className="text-xs text-zinc-400">Monitorar compras para não estourar o limite deste cartão.</p>
                   </div>
                   <Switch checked={settings.enabled} onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, enabled: checked }))} />
-                </div>
-                <div className="flex items-center justify-between rounded-2xl border border-zinc-700 bg-zinc-800/50 p-4">
-                  <div>
-                    <p className="font-medium text-sm text-zinc-100">Bloquear usuário ao exceder</p>
-                    <p className="text-xs text-zinc-400">Conta vai para status bloqueado se o limite for ultrapassado.</p>
-                  </div>
-                  <Switch checked={settings.blockOnLimitExceeded} onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, blockOnLimitExceeded: checked }))} />
                 </div>
               </div>
 
