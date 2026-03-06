@@ -35,6 +35,8 @@ import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { useDashboardTour } from "@/hooks/useDashboardTour";
 import { getCheckoutLink } from "@/services/billingService";
+import { getPaymentCards } from "@/services/paymentCardService";
+import { PaymentCard } from "@/types/paymentCard";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -92,6 +94,15 @@ const formatCategoryLabel = (value: string) => {
     return `• ${getSubcategoryName(value)}`;
   }
   return value;
+};
+
+const normalizeCardTypeForTransaction = (
+  cardType: PaymentCard["type"] | undefined,
+  method: PaymentMethod
+): "credit_card" | "debit_card" | undefined => {
+  if (cardType === "credit_card" || cardType === "debit_card") return cardType;
+  if (method === "credit_card" || method === "debit_card") return method;
+  return undefined;
 };
 
 const orderCategoryNames = (names: string[]) => {
@@ -165,6 +176,8 @@ export default function DashboardPage() {
   const [type, setType] = useState<TransactionType>("expense");
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("debit_card");
+  const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
+  const [selectedPaymentCardId, setSelectedPaymentCardId] = useState("");
   const [dueDate, setDueDate] = useState(new Date().toISOString().split('T')[0]);
   const [isInstallment, setIsInstallment] = useState(false);
   const [installmentsCount, setInstallmentsCount] = useState("2");
@@ -328,6 +341,16 @@ export default function DashboardPage() {
     return method ? method.hasDueDate : false;
   }, [paymentMethod]);
 
+  const availablePaymentCards = useMemo(() => {
+    if (paymentMethod !== "credit_card" && paymentMethod !== "debit_card") return [];
+    return paymentCards;
+  }, [paymentCards, paymentMethod]);
+
+  const selectedPaymentCard = useMemo(
+    () => paymentCards.find((card) => card.id === selectedPaymentCardId),
+    [paymentCards, selectedPaymentCardId]
+  );
+
   const chartData = useMemo(() => {
     const monthlyGroups: Record<string, number> = {};
 
@@ -376,6 +399,53 @@ export default function DashboardPage() {
     setEditingCategoryParent("");
   }, [isNewCategoryOpen]);
 
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const cards = await getPaymentCards();
+        if (cancelled) return;
+        setPaymentCards(cards);
+      } catch {
+        if (!cancelled) setPaymentCards([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || (!isFormOpen && !isEditOpen)) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const cards = await getPaymentCards();
+        if (!cancelled) setPaymentCards(cards);
+      } catch {
+        if (!cancelled) setPaymentCards([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isFormOpen, isEditOpen]);
+
+  useEffect(() => {
+    if (paymentMethod !== "credit_card" && paymentMethod !== "debit_card") {
+      setSelectedPaymentCardId("");
+      return;
+    }
+    if (!availablePaymentCards.some((card) => card.id === selectedPaymentCardId)) {
+      const fallbackCard = paymentCards.find((card) => card.type === paymentMethod || card.type === "credit_and_debit") || availablePaymentCards[0];
+      setSelectedPaymentCardId(fallbackCard?.id || "");
+      if (fallbackCard && fallbackCard.type !== "credit_and_debit" && fallbackCard.type !== paymentMethod) {
+        setPaymentMethod(fallbackCard.type);
+      }
+    }
+  }, [availablePaymentCards, paymentCards, paymentMethod, selectedPaymentCardId]);
+
   // --- RETORNO CONDICIONAL ---
   if (loading) return <DashboardSkeleton />;
 
@@ -417,6 +487,16 @@ export default function DashboardPage() {
     }
 
     if (!desc || !amount || !category) return;
+    const isCardPayment = paymentMethod === "credit_card" || paymentMethod === "debit_card";
+    if (isCardPayment && !selectedPaymentCard) {
+      setFeedbackModal({
+        isOpen: true,
+        type: "error",
+        title: "Selecione um cartao",
+        message: "Cadastre um cartao em /cards e selecione antes de confirmar.",
+      });
+      return;
+    }
     setIsSubmitting(true);
     try {
       let finalAmount = Number(amount);
@@ -456,6 +536,9 @@ export default function DashboardPage() {
         type: type, // Tipo (Despesa ou Renda)
         category: category, // Categoria
         paymentMethod: paymentMethod, // Método de Pagamento
+        cardId: selectedPaymentCard?.id,
+        cardLabel: selectedPaymentCard ? `${selectedPaymentCard.bankName} •••• ${selectedPaymentCard.last4}` : undefined,
+        cardType: normalizeCardTypeForTransaction(selectedPaymentCard?.type, paymentMethod),
         date: transactionDate, // Data do Gasto (para despesas) ou Data de Crédito (para rendas)
         dueDate: transactionDueDate, // Data de Vencimento (para despesas) ou Data de Crédito (para rendas)
         isInstallment, // Flag de Parcela
@@ -467,6 +550,7 @@ export default function DashboardPage() {
       setAmount("");
       setIsInstallment(false);
       setInstallmentsCount("2");
+      if (isCardPayment) setSelectedPaymentCardId("");
       if (type === 'income') setCategory("Salário");
       setIsFormOpen(false); // Fecha o modal após adicionar
     } catch (error) {
@@ -579,6 +663,16 @@ export default function DashboardPage() {
 
   const handleConfirmEdit = async (updateGroup: boolean) => {
     if (!editingTx || !user || !editingTx.id) return;
+    const isCardPayment = editingTx.paymentMethod === "credit_card" || editingTx.paymentMethod === "debit_card";
+    if (isCardPayment && !editingTx.cardId) {
+      setFeedbackModal({
+        isOpen: true,
+        type: "error",
+        title: "Selecione um cartao",
+        message: "Cadastre um cartao em /cards e selecione antes de salvar.",
+      });
+      return;
+    }
 
     // Normalização das datas na edição para manter consistência
     const finalDate = editingTx.date;
@@ -600,6 +694,9 @@ export default function DashboardPage() {
       amount: Number(editingTx.amount),
       category: editingTx.category,
       paymentMethod: editingTx.paymentMethod,
+      cardId: editingTx.cardId || undefined,
+      cardLabel: editingTx.cardLabel || undefined,
+      cardType: editingTx.cardType || undefined,
       dueDate: finalDueDate,
       date: finalDate
     }, updateGroup);
@@ -643,7 +740,37 @@ export default function DashboardPage() {
     }
   };
 
-  const openEditModal = (tx: Transaction) => { setEditingTx({ ...tx }); setIsEditOpen(true); };
+  const openEditModal = (tx: Transaction) => {
+    const nextTx = { ...tx };
+    const isCardPayment = nextTx.paymentMethod === "credit_card" || nextTx.paymentMethod === "debit_card";
+
+    if (isCardPayment) {
+      const direct = nextTx.cardId ? paymentCards.find((card) => card.id === nextTx.cardId) : undefined;
+      const inferred = !direct && nextTx.cardLabel
+        ? paymentCards.find((card) => {
+            const label = String(nextTx.cardLabel || "").toLowerCase();
+            return label.includes(card.last4) && label.includes(card.bankName.toLowerCase());
+          })
+        : undefined;
+      const linkedCard = direct || inferred;
+
+      if (linkedCard) {
+        nextTx.cardId = linkedCard.id;
+        nextTx.cardLabel = `${linkedCard.bankName} •••• ${linkedCard.last4}`;
+        nextTx.cardType = normalizeCardTypeForTransaction(linkedCard.type, nextTx.paymentMethod);
+        if (linkedCard.type === "credit_card" || linkedCard.type === "debit_card") {
+          nextTx.paymentMethod = linkedCard.type;
+        }
+      }
+    } else {
+      delete nextTx.cardId;
+      delete nextTx.cardLabel;
+      delete nextTx.cardType;
+    }
+
+    setEditingTx(nextTx);
+    setIsEditOpen(true);
+  };
 
   // --- COMPONENTE DO FORMULÁRIO ---
   const TransactionFormContent = (
@@ -707,6 +834,43 @@ export default function DashboardPage() {
           </Select>
         </div>
       </div>
+      {(paymentMethod === "credit_card" || paymentMethod === "debit_card") && (
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium text-zinc-400 ml-1 uppercase">
+            Cartão Vinculado
+          </Label>
+          <Select
+            value={selectedPaymentCardId}
+            onValueChange={(value) => {
+              setSelectedPaymentCardId(value);
+              const card = paymentCards.find((item) => item.id === value);
+              if (card && card.type !== "credit_and_debit") {
+                setPaymentMethod(card.type);
+              }
+            }}
+          >
+            <SelectTrigger className="h-12 rounded-xl bg-zinc-50 border-zinc-200">
+              <SelectValue placeholder="Selecione um cartão cadastrado em /cards" />
+            </SelectTrigger>
+            <SelectContent>
+              {availablePaymentCards.length === 0 ? (
+                <SelectItem value="__none" disabled>Nenhum cartão cadastrado</SelectItem>
+              ) : (
+                availablePaymentCards.map((card) => (
+                  <SelectItem key={card.id} value={card.id}>
+                    {card.bankName} •••• {card.last4} ({card.type === "credit_card" ? "Crédito" : card.type === "debit_card" ? "Débito" : "Crédito e Débito"})
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          {availablePaymentCards.length === 0 && (
+            <p className="text-[11px] text-amber-600">
+              Cadastre o cartão na página `/cards` para vincular este lançamento.
+            </p>
+          )}
+        </div>
+      )}
       <div className="bg-zinc-50/80 dark:bg-zinc-800/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800 space-y-4">
         <div className="grid grid-cols-2 gap-3">
           {type === 'expense' && (
@@ -740,7 +904,13 @@ export default function DashboardPage() {
         )}
       </div>
       <Button onClick={handleAdd} className={`w-full h-12 font-bold text-white shadow-lg rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] hover:cursor-pointer duration-200 ${type === 'expense' ? 'bg-linear-to-r from-red-500 to-orange-500 shadow-red-500/25 hover:shadow-red-500/40' : 'bg-linear-to-r from-emerald-500 to-teal-500 shadow-emerald-500/25 hover:shadow-emerald-500/40'}`} disabled={isSubmitting}>{isSubmitting ? "Processando..." : (type === 'expense' ? "Confirmar Despesa" : "Confirmar Receita")}</Button>
-      <Button variant="ghost" onClick={() => setIsFormOpen(false)} className="w-full h-12 font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-all hover:cursor-pointer duration-200">Cancelar</Button>
+      <Button
+        variant="ghost"
+        onClick={() => setIsFormOpen(false)}
+        className="w-full h-12 font-medium bg-red-500 text-white hover:bg-red-600 hover:text-white transition-all hover:cursor-pointer duration-200"
+      >
+        Cancelar
+      </Button>
     </div>
   );
 
@@ -1175,26 +1345,29 @@ export default function DashboardPage() {
 
         {/* MODAL FORMULÁRIO (UNIFICADO) */}
         <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogContent className=" sm:max-w-[600px] sm:h-auto sm:rounded-2xl p-6 overflow-y-auto">
-            <DialogHeader className="flex flex-row items-center justify-between">
-              <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                {type === 'expense' ? 'Novo Gasto' : 'Nova Renda'}
-              </DialogTitle>
-            </DialogHeader>
+          <DialogContent className="w-[calc(100vw-1rem)] max-w-[680px] max-h-[92vh] rounded-2xl sm:rounded-3xl p-0 gap-0 overflow-hidden">
+            <div className={`h-2 w-full ${type === 'expense' ? 'bg-red-500' : 'bg-emerald-500'}`} />
+            <div className="p-4 sm:p-6 overflow-y-auto">
+              <DialogHeader className="flex flex-row items-center justify-between">
+                <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                  {type === 'expense' ? 'Novo Gasto' : 'Nova Renda'}
+                </DialogTitle>
+              </DialogHeader>
 
-            <div className="mt-4">
+              <div className="mt-4">
               {TransactionFormContent}
+              </div>
             </div>
           </DialogContent>
         </Dialog>
 
         {/* Modal de Edição */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent className="sm:max-w-[500px] w-full max-h-[90vh] overflow-y-auto rounded-2xl p-0 gap-0 overflow-hidden">
+          <DialogContent className="w-[calc(100vw-1rem)] max-w-[680px] max-h-[92vh] overflow-y-auto overscroll-contain rounded-2xl sm:rounded-3xl p-0 gap-0">
             {editingTx && (
               <>
                 <div className={`h-2 w-full ${editingTx.type === 'expense' ? 'bg-red-500' : 'bg-emerald-500'}`} />
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   <DialogHeader className="mb-6">
                     <div className="flex items-center justify-between">
                       <DialogTitle className="text-xl flex items-center gap-2">
@@ -1225,7 +1398,7 @@ export default function DashboardPage() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Valor</Label>
                         <div className="relative">
@@ -1281,11 +1454,63 @@ export default function DashboardPage() {
 
                     <div className="space-y-2">
                       <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Método de Pagamento</Label>
-                      <Select value={editingTx.paymentMethod} onValueChange={(v) => setEditingTx({ ...editingTx, paymentMethod: v as PaymentMethod })}>
+                      <Select
+                        value={editingTx.paymentMethod}
+                        onValueChange={(v) => {
+                          const nextMethod = v as PaymentMethod;
+                          if (nextMethod !== "credit_card" && nextMethod !== "debit_card") {
+                            setEditingTx({ ...editingTx, paymentMethod: nextMethod, cardId: undefined, cardLabel: undefined, cardType: undefined });
+                            return;
+                          }
+                          const fallbackCard = paymentCards.find((card) => card.type === nextMethod || card.type === "credit_and_debit") || paymentCards[0];
+                            setEditingTx({
+                              ...editingTx,
+                              paymentMethod: fallbackCard?.type === "credit_card" || fallbackCard?.type === "debit_card" ? fallbackCard.type : nextMethod,
+                              cardId: fallbackCard?.id,
+                              cardLabel: fallbackCard ? `${fallbackCard.bankName} •••• ${fallbackCard.last4}` : undefined,
+                              cardType: normalizeCardTypeForTransaction(fallbackCard?.type, nextMethod),
+                            });
+                        }}
+                      >
                         <SelectTrigger className="h-11 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue /></SelectTrigger>
                         <SelectContent>{PAYMENT_METHODS.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
+
+                    {(editingTx.paymentMethod === "credit_card" || editingTx.paymentMethod === "debit_card") && (
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Cartão Vinculado</Label>
+                        <Select
+                          value={editingTx.cardId || ""}
+                          onValueChange={(value) => {
+                            const card = paymentCards.find((item) => item.id === value);
+                            if (!card) return;
+                            setEditingTx({
+                              ...editingTx,
+                              paymentMethod: card.type === "credit_and_debit" ? editingTx.paymentMethod : card.type,
+                              cardId: card.id,
+                              cardLabel: `${card.bankName} •••• ${card.last4}`,
+                              cardType: normalizeCardTypeForTransaction(card.type, editingTx.paymentMethod),
+                            });
+                          }}
+                        >
+                          <SelectTrigger className="h-11 rounded-xl bg-zinc-50 border-zinc-200">
+                            <SelectValue placeholder="Selecione um cartão cadastrado em /cards" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paymentCards.length === 0 ? (
+                              <SelectItem value="__none" disabled>Nenhum cartão cadastrado</SelectItem>
+                            ) : (
+                              paymentCards.map((card) => (
+                                <SelectItem key={card.id} value={card.id}>
+                                  {card.bankName} •••• {card.last4} ({card.type === "credit_card" ? "Crédito" : card.type === "debit_card" ? "Débito" : "Crédito e Débito"})
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
                     <div className="bg-zinc-50/80 dark:bg-zinc-800/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
                       {editingTx.type === 'income' ? (
@@ -1294,7 +1519,7 @@ export default function DashboardPage() {
                           <Input type="date" className="h-10 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={editingTx.date} onChange={e => setEditingTx({ ...editingTx, date: e.target.value })} />
                         </div>
                       ) : (
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="space-y-2">
                             <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Data Compra</Label>
                             <Input type="date" className="h-10 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={editingTx.date} onChange={e => setEditingTx({ ...editingTx, date: e.target.value })} />
@@ -1310,8 +1535,14 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <DialogFooter className="mt-8 flex flex-col sm:flex-row gap-3">
-                    <Button variant="ghost" className="w-full sm:w-auto h-11 hover:bg-zinc-100 rounded-xl font-medium text-zinc-500" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
+                  <DialogFooter className="mt-6 flex flex-col sm:flex-row gap-3 pb-2">
+                    <Button
+                      variant="ghost"
+                      className="w-full sm:w-auto h-11 bg-red-500 text-white hover:bg-red-600 hover:text-white rounded-xl font-medium"
+                      onClick={() => setIsEditOpen(false)}
+                    >
+                      Cancelar
+                    </Button>
                     {editingTx.groupId ? (
                       <>
                         <Button variant="outline" className="w-full sm:w-auto h-11 rounded-xl font-medium border-zinc-200" onClick={() => handleConfirmEdit(false)}>Salvar Apenas Esta</Button>
