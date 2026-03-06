@@ -30,9 +30,9 @@ import { updateOwnProfile, softDeleteUser } from "@/services/userService";
 import { getKeyFingerprint } from "@/lib/crypto";
 import { usePlans } from "@/hooks/usePlans";
 import { migrateCryptography } from "@/services/transactionService";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { sendFeatureRequest, sendSupportRequest } from "@/hooks/supportService";
-import { getCheckoutLink } from "@/services/billingService";
+import { confirmPreapproval, getCheckoutLink } from "@/services/billingService";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -46,6 +46,7 @@ export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode } = useAuth();
   const { plans } = usePlans();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [isMigrating, setIsMigrating] = useState(false);
   const [activeTab, setActiveTab] = useState("account");
@@ -57,6 +58,8 @@ export default function SettingsPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
+  const [manualPreapprovalId, setManualPreapprovalId] = useState("");
+  const [isConfirmingPreapproval, setIsConfirmingPreapproval] = useState(false);
 
   // Estados para Suporte
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
@@ -209,8 +212,8 @@ export default function SettingsPage() {
     setIsOpeningCheckout(plan);
     try {
       const token = await user.getIdToken();
-      const checkoutUrl = await getCheckoutLink(plan, token);
-      window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+      const session = await getCheckoutLink(plan, token);
+      window.open(session.checkoutUrl, "_blank", "noopener,noreferrer");
     } catch (error) {
       console.error(error);
       showFeedback("error", "Falha no checkout", "Nao foi possivel abrir o pagamento agora.");
@@ -219,11 +222,44 @@ export default function SettingsPage() {
     }
   };
 
+  const handleConfirmPreapproval = async (preapprovalId?: string, expectedPlan?: "premium" | "pro") => {
+    if (!user) return;
+    if (!preapprovalId?.trim() && !pendingPreapprovalId) return;
+
+    setIsConfirmingPreapproval(true);
+    try {
+      const token = await user.getIdToken();
+      const result = await confirmPreapproval(preapprovalId?.trim() || pendingPreapprovalId, token, expectedPlan);
+      showFeedback("success", "Assinatura confirmada", `Plano atualizado para ${result.targetPlan}.`);
+      setManualPreapprovalId("");
+    } catch (error) {
+      console.error(error);
+      showFeedback("error", "Falha na confirmacao", "Nao foi possivel validar a assinatura agora.");
+    } finally {
+      setIsConfirmingPreapproval(false);
+    }
+  };
+
   const currentPlan = userProfile?.plan || "free";
   const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
   const effectivePlan = isBillingExemptRole ? "pro" : currentPlan;
   const effectivePaymentStatus = isBillingExemptRole ? "free" : (userProfile?.paymentStatus || "pending");
   const canUpgrade = !isBillingExemptRole && effectivePlan !== "pro";
+  const pendingPreapprovalId = userProfile?.billing?.pendingPreapprovalId;
+
+  useEffect(() => {
+    const preapprovalId = searchParams.get("preapproval_id") || searchParams.get("preapprovalId");
+    const billingReturn = searchParams.get("billing_return");
+    const planParam = searchParams.get("plan");
+    const expectedPlan = planParam === "premium" || planParam === "pro" ? planParam : undefined;
+
+    if (!user || isConfirmingPreapproval) return;
+    if (!preapprovalId && !billingReturn) return;
+
+    void handleConfirmPreapproval(preapprovalId || undefined, expectedPlan).finally(() => {
+      router.replace("/settings");
+    });
+  }, [searchParams, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="font-sans p-4 md:p-8 pb-20">
@@ -464,6 +500,30 @@ export default function SettingsPage() {
                       <strong>{userProfile?.billing?.lastSyncAt ? new Date(userProfile.billing.lastSyncAt).toLocaleString() : "Sem sincronizacao"}</strong>
                     </p>
                   </div>
+                  {!isBillingExemptRole && (
+                    <div className="rounded-xl border border-white/15 bg-black/10 p-3 text-xs text-white/85 space-y-2">
+                      <p className="font-semibold">Ja concluiu o pagamento?</p>
+                      <p>Se o retorno automatico falhar, confirme com o ID da assinatura (preapproval_id).</p>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Input
+                          value={manualPreapprovalId}
+                          onChange={(e) => setManualPreapprovalId(e.target.value)}
+                          placeholder="Ex: 2c938084..."
+                          className="h-9 bg-white/95 text-zinc-900 placeholder:text-zinc-500"
+                        />
+                        <Button
+                          onClick={() => handleConfirmPreapproval(manualPreapprovalId)}
+                          disabled={isConfirmingPreapproval || (!manualPreapprovalId.trim() && !pendingPreapprovalId)}
+                          className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        >
+                          {isConfirmingPreapproval ? "Confirmando..." : "Atualizar Status da Assinatura"}
+                        </Button>
+                      </div>
+                      {pendingPreapprovalId && (
+                        <p className="text-[11px] text-white/80">Assinatura pendente detectada. ID interno: {pendingPreapprovalId}</p>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
               {canUpgrade && (
