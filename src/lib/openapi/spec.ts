@@ -23,6 +23,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       { name: "UserSettings", description: "Configuracoes financeiras do usuario" },
       { name: "CreditCard", description: "Controle de limite e politicas de cartao de credito" },
       { name: "PaymentCards", description: "Cadastro de cartoes sem dados sensiveis (banco, final e tipo)" },
+      { name: "PiggyBanks", description: "Gestao de cofrinhos/porquinhos e aportes com reflexo no extrato" },
       { name: "Support", description: "Chamados de suporte e solicitacoes de feature" },
       { name: "System", description: "Configuracoes globais do sistema" },
       { name: "MercadoPago", description: "Webhook e sincronizacao com gateway" },
@@ -767,6 +768,72 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             200: { description: "Identificacao retornada" },
             400: { description: "BIN invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/piggy-banks": {
+        get: {
+          tags: ["PiggyBanks"],
+          summary: "Listar porquinhos do usuario autenticado",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: { description: "Porquinhos retornados" },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+        post: {
+          tags: ["PiggyBanks"],
+          summary: "Guardar valor no porquinho (e opcionalmente aumentar limite do cartao)",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    action: { type: "string", enum: ["deposit"] },
+                    goalType: {
+                      type: "string",
+                      enum: ["card_limit", "emergency_reserve", "travel", "home_renovation", "dream_purchase", "custom"],
+                    },
+                    goalName: { type: "string" },
+                    amount: { type: "number" },
+                    withdrawalMode: { type: "string", nullable: true },
+                    yieldType: { type: "string", nullable: true },
+                    sourceType: { type: "string", enum: ["bank", "cash"] },
+                    cardId: { type: "string", nullable: true },
+                  },
+                  required: ["action", "goalType", "goalName", "amount"],
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Aporte registrado" },
+            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            404: { description: "Cartao nao encontrado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/piggy-banks/{slug}": {
+        get: {
+          tags: ["PiggyBanks"],
+          summary: "Ler porquinho por slug com historico",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "slug", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: {
+            200: { description: "Porquinho retornado" },
+            400: { description: "Slug invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            404: { description: "Porquinho nao encontrado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
