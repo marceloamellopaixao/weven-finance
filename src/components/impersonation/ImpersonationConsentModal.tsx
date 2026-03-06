@@ -18,7 +18,7 @@ import {
 } from "@/services/impersonationService";
 import { toast } from "react-toastify";
 
-const POLLING_INTERVAL_MS = 12000;
+const POLLING_INTERVAL_MS = 30000;
 
 export function ImpersonationConsentModal() {
   const { user, userProfile } = useAuth();
@@ -32,6 +32,7 @@ export function ImpersonationConsentModal() {
 
     let cancelled = false;
     const run = async () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       try {
         const data = await getPendingImpersonationRequests();
         if (!cancelled) setPending(data);
