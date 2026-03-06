@@ -1,14 +1,12 @@
 import { adminDb } from "@/services/firebase/admin";
 import { CreditCardSettings, CreditCardSummary } from "@/types/creditCard";
 
-const AUTO_BLOCK_REASON = "AUTO_CARD_LIMIT_EXCEEDED";
-
 export const defaultCreditCardSettings: CreditCardSettings = {
   enabled: false,
   cardName: "Cartão principal",
   limit: 0,
   alertThresholdPct: 80,
-  blockOnLimitExceeded: true,
+  blockOnLimitExceeded: false,
   autoUnblockWhenBelowLimit: true,
 };
 
@@ -24,7 +22,7 @@ function sanitizeSettings(raw: Partial<CreditCardSettings> | undefined): CreditC
     cardName: String(raw?.cardName || defaultCreditCardSettings.cardName).slice(0, 60),
     limit: clampNumber(raw?.limit, 0, 999999999, 0),
     alertThresholdPct: clampNumber(raw?.alertThresholdPct, 1, 100, 80),
-    blockOnLimitExceeded: raw?.blockOnLimitExceeded ?? true,
+    blockOnLimitExceeded: raw?.blockOnLimitExceeded ?? false,
     autoUnblockWhenBelowLimit: raw?.autoUnblockWhenBelowLimit ?? true,
     updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : undefined,
   };
@@ -143,9 +141,8 @@ export async function computeCreditCardSummary(uid: string, limit: number): Prom
 }
 
 export async function enforceCreditCardPolicy(uid: string) {
-  const [settings, userSnap, cardsSnapshot, pendingCreditSnapshot] = await Promise.all([
+  const [settings, cardsSnapshot, pendingCreditSnapshot] = await Promise.all([
     getCreditCardSettings(uid),
-    adminDb.collection("users").doc(uid).get(),
     adminDb.collection("users").doc(uid).collection("payment_cards").get(),
     adminDb
       .collection("users")
@@ -156,7 +153,6 @@ export async function enforceCreditCardPolicy(uid: string) {
       .where("status", "==", "pending")
       .get(),
   ]);
-  const userData = (userSnap.data() || {}) as Record<string, unknown>;
   const cards = cardsSnapshot.docs.map((docSnap) =>
     toPaymentCardPolicyDoc(docSnap.id, docSnap.data() as Record<string, unknown>)
   );
@@ -193,13 +189,13 @@ export async function enforceCreditCardPolicy(uid: string) {
     const cardLimit = Math.max(0, Number(card.creditLimit ?? settings.limit ?? 0));
     const cardEnabled = Boolean(card.limitEnabled ?? settings.enabled);
     const cardAlertThreshold = clampNumber(card.alertThresholdPct ?? settings.alertThresholdPct, 1, 100, 80);
-    const cardBlockOnExceeded = card.blockOnLimitExceeded ?? settings.blockOnLimitExceeded;
+    const cardBlockOnExceeded = false;
     const cardIsExceeded = cardLimit > 0 && cardUsed > cardLimit;
     const cardAvailable = cardLimit - cardUsed;
     const cardUsagePct = cardLimit <= 0 ? 0 : (cardUsed / cardLimit) * 100;
     totalLimit += cardLimit;
 
-    if (cardEnabled && cardBlockOnExceeded && cardIsExceeded) {
+    if (cardEnabled && cardIsExceeded) {
       exceededCardIds.push(card.id);
     }
 
@@ -242,28 +238,6 @@ export async function enforceCreditCardPolicy(uid: string) {
       lastEvaluatedAt: new Date().toISOString(),
     },
   };
-
-  const currentStatus = String(userData.status || "active");
-  const currentReason = String(userData.blockReason || "");
-  const isAutoBlocked = currentReason.startsWith(AUTO_BLOCK_REASON);
-
-  if (summary.isExceeded) {
-    const overflow = exceededCardIds.reduce((acc, cardId) => {
-      const data = perCard[cardId] as { used: number; limit: number } | undefined;
-      if (!data) return acc;
-      return acc + Math.max(0, data.used - data.limit);
-    }, 0);
-    patch.status = "blocked";
-    patch.blockReason = `${AUTO_BLOCK_REASON}: limite excedido em R$ ${overflow.toFixed(2)} (${exceededCardIds.length} cartão(oes))`;
-  } else if (
-    settings.autoUnblockWhenBelowLimit &&
-    !summary.isExceeded &&
-    currentStatus === "blocked" &&
-    isAutoBlocked
-  ) {
-    patch.status = "active";
-    patch.blockReason = "";
-  }
 
   await adminDb.collection("users").doc(uid).set(patch, { merge: true });
   return { settings, summary };
