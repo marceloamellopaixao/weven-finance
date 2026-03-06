@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/services/firebase/admin";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
+import { enforceCreditCardPolicy } from "@/lib/credit-card/limit";
+import { resolveApiErrorStatus } from "@/lib/api/error";
 
 function toIsoDate(value: unknown): string | null {
   if (!value) return null;
@@ -40,7 +42,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, transactions }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "missing_auth_token" ? 401 : 500;
+    const status = resolveApiErrorStatus(message);
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
@@ -86,6 +88,7 @@ export async function POST(request: NextRequest) {
         { merge: true }
       );
       await batch.commit();
+      await enforceCreditCardPolicy(uid);
       return NextResponse.json({ ok: true, created: txs.length }, { status: 200 });
     }
 
@@ -111,6 +114,7 @@ export async function POST(request: NextRequest) {
         batch.set(ref, entry.updates || {}, { merge: true });
       });
       await batch.commit();
+      await enforceCreditCardPolicy(uid);
       return NextResponse.json({ ok: true, updated: updates.length }, { status: 200 });
     }
 
@@ -135,6 +139,7 @@ export async function POST(request: NextRequest) {
         .collection("transactions")
         .doc(body.transactionId)
         .set({ status: nextStatus }, { merge: true });
+      await enforceCreditCardPolicy(uid);
 
       return NextResponse.json({ ok: true, status: nextStatus }, { status: 200 });
     }
@@ -174,13 +179,14 @@ export async function POST(request: NextRequest) {
         { merge: true }
       );
       await batch.commit();
+      await enforceCreditCardPolicy(uid);
       return NextResponse.json({ ok: true, deleted: snapshot.size }, { status: 200 });
     }
 
     return NextResponse.json({ ok: false, error: "invalid_action" }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "missing_auth_token" ? 401 : 500;
+    const status = resolveApiErrorStatus(message);
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
@@ -210,11 +216,12 @@ export async function PATCH(request: NextRequest) {
       .collection("transactions")
       .doc(body.transactionId)
       .set(body.updates, { merge: true });
+    await enforceCreditCardPolicy(uid);
 
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "missing_auth_token" ? 401 : 500;
+    const status = resolveApiErrorStatus(message);
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
@@ -260,6 +267,7 @@ export async function DELETE(request: NextRequest) {
         { merge: true }
       );
       await batch.commit();
+      await enforceCreditCardPolicy(uid);
       return NextResponse.json({ ok: true, deleted: snapshot.size }, { status: 200 });
     }
 
@@ -268,13 +276,11 @@ export async function DELETE(request: NextRequest) {
       { transactionCount: FieldValue.increment(-1) },
       { merge: true }
     );
+    await enforceCreditCardPolicy(uid);
     return NextResponse.json({ ok: true, deleted: 1 }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status =
-      message === "missing_auth_token" ? 401
-        : message.startsWith("impersonation_") ? 403
-          : 500;
+    const status = resolveApiErrorStatus(message);
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
