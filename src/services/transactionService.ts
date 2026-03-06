@@ -4,7 +4,12 @@ import { encryptData, decryptData, decryptLegacy } from "@/lib/crypto";
 import { getImpersonationHeader, getImpersonationTargetUid } from "@/lib/impersonation/client";
 import { getImpersonationActionStatus } from "@/services/impersonationService";
 
-const POLLING_INTERVAL_MS = 15000;
+const POLLING_INTERVAL_MS = 60000;
+
+function shouldPollNow() {
+  if (typeof document === "undefined") return true;
+  return document.visibilityState === "visible";
+}
 
 const addMonthsUTC = (dateStr: string, monthsToAdd: number): string => {
   const [year, month, day] = dateStr.split("-").map(Number);
@@ -202,6 +207,7 @@ export const subscribeToTransactions = (
   let cancelled = false;
 
   const run = async () => {
+    if (!shouldPollNow()) return;
     try {
       const data = await fetchTransactions(uid);
       if (!cancelled) onChange(data);
@@ -234,9 +240,13 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
     transactions.push({
       description: encryptedDesc,
       amount: encryptedAmount,
+      amountForLimit: Number(tx.amount),
       type: tx.type,
       category: tx.category,
       paymentMethod: tx.paymentMethod,
+      ...(tx.cardId ? { cardId: tx.cardId } : {}),
+      ...(tx.cardLabel ? { cardLabel: tx.cardLabel } : {}),
+      ...(tx.cardType ? { cardType: tx.cardType } : {}),
       status: "pending",
       date: tx.date,
       dueDate: currentDueDate,
@@ -314,6 +324,7 @@ export const updateTransaction = async (
   const updates: Record<string, unknown> = { ...data };
   if (data.amount !== undefined) {
     updates.amount = await encryptData(data.amount, cryptoUid);
+    updates.amountForLimit = Number(data.amount);
     updates.isEncrypted = true;
   }
 
@@ -382,6 +393,30 @@ export const toggleTransactionStatus = async (
   }
 };
 
+export const syncCreditCardAmountForLimit = async (uid: string, transactions: Transaction[]) => {
+  void uid;
+  const updates = transactions
+    .filter((tx) => tx.id && tx.paymentMethod === "credit_card" && tx.type === "expense")
+    .filter((tx) => tx.amountForLimit === undefined || Number.isNaN(tx.amountForLimit))
+    .map((tx) => ({
+      id: tx.id as string,
+      updates: {
+        amountForLimit: Number(tx.amount),
+      },
+    }));
+
+  if (updates.length === 0) return 0;
+
+  const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
+    method: "POST",
+    body: JSON.stringify({ action: "updateMany", updates }),
+  });
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel sincronizar valores do cartao");
+  }
+  return updates.length;
+};
+
 async function fetchUserSettings(): Promise<UserSettings> {
   const response = await apiFetch("/api/user-settings/finance", { method: "GET" });
   const payload = (await response.json()) as { ok: boolean; error?: string; currentBalance?: number };
@@ -404,6 +439,7 @@ export const subscribeToUserSettings = (
   void uid;
   let cancelled = false;
   const run = async () => {
+    if (!shouldPollNow()) return;
     try {
       const data = await fetchUserSettings();
       if (!cancelled) onChange(data);

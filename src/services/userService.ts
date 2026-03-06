@@ -9,7 +9,12 @@ import {
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { getImpersonationActionStatus } from "@/services/impersonationService";
 
-const POLLING_INTERVAL_MS = 15000;
+const POLLING_INTERVAL_MS = 60000;
+
+function shouldPollNow() {
+  if (typeof document === "undefined") return true;
+  return document.visibilityState === "visible";
+}
 
 async function getIdTokenOrThrow() {
   const auth = getAuth();
@@ -83,6 +88,7 @@ export const subscribeToAllUsers = (
 ) => {
   let cancelled = false;
   const run = async () => {
+    if (!shouldPollNow()) return;
     try {
       const response = await apiFetch("/api/admin/users", { method: "GET" });
       const payload = (await response.json()) as { ok: boolean; error?: string; users?: UserProfile[] };
@@ -108,6 +114,7 @@ export const subscribeToUserProfile = (
 ) => {
   let cancelled = false;
   const run = async () => {
+    if (!shouldPollNow()) return;
     try {
       const response = await apiFetch("/api/profile/me", { method: "GET" });
       const payload = (await response.json()) as { ok: boolean; error?: string; profile?: UserProfile | null };

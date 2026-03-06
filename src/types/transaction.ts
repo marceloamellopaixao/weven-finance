@@ -15,10 +15,14 @@ export interface Transaction {
   userId: string;
   description: string;
   amount: number;
+  amountForLimit?: number;
   type: TransactionType;
   category: string;
   status: TransactionStatus;
   paymentMethod: PaymentMethod;
+  cardId?: string;
+  cardLabel?: string;
+  cardType?: "credit_card" | "debit_card";
   isEncrypted?: boolean;
   isArchived?: boolean;
   date: string;

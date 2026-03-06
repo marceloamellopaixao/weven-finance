@@ -1,7 +1,14 @@
 import { getAuth } from "firebase/auth";
 import { DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
 
-const POLLING_INTERVAL_MS = 20000;
+const POLLING_INTERVAL_MS = 300000;
+const LOCAL_CACHE_TTL_MS = 120000;
+let lastPlansCache: { at: number; value: PlansConfig } | null = null;
+
+function shouldPollNow() {
+  if (typeof document === "undefined") return true;
+  return document.visibilityState === "visible";
+}
 
 async function getIdTokenOrThrow() {
   const auth = getAuth();
@@ -11,12 +18,17 @@ async function getIdTokenOrThrow() {
 }
 
 export const getPlansConfig = async (): Promise<PlansConfig> => {
+  if (lastPlansCache && Date.now() - lastPlansCache.at < LOCAL_CACHE_TTL_MS) {
+    return lastPlansCache.value;
+  }
+
   try {
     const response = await fetch("/api/system/plans", { method: "GET" });
     const payload = (await response.json()) as { ok: boolean; error?: string; plans?: PlansConfig };
     if (!response.ok || !payload.ok || !payload.plans) {
       throw new Error(payload.error || "Nao foi possivel buscar planos");
     }
+    lastPlansCache = { at: Date.now(), value: payload.plans };
     return payload.plans;
   } catch {
     return DEFAULT_PLANS_CONFIG;
@@ -45,6 +57,7 @@ export const subscribeToPlansConfig = (
 ) => {
   let cancelled = false;
   const run = async () => {
+    if (!shouldPollNow()) return;
     try {
       const data = await getPlansConfig();
       if (!cancelled) onChange(data);
