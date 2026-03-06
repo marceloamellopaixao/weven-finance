@@ -97,7 +97,14 @@ export async function getAuthContextFromRequest(request: NextRequest): Promise<A
 
   const decoded = await adminAuth.verifyIdToken(token);
   const userSnap = await adminDb.collection("users").doc(decoded.uid).get();
-  if (!userSnap.exists) throw new Error("user_not_found");
+  if (!userSnap.exists) {
+    return {
+      uid: decoded.uid,
+      role: "client",
+      displayName: String(decoded.name || "Usuario"),
+      email: String(decoded.email || ""),
+    };
+  }
 
   const data = userSnap.data() as Record<string, unknown>;
   return {
