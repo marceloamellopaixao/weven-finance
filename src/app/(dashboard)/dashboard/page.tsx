@@ -289,7 +289,9 @@ export default function DashboardPage() {
     });
   }, [transactions]);
 
-  const realCurrentBalance = useMemo(() => {
+  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+
+  const paidCurrentBalance = useMemo(() => {
     return transactions.reduce((acc, t) => {
       if (t.status === 'paid') {
         return t.type === 'income' ? acc + t.amount : acc - t.amount;
@@ -298,18 +300,30 @@ export default function DashboardPage() {
     }, 0);
   }, [transactions]);
 
+  const overduePendingNet = useMemo(() => {
+    return transactions
+      .filter((t) => t.status !== "paid" && typeof t.dueDate === "string" && t.dueDate < todayStr)
+      .reduce((acc, t) => (t.type === "income" ? acc + t.amount : acc - t.amount), 0);
+  }, [transactions, todayStr]);
+
+  const realCurrentBalance = useMemo(() => {
+    return paidCurrentBalance + overduePendingNet;
+  }, [paidCurrentBalance, overduePendingNet]);
+
   const selectedMonthEnd = selectedMonth + "-31";
 
   const projectedAccumulatedBalance = useMemo(() => {
     const pendingTransactions = transactions.filter(t => {
       if (t.status === 'paid') return false;
+      if (typeof t.dueDate !== "string") return false;
+      if (t.dueDate < todayStr) return false; // ja considerado no Saldo Atual
       return t.dueDate <= selectedMonthEnd;
     });
     const pendingNet = pendingTransactions.reduce((acc, t) => {
       return t.type === 'income' ? acc + t.amount : acc - t.amount;
     }, 0);
     return realCurrentBalance + pendingNet;
-  }, [transactions, realCurrentBalance, selectedMonthEnd]);
+  }, [transactions, realCurrentBalance, selectedMonthEnd, todayStr]);
 
   // Filtra categorias baseado no estado (lista dinâmica do Hook)
   const availableCategories = useMemo(() => {
