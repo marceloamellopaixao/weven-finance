@@ -21,6 +21,8 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       { name: "Categories", description: "Gestao de categorias personalizadas e visibilidade das padrao" },
       { name: "Transactions", description: "CRUD e operacoes em lote de transacoes" },
       { name: "UserSettings", description: "Configuracoes financeiras do usuario" },
+      { name: "CreditCard", description: "Controle de limite e politicas de cartao de credito" },
+      { name: "PaymentCards", description: "Cadastro de cartoes sem dados sensiveis (banco, final e tipo)" },
       { name: "Support", description: "Chamados de suporte e solicitacoes de feature" },
       { name: "System", description: "Configuracoes globais do sistema" },
       { name: "MercadoPago", description: "Webhook e sincronizacao com gateway" },
@@ -619,6 +621,153 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             200: { description: "Saldo atualizado" },
             400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/credit-card": {
+        get: {
+          tags: ["CreditCard"],
+          summary: "Ler configuracoes e resumo de limite do cartao de credito",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: { description: "Configuracoes e resumo retornados" },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+        put: {
+          tags: ["CreditCard"],
+          summary: "Atualizar configuracoes do cartao e reavaliar bloqueio por limite",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    enabled: { type: "boolean" },
+                    cardName: { type: "string" },
+                    limit: { type: "number" },
+                    alertThresholdPct: { type: "number" },
+                    blockOnLimitExceeded: { type: "boolean" },
+                    autoUnblockWhenBelowLimit: { type: "boolean" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Configuracoes salvas" },
+            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/payment-cards": {
+        get: {
+          tags: ["PaymentCards"],
+          summary: "Listar cartoes cadastrados do usuario",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: { description: "Cartoes retornados" },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+        post: {
+          tags: ["PaymentCards"],
+          summary: "Cadastrar cartao (somente banco, final e tipo)",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    bankName: { type: "string" },
+                    last4: { type: "string" },
+                    type: { type: "string", enum: ["credit_card", "debit_card"] },
+                  },
+                  required: ["bankName", "last4", "type"],
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Cartao criado" },
+            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+        patch: {
+          tags: ["PaymentCards"],
+          summary: "Atualizar cartao cadastrado",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    cardId: { type: "string" },
+                    updates: {
+                      type: "object",
+                      properties: {
+                        bankName: { type: "string" },
+                        last4: { type: "string" },
+                        type: { type: "string", enum: ["credit_card", "debit_card"] },
+                      },
+                    },
+                  },
+                  required: ["cardId", "updates"],
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Cartao atualizado" },
+            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+        delete: {
+          tags: ["PaymentCards"],
+          summary: "Excluir cartao cadastrado",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "cardId", in: "query", required: true, schema: { type: "string" } },
+          ],
+          responses: {
+            200: { description: "Cartao excluido" },
+            400: { description: "Parametro invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/payment-cards/identify": {
+        get: {
+          tags: ["PaymentCards"],
+          summary: "Identificar bandeira/banco por BIN (6+ digitos)",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "bin", in: "query", required: true, schema: { type: "string" } },
+          ],
+          responses: {
+            200: { description: "Identificacao retornada" },
+            400: { description: "BIN invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
       },
