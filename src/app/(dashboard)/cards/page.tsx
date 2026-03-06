@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { useTransactions } from "@/hooks/useTransactions";
 import { syncCreditCardAmountForLimit } from "@/services/transactionService";
@@ -13,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createPaymentCard, deletePaymentCard, getPaymentCards, identifyPaymentCard, updatePaymentCard } from "@/services/paymentCardService";
-import { CreditCard, ShieldAlert, RefreshCw, Save, AlertTriangle, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, CheckCircle2, Settings2, ReceiptText } from "lucide-react";
+import { CreditCard, ShieldAlert, RefreshCw, Save, AlertTriangle, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, CheckCircle2, Settings2, ReceiptText, PiggyBank } from "lucide-react";
 import { CreditCardSettings } from "@/types/creditCard";
 import { PaymentCard, PaymentCardType } from "@/types/paymentCard";
 
@@ -665,6 +666,16 @@ export default function CreditCardPage() {
                   {danger && <span className="text-red-600 font-semibold flex items-center gap-1"><AlertTriangle className="h-4 w-4" /> Excedido</span>}
                   {warning && !danger && <span className="text-amber-600 font-semibold">Próximo ao limite</span>}
                 </div>
+                {activeCard && (
+                  <div className="pt-2">
+                    <Link href={`/porquinho?goal=card_limit&cardId=${encodeURIComponent(activeCard.id)}`}>
+                      <Button className="rounded-xl bg-violet-600 hover:bg-violet-700 text-white">
+                        <PiggyBank className="mr-2 h-4 w-4" />
+                        Aumentar limite com Cofrinho do Cartão
+                      </Button>
+                    </Link>
+                  </div>
+                )}
               </div>
               )}
             </div>
