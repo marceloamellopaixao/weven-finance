@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home, UserCog } from "lucide-react";
+import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home, UserCog, CreditCard } from "lucide-react";
 import Link from "next/link";
 import { useImpersonation } from "@/hooks/useImpersonation";
 
@@ -156,7 +156,14 @@ export function Header() {
               </DropdownMenuItem>
             </Link>
 
-            {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
+            <Link href="/cards" className="cursor-pointer">
+              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
+                <CreditCard className="mr-2 h-4 w-4" />
+                <span>Cartões</span>
+              </DropdownMenuItem>
+            </Link>
+
+            {(userProfile?.role === "admin" || userProfile?.role === "moderator" || userProfile?.role === "support") && (
               <>
                 <DropdownMenuSeparator />
                 <Link href="/admin" className="cursor-pointer">
@@ -164,11 +171,13 @@ export function Header() {
                     className={`cursor-pointer rounded-lg font-medium ${
                       userProfile.role === "admin"
                         ? "text-red-600 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-900/10"
-                        : "text-amber-600 focus:text-amber-700 focus:bg-amber-50 dark:focus:bg-amber-900/10"
+                        : userProfile.role === "moderator"
+                        ? "text-amber-600 focus:text-amber-700 focus:bg-amber-50 dark:focus:bg-amber-900/10"
+                        : "text-zinc-600 focus:text-zinc-700 focus:bg-zinc-100 dark:focus:bg-zinc-800"
                     }`}
                   >
                     <ShieldAlert className="mr-2 h-4 w-4" />
-                    <span>Painel {userProfile.role === "admin" ? "Admin" : "Moderador"}</span>
+                    <span>Painel {userProfile.role === "admin" ? "Admin" : userProfile.role === "moderator" ? "Moderador" : "Funcionário"}</span>
                   </DropdownMenuItem>
                 </Link>
               </>
