@@ -37,6 +37,7 @@ import { useDashboardTour } from "@/hooks/useDashboardTour";
 import { getCheckoutLink } from "@/services/billingService";
 import { getPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
+import { useRouter } from "next/navigation";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -150,6 +151,7 @@ const orderCategoryNames = (names: unknown[]) => {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { user, userProfile, privacyMode, togglePrivacyMode } = useAuth();
   const { transactions, loading } = useTransactions();
   const { plans } = usePlans();
@@ -216,6 +218,14 @@ export default function DashboardPage() {
   const checkinStorageKey = useMemo(() => (
     user ? `wevenfinance:last-checkin-modal:${user.uid}` : "wevenfinance:last-checkin-modal:anonymous"
   ), [user]);
+
+  const handleOpenCardFromTransaction = (cardId: string) => {
+    if (!cardId) return;
+    try {
+      window.localStorage.setItem("wevenfinance:cards:selectedCardId", cardId);
+    } catch {}
+    router.push(`/cards?cardId=${encodeURIComponent(cardId)}`);
+  };
 
   // Constantes de Animação (Padrão do Sistema)
   const fadeInUp = "animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both";
@@ -1276,9 +1286,19 @@ export default function DashboardPage() {
                                   {formatCategoryLabel(tx.category)}
                                 </span>
                                 {tx.cardLabel && (
-                                  <span className="text-[10px] px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700 font-medium dark:border-violet-900 dark:bg-violet-900/20 dark:text-violet-300">
-                                    Cartao: {tx.cardLabel}
-                                  </span>
+                                  tx.cardId ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenCardFromTransaction(tx.cardId as string)}
+                                      className="text-[10px] px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700 font-medium transition-colors hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/35"
+                                    >
+                                      Cartao: {tx.cardLabel}
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700 font-medium dark:border-violet-900 dark:bg-violet-900/20 dark:text-violet-300">
+                                      Cartao: {tx.cardLabel}
+                                    </span>
+                                  )
                                 )}
                                 {tx.groupId && (
                                   <span className="flex items-center text-[10px] bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
