@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTransactions } from "@/hooks/useTransactions";
 import { syncCreditCardAmountForLimit } from "@/services/transactionService";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,7 @@ const defaultSettings: CreditCardSettings = { enabled: false, cardName: "Cartao 
 export default function CreditCardPage() {
   const { user, userProfile, loading: authLoading } = useAuth();
   const { transactions, loading: txLoading } = useTransactions();
+  const searchParams = useSearchParams();
 
   const [settings, setSettings] = useState<CreditCardSettings>(defaultSettings);
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
@@ -73,6 +75,7 @@ export default function CreditCardPage() {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [feedback, setFeedback] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+  const cardIdFromQuery = useMemo(() => searchParams.get("cardId"), [searchParams]);
   
   const activeCard = useMemo(
     () => paymentCards.find((card) => card.id === selectedCardId) || paymentCards[0] || null,
@@ -164,6 +167,32 @@ export default function CreditCardPage() {
       setCarouselIndex(currentIndex);
     }
   }, [paymentCards, selectedCardId, carouselIndex]);
+
+  useEffect(() => {
+    if (paymentCards.length === 0) return;
+
+    const fromStorage = (() => {
+      try {
+        return window.localStorage.getItem("wevenfinance:cards:selectedCardId");
+      } catch {
+        return null;
+      }
+    })();
+
+    const preferredId = cardIdFromQuery || fromStorage;
+    if (!preferredId) return;
+    const preferredIndex = paymentCards.findIndex((card) => card.id === preferredId);
+    if (preferredIndex < 0) return;
+
+    setSelectedCardId(paymentCards[preferredIndex].id);
+    setCarouselIndex(preferredIndex);
+
+    if (fromStorage) {
+      try {
+        window.localStorage.removeItem("wevenfinance:cards:selectedCardId");
+      } catch {}
+    }
+  }, [paymentCards, cardIdFromQuery]);
 
   const handleSave = async () => {
     if (!activeCard || activeCard.type === "debit_card") {
