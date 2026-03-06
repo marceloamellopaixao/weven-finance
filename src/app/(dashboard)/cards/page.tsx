@@ -17,6 +17,7 @@ import { createPaymentCard, deletePaymentCard, getPaymentCards, identifyPaymentC
 import { CreditCard, ShieldAlert, RefreshCw, Save, AlertTriangle, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, CheckCircle2, Settings2, ReceiptText, PiggyBank } from "lucide-react";
 import { CreditCardSettings } from "@/types/creditCard";
 import { PaymentCard, PaymentCardType } from "@/types/paymentCard";
+import { PiContactlessPaymentFill } from "react-icons/pi";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value || 0);
@@ -28,18 +29,26 @@ const BANK_THEMES: Array<{
   muted: string;
 }> = [
   { matcher: /nubank|nu\b/i, background: "bg-linear-to-br from-fuchsia-700 to-violet-900", foreground: "text-white", muted: "text-white/75" },
-  { matcher: /inter/i, background: "bg-linear-to-br from-orange-500 to-amber-700", foreground: "text-white", muted: "text-white/80" },
-  { matcher: /itau|ita[uú]/i, background: "bg-linear-to-br from-blue-700 to-orange-500", foreground: "text-white", muted: "text-white/80" },
+  { matcher: /inter/i, background: "bg-linear-to-br from-zinc-400 to-zinc-700", foreground: "text-white", muted: "text-white/80" },
+  { matcher: /itau|ita[uú]/i, background: "bg-linear-to-br from-orange-700 to-orange-400", foreground: "text-white", muted: "text-white/80" },
   { matcher: /bradesco/i, background: "bg-linear-to-br from-rose-700 to-red-900", foreground: "text-white", muted: "text-white/80" },
   { matcher: /santander/i, background: "bg-linear-to-br from-red-600 to-rose-800", foreground: "text-white", muted: "text-white/80" },
   { matcher: /caixa/i, background: "bg-linear-to-br from-blue-700 to-cyan-600", foreground: "text-white", muted: "text-white/80" },
   { matcher: /banco do brasil|bb\b/i, background: "bg-linear-to-br from-yellow-400 to-blue-700", foreground: "text-zinc-900", muted: "text-zinc-800/80" },
   { matcher: /picpay/i, background: "bg-linear-to-br from-emerald-500 to-green-700", foreground: "text-white", muted: "text-white/80" },
   { matcher: /c6/i, background: "bg-linear-to-br from-zinc-800 to-black", foreground: "text-white", muted: "text-zinc-400" },
+  { matcher: /neon/i, background: "bg-linear-to-br from-green-700 to-green-900", foreground: "text-white", muted: "text-white/80" },
+  { matcher: /next/i, background: "bg-linear-to-br from-blue-600 to-blue-900", foreground: "text-white", muted: "text-white/80" },
+  { matcher: /original/i, background: "bg-linear-to-br from-yellow-400 to-yellow-600", foreground: "text-zinc-900", muted: "text-zinc-800/80" },
+  { matcher: /neobank|nobank/i, background: "bg-linear-to-br from-gray-700 to-gray-900", foreground: "text-white", muted: "text-zinc-400" },
+  { matcher: /serasa/i, background: "bg-linear-to-br from-yellow-500 to-yellow-700", foreground: "text-zinc-900", muted: "text-zinc-800/80" },
+  { matcher: /credicard/i, background: "bg-linear-to-br from-blue-700 to-blue-900", foreground: "text-white", muted: "text-white/80" },
+  { matcher: /safra/i, background: "bg-linear-to-br from-green-700 to-green-900", foreground: "text-white", muted: "text-white/80" },
+  { matcher: /mercado pago/i, background: "bg-linear-to-br from-blue-400 to-blue-800", foreground: "text-white", muted: "text-white/80" },
   { matcher: /.*/, background: "bg-linear-to-br from-zinc-800 to-zinc-900", foreground: "text-white", muted: "text-zinc-400" },
 ];
 
-const BANK_OPTIONS = ["Nubank", "Inter", "Itau", "Bradesco", "Santander", "Caixa", "Banco do Brasil", "PicPay", "C6 Bank", "Neon"];
+const BANK_OPTIONS = ["Nubank", "Inter", "Itau", "Bradesco", "Santander", "Caixa", "Banco do Brasil", "PicPay", "C6 Bank", "Neon", "Next", "Original", "Serasa", "Credicard", "Safra", "Mercado Pago"];
 
 function getBankTheme(bankName: string) {
   return BANK_THEMES.find((theme) => theme.matcher.test(bankName || "")) || BANK_THEMES[BANK_THEMES.length - 1];
@@ -389,7 +398,7 @@ export default function CreditCardPage() {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <div className="h-8 w-11 rounded bg-yellow-300/90 border border-yellow-200/80 shadow-sm" />
-              <span className={`text-xs font-medium ${theme.muted}`}>Contactless</span>
+              <span className={`text-xs font-medium ${theme.muted}`}><PiContactlessPaymentFill className="h-7 w-7"/></span>
             </div>
             <p className="text-3xl tracking-[0.22em] font-semibold drop-shadow-sm font-mono">
               **** **** **** {(input.last4 || "0000").padStart(4, "0")}
@@ -566,6 +575,7 @@ export default function CreditCardPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">BIN (6 primeiros dígitos) <span className="text-xs text-zinc-400 font-normal">- Opcional</span></Label>
+                  <Label className="flex items-center gap-1"><span className="text-xs text-zinc-400 font-normal">Consulta e preenche automáticaticamente os dados do banco</span></Label>
                   <Input value={cardBin} maxLength={8} inputMode="numeric" placeholder="Ex: 539022" onChange={(e) => setCardBin(e.target.value.replace(/\D/g, "").slice(0, 8))} />
                   <div className="h-4">
                     {isIdentifyingCard ? (
