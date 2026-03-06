@@ -17,7 +17,12 @@ export interface SupportTicket {
   assignedToName?: string;
 }
 
-const POLLING_INTERVAL_MS = 15000;
+const POLLING_INTERVAL_MS = 60000;
+
+function shouldPollNow() {
+  if (typeof document === "undefined") return true;
+  return document.visibilityState === "visible";
+}
 
 async function getIdTokenOrThrow() {
   const auth = getAuth();
@@ -100,6 +105,7 @@ export const subscribeToSupportTickets = (
 ) => {
   let cancelled = false;
   const run = async () => {
+    if (!shouldPollNow()) return;
     try {
       const tickets = await getTickets();
       if (!cancelled) onChange(tickets);
