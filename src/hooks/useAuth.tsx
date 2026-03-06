@@ -137,10 +137,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
     const syncProfile = async () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
       try {
         const response = await apiFetchWithToken("/api/profile/me", { method: "GET" });
-        const payload = (await response.json()) as { ok: boolean; profile?: UserProfile | null };
-        if (!response.ok || !payload.ok) throw new Error("Erro ao buscar perfil");
+        const payload = (await response.json()) as { ok: boolean; error?: string; profile?: UserProfile | null };
+        if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao buscar perfil");
 
         const profile = payload.profile;
         if (profile) {
@@ -162,7 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     void syncProfile();
-    const interval = setInterval(() => void syncProfile(), 15000);
+    const interval = setInterval(() => void syncProfile(), 60000);
 
     return () => {
       cancelled = true;
