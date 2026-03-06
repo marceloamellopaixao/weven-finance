@@ -67,33 +67,40 @@ type FeedbackData = {
 
 const LEGACY_SUB_PREFIX = /^\s*[\*\-•]\s*/;
 
-const isLegacySubcategory = (value: string) => LEGACY_SUB_PREFIX.test(value) && !value.includes(CATEGORY_PATH_SEPARATOR);
-const isLinkedSubcategory = (value: string) => value.includes(CATEGORY_PATH_SEPARATOR);
-const isSubcategory = (value: string) => isLinkedSubcategory(value) || isLegacySubcategory(value);
-const isOthersCategory = (value: string) => value === "Outros";
+const toSafeCategory = (value: unknown) => (typeof value === "string" ? value : "");
+const isLegacySubcategory = (value: unknown) => {
+  const safe = toSafeCategory(value);
+  return LEGACY_SUB_PREFIX.test(safe) && !safe.includes(CATEGORY_PATH_SEPARATOR);
+};
+const isLinkedSubcategory = (value: unknown) => toSafeCategory(value).includes(CATEGORY_PATH_SEPARATOR);
+const isSubcategory = (value: unknown) => isLinkedSubcategory(value) || isLegacySubcategory(value);
+const isOthersCategory = (value: unknown) => toSafeCategory(value) === "Outros";
 
-const getSubcategoryName = (value: string) => {
+const getSubcategoryName = (value: unknown) => {
+  const safe = toSafeCategory(value);
   if (isLinkedSubcategory(value)) {
-    const parts = value.split(CATEGORY_PATH_SEPARATOR);
+    const parts = safe.split(CATEGORY_PATH_SEPARATOR);
     return parts.slice(1).join(CATEGORY_PATH_SEPARATOR);
   }
-  return value.replace(LEGACY_SUB_PREFIX, "");
+  return safe.replace(LEGACY_SUB_PREFIX, "");
 };
 
-const getCategoryRoot = (value: string) => {
-  if (isLinkedSubcategory(value)) return value.split(CATEGORY_PATH_SEPARATOR)[0];
+const getCategoryRoot = (value: unknown) => {
+  const safe = toSafeCategory(value);
+  if (isLinkedSubcategory(safe)) return safe.split(CATEGORY_PATH_SEPARATOR)[0];
   if (isLegacySubcategory(value)) return "";
-  return value;
+  return safe;
 };
 
-const formatCategoryLabel = (value: string) => {
+const formatCategoryLabel = (value: unknown) => {
+  const safe = toSafeCategory(value);
   if (isLinkedSubcategory(value)) {
     return `${getCategoryRoot(value)} > ${getSubcategoryName(value)}`;
   }
   if (isLegacySubcategory(value)) {
     return `• ${getSubcategoryName(value)}`;
   }
-  return value;
+  return safe;
 };
 
 const normalizeCardTypeForTransaction = (
@@ -105,8 +112,8 @@ const normalizeCardTypeForTransaction = (
   return undefined;
 };
 
-const orderCategoryNames = (names: string[]) => {
-  const unique = Array.from(new Set(names));
+const orderCategoryNames = (names: unknown[]) => {
+  const unique = Array.from(new Set(names.map((name) => toSafeCategory(name).trim()).filter(Boolean)));
   const roots = unique.filter((name) => !isSubcategory(name));
   const linkedSubs = unique.filter((name) => isLinkedSubcategory(name));
   const legacySubs = unique.filter((name) => isLegacySubcategory(name));
@@ -1268,6 +1275,11 @@ export default function DashboardPage() {
                                 <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getCategoryStyle(tx.category)}`}>
                                   {formatCategoryLabel(tx.category)}
                                 </span>
+                                {tx.cardLabel && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700 font-medium dark:border-violet-900 dark:bg-violet-900/20 dark:text-violet-300">
+                                    Cartao: {tx.cardLabel}
+                                  </span>
+                                )}
                                 {tx.groupId && (
                                   <span className="flex items-center text-[10px] bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
                                     {getCategoryRoot(tx.category) === 'Streaming' ? <Tv className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
