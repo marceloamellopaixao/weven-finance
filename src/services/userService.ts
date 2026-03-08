@@ -1,4 +1,3 @@
-import { getAuth, signOut, updateProfile } from "firebase/auth";
 import {
   UserProfile,
   UserStatus,
@@ -8,8 +7,11 @@ import {
 } from "@/types/user";
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { getImpersonationActionStatus } from "@/services/impersonationService";
+import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { getSupabaseClient } from "@/services/supabase/client";
+import { subscribeToTableChanges } from "@/services/supabase/realtime";
 
-const POLLING_INTERVAL_MS = 60000;
+const POLLING_INTERVAL_MS = 20000;
 
 function shouldPollNow() {
   if (typeof document === "undefined") return true;
@@ -17,10 +19,7 @@ function shouldPollNow() {
 }
 
 async function getIdTokenOrThrow() {
-  const auth = getAuth();
-  const currentUser = auth.currentUser;
-  if (!currentUser) throw new Error("missing_auth_user");
-  return currentUser.getIdToken();
+  return getAccessTokenOrThrow();
 }
 
 async function apiFetch(path: string, init?: RequestInit) {
@@ -101,14 +100,22 @@ export const subscribeToAllUsers = (
 
   void run();
   const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
+  const stopRealtime = subscribeToTableChanges({
+    table: "profiles",
+    onChange: () => void run(),
+  });
+  const onFocus = () => void run();
+  window.addEventListener("focus", onFocus);
   return () => {
     cancelled = true;
     clearInterval(interval);
+    stopRealtime();
+    window.removeEventListener("focus", onFocus);
   };
 };
 
 export const subscribeToUserProfile = (
-  _uid: string,
+  uid: string,
   onChange: (profile: UserProfile | null) => void,
   onError?: (error: Error) => void
 ) => {
@@ -127,9 +134,18 @@ export const subscribeToUserProfile = (
 
   void run();
   const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
+  const stopRealtime = subscribeToTableChanges({
+    table: "profiles",
+    filter: `uid=eq.${uid}`,
+    onChange: () => void run(),
+  });
+  const onFocus = () => void run();
+  window.addEventListener("focus", onFocus);
   return () => {
     cancelled = true;
     clearInterval(interval);
+    stopRealtime();
+    window.removeEventListener("focus", onFocus);
   };
 };
 
@@ -232,11 +248,14 @@ export const updateOwnProfile = async (
   uid: string,
   data: { displayName: string; completeName: string; phone: string }
 ) => {
-  const auth = getAuth();
-  const user = auth.currentUser;
-  if (user) {
-    await updateProfile(user, { displayName: data.displayName });
-  }
+  const supabase = getSupabaseClient();
+  await supabase.auth.updateUser({
+    data: {
+      displayName: data.displayName,
+      completeName: data.completeName,
+      phone: data.phone,
+    },
+  });
 
   const { response, payload } = await apiFetchWithOptionalApproval("/api/profile/me", {
     method: "PUT",
@@ -279,9 +298,15 @@ export const softDeleteUser = async (uid: string): Promise<void> => {
   const payload = (await response.json()) as { ok: boolean; error?: string };
   if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao deletar usuário");
 
-  const auth = getAuth();
-  if (auth.currentUser?.uid === uid) {
-    await signOut(auth);
+  const supabase = getSupabaseClient();
+  const { data } = await supabase.auth.getUser();
+  const meta = (data.user?.user_metadata as Record<string, unknown> | undefined) || {};
+  const mappedUid =
+    typeof meta.firebaseUid === "string" && meta.firebaseUid.trim()
+      ? meta.firebaseUid
+      : data.user?.id;
+  if (mappedUid === uid) {
+    await supabase.auth.signOut();
   }
 };
 
@@ -308,3 +333,4 @@ export const requestOwnAccountDeletion = async (idToken: string): Promise<void> 
     throw new Error(payload.error || "Não foi possível excluir a conta");
   }
 };
+
