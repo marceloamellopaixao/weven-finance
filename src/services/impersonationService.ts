@@ -1,9 +1,9 @@
-import { getAuth } from "firebase/auth";
 import {
   clearImpersonationTargetUid,
   getImpersonationTargetUid,
   setImpersonationTargetUid,
 } from "@/lib/impersonation/client";
+import { getAccessTokenOrThrow } from "@/services/auth/token";
 
 export type SupportAccessRequest = {
   id: string;
@@ -45,10 +45,7 @@ export type ImpersonationActionRequest = {
 };
 
 async function getIdTokenOrThrow() {
-  const auth = getAuth();
-  const user = auth.currentUser;
-  if (!user) throw new Error("missing_auth_user");
-  return user.getIdToken();
+  return getAccessTokenOrThrow();
 }
 
 async function apiFetch(path: string, init?: RequestInit) {
@@ -180,3 +177,4 @@ export function deactivateImpersonation() {
 export function getActiveImpersonationTargetUid() {
   return getImpersonationTargetUid();
 }
+
