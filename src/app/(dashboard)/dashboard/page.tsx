@@ -18,7 +18,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -35,7 +34,7 @@ import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { useDashboardTour } from "@/hooks/useDashboardTour";
 import { getCheckoutLink } from "@/services/billingService";
-import { getPaymentCards } from "@/services/paymentCardService";
+import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
 import { useRouter } from "next/navigation";
 
@@ -58,7 +57,7 @@ const ITEMS_PER_PAGE = 12;
 const FREE_PLAN_LIMIT = 20;
 const CHECKIN_MODAL_COOLDOWN_MS = 60 * 60 * 1000; // 1 hora
 
-// Tipo para feedback genérico (VALIDAÇÃO DE PAGAMENTO)
+// Tipo para feedback genérico (VALIDA??O DE PAGAMENTO)
 type FeedbackData = {
   isOpen: boolean;
   type: 'success' | 'error' | 'info';
@@ -66,7 +65,7 @@ type FeedbackData = {
   message: string;
 };
 
-const LEGACY_SUB_PREFIX = /^\s*[\*\-•]\s*/;
+const LEGACY_SUB_PREFIX = /^\s*[\*\-⬢]\s*/;
 
 const toSafeCategory = (value: unknown) => (typeof value === "string" ? value : "");
 const isLegacySubcategory = (value: unknown) => {
@@ -99,7 +98,7 @@ const formatCategoryLabel = (value: unknown) => {
     return `${getCategoryRoot(value)} > ${getSubcategoryName(value)}`;
   }
   if (isLegacySubcategory(value)) {
-    return `• ${getSubcategoryName(value)}`;
+    return `⬢ ${getSubcategoryName(value)}`;
   }
   return safe;
 };
@@ -237,7 +236,7 @@ export default function DashboardPage() {
 
   // Helper para display na UI (com blur)
   const formatCurrencyDisplay = (value: number) => {
-    if (privacyMode) return "R$ ••••••";
+    if (privacyMode) return "R$ ⬢⬢⬢⬢⬢⬢";
     return formatCurrency(value);
   };
 
@@ -248,7 +247,7 @@ export default function DashboardPage() {
     }
   })
 
-  // --- 3. CHECK-IN DIÁRIO (Pop-up Inteligente) ---
+  // --- 3. CHECK-IN DI?RIO (Pop-up Inteligente) ---
   useEffect(() => {
     if (loading || !user || hasRunCheckin) return;
 
@@ -452,7 +451,7 @@ export default function DashboardPage() {
       return {
         ok: false as const,
         title: "Limite insuficiente no cartão",
-        message: `Limite restante em ${card.bankName} •••• ${card.last4}: ${formatCurrency(remaining)}. Valor informado: ${formatCurrency(amountTotal)}.`,
+        message: `Limite restante em ${card.bankName} ⬢⬢⬢⬢ ${card.last4}: ${formatCurrency(remaining)}. Valor informado: ${formatCurrency(amountTotal)}.`,
       };
     }
     return { ok: true as const };
@@ -515,37 +514,17 @@ export default function DashboardPage() {
   }, [isNewCategoryOpen]);
 
   useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const cards = await getPaymentCards();
-        if (cancelled) return;
-        setPaymentCards(cards);
-      } catch {
-        if (!cancelled) setPaymentCards([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    if (!user) {
+      setPaymentCards([]);
+      return;
+    }
+    const unsubscribe = subscribeToPaymentCards(
+      user.uid,
+      (cards) => setPaymentCards(cards),
+      () => setPaymentCards([])
+    );
+    return () => unsubscribe();
   }, [user]);
-
-  useEffect(() => {
-    if (!user || (!isFormOpen && !isEditOpen)) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const cards = await getPaymentCards();
-        if (!cancelled) setPaymentCards(cards);
-      } catch {
-        if (!cancelled) setPaymentCards([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, isFormOpen, isEditOpen]);
 
   useEffect(() => {
     if (paymentMethod !== "credit_card" && paymentMethod !== "debit_card") {
@@ -672,7 +651,7 @@ export default function DashboardPage() {
         category: category, // Categoria
         paymentMethod: paymentMethod, // Método de Pagamento
         cardId: selectedPaymentCard?.id,
-        cardLabel: selectedPaymentCard ? `${selectedPaymentCard.bankName} •••• ${selectedPaymentCard.last4}` : undefined,
+        cardLabel: selectedPaymentCard ? `${selectedPaymentCard.bankName} ⬢⬢⬢⬢ ${selectedPaymentCard.last4}` : undefined,
         cardType: normalizeCardTypeForTransaction(selectedPaymentCard?.type, paymentMethod),
         date: transactionDate, // Data do Gasto (para despesas) ou Data de Crédito (para rendas)
         dueDate: transactionDueDate, // Data de Vencimento (para despesas) ou Data de Crédito (para rendas)
@@ -918,7 +897,7 @@ export default function DashboardPage() {
 
       if (linkedCard) {
         nextTx.cardId = linkedCard.id;
-        nextTx.cardLabel = `${linkedCard.bankName} •••• ${linkedCard.last4}`;
+        nextTx.cardLabel = `${linkedCard.bankName} ⬢⬢⬢⬢ ${linkedCard.last4}`;
         nextTx.cardType = normalizeCardTypeForTransaction(linkedCard.type, nextTx.paymentMethod);
         if (linkedCard.type === "credit_card" || linkedCard.type === "debit_card") {
           nextTx.paymentMethod = linkedCard.type;
@@ -1020,7 +999,7 @@ export default function DashboardPage() {
               ) : (
                 availablePaymentCards.map((card) => (
                   <SelectItem key={card.id} value={card.id}>
-                    {card.bankName} •••• {card.last4} ({card.type === "credit_card" ? "Crédito" : card.type === "debit_card" ? "Débito" : "Crédito e Débito"})
+                    {card.bankName} ⬢⬢⬢⬢ {card.last4} ({card.type === "credit_card" ? "Crédito" : card.type === "debit_card" ? "Débito" : "Crédito e Débito"})
                   </SelectItem>
                 ))
               )}
@@ -1044,7 +1023,7 @@ export default function DashboardPage() {
               <p className="font-semibold">{selectedCardIndicator.label}: {formatCurrency(selectedCardIndicator.value)}</p>
               {selectedCardIndicator.kind === "credit" && (
                 <p className="mt-0.5 opacity-90">
-                  Limite: {formatCurrency(selectedCardIndicator.limit)} • Usado: {formatCurrency(selectedCardIndicator.used)}
+                  Limite: {formatCurrency(selectedCardIndicator.limit)} ⬢ Usado: {formatCurrency(selectedCardIndicator.used)}
                 </p>
               )}
             </div>
@@ -1077,7 +1056,7 @@ export default function DashboardPage() {
         {isInstallment && (
           <div className="animate-in slide-in-from-top-2 pt-1">
             <Label className="text-xs font-medium text-zinc-500">
-              {getCategoryRoot(category) === 'Streaming' ? 'Meses de Assinatura (Previsão)' : 'Número de Parcelas'}
+              {getCategoryRoot(category) === 'Streaming' ? 'Meses de Assinatura (PREVIS?O)' : 'Número de Parcelas'}
             </Label>
             <Input type="number" className="h-10 mt-1.5 bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" min="2" max="60" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
           </div>
@@ -1094,7 +1073,7 @@ export default function DashboardPage() {
     </div>
   );
 
-  // --- 7. RENDERIZAÇÃO E FILTRAGEM ---
+  // --- 7. RENDERIZA??O E FILTRAGEM ---
 
   const monthTransactions = transactions.filter(t => t.dueDate && t.dueDate.startsWith(selectedMonth));
 
@@ -1215,7 +1194,7 @@ export default function DashboardPage() {
 
       <main className="container mx-auto p-3 md:p-8 space-y-6 max-w-7xl">
 
-        {/* TOP BAR: TÍTULO + CONTROLES + BOTÃO NOVA TRANSAÇÃO */}
+        {/* TOP BAR: TÍTULO + CONTROLES + BOT?O NOVA TRANSA??O */}
         <div className={`${fadeInUp} flex flex-col md:flex-row md:items-center justify-between gap-4`}>
           <div id="tour-welcome-header">
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Visão Geral</h1>
@@ -1287,12 +1266,12 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* MOVIMENTAÇÃO */}
+          {/* MOVIMENTA??O */}
           <Card id="tour-movement-card" className={`${fadeInUp} delay-300 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl`}>
             <div className="absolute inset-0 bg-linear-to-br from-violet-500/5 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Movimentação (Mês)</CardTitle>
+                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">MOVIMENTA??O (Mês)</CardTitle>
                 <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
                   {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -1316,11 +1295,11 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* PREVISÃO */}
+          {/* PREVIS?O */}
           <Card id="tour-forecast-card" className={`${fadeInUp} delay-500 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Previsão de Fechamento</CardTitle>
+                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">PREVIS?O de Fechamento</CardTitle>
                 <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
                   {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -1342,7 +1321,7 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* --- Layout Principal (Agora Coluna Única) --- */}
+        {/* --- Layout Principal (Agora Coluna ?nica) --- */}
         <div className="w-full space-y-8">
 
           {/* Gráfico do Fluxo Mensal */}
@@ -1469,103 +1448,6 @@ export default function DashboardPage() {
                 })}
                 </div>
               )}
-            </div>
-
-            <div className="hidden overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-zinc-100/50 dark:bg-zinc-900">
-                  <TableRow className="hover:bg-transparent border-zinc-200 dark:border-zinc-800">
-                    <TableHead className="font-semibold text-zinc-500">Título</TableHead>
-                    <TableHead className="w-[150px] font-semibold text-zinc-500">Data</TableHead>
-                    <TableHead className="w-[100px] font-semibold text-zinc-500">Valor</TableHead>
-                    <TableHead className="w-[100px] text-center font-semibold text-zinc-500">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedTransactions.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="h-32 text-center text-zinc-400">
-                        Nenhum lançamento encontrado com estes filtros.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    paginatedTransactions.map((tx) => {
-                      const overdue = isOverdue(tx);
-                      return (
-                        <TableRow key={tx.id} className={`group border-zinc-100 dark:border-zinc-800 transition-all duration-200 ${overdue ? 'bg-red-50/50 dark:bg-red-900/10' : 'hover:bg-zinc-50/80 dark:hover:bg-zinc-800/50'}`}>
-                          <TableCell className="align-middle">
-                            <div className="flex flex-col ml-2 gap-1.5 py-1 whitespace-nowrap">
-                              <span className={`font-semibold text-sm truncate max-w-[150px] sm:max-w-[400px] ${tx.status === 'paid' ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'}`}>
-                                {tx.description}
-                              </span>
-
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getCategoryStyle(tx.category)}`}>
-                                  {formatCategoryLabel(tx.category)}
-                                </span>
-                                {tx.cardLabel && (
-                                  tx.cardId ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenCardFromTransaction(tx.cardId as string)}
-                                      className="text-[10px] px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700 font-medium transition-colors hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/35"
-                                    >
-                                      Cartão: {tx.cardLabel}
-                                    </button>
-                                  ) : (
-                                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700 font-medium dark:border-violet-900 dark:bg-violet-900/20 dark:text-violet-300">
-                                      Cartão: {tx.cardLabel}
-                                    </span>
-                                  )
-                                )}
-                                {tx.groupId && (
-                                  <span className="flex items-center text-[10px] bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
-                                    {getCategoryRoot(tx.category) === 'Streaming' ? <Tv className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
-                                    {(tx.installmentCurrent || 0)}/{(tx.installmentTotal || 0)}
-                                  </span>
-                                )}
-                                {tx.type === 'income' && (
-                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold dark:bg-emerald-900/20 dark:text-emerald-400">
-                                    Receita
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </TableCell>
-
-                          <TableCell className="align-middle whitespace-nowrap">
-                            <div className="flex flex-col text-sm">
-                              <span className={`flex items-center font-medium ${overdue ? "text-red-500" : "text-zinc-500 dark:text-zinc-400"}`}>
-                                <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
-                                {formatDateDisplay(tx.dueDate)}
-                                {overdue && <AlertCircle className="h-3.5 w-3.5 ml-1 text-red-500" />}
-                              </span>
-                              {paymentMethod === 'credit_card' && tx.type === 'expense' && (
-                                <span className="text-[10px] text-zinc-400 ml-5 font-medium">
-                                  Fatura
-                                </span>
-                              )}
-                            </div>
-                          </TableCell>
-
-                          <TableCell className="text-right align-middle whitespace-nowrap">
-                            <span className={`font-bold text-base tracking-tight ${tx.status === 'paid' ? 'text-zinc-400' : (tx.type === 'income' ? 'text-emerald-600' : 'text-zinc-800 dark:text-zinc-200')}`}>
-                              {tx.type === 'expense' ? '- ' : '+ '}
-                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
-                            </span>
-                          </TableCell>
-
-                          <TableCell className="text-center align-middle">
-                            <div className="flex justify-center">
-                              {renderTransactionActions(tx)}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
             </div>
 
             {/* Paginação Footer */}
@@ -1751,7 +1633,7 @@ export default function DashboardPage() {
                               ...editingTx,
                               paymentMethod: fallbackCard?.type === "credit_card" || fallbackCard?.type === "debit_card" ? fallbackCard.type : nextMethod,
                               cardId: fallbackCard?.id,
-                              cardLabel: fallbackCard ? `${fallbackCard.bankName} •••• ${fallbackCard.last4}` : undefined,
+                              cardLabel: fallbackCard ? `${fallbackCard.bankName} ⬢⬢⬢⬢ ${fallbackCard.last4}` : undefined,
                               cardType: normalizeCardTypeForTransaction(fallbackCard?.type, nextMethod),
                             });
                         }}
@@ -1773,7 +1655,7 @@ export default function DashboardPage() {
                               ...editingTx,
                               paymentMethod: card.type === "credit_and_debit" ? editingTx.paymentMethod : card.type,
                               cardId: card.id,
-                              cardLabel: `${card.bankName} •••• ${card.last4}`,
+                              cardLabel: `${card.bankName} ⬢⬢⬢⬢ ${card.last4}`,
                               cardType: normalizeCardTypeForTransaction(card.type, editingTx.paymentMethod),
                             });
                           }}
@@ -1787,7 +1669,7 @@ export default function DashboardPage() {
                             ) : (
                               paymentCards.map((card) => (
                                 <SelectItem key={card.id} value={card.id}>
-                                  {card.bankName} •••• {card.last4} ({card.type === "credit_card" ? "Crédito" : card.type === "debit_card" ? "Débito" : "Crédito e Débito"})
+                                  {card.bankName} ⬢⬢⬢⬢ {card.last4} ({card.type === "credit_card" ? "Crédito" : card.type === "debit_card" ? "Débito" : "Crédito e Débito"})
                                 </SelectItem>
                               ))
                             )}
@@ -2187,6 +2069,8 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+
 
 
 
