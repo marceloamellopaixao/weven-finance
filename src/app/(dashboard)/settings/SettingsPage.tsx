@@ -588,12 +588,12 @@ export default function SettingsPage() {
                               ? "Cancelamento Mercado Pago"
                               : userProfile?.billing?.source === "system"
                                 ? "Sistema"
-                                : "Administracao manual"}
+                                : "Administração manual"}
                       </strong>
                     </p>
                     <p>
-                      Ultima sincronizacao:{" "}
-                      <strong>{userProfile?.billing?.lastSyncAt ? new Date(userProfile.billing.lastSyncAt).toLocaleString() : "Sem sincronizacao"}</strong>
+                      Última sincronização:{" "}
+                      <strong>{userProfile?.billing?.lastSyncAt ? new Date(userProfile.billing.lastSyncAt).toLocaleString() : "Sem sincronização"}</strong>
                     </p>
                   </div>
                   {!isBillingExemptRole && (
