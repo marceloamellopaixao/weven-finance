@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
@@ -95,9 +95,9 @@ import {
   Lightbulb,
   MessageSquare,
   Eye,
+  Bell,
 } from "lucide-react";
-import { deleteTicket, subscribeToSupportTickets, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
-import { Timestamp } from "firebase/firestore";
+import { deleteTicket, markSupportTicketsAsSeen, subscribeToSupportTickets, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
 import { DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@radix-ui/react-dropdown-menu";
 import {
   activateImpersonation,
@@ -115,6 +115,23 @@ type FeedbackData = {
   title: string;
   message: string;
 };
+
+function formatDateSafe(value: unknown) {
+  if (value instanceof Date) return value.toLocaleDateString();
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleDateString();
+  }
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as { toDate: () => Date }).toDate === "function"
+  ) {
+    return (value as { toDate: () => Date }).toDate().toLocaleDateString();
+  }
+  return "Data invalida";
+}
 
 // Dono Supremo (Hardcoded para segurança extra na UI)
 const CREATOR_SUPREME = "Z3ciyXudWuZZywhojA6iWJTurH52";
@@ -143,6 +160,7 @@ export default function AdminPage() {
   const [staffMembers, setStaffMembers] = useState<UserProfile[]>([]);
   const [viewTicket, setViewTicket] = useState<SupportTicket | null>(null);
   const [ticketToDelete, setTicketToDelete] = useState<SupportTicket | null>(null);
+  const [isMarkingSupportSeen, setIsMarkingSupportSeen] = useState(false);
 
   // --- FILTROS ---
   const [searchTerm, setSearchTerm] = useState("");
@@ -155,7 +173,7 @@ export default function AdminPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const usersPerPage = 10;
 
-  // --- MODAIS DE AÇÃO ---
+  // --- MODAIS DE A??O ---
   const [userToReset, setUserToReset] = useState<UserProfile | null>(null);
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const [deletedUserData, setDeletedUserData] = useState<DeletionSuccessData>(null);
@@ -184,11 +202,19 @@ export default function AdminPage() {
   const [editedPlans, setEditedPlans] = useState<PlansConfig | null>(null);
   const [isSavingPlans, setIsSavingPlans] = useState(false);
 
-  // --- PERMISSÕES ---
+  // --- PERMISS?ES ---
   const canManageSensitive = userProfile?.role === "admin";
   const canRestore = userProfile?.role === "admin" || userProfile?.role === "moderator";
   const canImpersonateUsers =
     userProfile?.role === "admin" || userProfile?.role === "moderator" || userProfile?.role === "support";
+
+  const unseenSupportTickets = useMemo(() => {
+    if (!userProfile) return [];
+    if (userProfile.role !== "admin" && userProfile.role !== "moderator" && userProfile.role !== "support") return [];
+    return tickets.filter((ticket) => !Array.isArray(ticket.staffSeenBy) || !ticket.staffSeenBy.includes(userProfile.uid));
+  }, [tickets, userProfile]);
+
+  const unseenSupportCount = unseenSupportTickets.length;
 
   const allowedTabs = useMemo(() => {
     if (!userProfile) return ["users", "support"];
@@ -258,7 +284,7 @@ export default function AdminPage() {
     return myRank > targetRank;
   }, [userProfile]);
 
-  // Permissão genérica para ações no usuário (Bloquear, Resetar, Deletar)
+  // PERMISSÕES no usuário (Bloquear, Resetar, Deletar)
   const canEditUser = useCallback((targetUser: UserProfile) => {
     if (!userProfile) return false;
 
@@ -385,6 +411,35 @@ export default function AdminPage() {
     return labels[status] || String(status);
   };
 
+  const getTicketStatusTone = (status: SupportTicket["status"]) => {
+    if (status === "resolved" || status === "implemented" || status === "approved") {
+      return {
+        badge: "bg-emerald-500",
+        dot: "bg-emerald-500",
+        border: "border-emerald-200",
+      };
+    }
+    if (status === "pending" || status === "under_review") {
+      return {
+        badge: "bg-amber-500",
+        dot: "bg-amber-500",
+        border: "border-amber-200",
+      };
+    }
+    if (status === "in_progress") {
+      return {
+        badge: "bg-blue-500",
+        dot: "bg-blue-500",
+        border: "border-blue-200",
+      };
+    }
+    return {
+      badge: "bg-red-500",
+      dot: "bg-red-500",
+      border: "border-red-200",
+    };
+  };
+
   const handleRequestImpersonation = async (targetUser: UserProfile) => {
     try {
       const result = await requestImpersonationAccess(targetUser.uid);
@@ -446,6 +501,28 @@ export default function AdminPage() {
       clearInterval(timer);
     };
   }, [impersonationPollingTargetUid, router]);
+
+  useEffect(() => {
+    if (!userProfile) return;
+    if (activeTab !== "support") return;
+    if (unseenSupportTickets.length === 0) return;
+    if (isMarkingSupportSeen) return;
+
+    const ids = unseenSupportTickets.map((ticket) => ticket.id);
+    setIsMarkingSupportSeen(true);
+    void markSupportTicketsAsSeen(ids)
+      .then(() => {
+        setTickets((prev) =>
+          prev.map((ticket) =>
+            ids.includes(ticket.id)
+              ? { ...ticket, staffSeenBy: Array.from(new Set([...(ticket.staffSeenBy || []), userProfile.uid])) }
+              : ticket
+          )
+        );
+      })
+      .catch((err) => console.error(err))
+      .finally(() => setIsMarkingSupportSeen(false));
+  }, [activeTab, unseenSupportTickets, userProfile, isMarkingSupportSeen]);
 
   const handleAssignTicket = async (ticketId: string, staffUid: string) => {
     const staff = staffMembers.find(s => s.uid === staffUid);
@@ -774,6 +851,11 @@ export default function AdminPage() {
             {/* Aba Suporte: Todos da Equipe */}
             <button onClick={() => setActiveTabAndPersist("support")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "support" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <HeadphonesIcon className="h-4 w-4" /> Suporte & Ideias
+              {unseenSupportCount > 0 && (
+                <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">
+                  {unseenSupportCount > 99 ? "99+" : unseenSupportCount}
+                </span>
+              )}
             </button>
 
             {canRestore && (
@@ -804,7 +886,140 @@ export default function AdminPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="overflow-x-auto">
+                  <div className="p-4 md:p-5 grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    {tickets.length === 0 ? (
+                      <div className="col-span-full h-32 rounded-2xl border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-500 bg-zinc-50/50 dark:bg-zinc-900/30">
+                        Nenhum chamado encontrado.
+                      </div>
+                    ) : (
+                      tickets.map((ticket) => {
+                        const isFinished = ticket.status === 'resolved' || ticket.status === 'implemented' || ticket.status === 'rejected';
+                        const canEditStatus = userProfile?.role === 'admin' || !isFinished;
+                        const tone = getTicketStatusTone(ticket.status);
+                        const dateStr = formatDateSafe(ticket.createdAt);
+                        const isUnseen = !Array.isArray(ticket.staffSeenBy) || (userProfile ? !ticket.staffSeenBy.includes(userProfile.uid) : false);
+
+                        return (
+                          <div key={ticket.id} className={`rounded-2xl border ${tone.border} bg-white dark:bg-zinc-950/50 p-4 space-y-3`}>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-xs text-zinc-500">{dateStr}</p>
+                                <p className="font-semibold text-sm text-zinc-900 dark:text-zinc-100 truncate">{ticket.name}</p>
+                                <p className="text-xs text-zinc-500 truncate">{ticket.email}</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {isUnseen && <Bell className="h-4 w-4 text-red-500" />}
+                                <span className={`h-2.5 w-2.5 rounded-full ${tone.dot}`} />
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              {ticket.type === 'feature' ? (
+                                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 gap-1">
+                                  <Lightbulb className="h-3 w-3" /> Ideia
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-violet-50 text-violet-700 border-violet-200 gap-1">
+                                  <MessageSquare className="h-3 w-3" /> Suporte
+                                </Badge>
+                              )}
+                              <Badge className={tone.badge}>{formatTicketStatus(ticket.status)}</Badge>
+                            </div>
+
+                            <button
+                              type="button"
+                              className="w-full text-left text-sm text-zinc-600 dark:text-zinc-300 line-clamp-2 hover:underline"
+                              onClick={() => setViewTicket(ticket)}
+                            >
+                              {ticket.message}
+                            </button>
+
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                              <div className="text-xs text-zinc-600">
+                                {userProfile?.role === 'admin' ? (
+                                  <Select
+                                    value={ticket.assignedTo || "unassigned"}
+                                    onValueChange={(val) => handleAssignTicket(ticket.id, val)}
+                                  >
+                                    <SelectTrigger className="w-[220px] h-8 text-xs">
+                                      <SelectValue placeholder="Atribuir" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="unassigned">-- Ninguém --</SelectItem>
+                                      {staffMembers.map(staff => (
+                                        <SelectItem key={staff.uid} value={staff.uid}>
+                                          {staff.displayName || staff.email} ({staff.role})
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <span>{ticket.assignedToName || (ticket.assignedTo ? "Staff" : "Ninguém")}</span>
+                                )}
+                              </div>
+
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg">
+                                    <MoreVertical className="h-4 w-4 text-zinc-500" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 shadow-xl">
+                                  <DropdownMenuItem onClick={() => setViewTicket(ticket)}>
+                                    <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
+                                  </DropdownMenuItem>
+
+                                  {canEditStatus && (
+                                    <DropdownMenuSub>
+                                      <DropdownMenuSubTrigger className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200 focus:bg-zinc-100 dark:focus:bg-zinc-800 data-[state=open]:bg-zinc-100 dark:data-[state=open]:bg-zinc-800">
+                                        <span className="flex items-center">
+                                          <RefreshCcw className="mr-2 h-4 w-4 text-zinc-500" />
+                                          Alterar Status
+                                        </span>
+                                      </DropdownMenuSubTrigger>
+                                      <DropdownMenuSubContent className="w-56 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 shadow-xl">
+                                        {ticket.type === 'support' && (
+                                          <>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'pending')}>Pendente</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'in_progress')}>Em Progresso</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'resolved')}>Resolvido</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'rejected')}>Rejeitado</DropdownMenuItem>
+                                          </>
+                                        )}
+                                        {ticket.type === 'feature' && (
+                                          <>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'pending')}>Pendente</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'under_review')}>Em Análise</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'approved')}>Aprovado</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'rejected')}>Rejeitado</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'implemented')}>Implementado</DropdownMenuItem>
+                                          </>
+                                        )}
+                                      </DropdownMenuSubContent>
+                                    </DropdownMenuSub>
+                                  )}
+
+                                  {userProfile?.role === 'admin' && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() => setTicketToDelete(ticket)}
+                                        className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950 hover:cursor-pointer"
+                                      >
+                                        <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <div className="hidden overflow-x-auto">
                     <Table>
                       <TableHeader className="bg-zinc-50 dark:bg-zinc-950">
                         <TableRow className="border-zinc-100 dark:border-zinc-800 hover:bg-transparent">
@@ -828,11 +1043,7 @@ export default function AdminPage() {
                           tickets.map(ticket => {
                             const isFinished = ticket.status === 'resolved' || ticket.status === 'implemented' || ticket.status === 'rejected';
                             const canEditStatus = userProfile?.role === 'admin' || !isFinished;
-                            const dateStr = ticket.createdAt instanceof Date
-                              ? ticket.createdAt.toLocaleDateString()
-                              : (ticket.createdAt as unknown as Timestamp)?.toDate
-                                ? (ticket.createdAt as unknown as Timestamp).toDate().toLocaleDateString()
-                                : "Data Inválida";
+                            const dateStr = formatDateSafe(ticket.createdAt);
 
 
                             return (
@@ -1043,8 +1254,8 @@ export default function AdminPage() {
                     <SelectContent>
                       <SelectItem value="all">Todos os Planos</SelectItem>
                       <SelectItem value="free">Free</SelectItem>
-                      <SelectItem value="premium">Premium 💎</SelectItem>
-                      <SelectItem value="pro">Pro 👑</SelectItem>
+                      <SelectItem value="premium">Premium</SelectItem>
+                      <SelectItem value="pro">Pro</SelectItem>
                     </SelectContent>
                   </Select>
 
@@ -1087,7 +1298,7 @@ export default function AdminPage() {
                       <SelectItem value="not_paid">Não Pago</SelectItem>
                       <SelectItem value="overdue">Atrasado</SelectItem>
                       <SelectItem value="canceled">Cancelado</SelectItem>
-                      <SelectItem value="unpaid_group" className="text-red-500 font-medium">⚠️ Inadimplentes (Geral)</SelectItem>
+                      <SelectItem value="unpaid_group" className="text-red-500 font-medium">Inadimplentes (Geral)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1098,7 +1309,148 @@ export default function AdminPage() {
                   <CardTitle className="text-lg font-semibold text-violet-600 dark:text-violet-400">Base de Usuários</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="overflow-x-auto">
+                  <div className="md:hidden p-3 space-y-3">
+                    {isLoadingUsers ? (
+                      <div className="h-28 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando base de dados...
+                      </div>
+                    ) : paginatedUsers.length === 0 ? (
+                      <div className="h-28 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
+                        Nenhum usuário encontrado com os filtros atuais.
+                      </div>
+                    ) : (
+                      paginatedUsers.map((u) => {
+                        const isTargetAdminOrMod = u.role === "admin" || u.role === "moderator";
+                        const canChangeRole = canEditRole(u);
+                        const canChangePlan = canEditPlan(u);
+                        const canEditThisUser = canEditUser(u);
+                        return (
+                          <div key={u.uid} className="rounded-2xl border border-zinc-200 bg-white p-3 space-y-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="font-semibold text-zinc-900 truncate">{u.displayName}</p>
+                                <p className="text-xs text-zinc-500 truncate">{u.email}</p>
+                                <p className="text-[11px] text-zinc-400 mt-0.5">
+                                  Cadastro: {new Date(u.createdAt).toLocaleDateString()}
+                                </p>
+                              </div>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-zinc-100">
+                                    <MoreVertical className="h-4 w-4 text-zinc-500" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="rounded-xl p-1 shadow-xl border-zinc-200 dark:border-zinc-800">
+                                  <DropdownMenuLabel className="text-xs">Ações</DropdownMenuLabel>
+                                  <DropdownMenuSeparator />
+                                  {canImpersonateUsers && (
+                                    <DropdownMenuItem
+                                      onClick={() => handleRequestImpersonation(u)}
+                                      disabled={!canEditThisUser}
+                                      className="cursor-pointer rounded-lg text-xs font-medium"
+                                    >
+                                      <User className="mr-2 h-4 w-4" /> Impersonar
+                                    </DropdownMenuItem>
+                                  )}
+                                  {canManageSensitive && (
+                                    <>
+                                      <DropdownMenuItem
+                                        onClick={() => setUserToReset(u)}
+                                        disabled={!canEditThisUser}
+                                        className="cursor-pointer rounded-lg text-xs font-medium disabled:opacity-50"
+                                      >
+                                        <RefreshCcw className="mr-2 h-4 w-4" /> Resetar Dados
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() => setUserToDelete(u)}
+                                        disabled={!canEditThisUser}
+                                        className="text-red-600 focus:text-red-700 focus:bg-red-50 cursor-pointer rounded-lg text-xs font-medium dark:focus:bg-red-900/20 disabled:opacity-50"
+                                      >
+                                        <Trash2 className="mr-2 h-4 w-4" /> Excluir Conta
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <p className="text-[10px] text-zinc-400 uppercase">Plano</p>
+                                {canChangePlan ? (
+                                  <Select value={u.plan} onValueChange={(val) => handlePlanChange(u.uid, val)}>
+                                    <SelectTrigger className="w-full h-8 text-xs rounded-lg"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="free">Free</SelectItem>
+                                      <SelectItem value="premium">Premium</SelectItem>
+                                      <SelectItem value="pro">Pro</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <Badge variant="secondary" className="mt-1">{u.plan.toUpperCase()}</Badge>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-[10px] text-zinc-400 uppercase">Função</p>
+                                {canChangeRole ? (
+                                  <Select value={u.role} onValueChange={(val) => handleRoleChange(u.uid, val)}>
+                                    <SelectTrigger className="w-full h-8 text-xs rounded-lg"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="client">Cliente</SelectItem>
+                                      <SelectItem value="support">Suporte</SelectItem>
+                                      <SelectItem value="moderator">Moderador</SelectItem>
+                                      <SelectItem value="admin">Admin</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <Badge variant="secondary" className="mt-1">
+                                    {u.role === 'client' ? 'Cliente' : u.role === 'support' ? 'Suporte' : u.role === 'moderator' ? 'Moderador' : 'Admin'}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                              <Badge variant="secondary" className="bg-zinc-100 text-zinc-600 border-zinc-200">
+                                Registros: {Number.isNaN(u.transactionCount) ? "..." : u.transactionCount ?? "..."}
+                              </Badge>
+                              <Badge variant={u.status === "active" ? "default" : "destructive"} className={u.status === "active" ? "bg-emerald-500" : ""}>
+                                {u.status === "active" ? "Ativo" : u.status === "blocked" ? "Bloqueado" : "Inativo"}
+                              </Badge>
+                            </div>
+
+                            <div>
+                              <p className="text-[10px] text-zinc-400 uppercase mb-1">Pagamento</p>
+                              {isTargetAdminOrMod ? (
+                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                                  <ShieldCheck className="h-3 w-3 mr-1" /> Isento
+                                </Badge>
+                              ) : (
+                                <Select
+                                  value={u.paymentStatus || "free"}
+                                  onValueChange={(val) => handlePaymentStatusChange(u.uid, val)}
+                                  disabled={!canEditThisUser}
+                                >
+                                  <SelectTrigger className="w-full h-8 text-xs rounded-lg"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="free">Grátis</SelectItem>
+                                    <SelectItem value="paid">Pago</SelectItem>
+                                    <SelectItem value="pending">Pendente</SelectItem>
+                                    <SelectItem value="not_paid">Não Pago</SelectItem>
+                                    <SelectItem value="overdue">Atrasado</SelectItem>
+                                    <SelectItem value="canceled">Cancelado</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <div className="hidden md:block overflow-x-auto">
                     <Table>
                       <TableHeader className="bg-violet-100 dark:bg-violet-950">
                         <TableRow className="border-violet-100 dark:border-violet-800 hover:bg-transparent">
@@ -1157,8 +1509,8 @@ export default function AdminPage() {
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="free">Free</SelectItem>
-                                      <SelectItem value="premium">Premium 💎</SelectItem>
-                                      <SelectItem value="pro">Pro 👑</SelectItem>
+                                      <SelectItem value="premium">Premium</SelectItem>
+                                      <SelectItem value="pro">Pro</SelectItem>
                                     </SelectContent>
                                   </Select>
                                 ) : (
@@ -1344,7 +1696,49 @@ export default function AdminPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="overflow-x-auto">
+                  <div className="md:hidden p-3 space-y-3">
+                    {deletedUsers.length === 0 ? (
+                      <div className="h-28 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
+                        Nenhum usuário excluído encontrado.
+                      </div>
+                    ) : (
+                      deletedUsers.map((u) => (
+                        <div key={u.uid} className="rounded-2xl border border-orange-200 bg-orange-50/30 p-3 space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-zinc-900 truncate">{u.displayName}</p>
+                              <p className="text-xs text-zinc-500 truncate">{u.email}</p>
+                            </div>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-600 hover:bg-orange-100 rounded-lg">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="rounded-xl border-orange-100 dark:border-orange-900/30">
+                                <DropdownMenuLabel className="text-orange-700 dark:text-orange-400">Ações de Restauração</DropdownMenuLabel>
+                                <DropdownMenuSeparator className="bg-orange-100 dark:bg-orange-900/30" />
+                                <DropdownMenuItem onClick={() => handleRestoreUser(u, false)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
+                                  <UserIcon className="mr-2 h-4 w-4" /> Restaurar Somente a Conta
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleRestoreUser(u, true)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
+                                  <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar Conta e Dados
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <Badge variant="outline" className="border-orange-200 text-orange-700 bg-orange-50">
+                              {u.transactionCount} Transações
+                            </Badge>
+                            <span className="uppercase text-xs font-bold text-zinc-500">{u.plan}</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="hidden md:block overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow className="border-orange-100 dark:border-orange-900/30 hover:bg-transparent">
@@ -1546,7 +1940,7 @@ export default function AdminPage() {
 
                 {plans && plans.pro.active && (
                   <div className="col-span-1 md:col-span-3 text-xs text-zinc-500 italic text-center">
-                    👑 O Plano Pro oferece benefícios exclusivos. Certifique-se de configurar corretamente o link de pagamento.
+                    O Plano Pro oferece benefícios exclusivos. Certifique-se de configurar corretamente o link de pagamento.
                   </div>
                 )}
               </div>
@@ -1737,11 +2131,7 @@ export default function AdminPage() {
                 <div>
                   <span className="font-semibold block">Data:</span>
                   <span className="text-zinc-600">
-                    {viewTicket.createdAt instanceof Date
-                      ? viewTicket.createdAt.toLocaleDateString()
-                      : (viewTicket.createdAt as unknown as Timestamp)?.toDate
-                        ? (viewTicket.createdAt as unknown as Timestamp).toDate().toLocaleDateString()
-                        : "Data Inválida"}
+                    {formatDateSafe(viewTicket.createdAt)}
                   </span>
                 </div>
                 <div>
@@ -1783,3 +2173,5 @@ export default function AdminPage() {
     </div>
   );
 }
+
+
