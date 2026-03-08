@@ -5,7 +5,6 @@ export function isAuthErrorMessage(message: string) {
     normalized.includes("id token") ||
     normalized.includes("verifyidtoken") ||
     normalized.includes("auth/id-token") ||
-    normalized.includes("decoding firebase id token") ||
     normalized.includes("argument \"token\"") ||
     normalized.includes("jwt")
   );

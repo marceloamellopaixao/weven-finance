@@ -1,9 +1,9 @@
-import { adminDb } from "@/services/firebase/admin";
+import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { CreditCardSettings, CreditCardSummary } from "@/types/creditCard";
 
 export const defaultCreditCardSettings: CreditCardSettings = {
   enabled: false,
-  cardName: "Cartão principal",
+  cardName: "Cartao principal",
   limit: 0,
   alertThresholdPct: 80,
   blockOnLimitExceeded: false,
@@ -28,10 +28,19 @@ function sanitizeSettings(raw: Partial<CreditCardSettings> | undefined): CreditC
   };
 }
 
+async function getFinanceSettingRow(uid: string) {
+  const rows = await supabaseSelect("user_settings", {
+    select: "id,data",
+    filters: { uid, setting_key: "creditCard" },
+    limit: 1,
+  });
+  return rows[0];
+}
+
 export async function getCreditCardSettings(uid: string): Promise<CreditCardSettings> {
-  const snap = await adminDb.collection("users").doc(uid).collection("settings").doc("creditCard").get();
-  if (!snap.exists) return defaultCreditCardSettings;
-  const data = snap.data() as Partial<CreditCardSettings>;
+  const row = await getFinanceSettingRow(uid);
+  if (!row) return defaultCreditCardSettings;
+  const data = (row.data as Partial<CreditCardSettings> | undefined) ?? undefined;
   return sanitizeSettings(data);
 }
 
@@ -43,7 +52,20 @@ export async function saveCreditCardSettings(uid: string, patch: Partial<CreditC
     updatedAt: new Date().toISOString(),
   });
 
-  await adminDb.collection("users").doc(uid).collection("settings").doc("creditCard").set(next, { merge: true });
+  const row = await getFinanceSettingRow(uid);
+  await supabaseUpsertRows(
+    "user_settings",
+    [
+      {
+        id: String(row?.id || `${uid}__creditCard`),
+        uid,
+        setting_key: "creditCard",
+        data: next,
+        updated_at: new Date().toISOString(),
+      },
+    ],
+    { onConflict: "id" }
+  );
   return next;
 }
 
@@ -68,20 +90,39 @@ function isCreditCapable(type: PaymentCardPolicyDoc["type"]) {
   return type === "credit_card" || type === "credit_and_debit";
 }
 
-function toPaymentCardPolicyDoc(id: string, data: Record<string, unknown>): PaymentCardPolicyDoc {
+function toPaymentCardPolicyDoc(row: Record<string, unknown>): PaymentCardPolicyDoc {
+  const raw = (row.raw as Record<string, unknown> | null) ?? {};
   const type =
-    data.type === "debit_card" || data.type === "credit_and_debit"
-      ? data.type
-      : "credit_card";
+    row.card_type === "debit_card" || row.card_type === "credit_and_debit"
+      ? row.card_type
+      : raw.type === "debit_card" || raw.type === "credit_and_debit"
+        ? (raw.type as PaymentCardPolicyDoc["type"])
+        : "credit_card";
   return {
-    id,
-    bankName: String(data.bankName || ""),
-    last4: String(data.last4 || ""),
+    id: String(row.source_id || ""),
+    bankName: String(row.bank_name || raw.bankName || ""),
+    last4: String(row.last4 || raw.last4 || ""),
     type,
-    limitEnabled: data.limitEnabled === undefined ? undefined : Boolean(data.limitEnabled),
-    creditLimit: typeof data.creditLimit === "number" ? data.creditLimit : undefined,
-    alertThresholdPct: typeof data.alertThresholdPct === "number" ? data.alertThresholdPct : undefined,
-    blockOnLimitExceeded: data.blockOnLimitExceeded === undefined ? undefined : Boolean(data.blockOnLimitExceeded),
+    limitEnabled:
+      row.limit_enabled === undefined || row.limit_enabled === null
+        ? (raw.limitEnabled as boolean | undefined)
+        : Boolean(row.limit_enabled),
+    creditLimit:
+      typeof row.credit_limit === "number"
+        ? row.credit_limit
+        : typeof raw.creditLimit === "number"
+          ? raw.creditLimit
+          : undefined,
+    alertThresholdPct:
+      typeof row.alert_threshold_pct === "number"
+        ? row.alert_threshold_pct
+        : typeof raw.alertThresholdPct === "number"
+          ? raw.alertThresholdPct
+          : undefined,
+    blockOnLimitExceeded:
+      row.block_on_limit_exceeded === undefined || row.block_on_limit_exceeded === null
+        ? (raw.blockOnLimitExceeded as boolean | undefined)
+        : Boolean(row.block_on_limit_exceeded),
   };
 }
 
@@ -93,28 +134,35 @@ function mapTxToCard(tx: Record<string, unknown>, cards: PaymentCardPolicyDoc[])
   }
   const cardLabel = String(tx.cardLabel || "").toLowerCase();
   if (!cardLabel) return null;
-  return cards.find((card) => {
-    const bank = card.bankName.toLowerCase();
-    return bank && card.last4 && cardLabel.includes(bank) && cardLabel.includes(card.last4);
-  }) || null;
+  return (
+    cards.find((card) => {
+      const bank = card.bankName.toLowerCase();
+      return bank && card.last4 && cardLabel.includes(bank) && cardLabel.includes(card.last4);
+    }) || null
+  );
+}
+
+async function getPendingCreditTransactions(uid: string) {
+  const rows = await supabaseSelect("transactions", {
+    select: "source_id,tx_type,tx_status,payment_method,raw",
+    filters: { uid },
+  });
+
+  return rows
+    .map((row) => ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>)
+    .filter(
+      (tx) => tx.paymentMethod === "credit_card" && tx.type === "expense" && tx.status === "pending"
+    );
 }
 
 export async function computeCreditCardSummary(uid: string, limit: number): Promise<CreditCardSummary> {
-  const snapshot = await adminDb
-    .collection("users")
-    .doc(uid)
-    .collection("transactions")
-    .where("paymentMethod", "==", "credit_card")
-    .where("type", "==", "expense")
-    .where("status", "==", "pending")
-    .get();
+  const txs = await getPendingCreditTransactions(uid);
 
   let used = 0;
   let trackedCount = 0;
   let untrackedCount = 0;
 
-  snapshot.docs.forEach((docSnap) => {
-    const tx = docSnap.data() as Record<string, unknown>;
+  txs.forEach((tx) => {
     const amount = readAmountForLimit(tx);
     if (amount === null) {
       untrackedCount += 1;
@@ -134,28 +182,23 @@ export async function computeCreditCardSummary(uid: string, limit: number): Prom
     available,
     usagePct,
     isExceeded,
-    pendingCount: snapshot.size,
+    pendingCount: txs.length,
     trackedCount,
     untrackedCount,
   };
 }
 
 export async function enforceCreditCardPolicy(uid: string) {
-  const [settings, cardsSnapshot, pendingCreditSnapshot] = await Promise.all([
+  const [settings, cardRows, pendingTxs] = await Promise.all([
     getCreditCardSettings(uid),
-    adminDb.collection("users").doc(uid).collection("payment_cards").get(),
-    adminDb
-      .collection("users")
-      .doc(uid)
-      .collection("transactions")
-      .where("paymentMethod", "==", "credit_card")
-      .where("type", "==", "expense")
-      .where("status", "==", "pending")
-      .get(),
+    supabaseSelect("payment_cards", {
+      select: "source_id,bank_name,last4,card_type,limit_enabled,credit_limit,alert_threshold_pct,block_on_limit_exceeded,raw",
+      filters: { uid },
+    }),
+    getPendingCreditTransactions(uid),
   ]);
-  const cards = cardsSnapshot.docs.map((docSnap) =>
-    toPaymentCardPolicyDoc(docSnap.id, docSnap.data() as Record<string, unknown>)
-  );
+
+  const cards = cardRows.map((row) => toPaymentCardPolicyDoc(row));
   const creditCards = cards.filter((card) => isCreditCapable(card.type));
 
   const perCardUsed = new Map<string, number>();
@@ -163,8 +206,7 @@ export async function enforceCreditCardPolicy(uid: string) {
   let untrackedCount = 0;
   let totalUsed = 0;
 
-  pendingCreditSnapshot.docs.forEach((docSnap) => {
-    const tx = docSnap.data() as Record<string, unknown>;
+  pendingTxs.forEach((tx) => {
     const amount = readAmountForLimit(tx);
     if (amount === null) {
       untrackedCount += 1;
@@ -219,13 +261,19 @@ export async function enforceCreditCardPolicy(uid: string) {
     available: totalLimit - totalUsed,
     usagePct: totalLimit <= 0 ? 0 : (totalUsed / totalLimit) * 100,
     isExceeded: exceededCardIds.length > 0,
-    pendingCount: pendingCreditSnapshot.size,
+    pendingCount: pendingTxs.length,
     trackedCount,
     untrackedCount,
   };
 
-  const patch: Record<string, unknown> = {
-    creditCardMeta: {
+  const rows = await supabaseSelect("profiles", {
+    select: "uid,raw",
+    filters: { uid },
+    limit: 1,
+  });
+  if (rows.length > 0) {
+    const raw = ((rows[0].raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+    raw.creditCardMeta = {
       used: summary.used,
       available: summary.available,
       usagePct: summary.usagePct,
@@ -236,9 +284,21 @@ export async function enforceCreditCardPolicy(uid: string) {
       exceededCardIds,
       perCard,
       lastEvaluatedAt: new Date().toISOString(),
-    },
-  };
+    };
 
-  await adminDb.collection("users").doc(uid).set(patch, { merge: true });
+    await supabaseUpsertRows(
+      "profiles",
+      [
+        {
+          uid,
+          raw,
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      { onConflict: "uid" }
+    );
+  }
+
   return { settings, summary };
 }
+

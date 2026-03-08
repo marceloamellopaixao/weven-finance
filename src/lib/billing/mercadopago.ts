@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
-import { FieldValue } from "firebase-admin/firestore";
-import { adminDb } from "@/services/firebase/admin";
+import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { UserPaymentStatus, UserPlan, UserRole, UserStatus } from "@/types/user";
 
 type MercadoPagoTopic = "payment" | "merchant_order" | "preapproval";
@@ -34,12 +33,87 @@ type UserMatch = {
   matchedBy: "external_reference" | "email" | "pending_checkout";
 };
 
+type ProfileRow = Record<string, unknown> & {
+  uid: string;
+};
+
 const MERCADO_PAGO_API_BASE = "https://api.mercadopago.com";
 
 const PLAN_BY_PREAPPROVAL_ID: Record<string, UserPlan> = {
   [process.env.MERCADOPAGO_PLAN_PRO_ID ?? ""]: "pro",
   [process.env.MERCADOPAGO_PLAN_PREMIUM_ID ?? ""]: "premium",
 };
+
+async function getProfileRow(uid: string): Promise<ProfileRow | null> {
+  const rows = await supabaseSelect("profiles", {
+    filters: { uid },
+    limit: 1,
+  });
+  if (rows.length === 0) return null;
+  return rows[0] as ProfileRow;
+}
+
+function profileToUserData(row: ProfileRow): Record<string, unknown> {
+  const raw = (row.raw as Record<string, unknown> | null) ?? {};
+  return {
+    ...raw,
+    uid: row.uid,
+    email: row.email ?? raw.email ?? "",
+    role: row.role ?? raw.role ?? "client",
+    plan: row.plan ?? raw.plan ?? "free",
+    status: row.status ?? raw.status ?? "active",
+    blockReason: row.block_reason ?? raw.blockReason ?? "",
+    paymentStatus: row.payment_status ?? raw.paymentStatus ?? "pending",
+    billing: row.billing ?? raw.billing ?? {},
+  };
+}
+
+async function updateUserProfile(uid: string, patch: Record<string, unknown>) {
+  const existing = await getProfileRow(uid);
+  const raw = ((existing?.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const nextRaw = { ...raw };
+
+  if (patch.plan !== undefined) nextRaw.plan = patch.plan;
+  if (patch.paymentStatus !== undefined) nextRaw.paymentStatus = patch.paymentStatus;
+  if (patch.status !== undefined) nextRaw.status = patch.status;
+  if (patch.blockReason !== undefined) nextRaw.blockReason = patch.blockReason;
+  if (patch.billing !== undefined) nextRaw.billing = patch.billing;
+
+  await supabaseUpsertRows(
+    "profiles",
+    [
+      {
+        uid,
+        ...(patch.plan !== undefined ? { plan: patch.plan } : {}),
+        ...(patch.paymentStatus !== undefined ? { payment_status: patch.paymentStatus } : {}),
+        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...(patch.blockReason !== undefined ? { block_reason: patch.blockReason } : {}),
+        ...(patch.billing !== undefined ? { billing: patch.billing } : {}),
+        raw: nextRaw,
+        updated_at: new Date().toISOString(),
+      },
+    ],
+    { onConflict: "uid" }
+  );
+}
+
+async function writeBillingEvent(eventId: string, payload: Record<string, unknown>) {
+  await supabaseUpsertRows(
+    "billing_events",
+    [
+      {
+        id: eventId,
+        uid: typeof payload.uid === "string" ? payload.uid : null,
+        event_type: typeof payload.topic === "string" ? payload.topic : null,
+        action: typeof payload.action === "string" ? payload.action : null,
+        provider: "mercadopago",
+        raw: payload,
+        created_at: new Date().toISOString(),
+      },
+    ],
+    { onConflict: "id" }
+  );
+}
 
 function assertToken() {
   if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {
@@ -324,29 +398,27 @@ async function findUserByWebhook(details: GatewayDetails): Promise<UserMatch | n
   const parsedReference = parseExternalReference(details.externalReference);
 
   if (parsedReference.uid) {
-    const userRef = adminDb.collection("users").doc(parsedReference.uid);
-    const userSnap = await userRef.get();
-    if (userSnap.exists) {
+    const userRow = await getProfileRow(parsedReference.uid);
+    if (userRow) {
       return {
-        uid: userSnap.id,
-        userData: userSnap.data() ?? {},
+        uid: userRow.uid,
+        userData: profileToUserData(userRow),
         matchedBy: "external_reference",
       };
     }
   }
 
   if (details.payerEmail) {
-    const userQuery = await adminDb
-      .collection("users")
-      .where("email", "==", details.payerEmail.toLowerCase())
-      .limit(1)
-      .get();
+    const userQuery = await supabaseSelect("profiles", {
+      filters: { email: details.payerEmail.toLowerCase() },
+      limit: 1,
+    });
 
-    if (!userQuery.empty) {
-      const doc = userQuery.docs[0];
+    if (userQuery.length > 0) {
+      const doc = userQuery[0] as ProfileRow;
       return {
-        uid: doc.id,
-        userData: doc.data(),
+        uid: doc.uid,
+        userData: profileToUserData(doc),
         matchedBy: "email",
       };
     }
@@ -356,21 +428,19 @@ async function findUserByWebhook(details: GatewayDetails): Promise<UserMatch | n
   if (pendingPlan) {
     const now = Date.now();
     const windowMs = 6 * 60 * 60 * 1000; // 6 hours
-    const pendingUsers = await adminDb
-      .collection("users")
-      .where("billing.pendingPlan", "==", pendingPlan)
-      .limit(25)
-      .get();
+    const pendingUsers = await supabaseSelect("profiles", {
+      limit: 200,
+    });
 
     const candidates: Array<{ uid: string; userData: Record<string, unknown>; distanceMs: number }> = [];
 
-    for (const doc of pendingUsers.docs) {
-      const data = doc.data() as Record<string, unknown>;
+    for (const row of pendingUsers as ProfileRow[]) {
+      const data = profileToUserData(row);
+      const billing = (data.billing as Record<string, unknown> | null) ?? {};
+      if (billing.pendingPlan !== pendingPlan) continue;
       const pendingCheckoutAt =
-        typeof data.billing === "object" &&
-        data.billing !== null &&
-        typeof (data.billing as { pendingCheckoutAt?: unknown }).pendingCheckoutAt === "string"
-          ? (data.billing as { pendingCheckoutAt: string }).pendingCheckoutAt
+        typeof billing.pendingCheckoutAt === "string"
+          ? billing.pendingCheckoutAt
           : null;
       if (!pendingCheckoutAt) continue;
 
@@ -380,7 +450,7 @@ async function findUserByWebhook(details: GatewayDetails): Promise<UserMatch | n
       const distanceMs = Math.abs(now - pendingAtMs);
       if (distanceMs > windowMs) continue;
 
-      candidates.push({ uid: doc.id, userData: data, distanceMs });
+      candidates.push({ uid: row.uid, userData: data, distanceMs });
     }
 
     if (candidates.length === 1) {
@@ -434,18 +504,15 @@ export async function syncFromWebhook(input: WebhookInput) {
     action: input.action ?? null,
     eventId: input.eventId,
     resourceId: input.resourceId,
-    receivedAt: FieldValue.serverTimestamp(),
+    receivedAt: new Date().toISOString(),
     details,
   };
 
   if (!userMatch) {
-    await adminDb.collection("billing_events").doc(eventDocId).set(
-      {
-        ...baseEvent,
-        status: "ignored_no_user_match",
-      },
-      { merge: true }
-    );
+    await writeBillingEvent(eventDocId, {
+      ...baseEvent,
+      status: "ignored_no_user_match",
+    });
 
     return {
       ok: true,
@@ -494,44 +561,38 @@ export async function syncFromWebhook(input: WebhookInput) {
     }
   }
 
-  await adminDb.collection("users").doc(userMatch.uid).set(
-    {
-      plan: targetPlan,
-      paymentStatus: targetPaymentStatus,
-      ...statusPatch,
-      billing: {
-        source: "mercadopago_webhook",
-        provider: "mercadopago",
-        gatewayStatus: details.gatewayStatus,
-        gatewayStatusDetail: details.gatewayStatusDetail ?? null,
-        gatewayPlan,
-        externalReference: details.externalReference ?? null,
-        paymentId: details.paymentId ?? null,
-        preapprovalId: details.preapprovalId ?? null,
-        merchantOrderId: details.merchantOrderId ?? null,
-        lastEventType: input.topic,
-        lastEventAction: input.action ?? null,
-        lastEventId: input.eventId ?? null,
-        lastEventAt: nowIso,
-        lastSyncAt: nowIso,
-        lastError: null,
-      },
+  await updateUserProfile(userMatch.uid, {
+    plan: targetPlan,
+    paymentStatus: targetPaymentStatus,
+    ...statusPatch,
+    billing: {
+      source: "mercadopago_webhook",
+      provider: "mercadopago",
+      gatewayStatus: details.gatewayStatus,
+      gatewayStatusDetail: details.gatewayStatusDetail ?? null,
+      gatewayPlan,
+      externalReference: details.externalReference ?? null,
+      paymentId: details.paymentId ?? null,
+      preapprovalId: details.preapprovalId ?? null,
+      merchantOrderId: details.merchantOrderId ?? null,
+      lastEventType: input.topic,
+      lastEventAction: input.action ?? null,
+      lastEventId: input.eventId ?? null,
+      lastEventAt: nowIso,
+      lastSyncAt: nowIso,
+      lastError: null,
     },
-    { merge: true }
-  );
+  });
 
-  await adminDb.collection("billing_events").doc(eventDocId).set(
-    {
-      ...baseEvent,
-      status: "processed",
-      matchedBy: userMatch.matchedBy,
-      uid: userMatch.uid,
-      targetPlan,
-      targetPaymentStatus,
-      statusPatch,
-    },
-    { merge: true }
-  );
+  await writeBillingEvent(eventDocId, {
+    ...baseEvent,
+    status: "processed",
+    matchedBy: userMatch.matchedBy,
+    uid: userMatch.uid,
+    targetPlan,
+    targetPaymentStatus,
+    statusPatch,
+  });
 
   return {
     ok: true,
@@ -591,13 +652,12 @@ export async function confirmPreapprovalForUser(params: {
     throw new Error("plan_mismatch");
   }
 
-  const userRef = adminDb.collection("users").doc(params.uid);
-  const userSnap = await userRef.get();
-  if (!userSnap.exists) {
+  const userRow = await getProfileRow(params.uid);
+  if (!userRow) {
     throw new Error("user_not_found");
   }
 
-  const userData = userSnap.data() ?? {};
+  const userData = profileToUserData(userRow);
   const currentPlan = (userData.plan as UserPlan) || "free";
   const currentRole = (userData.role as UserRole) || "client";
   const currentStatus = (userData.status as UserStatus) || "active";
@@ -629,47 +689,41 @@ export async function confirmPreapprovalForUser(params: {
     }
   }
 
-  await userRef.set(
-    {
-      plan: targetPlan,
-      paymentStatus: targetPaymentStatus,
-      ...statusPatch,
-      billing: {
-        source: "mercadopago_confirm",
-        provider: "mercadopago",
-        gatewayStatus: details.gatewayStatus,
-        gatewayStatusDetail: details.gatewayStatusDetail ?? null,
-        gatewayPlan,
-        externalReference: details.externalReference ?? null,
-        preapprovalId: details.preapprovalId ?? null,
-        lastEventType: "preapproval_confirm",
-        lastEventAction: "manual_confirm",
-        lastEventId: details.preapprovalId ?? null,
-        lastEventAt: nowIso,
-        lastSyncAt: nowIso,
-        lastError: null,
-        pendingPreapprovalId: null,
-        pendingPlan: null,
-        pendingCheckoutAt: null,
-      },
+  await updateUserProfile(params.uid, {
+    plan: targetPlan,
+    paymentStatus: targetPaymentStatus,
+    ...statusPatch,
+    billing: {
+      source: "mercadopago_confirm",
+      provider: "mercadopago",
+      gatewayStatus: details.gatewayStatus,
+      gatewayStatusDetail: details.gatewayStatusDetail ?? null,
+      gatewayPlan,
+      externalReference: details.externalReference ?? null,
+      preapprovalId: details.preapprovalId ?? null,
+      lastEventType: "preapproval_confirm",
+      lastEventAction: "manual_confirm",
+      lastEventId: details.preapprovalId ?? null,
+      lastEventAt: nowIso,
+      lastSyncAt: nowIso,
+      lastError: null,
+      pendingPreapprovalId: null,
+      pendingPlan: null,
+      pendingCheckoutAt: null,
     },
-    { merge: true }
-  );
+  });
 
-  await adminDb.collection("billing_events").doc(`confirm_preapproval_${params.preapprovalId}_${params.uid}`).set(
-    {
-      topic: "preapproval_confirm",
-      action: "manual_confirm",
-      resourceId: params.preapprovalId,
-      uid: params.uid,
-      status: "processed",
-      targetPlan,
-      targetPaymentStatus,
-      details,
-      processedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+  await writeBillingEvent(`confirm_preapproval_${params.preapprovalId}_${params.uid}`, {
+    topic: "preapproval_confirm",
+    action: "manual_confirm",
+    resourceId: params.preapprovalId,
+    uid: params.uid,
+    status: "processed",
+    targetPlan,
+    targetPaymentStatus,
+    details,
+    processedAt: new Date().toISOString(),
+  });
 
   return {
     ok: true,
@@ -770,13 +824,12 @@ export async function cancelSubscriptionForUser(params: {
   uid: string;
   userEmail: string;
 }) {
-  const userRef = adminDb.collection("users").doc(params.uid);
-  const userSnap = await userRef.get();
-  if (!userSnap.exists) {
+  const userRow = await getProfileRow(params.uid);
+  if (!userRow) {
     throw new Error("user_not_found");
   }
 
-  const userData = userSnap.data() ?? {};
+  const userData = profileToUserData(userRow);
   const currentRole = (userData.role as UserRole) || "client";
   const currentStatus = (userData.status as UserStatus) || "active";
   const currentPlan = (userData.plan as UserPlan) || "free";
@@ -827,47 +880,41 @@ export async function cancelSubscriptionForUser(params: {
   const details = normalizeGatewayDetailsFromPreapproval(payload, preapprovalId);
   const nowIso = new Date().toISOString();
 
-  await userRef.set(
-    {
-      plan: "free" as UserPlan,
-      paymentStatus: "canceled" as UserPaymentStatus,
-      status: currentStatus === "deleted" ? "deleted" : "active",
-      blockReason: "",
-      billing: {
-        source: "mercadopago_cancel",
-        provider: "mercadopago",
-        gatewayStatus: details.gatewayStatus,
-        gatewayStatusDetail: details.gatewayStatusDetail ?? null,
-        gatewayPlan: "free",
-        preapprovalId,
-        lastEventType: "preapproval_cancel",
-        lastEventAction: "manual_cancel",
-        lastEventId: preapprovalId,
-        lastEventAt: nowIso,
-        lastSyncAt: nowIso,
-        lastError: null,
-        pendingPreapprovalId: null,
-        pendingPlan: null,
-        pendingCheckoutAt: null,
-      },
+  await updateUserProfile(params.uid, {
+    plan: "free" as UserPlan,
+    paymentStatus: "canceled" as UserPaymentStatus,
+    status: currentStatus === "deleted" ? "deleted" : "active",
+    blockReason: "",
+    billing: {
+      source: "mercadopago_cancel",
+      provider: "mercadopago",
+      gatewayStatus: details.gatewayStatus,
+      gatewayStatusDetail: details.gatewayStatusDetail ?? null,
+      gatewayPlan: "free",
+      preapprovalId,
+      lastEventType: "preapproval_cancel",
+      lastEventAction: "manual_cancel",
+      lastEventId: preapprovalId,
+      lastEventAt: nowIso,
+      lastSyncAt: nowIso,
+      lastError: null,
+      pendingPreapprovalId: null,
+      pendingPlan: null,
+      pendingCheckoutAt: null,
     },
-    { merge: true }
-  );
+  });
 
-  await adminDb.collection("billing_events").doc(`cancel_preapproval_${preapprovalId}_${params.uid}`).set(
-    {
-      topic: "preapproval_cancel",
-      action: "manual_cancel",
-      resourceId: preapprovalId,
-      uid: params.uid,
-      status: "processed",
-      targetPlan: "free",
-      targetPaymentStatus: "canceled",
-      details,
-      processedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+  await writeBillingEvent(`cancel_preapproval_${preapprovalId}_${params.uid}`, {
+    topic: "preapproval_cancel",
+    action: "manual_cancel",
+    resourceId: preapprovalId,
+    uid: params.uid,
+    status: "processed",
+    targetPlan: "free",
+    targetPaymentStatus: "canceled",
+    details,
+    processedAt: new Date().toISOString(),
+  });
 
   return {
     ok: true,
@@ -877,3 +924,4 @@ export async function cancelSubscriptionForUser(params: {
     targetPaymentStatus: "canceled" as UserPaymentStatus,
   };
 }
+

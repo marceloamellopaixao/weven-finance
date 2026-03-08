@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
-import { adminAuth, adminDb } from "@/services/firebase/admin";
 import { UserRole } from "@/types/user";
+import { verifyRequestAuth } from "@/lib/auth/server";
+import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 export type ImpersonationRequestStatus = "pending" | "approved" | "rejected" | "revoked" | "expired";
 
@@ -72,46 +73,47 @@ function getIsoNow() {
   return new Date().toISOString();
 }
 
-async function getUserProfileSummary(uid: string) {
-  const snap = await adminDb.collection("users").doc(uid).get();
-  if (!snap.exists) throw new Error("user_not_found");
-  const data = snap.data() as Record<string, unknown>;
-  return {
-    uid,
-    displayName: String(data.displayName || "Usuário"),
-    email: String(data.email || ""),
-    role: toUserRole(data.role),
-  };
-}
-
 function addHours(date: Date, hours: number): Date {
   const copy = new Date(date);
   copy.setHours(copy.getHours() + hours);
   return copy;
 }
 
-export async function getAuthContextFromRequest(request: NextRequest): Promise<AuthContext> {
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : null;
-  if (!token) throw new Error("missing_auth_token");
+function randomId() {
+  return crypto.randomUUID();
+}
 
-  const decoded = await adminAuth.verifyIdToken(token);
-  const userSnap = await adminDb.collection("users").doc(decoded.uid).get();
-  if (!userSnap.exists) {
+async function getUserProfileSummary(uid: string) {
+  const rows = await supabaseSelect("profiles", { filters: { uid }, limit: 1 });
+  if (rows.length === 0) throw new Error("user_not_found");
+  const row = rows[0];
+  const raw = (row.raw as Record<string, unknown> | null) ?? {};
+  return {
+    uid,
+    displayName: String(row.display_name || raw.displayName || "Usuario"),
+    email: String(row.email || raw.email || ""),
+    role: toUserRole(row.role || raw.role),
+  };
+}
+
+export async function getAuthContextFromRequest(request: NextRequest): Promise<AuthContext> {
+  const decoded = await verifyRequestAuth(request);
+  const rows = await supabaseSelect("profiles", { filters: { uid: decoded.uid }, limit: 1 });
+  if (rows.length === 0) {
     return {
       uid: decoded.uid,
       role: "client",
-      displayName: String(decoded.name || "Usuário"),
+      displayName: String(decoded.name || "Usuario"),
       email: String(decoded.email || ""),
     };
   }
-
-  const data = userSnap.data() as Record<string, unknown>;
+  const row = rows[0];
+  const raw = (row.raw as Record<string, unknown> | null) ?? {};
   return {
     uid: decoded.uid,
-    role: toUserRole(data.role),
-    displayName: String(data.displayName || decoded.name || "Usuário"),
-    email: String(data.email || decoded.email || ""),
+    role: toUserRole(row.role || raw.role),
+    displayName: String(row.display_name || raw.displayName || decoded.name || "Usuario"),
+    email: String(row.email || raw.email || decoded.email || ""),
   };
 }
 
@@ -132,29 +134,31 @@ export async function resolveActingContext(request: NextRequest): Promise<Acting
     throw new Error("impersonation_forbidden_role");
   }
 
-  const requestSnapshot = await adminDb
-    .collection("support_access_requests")
-    .where("requesterUid", "==", auth.uid)
-    .get();
-
-  if (requestSnapshot.empty) {
+  const requestRows = await supabaseSelect("support_access_requests", {
+    filters: { requester_uid: auth.uid },
+  });
+  if (requestRows.length === 0) {
     throw new Error("impersonation_not_allowed");
   }
 
   const nowIso = getIsoNow();
-  const validDoc = requestSnapshot.docs
-    .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as SupportAccessRequestDoc) }))
-    .filter((item) =>
-      item.targetUid === targetUid &&
-      item.status === "approved" &&
-      item.permissionImpersonate === true
+  const validDoc = requestRows
+    .map((row) => (row.raw as SupportAccessRequestDoc | null) ?? null)
+    .filter((item): item is SupportAccessRequestDoc => Boolean(item))
+    .filter(
+      (item) =>
+        item.targetUid === targetUid &&
+        item.status === "approved" &&
+        item.permissionImpersonate === true
     )
-    .sort((a, b) => String(b.handledAt || b.updatedAt || b.createdAt).localeCompare(String(a.handledAt || a.updatedAt || a.createdAt)))
+    .sort((a, b) =>
+      String(b.handledAt || b.updatedAt || b.createdAt).localeCompare(
+        String(a.handledAt || a.updatedAt || a.createdAt)
+      )
+    )
     .find((item) => !item.expiresAt || item.expiresAt > nowIso);
 
-  if (!validDoc) {
-    throw new Error("impersonation_expired");
-  }
+  if (!validDoc) throw new Error("impersonation_expired");
 
   return {
     requesterUid: auth.uid,
@@ -177,7 +181,7 @@ export async function createSupportAccessLog(input: {
   requestId: string;
 }) {
   const createdAt = getIsoNow();
-  await adminDb.collection("log_acesso_suporte").add({
+  const raw = {
     idUser: input.idUser,
     idUserImpersonate: input.idUserImpersonate,
     userDisplayName: input.userDisplayName,
@@ -189,7 +193,17 @@ export async function createSupportAccessLog(input: {
     permissionImpersonate: input.permissionImpersonate,
     requestId: input.requestId,
     createdAt,
-  });
+  };
+  await supabaseUpsertRows("log_acesso_suporte", [
+    {
+      id: randomId(),
+      id_user: input.idUser,
+      id_user_impersonate: input.idUserImpersonate,
+      permission_impersonate: input.permissionImpersonate,
+      raw,
+      created_at: createdAt,
+    },
+  ]);
 }
 
 export function buildApprovedRequestPatch() {
@@ -221,22 +235,21 @@ async function createOrReusePendingActionRequest(input: {
   actionType: string;
   actionLabel: string;
 }) {
-  const existingSnapshot = await adminDb
-    .collection("impersonation_action_requests")
-    .where("requesterUid", "==", input.requesterUid)
-    .get();
+  const rows = await supabaseSelect("impersonation_action_requests", {
+    filters: { requester_uid: input.requesterUid },
+  });
 
-  const existing = existingSnapshot.docs
-    .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as ImpersonationActionRequestDoc) }))
-    .find((item) =>
-      item.targetUid === input.targetUid &&
-      item.actionType === input.actionType &&
-      item.status === "pending"
+  const existing = rows
+    .map((row) => ({ id: String(row.id || ""), doc: (row.raw as ImpersonationActionRequestDoc | null) ?? null }))
+    .find(
+      (item) =>
+        item.doc &&
+        item.doc.targetUid === input.targetUid &&
+        item.doc.actionType === input.actionType &&
+        item.doc.status === "pending"
     );
 
-  if (existing) {
-    return existing.id;
-  }
+  if (existing) return existing.id;
 
   const [requester, target] = await Promise.all([
     getUserProfileSummary(input.requesterUid),
@@ -244,7 +257,8 @@ async function createOrReusePendingActionRequest(input: {
   ]);
 
   const nowIso = getIsoNow();
-  const requestRef = await adminDb.collection("impersonation_action_requests").add({
+  const id = randomId();
+  const raw: ImpersonationActionRequestDoc = {
     requesterUid: requester.uid,
     requesterDisplayName: requester.displayName,
     requesterEmail: requester.email,
@@ -262,9 +276,20 @@ async function createOrReusePendingActionRequest(input: {
     handledAt: null,
     expiresAt: null,
     consumedAt: null,
-  } satisfies ImpersonationActionRequestDoc);
+  };
 
-  return requestRef.id;
+  await supabaseUpsertRows("impersonation_action_requests", [
+    {
+      id,
+      requester_uid: requester.uid,
+      target_uid: target.uid,
+      action_type: input.actionType,
+      action_status: "pending",
+      raw,
+      created_at: nowIso,
+    },
+  ]);
+  return id;
 }
 
 async function consumeApprovedActionRequest(input: {
@@ -273,14 +298,16 @@ async function consumeApprovedActionRequest(input: {
   targetUid: string;
   actionType: string;
 }) {
-  const ref = adminDb.collection("impersonation_action_requests").doc(input.actionRequestId);
-  const snap = await ref.get();
-  if (!snap.exists) throw new Error("impersonation_action_not_found");
+  const rows = await supabaseSelect("impersonation_action_requests", {
+    filters: { id: input.actionRequestId },
+    limit: 1,
+  });
+  if (rows.length === 0) throw new Error("impersonation_action_not_found");
 
-  const data = snap.data() as ImpersonationActionRequestDoc;
+  const data = ((rows[0].raw as ImpersonationActionRequestDoc | null) ?? null);
+  if (!data) throw new Error("impersonation_action_not_found");
   const nowIso = getIsoNow();
   const notExpired = !data.expiresAt || data.expiresAt > nowIso;
-
   const valid =
     data.requesterUid === input.requesterUid &&
     data.targetUid === input.targetUid &&
@@ -289,16 +316,19 @@ async function consumeApprovedActionRequest(input: {
     data.permissionImpersonate === true &&
     !data.consumedAt &&
     notExpired;
-
   if (!valid) throw new Error("impersonation_action_not_approved");
 
-  await ref.set(
-    {
-      status: "consumed",
-      updatedAt: nowIso,
-      consumedAt: nowIso,
-    },
-    { merge: true }
+  const nextRaw = { ...data, status: "consumed" as const, updatedAt: nowIso, consumedAt: nowIso };
+  await supabaseUpsertRows(
+    "impersonation_action_requests",
+    [
+      {
+        id: input.actionRequestId,
+        action_status: "consumed",
+        raw: nextRaw,
+      },
+    ],
+    { onConflict: "id" }
   );
 }
 
@@ -333,3 +363,4 @@ export async function ensureImpersonationWriteApproval(input: {
 
   return { allowed: true as const };
 }
+
