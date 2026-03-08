@@ -1,12 +1,17 @@
-import { getAuth } from "firebase/auth";
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { PaymentCard, PaymentCardIdentification } from "@/types/paymentCard";
+import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { subscribeToTableChanges } from "@/services/supabase/realtime";
+
+const PAYMENT_CARDS_CHANGED_EVENT = "wevenfinance:payment-cards:changed";
+
+function emitPaymentCardsChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(PAYMENT_CARDS_CHANGED_EVENT));
+}
 
 async function getIdTokenOrThrow() {
-  const auth = getAuth();
-  const currentUser = auth.currentUser;
-  if (!currentUser) throw new Error("missing_auth_user");
-  return currentUser.getIdToken();
+  return getAccessTokenOrThrow();
 }
 
 async function fetchWithAuth(path: string, init?: RequestInit) {
@@ -42,6 +47,7 @@ export async function createPaymentCard(
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível criar cartão");
   }
+  emitPaymentCardsChanged();
   return payload.id;
 }
 
@@ -57,6 +63,7 @@ export async function updatePaymentCard(
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível atualizar cartão");
   }
+  emitPaymentCardsChanged();
 }
 
 export async function deletePaymentCard(cardId: string) {
@@ -67,6 +74,7 @@ export async function deletePaymentCard(cardId: string) {
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível excluir cartão");
   }
+  emitPaymentCardsChanged();
 }
 
 export async function identifyPaymentCard(bin: string): Promise<PaymentCardIdentification> {
@@ -91,3 +99,41 @@ export async function identifyPaymentCard(bin: string): Promise<PaymentCardIdent
 
   return payload.identification;
 }
+
+export const subscribeToPaymentCards = (
+  uid: string,
+  onChange: (cards: PaymentCard[]) => void,
+  onError?: (error: Error) => void
+) => {
+  let cancelled = false;
+
+  const run = async () => {
+    try {
+      const cards = await getPaymentCards();
+      if (!cancelled) onChange(cards);
+    } catch (error) {
+      if (!cancelled) onError?.(error as Error);
+    }
+  };
+
+  void run();
+  const stopRealtime = subscribeToTableChanges({
+    table: "payment_cards",
+    filter: `uid=eq.${uid}`,
+    onChange: () => void run(),
+  });
+  const onChangedEvent = () => void run();
+  const interval = setInterval(() => void run(), 20000);
+  const onFocus = () => void run();
+  window.addEventListener(PAYMENT_CARDS_CHANGED_EVENT, onChangedEvent);
+  window.addEventListener("focus", onFocus);
+
+  return () => {
+    cancelled = true;
+    stopRealtime();
+    clearInterval(interval);
+    window.removeEventListener(PAYMENT_CARDS_CHANGED_EVENT, onChangedEvent);
+    window.removeEventListener("focus", onFocus);
+  };
+};
+
