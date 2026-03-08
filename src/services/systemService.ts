@@ -1,7 +1,8 @@
-import { getAuth } from "firebase/auth";
 import { DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
+import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { subscribeToTableChanges } from "@/services/supabase/realtime";
 
-const POLLING_INTERVAL_MS = 300000;
+const POLLING_INTERVAL_MS = 60000;
 const LOCAL_CACHE_TTL_MS = 120000;
 let lastPlansCache: { at: number; value: PlansConfig } | null = null;
 
@@ -11,10 +12,7 @@ function shouldPollNow() {
 }
 
 async function getIdTokenOrThrow() {
-  const auth = getAuth();
-  const currentUser = auth.currentUser;
-  if (!currentUser) throw new Error("missing_auth_user");
-  return currentUser.getIdToken();
+  return getAccessTokenOrThrow();
 }
 
 export const getPlansConfig = async (): Promise<PlansConfig> => {
@@ -70,8 +68,17 @@ export const subscribeToPlansConfig = (
 
   void run();
   const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
+  const stopRealtime = subscribeToTableChanges({
+    table: "system_configs",
+    onChange: () => void run(),
+  });
+  const onFocus = () => void run();
+  window.addEventListener("focus", onFocus);
   return () => {
     cancelled = true;
     clearInterval(interval);
+    stopRealtime();
+    window.removeEventListener("focus", onFocus);
   };
 };
+
