@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -149,13 +149,6 @@ export function Header() {
               </DropdownMenuItem>
             </Link>
 
-            <Link href="/settings" className="cursor-pointer">
-              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Configurações</span>
-              </DropdownMenuItem>
-            </Link>
-
             <Link href="/cards" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
                 <CreditCard className="mr-2 h-4 w-4" />
@@ -167,6 +160,13 @@ export function Header() {
               <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
                 <PiggyBank className="mr-2 h-4 w-4" />
                 <span>Porquinho</span>
+              </DropdownMenuItem>
+            </Link>
+
+            <Link href="/settings" className="cursor-pointer">
+              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Configurações</span>
               </DropdownMenuItem>
             </Link>
 
@@ -205,3 +205,4 @@ export function Header() {
     </nav>
   );
 }
+
