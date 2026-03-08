@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyRequestAuth } from "@/lib/auth/server";
-import { supabaseDeleteByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
+import { writeAdminAuditLog } from "@/lib/audit/admin";
+import { checkRateLimit } from "@/lib/api/rate-limit";
+import { getRequestMeta } from "@/lib/api/request-meta";
+import { apiLogger } from "@/lib/observability/logger";
+import { writeApiMetric } from "@/lib/observability/metrics";
+import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
 
 type UserRole = "admin" | "moderator" | "support" | "client";
 
@@ -80,30 +85,109 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const meta = getRequestMeta(request);
+  const startedAt = Date.now();
   try {
+    const rate = await checkRateLimit(request, { key: "api:admin-users:get", max: 120, windowMs: 60_000 });
+    if (!rate.allowed) {
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
+      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    }
+
     const auth = await getAuthContext(request);
     if (!isManager(auth.role)) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
     const scope = request.nextUrl.searchParams.get("scope");
-    const rows = await supabaseSelect("profiles", { order: "created_at.desc.nullslast" });
-    let users = rows.map(mapProfileRowToUser);
+    const page = Math.max(1, Number(request.nextUrl.searchParams.get("page") || "1"));
+    const limit = Math.max(1, Math.min(100, Number(request.nextUrl.searchParams.get("limit") || "20")));
+    const q = request.nextUrl.searchParams.get("q")?.trim().toLowerCase() || "";
+    const role = request.nextUrl.searchParams.get("role")?.trim();
+    const plan = request.nextUrl.searchParams.get("plan")?.trim();
+    const status = request.nextUrl.searchParams.get("status")?.trim();
+    const paymentStatus = request.nextUrl.searchParams.get("paymentStatus")?.trim();
+
+    let users: ReturnType<typeof mapProfileRowToUser>[] = [];
+    let total = 0;
+
+    const unpaidGroup = paymentStatus === "unpaid_group";
 
     if (scope === "staff") {
-      users = users.filter((user) => user.role === "admin" || user.role === "moderator");
+      const rows = await supabaseSelect("profiles", { order: "created_at.desc.nullslast" });
+      users = rows.map(mapProfileRowToUser).filter((user) => user.role === "admin" || user.role === "moderator");
+      total = users.length;
+    } else if (q || unpaidGroup) {
+      // Busca textual exige fallback por enquanto (filtro composto em displayName/email)
+      const rows = await supabaseSelect("profiles", { order: "created_at.desc.nullslast" });
+      const filtered = rows
+        .map(mapProfileRowToUser)
+        .filter((user) => {
+          const matchesQ =
+            String(user.displayName || "").toLowerCase().includes(q) ||
+            String(user.email || "").toLowerCase().includes(q);
+          const matchesRole = !role || role === "all" || String(user.role) === role;
+          const matchesPlan = !plan || plan === "all" || String(user.plan) === plan;
+          const matchesStatus = !status || status === "all" || String(user.status) === status;
+          const safePayment = String(user.paymentStatus || "");
+          const matchesPayment =
+            !paymentStatus ||
+            paymentStatus === "all" ||
+            (paymentStatus === "unpaid_group"
+              ? safePayment !== "paid" && safePayment !== "free"
+              : safePayment === paymentStatus);
+          return matchesQ && matchesRole && matchesPlan && matchesStatus && matchesPayment;
+        });
+      total = filtered.length;
+      users = filtered.slice((page - 1) * limit, page * limit);
+    } else {
+      const filters: Record<string, string | undefined> = {};
+      if (role && role !== "all") filters.role = role;
+      if (plan && plan !== "all") filters.plan = plan;
+      if (status && status !== "all") filters.status = status;
+      if (paymentStatus && paymentStatus !== "all" && paymentStatus !== "unpaid_group") {
+        filters.payment_status = paymentStatus;
+      }
+
+      const paged = await supabaseSelectPaged("profiles", {
+        select:
+          "uid,email,display_name,complete_name,phone,role,plan,status,payment_status,transaction_count,verified_email,block_reason,created_at,deleted_at,raw",
+        order: "created_at.desc.nullslast",
+        page,
+        limit,
+        filters,
+      });
+      users = paged.data.map(mapProfileRowToUser);
+      total = paged.total;
     }
 
-    return NextResponse.json({ ok: true, users }, { status: 200 });
+    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
+    return NextResponse.json({ ok: true, users, page, limit, total }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
+    apiLogger.error({
+      message: "admin_users_get_failed",
+      requestId: meta.requestId,
+      route: meta.route,
+      method: meta.method,
+      meta: { error: message },
+    });
     const status = message === "missing_auth_token" ? 401 : 500;
+    await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
 
 export async function PATCH(request: NextRequest) {
+  const meta = getRequestMeta(request);
+  const startedAt = Date.now();
   try {
+    const rate = await checkRateLimit(request, { key: "api:admin-users:patch", max: 60, windowMs: 60_000 });
+    if (!rate.allowed) {
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
+      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    }
+
     const auth = await getAuthContext(request);
     if (!isManager(auth.role)) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
@@ -146,16 +230,45 @@ export async function PATCH(request: NextRequest) {
       { onConflict: "uid" }
     );
 
+    await writeAdminAuditLog({
+      actorUid: auth.uid,
+      action: "admin.users.patch",
+      targetUid: body.uid,
+      requestId: meta.requestId,
+      route: meta.route,
+      method: meta.method,
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+      details: { updates: body.updates },
+    });
+
+    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
+    apiLogger.error({
+      message: "admin_users_patch_failed",
+      requestId: meta.requestId,
+      route: meta.route,
+      method: meta.method,
+      meta: { error: message },
+    });
     const status = message === "missing_auth_token" ? 401 : 500;
+    await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
 
 export async function POST(request: NextRequest) {
+  const meta = getRequestMeta(request);
+  const startedAt = Date.now();
   try {
+    const rate = await checkRateLimit(request, { key: "api:admin-users:post", max: 40, windowMs: 60_000 });
+    if (!rate.allowed) {
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
+      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    }
+
     const auth = await getAuthContext(request);
     if (!isManager(auth.role)) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
@@ -198,6 +311,17 @@ export async function POST(request: NextRequest) {
       if (upserts.length > 0) {
         await supabaseUpsertRows("profiles", upserts, { onConflict: "uid" });
       }
+      await writeAdminAuditLog({
+        actorUid: auth.uid,
+        action: "admin.users.normalize",
+        requestId: meta.requestId,
+        route: meta.route,
+        method: meta.method,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+        details: { affected: updateCount },
+      });
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
       return NextResponse.json({ ok: true, count: updateCount }, { status: 200 });
     }
 
@@ -210,6 +334,18 @@ export async function POST(request: NextRequest) {
       await supabaseUpsertRows("profiles", [{ uid: body.uid, transaction_count: 0, updated_at: new Date().toISOString() }], {
         onConflict: "uid",
       });
+      await writeAdminAuditLog({
+        actorUid: auth.uid,
+        action: "admin.users.reset_financial_data",
+        targetUid: body.uid,
+        requestId: meta.requestId,
+        route: meta.route,
+        method: meta.method,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+        details: { deletedTransactions: deleted },
+      });
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
       return NextResponse.json({ ok: true, deleted }, { status: 200 });
     }
 
@@ -233,6 +369,17 @@ export async function POST(request: NextRequest) {
         ],
         { onConflict: "uid" }
       );
+      await writeAdminAuditLog({
+        actorUid: auth.uid,
+        action: "admin.users.soft_delete",
+        targetUid: body.uid,
+        requestId: meta.requestId,
+        route: meta.route,
+        method: meta.method,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      });
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
       return NextResponse.json({ ok: true }, { status: 200 });
     }
 
@@ -254,6 +401,18 @@ export async function POST(request: NextRequest) {
         ],
         { onConflict: "uid" }
       );
+      await writeAdminAuditLog({
+        actorUid: auth.uid,
+        action: "admin.users.restore",
+        targetUid: body.uid,
+        requestId: meta.requestId,
+        route: meta.route,
+        method: meta.method,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+        details: { restoreData: body.restoreData !== false },
+      });
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
       return NextResponse.json({ ok: true }, { status: 200 });
     }
 
@@ -268,13 +427,33 @@ export async function POST(request: NextRequest) {
         [{ uid: body.uid, transaction_count: total, updated_at: new Date().toISOString() }],
         { onConflict: "uid" }
       );
+      await writeAdminAuditLog({
+        actorUid: auth.uid,
+        action: "admin.users.recount_transaction_count",
+        targetUid: body.uid,
+        requestId: meta.requestId,
+        route: meta.route,
+        method: meta.method,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+        details: { count: total },
+      });
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
       return NextResponse.json({ ok: true, count: total }, { status: 200 });
     }
 
     return NextResponse.json({ ok: false, error: "invalid_action" }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
+    apiLogger.error({
+      message: "admin_users_post_failed",
+      requestId: meta.requestId,
+      route: meta.route,
+      method: meta.method,
+      meta: { error: message },
+    });
     const status = message === "missing_auth_token" ? 401 : 500;
+    await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }

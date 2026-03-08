@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { enforceCreditCardPolicy } from "@/lib/credit-card/limit";
 import { resolveApiErrorStatus } from "@/lib/api/error";
+import { checkRateLimit } from "@/lib/api/rate-limit";
+import { getRequestMeta } from "@/lib/api/request-meta";
+import { apiLogger } from "@/lib/observability/logger";
+import { writeApiMetric } from "@/lib/observability/metrics";
 import {
   supabaseDeleteByFilters,
   supabaseSelect,
+  supabaseSelectPaged,
   supabaseUpsertRows,
 } from "@/services/supabase/admin";
 
@@ -81,24 +86,65 @@ async function fetchUserTransactions(uid: string) {
 }
 
 export async function GET(request: NextRequest) {
+  const meta = getRequestMeta(request);
+  const startedAt = Date.now();
   try {
+    const rate = await checkRateLimit(request, { key: "api:transactions:get", max: 180, windowMs: 60_000 });
+    if (!rate.allowed) {
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
+      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    }
+
     const { actingUid: uid } = await resolveActingContext(request);
     const groupId = request.nextUrl.searchParams.get("groupId")?.trim();
+    const pageParam = request.nextUrl.searchParams.get("page");
+    const limitParam = request.nextUrl.searchParams.get("limit");
+    const page = Math.max(1, Number(pageParam || "1"));
+    const limit = Math.max(1, Math.min(200, Number(limitParam || "50")));
 
-    const rows = await fetchUserTransactions(uid);
+    const usePaged = Boolean(pageParam || limitParam) && !groupId;
+    const paged = usePaged
+      ? await supabaseSelectPaged("transactions", {
+          select:
+            "source_id,description,amount,amount_text,amount_for_limit,tx_type,category,tx_status,payment_method,card_id,card_label,card_type,tx_date,due_date,group_id,installment_current,installment_total,created_at,raw",
+          filters: { uid },
+          order: "due_date.desc.nullslast",
+          page,
+          limit,
+        })
+      : null;
+    const rows = paged ? paged.data : await fetchUserTransactions(uid);
     const filtered = groupId ? rows.filter((row) => String(row.group_id || "") === groupId) : rows;
     const transactions = filtered.map((row) => toClientTx(uid, row));
+    const total = paged ? paged.total : transactions.length;
 
-    return NextResponse.json({ ok: true, transactions }, { status: 200 });
+    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+    return NextResponse.json({ ok: true, transactions, total, page, limit }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
+    apiLogger.error({
+      message: "transactions_get_failed",
+      requestId: meta.requestId,
+      route: meta.route,
+      method: meta.method,
+      meta: { error: message },
+    });
     const status = resolveApiErrorStatus(message);
+    await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
 
 export async function POST(request: NextRequest) {
+  const meta = getRequestMeta(request);
+  const startedAt = Date.now();
   try {
+    const rate = await checkRateLimit(request, { key: "api:transactions:post", max: 90, windowMs: 60_000 });
+    if (!rate.allowed) {
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
+      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    }
+
     const acting = await resolveActingContext(request);
     const uid = acting.actingUid;
     const body = (await request.json()) as
@@ -131,6 +177,7 @@ export async function POST(request: NextRequest) {
 
       await supabaseUpsertRows("transactions", rows, { onConflict: "id" });
       await enforceCreditCardPolicy(uid);
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
       return NextResponse.json({ ok: true, created: rows.length }, { status: 200 });
     }
 
@@ -167,6 +214,7 @@ export async function POST(request: NextRequest) {
         await supabaseUpsertRows("transactions", nextRows, { onConflict: "id" });
       }
       await enforceCreditCardPolicy(uid);
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
       return NextResponse.json({ ok: true, updated: nextRows.length }, { status: 200 });
     }
 
@@ -199,6 +247,7 @@ export async function POST(request: NextRequest) {
       });
       await enforceCreditCardPolicy(uid);
 
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
       return NextResponse.json({ ok: true, status: nextStatus }, { status: 200 });
     }
 
@@ -233,19 +282,36 @@ export async function POST(request: NextRequest) {
       }
 
       await enforceCreditCardPolicy(uid);
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
       return NextResponse.json({ ok: true, deleted: toDelete.length }, { status: 200 });
     }
 
     return NextResponse.json({ ok: false, error: "invalid_action" }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
+    apiLogger.error({
+      message: "transactions_post_failed",
+      requestId: meta.requestId,
+      route: meta.route,
+      method: meta.method,
+      meta: { error: message },
+    });
     const status = resolveApiErrorStatus(message);
+    await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
 
 export async function PATCH(request: NextRequest) {
+  const meta = getRequestMeta(request);
+  const startedAt = Date.now();
   try {
+    const rate = await checkRateLimit(request, { key: "api:transactions:patch", max: 90, windowMs: 60_000 });
+    if (!rate.allowed) {
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
+      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    }
+
     const acting = await resolveActingContext(request);
     const uid = acting.actingUid;
     const approval = await ensureImpersonationWriteApproval({
@@ -276,16 +342,33 @@ export async function PATCH(request: NextRequest) {
     });
     await enforceCreditCardPolicy(uid);
 
+    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
+    apiLogger.error({
+      message: "transactions_patch_failed",
+      requestId: meta.requestId,
+      route: meta.route,
+      method: meta.method,
+      meta: { error: message },
+    });
     const status = resolveApiErrorStatus(message);
+    await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
 
 export async function DELETE(request: NextRequest) {
+  const meta = getRequestMeta(request);
+  const startedAt = Date.now();
   try {
+    const rate = await checkRateLimit(request, { key: "api:transactions:delete", max: 60, windowMs: 60_000 });
+    if (!rate.allowed) {
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
+      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    }
+
     const acting = await resolveActingContext(request);
     const uid = acting.actingUid;
     const approval = await ensureImpersonationWriteApproval({
@@ -315,15 +398,25 @@ export async function DELETE(request: NextRequest) {
         });
       }
       await enforceCreditCardPolicy(uid);
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
       return NextResponse.json({ ok: true, deleted: toDelete.length }, { status: 200 });
     }
 
     await supabaseDeleteByFilters("transactions", { uid, source_id: transactionId as string });
     await enforceCreditCardPolicy(uid);
+    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json({ ok: true, deleted: 1 }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
+    apiLogger.error({
+      message: "transactions_delete_failed",
+      requestId: meta.requestId,
+      route: meta.route,
+      method: meta.method,
+      meta: { error: message },
+    });
     const status = resolveApiErrorStatus(message);
+    await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }

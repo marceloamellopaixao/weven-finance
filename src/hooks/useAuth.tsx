@@ -245,7 +245,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (pathname.startsWith("/admin")) {
-      if (userProfile.role !== "admin" && userProfile.role !== "moderator") {
+      if (userProfile.role !== "admin" && userProfile.role !== "moderator" && userProfile.role !== "support") {
         router.replace("/");
       }
     }

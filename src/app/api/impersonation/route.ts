@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
 
-      return NextResponse.json({ ok: true, request: { id: rows[0].id, ...action } }, { status: 200 });
+      return NextResponse.json({ ok: true, request: { id: String(rows[0]?.id || actionRequestId), ...action } }, { status: 200 });
     }
 
     return NextResponse.json({ ok: false, error: "invalid_mode" }, { status: 400 });

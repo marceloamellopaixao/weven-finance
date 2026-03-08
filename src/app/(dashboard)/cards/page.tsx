@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -639,7 +639,7 @@ export default function CreditCardPage() {
                 <Badge variant="secondary" className="bg-zinc-100 text-zinc-600 font-medium">Por Cartão</Badge>
               </div>
 
-              {activeCard?.type === "debit_card" ? (
+              {activeCard.type === "debit_card" ? (
                 <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
                   Cartão de débito: as compras devem respeitar seu saldo disponivel (Pix, transferencias e entradas).
                 </div>
@@ -662,7 +662,7 @@ export default function CreditCardPage() {
               </div>
               )}
 
-              {activeCard?.type !== "debit_card" && (
+              {activeCard.type !== "debit_card" && (
               <div className="space-y-3">
                 <div className="h-3 w-full rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden flex">
                   <div
@@ -740,7 +740,7 @@ export default function CreditCardPage() {
               <CardDescription className="text-zinc-400">As regras abaixo valem somente para o cartão ativo.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {activeCard?.type === "debit_card" ? (
+              {activeCard.type === "debit_card" ? (
                 <div className="rounded-2xl border border-zinc-700 bg-zinc-800/50 p-4 text-sm text-zinc-300">
                   Cartão de débito não usa limite de fatura. O controle ocorre pelo saldo disponivel da conta.
                 </div>
@@ -782,3 +782,4 @@ export default function CreditCardPage() {
     </div>
   );
 }
+

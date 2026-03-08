@@ -114,6 +114,46 @@ export const subscribeToAllUsers = (
   };
 };
 
+export const fetchAdminUsersPage = async (params?: {
+  page?: number;
+  limit?: number;
+  q?: string;
+  role?: UserRole | "all";
+  plan?: UserPlan | "all";
+  status?: UserStatus | "all";
+  paymentStatus?: UserPaymentStatus | "all" | "unpaid_group";
+}): Promise<{ users: UserProfile[]; total: number; page: number; limit: number }> => {
+  const query = new URLSearchParams();
+  query.set("page", String(Math.max(1, Number(params?.page || 1))));
+  query.set("limit", String(Math.max(1, Math.min(100, Number(params?.limit || 20)))));
+  if (params?.q?.trim()) query.set("q", params.q.trim());
+  if (params?.role && params.role !== "all") query.set("role", params.role);
+  if (params?.plan && params.plan !== "all") query.set("plan", params.plan);
+  if (params?.status && params.status !== "all") query.set("status", params.status);
+  if (params?.paymentStatus && params.paymentStatus !== "all" && params.paymentStatus !== "unpaid_group") {
+    query.set("paymentStatus", params.paymentStatus);
+  }
+
+  const response = await apiFetch(`/api/admin/users?${query.toString()}`, { method: "GET" });
+  const payload = (await response.json()) as {
+    ok: boolean;
+    error?: string;
+    users?: UserProfile[];
+    total?: number;
+    page?: number;
+    limit?: number;
+  };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Erro ao buscar usuários");
+  }
+  return {
+    users: payload.users || [],
+    total: Number(payload.total || 0),
+    page: Number(payload.page || params?.page || 1),
+    limit: Number(payload.limit || params?.limit || 20),
+  };
+};
+
 export const subscribeToUserProfile = (
   uid: string,
   onChange: (profile: UserProfile | null) => void,

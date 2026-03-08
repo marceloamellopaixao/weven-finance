@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
@@ -37,6 +37,7 @@ import { getCheckoutLink } from "@/services/billingService";
 import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
 import { useRouter } from "next/navigation";
+import { useOnboarding } from "@/hooks/useOnboarding";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -57,7 +58,7 @@ const ITEMS_PER_PAGE = 12;
 const FREE_PLAN_LIMIT = 20;
 const CHECKIN_MODAL_COOLDOWN_MS = 60 * 60 * 1000; // 1 hora
 
-// Tipo para feedback genérico (VALIDA??O DE PAGAMENTO)
+// Tipo para feedback genérico (VALIDAO DE PAGAMENTO)
 type FeedbackData = {
   isOpen: boolean;
   type: 'success' | 'error' | 'info';
@@ -164,6 +165,7 @@ export default function DashboardPage() {
   } = useCategories();
   const { startTour } = useDashboardTour();
   const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
+  const { status: onboardingStatus, loading: onboardingLoading, dismiss: dismissOnboarding } = useOnboarding();
 
   // --- 1. STATES ---
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -247,7 +249,7 @@ export default function DashboardPage() {
     }
   })
 
-  // --- 3. CHECK-IN DI?RIO (Pop-up Inteligente) ---
+  // --- 3. CHECK-IN DIRIO (Pop-up Inteligente) ---
   useEffect(() => {
     if (loading || !user || hasRunCheckin) return;
 
@@ -417,6 +419,33 @@ export default function DashboardPage() {
     };
   }, [selectedPaymentCard, paymentMethod, realCurrentBalance, getLinkedCardTransactions]);
 
+  const monthlyInsights = useMemo(() => {
+    const monthTransactions = transactions.filter(
+      (t) => typeof t.dueDate === "string" && t.dueDate.startsWith(selectedMonth)
+    );
+
+    const biggestExpense = monthTransactions
+      .filter((t) => t.type === "expense")
+      .sort((a, b) => b.amount - a.amount)[0];
+
+    const creditRisks = paymentCards
+      .filter((card) => card.type !== "debit_card")
+      .map((card) => {
+        const linked = getLinkedCardTransactions(card).filter((tx) => tx.paymentMethod === "credit_card" && tx.status === "pending");
+        const used = linked.reduce((acc, tx) => acc + Number(tx.amountForLimit ?? tx.amount ?? 0), 0);
+        const limit = Number(card.creditLimit || 0);
+        const usagePct = limit > 0 ? (used / limit) * 100 : 0;
+        return { card, used, limit, usagePct };
+      })
+      .filter((item) => item.limit > 0 && item.usagePct >= 80)
+      .sort((a, b) => b.usagePct - a.usagePct);
+
+    return {
+      biggestExpense,
+      topRisk: creditRisks[0] || null,
+    };
+  }, [transactions, selectedMonth, paymentCards, getLinkedCardTransactions]);
+
   const validateCardLimitBeforeSave = ({
     card,
     method,
@@ -484,9 +513,10 @@ export default function DashboardPage() {
   }, [transactions]);
 
   const editingGroupTransactions = useMemo(() => {
-    if (!editingTx?.groupId) return [];
+    const groupId = editingTx?.groupId;
+    if (!groupId) return [];
     return transactions
-      .filter((tx) => tx.groupId === editingTx.groupId)
+      .filter((tx) => tx.groupId === groupId)
       .sort((a, b) => Number(a.installmentCurrent || 0) - Number(b.installmentCurrent || 0));
   }, [transactions, editingTx?.groupId]);
 
@@ -532,7 +562,9 @@ export default function DashboardPage() {
       return;
     }
     if (!availablePaymentCards.some((card) => card.id === selectedPaymentCardId)) {
-      const fallbackCard = paymentCards.find((card) => card.type === paymentMethod || card.type === "credit_and_debit") || availablePaymentCards[0];
+      const fallbackCard =
+        paymentCards.find((card) => card.type === paymentMethod || card.type === "credit_and_debit") ||
+        availablePaymentCards[0];
       setSelectedPaymentCardId(fallbackCard?.id || "");
       if (fallbackCard && fallbackCard.type !== "credit_and_debit" && fallbackCard.type !== paymentMethod) {
         setPaymentMethod(fallbackCard.type);
@@ -703,7 +735,7 @@ export default function DashboardPage() {
       if (category === categoryName || category.startsWith(`${categoryName}${CATEGORY_PATH_SEPARATOR}`)) {
         setCategory("Outros");
       }
-      if (editingTx?.category === categoryName || editingTx?.category.startsWith(`${categoryName}${CATEGORY_PATH_SEPARATOR}`)) {
+      if (editingTx && (editingTx.category === categoryName || editingTx.category.startsWith(`${categoryName}${CATEGORY_PATH_SEPARATOR}`))) {
         setEditingTx({ ...editingTx, category: "Outros" });
       }
     } catch (error) {
@@ -716,9 +748,11 @@ export default function DashboardPage() {
   const handleStartEditCategory = (categoryName: string) => {
     setEditingCategoryName(categoryName);
     setEditingCategoryInput(getSubcategoryName(categoryName));
-    setEditingCategoryParent(isSubcategory(categoryName)
-      ? (isLinkedSubcategory(categoryName) ? getCategoryRoot(categoryName) : "Outros")
-      : "");
+    setEditingCategoryParent(
+      isSubcategory(categoryName)
+        ? (isLinkedSubcategory(categoryName) ? getCategoryRoot(categoryName) : "Outros")
+        : ""
+    );
   };
 
   const handleCancelEditCategory = () => {
@@ -882,35 +916,8 @@ export default function DashboardPage() {
   };
 
   const openEditModal = (tx: Transaction) => {
-    const nextTx = { ...tx };
-    const isCardPayment = nextTx.paymentMethod === "credit_card" || nextTx.paymentMethod === "debit_card";
-
-    if (isCardPayment) {
-      const direct = nextTx.cardId ? paymentCards.find((card) => card.id === nextTx.cardId) : undefined;
-      const inferred = !direct && nextTx.cardLabel
-        ? paymentCards.find((card) => {
-            const label = String(nextTx.cardLabel || "").toLowerCase();
-            return label.includes(card.last4) && label.includes(card.bankName.toLowerCase());
-          })
-        : undefined;
-      const linkedCard = direct || inferred;
-
-      if (linkedCard) {
-        nextTx.cardId = linkedCard.id;
-        nextTx.cardLabel = `${linkedCard.bankName} ⬢⬢⬢⬢ ${linkedCard.last4}`;
-        nextTx.cardType = normalizeCardTypeForTransaction(linkedCard.type, nextTx.paymentMethod);
-        if (linkedCard.type === "credit_card" || linkedCard.type === "debit_card") {
-          nextTx.paymentMethod = linkedCard.type;
-        }
-      }
-    } else {
-      delete nextTx.cardId;
-      delete nextTx.cardLabel;
-      delete nextTx.cardType;
-    }
-
-    setEditingTx(nextTx);
-    setIsEditOpen(true);
+    if (!tx.id) return;
+    router.push(`/transactions/${encodeURIComponent(tx.id)}/edit`);
   };
 
   // --- COMPONENTE DO FORMULÁRIO ---
@@ -1048,15 +1055,15 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
           <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
             <Layers className="h-3.5 w-3.5 text-violet-500" />
-            {type === 'expense' && (getCategoryRoot(category) === 'Streaming' ? 'Recorrência (Mensal)' : 'Compra Parcelada?')}
-            {type === 'income' && (getCategoryRoot(category) === 'Salário' ? 'Recorrência (Mensal)' : 'Recebimento Parcelado?')}
+            {type === 'expense' && (getCategoryRoot(category) === 'Streaming' ? 'Recorrência (Mensal)' : 'Compra Parcelada')}
+            {type === 'income' && (getCategoryRoot(category) === 'Salário' ? 'Recorrência (Mensal)' : 'Recebimento Parcelado')}
           </Label>
           <Switch id="inst-switch" className="scale-100 data-[state=checked]:bg-violet-600" checked={isInstallment} onCheckedChange={setIsInstallment} />
         </div>
         {isInstallment && (
           <div className="animate-in slide-in-from-top-2 pt-1">
             <Label className="text-xs font-medium text-zinc-500">
-              {getCategoryRoot(category) === 'Streaming' ? 'Meses de Assinatura (PREVIS?O)' : 'Número de Parcelas'}
+              {getCategoryRoot(category) === 'Streaming' ? 'Meses de Assinatura (PREVISO)' : 'Número de Parcelas'}
             </Label>
             <Input type="number" className="h-10 mt-1.5 bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" min="2" max="60" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
           </div>
@@ -1073,7 +1080,7 @@ export default function DashboardPage() {
     </div>
   );
 
-  // --- 7. RENDERIZA??O E FILTRAGEM ---
+  // --- 7. RENDERIZAO E FILTRAGEM ---
 
   const monthTransactions = transactions.filter(t => t.dueDate && t.dueDate.startsWith(selectedMonth));
 
@@ -1100,6 +1107,46 @@ export default function DashboardPage() {
   const monthIncome = monthTransactions.filter(t => t.type === 'income').reduce((acc, curr) => acc + curr.amount, 0);
   const monthExpense = monthTransactions.filter(t => t.type === 'expense').reduce((acc, curr) => acc + curr.amount, 0);
   const monthBalance = monthIncome - monthExpense;
+  const effectivePlan = userProfile?.plan || "free";
+  const effectivePaymentStatus = userProfile?.paymentStatus || "pending";
+  const freeLimit = plans.free.limit || FREE_PLAN_LIMIT;
+  const freeUsagePct = freeLimit > 0 ? (transactionsThisMonthCount / freeLimit) * 100 : 0;
+  const overduePendingCount = transactions.filter((t) => t.status === "pending" && typeof t.dueDate === "string" && t.dueDate < todayStr).length;
+  const hasBillingIssue =
+    !isBillingExemptRole &&
+    effectivePlan !== "free" &&
+    (effectivePaymentStatus === "pending" || effectivePaymentStatus === "overdue" || effectivePaymentStatus === "not_paid");
+
+  const upgradePrompt = (() => {
+    if (hasBillingIssue) {
+      return {
+        kind: "billing" as const,
+        title: "Seu plano está com pendência de pagamento",
+        description: "Regularize a assinatura para manter recursos premium e evitar bloqueios de acesso.",
+        ctaPrimary: "Regularizar agora",
+      };
+    }
+
+    if (!isBillingExemptRole && effectivePlan === "free" && freeUsagePct >= 80) {
+      return {
+        kind: "upgrade" as const,
+        title: "Você está perto do limite do plano grátis",
+        description: `Você já usou ${transactionsThisMonthCount}/${freeLimit} lançamentos neste mês.`,
+        ctaPrimary: "Fazer upgrade",
+      };
+    }
+
+    if (!isBillingExemptRole && effectivePlan === "free" && monthlyInsights.topRisk) {
+      return {
+        kind: "upgrade" as const,
+        title: "Seu uso financeiro está evoluindo",
+        description: "Upgrade libera mais controle para cartões e crescimento sem limite mensal de lançamentos.",
+        ctaPrimary: "Conhecer planos",
+      };
+    }
+
+    return null;
+  })();
 
   const getCategoryStyle = (catName: string) => {
     const direct = categories.find(c => c.name === catName);
@@ -1194,7 +1241,7 @@ export default function DashboardPage() {
 
       <main className="container mx-auto p-3 md:p-8 space-y-6 max-w-7xl">
 
-        {/* TOP BAR: TÍTULO + CONTROLES + BOT?O NOVA TRANSA??O */}
+        {/* TOP BAR: TÍTULO + CONTROLES + BOTO NOVA TRANSAO */}
         <div className={`${fadeInUp} flex flex-col md:flex-row md:items-center justify-between gap-4`}>
           <div id="tour-welcome-header">
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Visão Geral</h1>
@@ -1205,7 +1252,7 @@ export default function DashboardPage() {
             {/* Botão de Nova Transação (Visível em Mobile e Desktop) */}
             <Button
               id="tour-new-transaction"
-              onClick={() => setIsFormOpen(true)}
+              onClick={() => router.push("/transactions/new")}
               className="h-11 rounded-xl bg-linear-to-r from-violet-600 to-indigo-600 text-white font-bold shadow-lg shadow-violet-500/25 active:scale-[0.98] transition-all w-full sm:w-auto hover:cursor-pointer duration-200"
             >
               <Plus className="mr-2 h-4 w-4" /> Nova Transação
@@ -1238,6 +1285,136 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.completed && (
+          <Card className={`${fadeInUp} delay-100 border-none shadow-lg shadow-blue-200/40 bg-white dark:bg-zinc-900 rounded-2xl`}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Info className="h-4 w-4 text-blue-600" /> Primeiros passos
+              </CardTitle>
+              <CardDescription>
+                Complete o onboarding para liberar o melhor da plataforma.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="h-2 w-full rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                <div
+                  className="h-full bg-linear-to-r from-blue-500 to-violet-600 transition-all duration-300"
+                  style={{ width: `${(onboardingStatus.progress / onboardingStatus.total) * 100}%` }}
+                />
+              </div>
+              <p className="text-xs text-zinc-500">
+                Progresso: {onboardingStatus.progress}/{onboardingStatus.total}
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => router.push("/transactions/new")}
+                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstTransaction ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"}`}
+                >
+                  {onboardingStatus.steps.firstTransaction ? "✓ " : ""}Primeira transação
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/cards")}
+                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstCard ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"}`}
+                >
+                  {onboardingStatus.steps.firstCard ? "✓ " : ""}Primeiro cartão
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/porquinho")}
+                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstGoal ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"}`}
+                >
+                  {onboardingStatus.steps.firstGoal ? "✓ " : ""}Primeira meta
+                </button>
+              </div>
+              <div className="flex justify-end">
+                <Button variant="ghost" size="sm" onClick={() => void dismissOnboarding()} className="text-zinc-500 hover:cursor-pointer">
+                  Fechar onboarding
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className={`${fadeInUp} delay-120 border-none shadow-lg bg-white dark:bg-zinc-900 rounded-2xl`}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Insights Automáticos</CardTitle>
+            <CardDescription className="text-zinc-500">Resumo inteligente do mês selecionado.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
+              <p className="text-xs text-zinc-500">Maior gasto do mês</p>
+              {monthlyInsights.biggestExpense ? (
+                <p className="text-sm font-semibold text-zinc-900 mt-1">
+                  {monthlyInsights.biggestExpense.description} • {formatCurrencyDisplay(monthlyInsights.biggestExpense.amount)}
+                </p>
+              ) : (
+                <p className="text-sm font-semibold text-zinc-600 mt-1">Sem despesas no período.</p>
+              )}
+            </div>
+            <div
+              className={`rounded-xl border px-3 py-2 ${
+                monthlyInsights.topRisk ? "border-amber-300 bg-amber-50" : "border-emerald-200 bg-emerald-50"
+              }`}
+            >
+              <p className="text-xs text-zinc-500">Risco de estourar limite</p>
+              {monthlyInsights.topRisk ? (
+                <p className="text-sm font-semibold text-amber-700 mt-1">
+                  {monthlyInsights.topRisk.card.bankName} •••• {monthlyInsights.topRisk.card.last4} em {monthlyInsights.topRisk.usagePct.toFixed(1)}%
+                </p>
+              ) : (
+                <p className="text-sm font-semibold text-emerald-700 mt-1">Nenhum cartão em risco no momento.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {upgradePrompt && (
+          <Card className={`${fadeInUp} delay-130 border-none shadow-lg rounded-2xl ${
+            upgradePrompt.kind === "billing"
+              ? "bg-linear-to-r from-amber-600 to-orange-600 text-white"
+              : "bg-linear-to-r from-violet-600 to-indigo-600 text-white"
+          }`}>
+            <CardContent className="p-4 md:p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-sm font-bold">{upgradePrompt.title}</p>
+                <p className="text-xs text-white/90">
+                  {upgradePrompt.description}
+                  {overduePendingCount > 0 ? ` Você também tem ${overduePendingCount} lançamento(s) vencido(s).` : ""}
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 min-w-fit">
+                {upgradePrompt.kind === "billing" ? (
+                  <Button
+                    className="h-9 bg-white text-amber-700 hover:bg-zinc-100"
+                    onClick={() => router.push("/settings?tab=billing")}
+                  >
+                    {upgradePrompt.ctaPrimary}
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      className="h-9 bg-white text-violet-700 hover:bg-zinc-100"
+                      onClick={() => handleStartCheckout("premium")}
+                      disabled={isOpeningCheckout === "premium"}
+                    >
+                      {isOpeningCheckout === "premium" ? "Abrindo..." : upgradePrompt.ctaPrimary}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-9 border-white/50 text-white hover:bg-white/10"
+                      onClick={() => router.push("/settings?tab=billing")}
+                    >
+                      Ver planos
+                    </Button>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* --- KPI Cards --- */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           {/* SALDO EM CAIXA */}
@@ -1266,12 +1443,12 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* MOVIMENTA??O */}
+          {/* MOVIMENTAO */}
           <Card id="tour-movement-card" className={`${fadeInUp} delay-300 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl`}>
             <div className="absolute inset-0 bg-linear-to-br from-violet-500/5 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">MOVIMENTA??O (Mês)</CardTitle>
+                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">MOVIMENTAO (Mês)</CardTitle>
                 <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
                   {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -1295,11 +1472,11 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* PREVIS?O */}
+          {/* PREVISO */}
           <Card id="tour-forecast-card" className={`${fadeInUp} delay-500 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">PREVIS?O de Fechamento</CardTitle>
+                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">PREVISO de Fechamento</CardTitle>
                 <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
                   {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -1321,7 +1498,7 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* --- Layout Principal (Agora Coluna ?nica) --- */}
+        {/* --- Layout Principal (Agora Coluna nica) --- */}
         <div className="w-full space-y-8">
 
           {/* Gráfico do Fluxo Mensal */}
@@ -1510,10 +1687,11 @@ export default function DashboardPage() {
                   <DialogHeader className="mb-6">
                     <div className="flex items-center justify-between">
                       <DialogTitle className="text-xl flex items-center gap-2">
-                        {editingTx.type === 'expense' ?
-                          <div className="p-2 bg-red-100 text-red-600 rounded-full"><TrendingDown className="h-5 w-5" /></div> :
+                        {editingTx.type === 'expense' ? (
+                          <div className="p-2 bg-red-100 text-red-600 rounded-full"><TrendingDown className="h-5 w-5" /></div>
+                        ) : (
                           <div className="p-2 bg-emerald-100 text-emerald-600 rounded-full"><TrendingUp className="h-5 w-5" /></div>
-                        }
+                        )}
                         <span>Editar {editingTx.type === 'expense' ? 'Despesa' : 'Receita'}</span>
                       </DialogTitle>
                       {editingTx.groupId && (
@@ -1631,10 +1809,10 @@ export default function DashboardPage() {
                           const fallbackCard = paymentCards.find((card) => card.type === nextMethod || card.type === "credit_and_debit") || paymentCards[0];
                             setEditingTx({
                               ...editingTx,
-                              paymentMethod: fallbackCard?.type === "credit_card" || fallbackCard?.type === "debit_card" ? fallbackCard.type : nextMethod,
-                              cardId: fallbackCard?.id,
+                              paymentMethod: fallbackCard.type === "credit_card" || fallbackCard.type === "debit_card" ? fallbackCard.type : nextMethod,
+                              cardId: fallbackCard.id,
                               cardLabel: fallbackCard ? `${fallbackCard.bankName} ⬢⬢⬢⬢ ${fallbackCard.last4}` : undefined,
-                              cardType: normalizeCardTypeForTransaction(fallbackCard?.type, nextMethod),
+                              cardType: normalizeCardTypeForTransaction(fallbackCard.type, nextMethod),
                             });
                         }}
                       >
@@ -1735,7 +1913,7 @@ export default function DashboardPage() {
                 Excluir Transação
               </DialogTitle>
               <DialogDescription className="pt-3 text-base">
-                Tem certeza? Você vai apagar: <br /> <span className="font-bold text-zinc-900 dark:text-white mt-1 block">{txToDelete?.description}</span>
+                Tem certeza Você vai apagar: <br /> <span className="font-bold text-zinc-900 dark:text-white mt-1 block">{txToDelete?.description}</span>
               </DialogDescription>
             </DialogHeader>
 
@@ -1800,7 +1978,7 @@ export default function DashboardPage() {
                 <CheckCircle2 className="h-6 w-6" /> Check-in Diário
               </DialogTitle>
               <DialogDescription className="pt-2 text-base">
-                Você tem <strong>{pendingCheckins.length}</strong> contas vencidas ou vencendo hoje. Vamos atualizar?
+                Você tem <strong>{pendingCheckins.length}</strong> contas vencidas ou vencendo hoje. Vamos atualizar
               </DialogDescription>
             </DialogHeader>
 
@@ -1857,7 +2035,7 @@ export default function DashboardPage() {
                   onClick={() => handleStartCheckout("premium")}
                   disabled={isOpeningCheckout === "premium"}
                   variant="outline"
-                  className="w-full h-12 rounded-xl  sm:text-lg font-bold border-violet-200 text-violet-700 hover:bg-violet-50 shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
+                  className="w-full h-12 rounded-xl sm:text-lg font-bold border-violet-200 text-violet-700 hover:bg-violet-50 shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
                 >
                   <Medal className="inline-block h-6 w-6 text-violet-600 dark:text-violet-400" /> {isOpeningCheckout === "premium" ? "Abrindo..." : "Premium"}
                 </Button>
@@ -1865,7 +2043,7 @@ export default function DashboardPage() {
                 <Button
                   onClick={() => handleStartCheckout("pro")}
                   disabled={isOpeningCheckout === "pro"}
-                  className="w-full h-12 rounded-xl bg-violet-600 hover:bg-violet-700  sm:text-lg font-bold shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
+                  className="w-full h-12 rounded-xl bg-violet-600 hover:bg-violet-700 sm:text-lg font-bold shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
                 >
                   <Medal className="inline-block h-6 w-6 text-zinc-100 dark:text-zinc-200" /> {isOpeningCheckout === "pro" ? "Abrindo..." : "Pro"}
                 </Button>
@@ -1951,7 +2129,7 @@ export default function DashboardPage() {
                             type="button"
                             size="sm"
                             className={`h-8 px-2 shrink-0 w-full sm:w-auto text-white ${
-                              cat.name === "Outros"
+                               cat.name === "Outros"
                                 ? "bg-zinc-500 hover:bg-zinc-600"
                                 : hidden
                                   ? "bg-emerald-600 hover:bg-emerald-700"
@@ -2069,6 +2247,9 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+
+
 
 
 

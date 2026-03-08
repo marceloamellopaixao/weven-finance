@@ -1,5 +1,17 @@
 import { UserPlan } from "@/types/user";
 
+export type BillingHistoryItem = {
+  id: string;
+  createdAt: string | null;
+  provider: string;
+  eventType: string;
+  action: string;
+  plan: string | null;
+  paymentStatus: string | null;
+  amount: number | null;
+  currency: string | null;
+};
+
 export async function getCheckoutLink(
   plan: Exclude<UserPlan, "free">,
   idToken: string
@@ -59,6 +71,27 @@ export async function confirmPreapproval(
     targetPlan: payload.targetPlan,
     targetPaymentStatus: payload.targetPaymentStatus,
   };
+}
+
+export async function getBillingHistory(idToken: string): Promise<BillingHistoryItem[]> {
+  const response = await fetch("/api/billing/history", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+
+  const payload = (await response.json()) as {
+    ok: boolean;
+    error?: string;
+    history?: BillingHistoryItem[];
+  };
+
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Nao foi possivel carregar o historico");
+  }
+
+  return Array.isArray(payload.history) ? payload.history : [];
 }
 
 export async function cancelSubscription(

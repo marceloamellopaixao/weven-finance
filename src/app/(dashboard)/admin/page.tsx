@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePlans } from "@/hooks/usePlans";
 import {
-  subscribeToAllUsers,
+  fetchAdminUsersPage,
   updateUserStatus,
   updateUserPlan,
   updateUserRole,
@@ -96,8 +96,12 @@ import {
   MessageSquare,
   Eye,
   Bell,
+  Calculator,
+  Download,
+  FilterX,
 } from "lucide-react";
-import { deleteTicket, markSupportTicketsAsSeen, subscribeToSupportTickets, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
+import { deleteTicket, fetchSupportTicketsPage, markSupportTicketsAsSeen, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
+import { subscribeToTableChanges } from "@/services/supabase/realtime";
 import { DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@radix-ui/react-dropdown-menu";
 import {
   activateImpersonation,
@@ -114,6 +118,56 @@ type FeedbackData = {
   type: 'success' | 'error' | 'info';
   title: string;
   message: string;
+};
+
+type AdminAuditLog = {
+  id: string;
+  actorUid: string;
+  action: string;
+  targetUid: string | null;
+  requestId: string | null;
+  route: string | null;
+  method: string | null;
+  ip: string | null;
+  createdAt: string | null;
+  details: Record<string, unknown>;
+};
+
+type AdminMetricsSummary = {
+  total: number;
+  errors: number;
+  rateLimited: number;
+  avgDurationMs: number;
+  errorRatePct: number;
+  rateLimitedPct: number;
+  previousTotal?: number;
+  trafficDropPct?: number;
+};
+
+type AdminMetricsRoute = {
+  route: string;
+  total: number;
+  errors: number;
+  rateLimited: number;
+  avgDurationMs: number;
+};
+
+type AdminMetricsAlert = {
+  code?: string;
+  level: "critical" | "high" | "medium";
+  title: string;
+  description: string;
+  value?: number;
+};
+
+type AdminHealth = {
+  dbHealthy: boolean;
+  latestWebhookAt: string | null;
+  webhookDelayMinutes: number | null;
+  failedPayments24h: number;
+  pendingRecoveryUsers: number;
+  apiErrors1h: number;
+  apiAvgLatency1h: number;
 };
 
 function formatDateSafe(value: unknown) {
@@ -135,9 +189,10 @@ function formatDateSafe(value: unknown) {
 
 // Dono Supremo (Hardcoded para segurança extra na UI)
 const CREATOR_SUPREME = "Z3ciyXudWuZZywhojA6iWJTurH52";
+const ADMIN_USERS_FILTERS_STORAGE_KEY = "wevenfinance:admin:users-filters:v1";
 
 export default function AdminPage() {
-  const { userProfile, loading } = useAuth();
+  const { user, userProfile, loading } = useAuth();
   const { plans } = usePlans();
   const router = useRouter();
   const pathname = usePathname();
@@ -152,15 +207,39 @@ export default function AdminPage() {
 
   // Users Data
   const [users, setUsers] = useState<UserWithCount[]>([]);
+  const [usersTotal, setUsersTotal] = useState(0);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [isNormalizing, setIsNormalizing] = useState(false);
 
   // Support Data
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [ticketsTotal, setTicketsTotal] = useState(0);
+  const [supportUnseenCount, setSupportUnseenCount] = useState(0);
+  const [supportPage, setSupportPage] = useState(1);
+  const supportPerPage = 12;
   const [staffMembers, setStaffMembers] = useState<UserProfile[]>([]);
   const [viewTicket, setViewTicket] = useState<SupportTicket | null>(null);
   const [ticketToDelete, setTicketToDelete] = useState<SupportTicket | null>(null);
   const [isMarkingSupportSeen, setIsMarkingSupportSeen] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
+  const [auditSearch, setAuditSearch] = useState("");
+  const [auditActionFilter, setAuditActionFilter] = useState("all");
+  const [auditActorUidFilter, setAuditActorUidFilter] = useState("");
+  const [auditTargetUidFilter, setAuditTargetUidFilter] = useState("");
+  const [auditFromDate, setAuditFromDate] = useState("");
+  const [auditToDate, setAuditToDate] = useState("");
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const auditPerPage = 20;
+  const [metricsWindowMinutes, setMetricsWindowMinutes] = useState("60");
+  const [metricsSummary, setMetricsSummary] = useState<AdminMetricsSummary | null>(null);
+  const [metricsByRoute, setMetricsByRoute] = useState<AdminMetricsRoute[]>([]);
+  const [metricsAlerts, setMetricsAlerts] = useState<AdminMetricsAlert[]>([]);
+  const [criticalMetricsAlerts, setCriticalMetricsAlerts] = useState<AdminMetricsAlert[]>([]);
+  const [healthData, setHealthData] = useState<AdminHealth | null>(null);
+  const [healthAlerts, setHealthAlerts] = useState<AdminMetricsAlert[]>([]);
+  const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
 
   // --- FILTROS ---
   const [searchTerm, setSearchTerm] = useState("");
@@ -173,7 +252,7 @@ export default function AdminPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const usersPerPage = 10;
 
-  // --- MODAIS DE A??O ---
+  // --- MODAIS DE A?O ---
   const [userToReset, setUserToReset] = useState<UserProfile | null>(null);
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const [deletedUserData, setDeletedUserData] = useState<DeletionSuccessData>(null);
@@ -214,14 +293,15 @@ export default function AdminPage() {
     return tickets.filter((ticket) => !Array.isArray(ticket.staffSeenBy) || !ticket.staffSeenBy.includes(userProfile.uid));
   }, [tickets, userProfile]);
 
-  const unseenSupportCount = unseenSupportTickets.length;
+  const unseenSupportCount = supportUnseenCount || unseenSupportTickets.length;
 
   const allowedTabs = useMemo(() => {
-    if (!userProfile) return ["users", "support"];
-    const tabs = ["support"];
+    if (!userProfile) return ["users", "support", "audit"];
+    const tabs = ["support", "audit"];
     if (userProfile.role === "admin" || userProfile.role === "moderator") {
       tabs.unshift("users");
       tabs.push("restore");
+      tabs.push("metrics");
     }
     if (userProfile.role === "admin") {
       tabs.push("plans");
@@ -235,6 +315,15 @@ export default function AdminPage() {
     params.set("tab", tab);
     router.replace(`${pathname}?${params.toString()}`);
   }, [pathname, router, searchParams]);
+
+  const clearUsersFilters = useCallback(() => {
+    setSearchTerm("");
+    setRoleFilter("all");
+    setPlanFilter("all");
+    setStatusFilter("all");
+    setPaymentStatusFilter("all");
+    setCurrentPage(1);
+  }, []);
 
   // Permissão de Visualização na Tabela de Usuários
   const canViewRole = useCallback((targetRole: UserRole) => {
@@ -316,6 +405,46 @@ export default function AdminPage() {
   }, [plans]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(ADMIN_USERS_FILTERS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<{
+        searchTerm: string;
+        roleFilter: UserRole | "all";
+        planFilter: UserPlan | "all";
+        statusFilter: UserStatus | "all";
+        paymentStatusFilter: PaymentFilterType;
+      }>;
+      if (typeof parsed.searchTerm === "string") setSearchTerm(parsed.searchTerm);
+      if (parsed.roleFilter) setRoleFilter(parsed.roleFilter);
+      if (parsed.planFilter) setPlanFilter(parsed.planFilter);
+      if (parsed.statusFilter) setStatusFilter(parsed.statusFilter);
+      if (parsed.paymentStatusFilter) setPaymentStatusFilter(parsed.paymentStatusFilter);
+    } catch {
+      // Ignora parse inválido
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        ADMIN_USERS_FILTERS_STORAGE_KEY,
+        JSON.stringify({
+          searchTerm,
+          roleFilter,
+          planFilter,
+          statusFilter,
+          paymentStatusFilter,
+        })
+      );
+    } catch {
+      // Ignora falha de storage
+    }
+  }, [searchTerm, roleFilter, planFilter, statusFilter, paymentStatusFilter]);
+
+  useEffect(() => {
     if (loading || !userProfile || isTabBootstrapped) return;
     const tabFromUrl = searchParams.get("tab");
     if (tabFromUrl && allowedTabs.includes(tabFromUrl)) {
@@ -336,61 +465,95 @@ export default function AdminPage() {
     }
   }, [activeTab, allowedTabs, isTabBootstrapped, pathname, router, searchParams]);
 
-  // --- Contagem ---
-  const attachCounts = useCallback(async (list: UserProfile[]) => {
-    const withCounts = await Promise.all(
-      list.map(async (u) => {
-        try {
-          const realCount = await getUserTransactionCount(u.uid);
-          return { ...u, transactionCount: realCount };
-        } catch {
-          return { ...u, transactionCount: NaN };
-        }
-      })
-    );
-    setUsers(withCounts);
-  }, []);
-
-  // --- Users realtime ---
   useEffect(() => {
-    if (loading) return;
-    if (!userProfile) return;
+    if (loading || !userProfile) return;
+    if (userProfile.role !== "admin" && userProfile.role !== "moderator") return;
+    if (activeTab !== "users" && activeTab !== "restore") return;
 
-    const shouldLoadUsers = userProfile.role === "admin" || userProfile.role === "moderator";
-
-    let unsubscribeUsers = () => { };
-
-    if (shouldLoadUsers) {
-      setIsLoadingUsers(true);
-      unsubscribeUsers = subscribeToAllUsers(
-        (list) => {
-          attachCounts(list).finally(() => setIsLoadingUsers(false));
-        },
-        () => {
+    let cancelled = false;
+    const loadUsers = async () => {
+      try {
+        setIsLoadingUsers(true);
+        const effectiveStatus = activeTab === "restore" ? "deleted" : statusFilter;
+        const payload = await fetchAdminUsersPage({
+          page: currentPage,
+          limit: usersPerPage,
+          q: searchTerm,
+          role: roleFilter,
+          plan: planFilter,
+          status: effectiveStatus,
+          paymentStatus: paymentStatusFilter,
+        });
+        if (cancelled) return;
+        setUsers(payload.users as UserWithCount[]);
+        setUsersTotal(payload.total);
+      } catch {
+        if (!cancelled) {
           setUsers([]);
-          setIsLoadingUsers(false);
+          setUsersTotal(0);
         }
-      );
-    }
+      } finally {
+        if (!cancelled) setIsLoadingUsers(false);
+      }
+    };
 
-    // Fetch de Tickets de Suporte (Todos carregam, filtrado pelo serviço)
-    const unsubscribeTickets = subscribeToSupportTickets(
-      userProfile.uid,
-      userProfile.role,
-      (data) => setTickets(data),
-      (err) => console.error(err)
-    );
+    void loadUsers();
+    const interval = setInterval(() => void loadUsers(), 15000);
+    const stopRealtime = subscribeToTableChanges({
+      table: "profiles",
+      onChange: () => void loadUsers(),
+    });
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      stopRealtime();
+    };
+  }, [activeTab, loading, userProfile, currentPage, usersPerPage, searchTerm, roleFilter, planFilter, statusFilter, paymentStatusFilter]);
 
-    // Fetch de Staff (Apenas Admin vê para atribuir)
-    if (userProfile.role === 'admin') {
-      getStaffUsers().then(setStaffMembers);
-    }
+  useEffect(() => {
+    if (loading || !userProfile) return;
+    if (activeTab !== "support") return;
+
+    let cancelled = false;
+    const loadTickets = async () => {
+      try {
+        const payload = await fetchSupportTicketsPage({
+          page: supportPage,
+          limit: supportPerPage,
+        });
+        if (cancelled) return;
+        setTickets(payload.tickets);
+        setTicketsTotal(payload.total);
+        setSupportUnseenCount(payload.unseenCount);
+      } catch {
+        if (!cancelled) {
+          setTickets([]);
+          setTicketsTotal(0);
+          setSupportUnseenCount(0);
+        }
+      }
+    };
+
+    void loadTickets();
+    const interval = setInterval(() => void loadTickets(), 10000);
+    const stopRealtime = subscribeToTableChanges({
+      table: "support_requests",
+      onChange: () => void loadTickets(),
+    });
 
     return () => {
-      unsubscribeUsers();
-      unsubscribeTickets();
+      cancelled = true;
+      clearInterval(interval);
+      stopRealtime();
     };
-  }, [loading, userProfile, attachCounts]);
+  }, [activeTab, loading, userProfile, supportPage]);
+
+  useEffect(() => {
+    if (!userProfile) return;
+    if (userProfile.role === 'admin') {
+      void getStaffUsers().then(setStaffMembers);
+    }
+  }, [userProfile]);
 
   // --- Helper para Feedback ---
   const showFeedback = (type: 'success' | 'error' | 'info', title: string, message: string) => {
@@ -439,6 +602,97 @@ export default function AdminPage() {
       border: "border-red-200",
     };
   };
+
+  const formatAuditAction = (action: string) =>
+    action
+      .replace(/\./g, " • ")
+      .replace(/_/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const getMetricsAlertTone = (level: AdminMetricsAlert["level"]) => {
+    if (level === "critical") {
+      return "border-red-300 bg-red-50 text-red-800";
+    }
+    if (level === "high") {
+      return "border-orange-300 bg-orange-50 text-orange-800";
+    }
+    return "border-amber-300 bg-amber-50 text-amber-800";
+  };
+
+  const onlyCriticalAlerts = useCallback(
+    (alerts: AdminMetricsAlert[]) => alerts.filter((alert) => alert.level === "critical"),
+    []
+  );
+
+  const getTicketPriorityLabel = (priority?: string) => {
+    if (priority === "urgent") return "Urgente";
+    if (priority === "high") return "Alta";
+    if (priority === "medium") return "Média";
+    return "Baixa";
+  };
+
+  const getTicketPriorityTone = (priority?: string) => {
+    if (priority === "urgent") return "bg-red-600 text-white";
+    if (priority === "high") return "bg-orange-500 text-white";
+    if (priority === "medium") return "bg-amber-500 text-white";
+    return "bg-zinc-500 text-white";
+  };
+
+  const parseIsoToMs = (value?: string | Date | null) => {
+    if (!value) return 0;
+    const date = value instanceof Date ? value : new Date(value);
+    const ms = date.getTime();
+    return Number.isNaN(ms) ? 0 : ms;
+  };
+
+  const supportTicketsOrdered = useMemo(() => {
+    const priorityRank: Record<string, number> = {
+      urgent: 4,
+      high: 3,
+      medium: 2,
+      low: 1,
+    };
+    return [...tickets].sort((a, b) => {
+      const aOver = Boolean(a.slaBreached);
+      const bOver = Boolean(b.slaBreached);
+      if (aOver !== bOver) return aOver ? -1 : 1;
+
+      const aPriority = priorityRank[String(a.priority || "low")] || 1;
+      const bPriority = priorityRank[String(b.priority || "low")] || 1;
+      if (aPriority !== bPriority) return bPriority - aPriority;
+
+      return parseIsoToMs(b.createdAt) - parseIsoToMs(a.createdAt);
+    });
+  }, [tickets]);
+
+  const supportQueueMetrics = useMemo(() => {
+    const openTickets = tickets.filter(
+      (ticket) => ticket.status !== "resolved" && ticket.status !== "implemented" && ticket.status !== "rejected"
+    );
+    const overdue = openTickets.filter((ticket) => ticket.slaBreached).length;
+    const urgent = openTickets.filter((ticket) => ticket.priority === "urgent" || ticket.priority === "high").length;
+
+    const finished = tickets.filter((ticket) => ticket.resolvedAt);
+    const avgResolutionMinutes =
+      finished.length === 0
+        ? 0
+        : Math.round(
+            finished.reduce((acc, ticket) => {
+              const start = parseIsoToMs(ticket.createdAt);
+              const end = parseIsoToMs(ticket.resolvedAt || null);
+              if (!start || !end || end < start) return acc;
+              return acc + (end - start) / 60000;
+            }, 0) / finished.length
+          );
+
+    return {
+      open: openTickets.length,
+      overdue,
+      urgent,
+      avgResolutionMinutes,
+    };
+  }, [tickets]);
 
   const handleRequestImpersonation = async (targetUser: UserProfile) => {
     try {
@@ -524,6 +778,193 @@ export default function AdminPage() {
       .finally(() => setIsMarkingSupportSeen(false));
   }, [activeTab, unseenSupportTickets, userProfile, isMarkingSupportSeen]);
 
+  useEffect(() => {
+    if (!user || !userProfile) return;
+    if (activeTab !== "audit") return;
+
+    let cancelled = false;
+
+    const loadAuditLogs = async () => {
+      try {
+        setIsLoadingAuditLogs(true);
+        const token = await user.getIdToken();
+        const params = new URLSearchParams();
+        params.set("page", String(auditPage));
+        params.set("limit", String(auditPerPage));
+        if (auditSearch.trim()) params.set("q", auditSearch.trim());
+        if (auditActionFilter !== "all") params.set("action", auditActionFilter);
+        if (auditActorUidFilter.trim()) params.set("actorUid", auditActorUidFilter.trim());
+        if (auditTargetUidFilter.trim()) params.set("targetUid", auditTargetUidFilter.trim());
+        if (auditFromDate) params.set("from", auditFromDate);
+        if (auditToDate) params.set("to", auditToDate);
+
+        const response = await fetch(`/api/admin/audit-logs?${params.toString()}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const payload = (await response.json()) as {
+          ok: boolean;
+          error?: string;
+          total?: number;
+          data?: AdminAuditLog[];
+        };
+
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.error || "Não foi possível carregar a auditoria.");
+        }
+
+        if (!cancelled) {
+          setAuditLogs(Array.isArray(payload.data) ? payload.data : []);
+          setAuditTotal(Number(payload.total || 0));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAuditLogs([]);
+          setAuditTotal(0);
+        }
+        console.error(error);
+      } finally {
+        if (!cancelled) setIsLoadingAuditLogs(false);
+      }
+    };
+
+    void loadAuditLogs();
+    const interval = setInterval(() => void loadAuditLogs(), 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeTab, auditPage, auditPerPage, auditSearch, auditActionFilter, auditActorUidFilter, auditTargetUidFilter, auditFromDate, auditToDate, user, userProfile]);
+
+  useEffect(() => {
+    if (!user || !userProfile) return;
+    if (activeTab !== "metrics") return;
+
+    let cancelled = false;
+
+    const loadMetrics = async () => {
+      try {
+        setIsLoadingMetrics(true);
+        const token = await user.getIdToken();
+        const params = new URLSearchParams();
+        params.set("windowMinutes", metricsWindowMinutes || "60");
+
+        const response = await fetch(`/api/admin/metrics?${params.toString()}`, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = (await response.json()) as {
+          ok: boolean;
+          error?: string;
+          summary?: AdminMetricsSummary;
+          byRoute?: AdminMetricsRoute[];
+          alerts?: AdminMetricsAlert[];
+        };
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.error || "Não foi possível carregar as métricas.");
+        }
+
+        if (!cancelled) {
+          setMetricsSummary(payload.summary || null);
+          setMetricsByRoute(Array.isArray(payload.byRoute) ? payload.byRoute : []);
+          const alerts = Array.isArray(payload.alerts) ? payload.alerts : [];
+          setMetricsAlerts(alerts);
+          setCriticalMetricsAlerts(onlyCriticalAlerts(alerts));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setMetricsSummary(null);
+          setMetricsByRoute([]);
+          setMetricsAlerts([]);
+          setCriticalMetricsAlerts([]);
+        }
+        console.error(error);
+      } finally {
+        if (!cancelled) setIsLoadingMetrics(false);
+      }
+    };
+
+    void loadMetrics();
+    const interval = setInterval(() => void loadMetrics(), 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeTab, metricsWindowMinutes, onlyCriticalAlerts, user, userProfile]);
+
+  useEffect(() => {
+    if (!user || !userProfile) return;
+    if (userProfile.role !== "admin" && userProfile.role !== "moderator") return;
+
+    let cancelled = false;
+
+    const loadCriticalAlerts = async () => {
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch("/api/admin/metrics?windowMinutes=60", {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = (await response.json()) as {
+          ok: boolean;
+          alerts?: AdminMetricsAlert[];
+        };
+        if (!response.ok || !payload.ok) return;
+        if (cancelled) return;
+        const alerts = Array.isArray(payload.alerts) ? payload.alerts : [];
+        setCriticalMetricsAlerts(onlyCriticalAlerts(alerts));
+      } catch {
+        if (!cancelled) setCriticalMetricsAlerts([]);
+      }
+    };
+
+    void loadCriticalAlerts();
+    const timer = setInterval(() => void loadCriticalAlerts(), 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [onlyCriticalAlerts, user, userProfile]);
+
+  useEffect(() => {
+    if (!user || !userProfile) return;
+    if (userProfile.role !== "admin" && userProfile.role !== "moderator") return;
+
+    let cancelled = false;
+
+    const loadHealth = async () => {
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch("/api/admin/health", {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = (await response.json()) as {
+          ok: boolean;
+          health?: AdminHealth;
+          alerts?: AdminMetricsAlert[];
+        };
+        if (!response.ok || !payload.ok || cancelled) return;
+        setHealthData(payload.health || null);
+        setHealthAlerts(Array.isArray(payload.alerts) ? payload.alerts : []);
+      } catch {
+        if (!cancelled) {
+          setHealthData(null);
+          setHealthAlerts([]);
+        }
+      }
+    };
+
+    void loadHealth();
+    const timer = setInterval(() => void loadHealth(), 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [user, userProfile]);
+
   const handleAssignTicket = async (ticketId: string, staffUid: string) => {
     const staff = staffMembers.find(s => s.uid === staffUid);
     try {
@@ -542,6 +983,17 @@ export default function AdminPage() {
       await updateTicket(ticketId, { status: status as SupportRequestStatus });
     } catch {
       showFeedback('error', 'Erro', 'Falha ao atualizar status.');
+    }
+  };
+
+  const handleChangeTicketPriority = async (
+    ticketId: string,
+    priority: "low" | "medium" | "high" | "urgent"
+  ) => {
+    try {
+      await updateTicket(ticketId, { priority } as Partial<SupportTicket>);
+    } catch {
+      showFeedback('error', 'Erro', 'Falha ao atualizar prioridade.');
     }
   };
 
@@ -751,53 +1203,70 @@ export default function AdminPage() {
 
   // --- FILTRAGEM ---
   const filteredUsers = useMemo(() => {
-    const list = users.filter((u) => {
-      if (u.status === 'deleted') return false;
-
-      const matchesSearch = (u.displayName?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-        (u.email?.toLowerCase() || "").includes(searchTerm.toLowerCase());
-
-      const matchesRole = roleFilter === "all" || u.role === roleFilter;
-      const matchesPlan = planFilter === "all" || u.plan === planFilter;
-
-      let matchesPayment = true;
-      if (paymentStatusFilter !== "all") {
-        if (paymentStatusFilter === "unpaid_group") {
-          const safeStatus = u.paymentStatus || 'free';
-          matchesPayment = safeStatus !== "paid" && safeStatus !== "free";
-        } else {
-          matchesPayment = u.paymentStatus === paymentStatusFilter;
-        }
-      }
-
-      const isVisible = canViewRole(u.role);
-
-      let matchesStatus = true;
-      if (statusFilter !== "all") {
-        matchesStatus = u.status === statusFilter;
-      }
-
-      return matchesSearch && matchesRole && matchesPlan && matchesPayment && matchesStatus && isVisible;
-    });
+    const list = users.filter((u) => u.status !== "deleted" && canViewRole(u.role));
 
     const rolePriority: Record<UserRole, number> = {
       admin: 1, moderator: 2, support: 3, client: 4
     };
     return list.sort((a, b) => rolePriority[a.role] - rolePriority[b.role]);
-  }, [users, searchTerm, roleFilter, planFilter,
-    paymentStatusFilter, statusFilter, canViewRole
-  ]);
+  }, [users, canViewRole]);
+
+  const handleExportUsersCsv = useCallback(() => {
+    const headers = [
+      "uid",
+      "nome",
+      "email",
+      "plano",
+      "cargo",
+      "status",
+      "pagamento",
+      "lancamentos",
+      "criado_em",
+    ];
+    const escapeCsv = (value: unknown) => {
+      const text = String(value ?? "");
+      if (/[",;\n]/.test(text)) return `"${text.replace(/"/g, "\"\"")}"`;
+      return text;
+    };
+    const rows = filteredUsers.map((u) => [
+      u.uid,
+      u.displayName || "",
+      u.email || "",
+      u.plan || "",
+      u.role || "",
+      u.status || "",
+      u.paymentStatus || "",
+      typeof u.transactionCount === "number" ? String(u.transactionCount) : "",
+      u.createdAt ? new Date(u.createdAt).toISOString() : "",
+    ]);
+    const content = [headers, ...rows].map((line) => line.map(escapeCsv).join(";")).join("\n");
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    a.href = url;
+    a.download = `usuarios-filtrados-${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [filteredUsers]);
 
   const deletedUsers = useMemo(() => {
     return users.filter(u => u.status === 'deleted');
   }, [users]);
 
-  const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
-  const paginatedUsers = filteredUsers.slice((currentPage - 1) * usersPerPage, currentPage * usersPerPage);
+  const totalPages = Math.ceil(usersTotal / usersPerPage);
+  const paginatedUsers = filteredUsers;
+  const supportTotalPages = Math.ceil(ticketsTotal / supportPerPage);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, roleFilter, planFilter, paymentStatusFilter, statusFilter]);
+
+  useEffect(() => {
+    if (activeTab === "support") setSupportPage(1);
+  }, [activeTab]);
 
   if (
     loading ||
@@ -838,6 +1307,18 @@ export default function AdminPage() {
           )}
         </div>
 
+        {criticalMetricsAlerts.length > 0 && (
+          <div className={`${fadeInUp} mb-4 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-red-900`}>
+            <div className="flex items-center gap-2 font-semibold text-sm">
+              <AlertTriangle className="h-4 w-4" />
+              {criticalMetricsAlerts.length} alerta(s) crítico(s) ativo(s)
+            </div>
+            <p className="text-xs mt-1">
+              {criticalMetricsAlerts[0]?.title}: {criticalMetricsAlerts[0]?.description}
+            </p>
+          </div>
+        )}
+
         <div className={`${fadeInUp} delay-150 space-y-6`}>
           {/* Navegação de Abas Moderna */}
           <div className="bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 w-full md:w-fit grid grid-cols-2 md:grid-flow-col gap-1 shadow-sm">
@@ -858,9 +1339,24 @@ export default function AdminPage() {
               )}
             </button>
 
+            <button onClick={() => setActiveTabAndPersist("audit")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "audit" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <ShieldCheck className="h-4 w-4" /> Auditoria
+            </button>
+
             {canRestore && (
               <button onClick={() => setActiveTabAndPersist("restore")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "restore" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <History className="h-4 w-4" /> Restaurar Dados
+              </button>
+            )}
+
+            {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
+              <button onClick={() => setActiveTabAndPersist("metrics")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "metrics" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+                <Calculator className="h-4 w-4" /> Métricas
+                {criticalMetricsAlerts.length > 0 && (
+                  <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-bold">
+                    {criticalMetricsAlerts.length > 99 ? "99+" : criticalMetricsAlerts.length}
+                  </span>
+                )}
               </button>
             )}
 
@@ -886,13 +1382,31 @@ export default function AdminPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
+                  <div className="p-4 md:p-5 border-b border-zinc-100 dark:border-zinc-800 grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                      <p className="text-xs text-zinc-500">Fila aberta</p>
+                      <p className="text-lg font-bold">{supportQueueMetrics.open}</p>
+                    </div>
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+                      <p className="text-xs text-red-600">SLA estourado</p>
+                      <p className="text-lg font-bold text-red-600">{supportQueueMetrics.overdue}</p>
+                    </div>
+                    <div className="rounded-xl border border-orange-200 bg-orange-50 p-3">
+                      <p className="text-xs text-orange-700">Alta/Urgente</p>
+                      <p className="text-lg font-bold text-orange-700">{supportQueueMetrics.urgent}</p>
+                    </div>
+                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                      <p className="text-xs text-blue-700">TMA resolução</p>
+                      <p className="text-lg font-bold text-blue-700">{supportQueueMetrics.avgResolutionMinutes} min</p>
+                    </div>
+                  </div>
                   <div className="p-4 md:p-5 grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    {tickets.length === 0 ? (
+                    {supportTicketsOrdered.length === 0 ? (
                       <div className="col-span-full h-32 rounded-2xl border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-500 bg-zinc-50/50 dark:bg-zinc-900/30">
                         Nenhum chamado encontrado.
                       </div>
                     ) : (
-                      tickets.map((ticket) => {
+                      supportTicketsOrdered.map((ticket) => {
                         const isFinished = ticket.status === 'resolved' || ticket.status === 'implemented' || ticket.status === 'rejected';
                         const canEditStatus = userProfile?.role === 'admin' || !isFinished;
                         const tone = getTicketStatusTone(ticket.status);
@@ -924,6 +1438,15 @@ export default function AdminPage() {
                                 </Badge>
                               )}
                               <Badge className={tone.badge}>{formatTicketStatus(ticket.status)}</Badge>
+                              <Badge className={getTicketPriorityTone(ticket.priority)}>
+                                Prioridade: {getTicketPriorityLabel(ticket.priority)}
+                              </Badge>
+                              <Badge variant="outline" className="text-[10px]">
+                                Protocolo {ticket.protocol || `#${ticket.id.slice(0, 8)}`}
+                              </Badge>
+                              {ticket.slaBreached && (
+                                <Badge className="bg-red-600 text-white">SLA estourado</Badge>
+                              )}
                             </div>
 
                             <button
@@ -999,6 +1522,20 @@ export default function AdminPage() {
                                     </DropdownMenuSub>
                                   )}
 
+                                  {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
+                                    <DropdownMenuSub>
+                                      <DropdownMenuSubTrigger className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200 focus:bg-zinc-100 dark:focus:bg-zinc-800 data-[state=open]:bg-zinc-100 dark:data-[state=open]:bg-zinc-800">
+                                        Prioridade
+                                      </DropdownMenuSubTrigger>
+                                      <DropdownMenuSubContent className="w-44 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 shadow-xl">
+                                        <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "low")}>Baixa</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "medium")}>Média</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "high")}>Alta</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "urgent")}>Urgente</DropdownMenuItem>
+                                      </DropdownMenuSubContent>
+                                    </DropdownMenuSub>
+                                  )}
+
                                   {userProfile?.role === 'admin' && (
                                     <>
                                       <DropdownMenuSeparator />
@@ -1033,14 +1570,14 @@ export default function AdminPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {tickets.length === 0 ? (
+                        {supportTicketsOrdered.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={7} className="h-32 text-center text-zinc-500">
                               Nenhum chamado encontrado.
                             </TableCell>
                           </TableRow>
                         ) : (
-                          tickets.map(ticket => {
+                          supportTicketsOrdered.map(ticket => {
                             const isFinished = ticket.status === 'resolved' || ticket.status === 'implemented' || ticket.status === 'rejected';
                             const canEditStatus = userProfile?.role === 'admin' || !isFinished;
                             const dateStr = formatDateSafe(ticket.createdAt);
@@ -1074,14 +1611,22 @@ export default function AdminPage() {
                                   </p>
                                 </TableCell>
                                 <TableCell className="text-center">
-                                  <Badge className={`
-                                                        ${ticket.status === 'resolved' || ticket.status === 'implemented' || ticket.status === 'approved' ? 'bg-emerald-500' : ''}
-                                                        ${ticket.status === 'pending' || ticket.status === 'under_review' ? 'bg-amber-500' : ''}
-                                                        ${ticket.status === 'in_progress' ? 'bg-blue-500' : ''}
-                                                        ${ticket.status === 'rejected' ? 'bg-red-500' : ''}
-                                                    `}>
-                                    {formatTicketStatus(ticket.status)}
-                                  </Badge>
+                                  <div className="flex flex-col items-center gap-1">
+                                    <Badge className={`
+                                                          ${ticket.status === 'resolved' || ticket.status === 'implemented' || ticket.status === 'approved' ? 'bg-emerald-500' : ''}
+                                                          ${ticket.status === 'pending' || ticket.status === 'under_review' ? 'bg-amber-500' : ''}
+                                                          ${ticket.status === 'in_progress' ? 'bg-blue-500' : ''}
+                                                          ${ticket.status === 'rejected' ? 'bg-red-500' : ''}
+                                                      `}>
+                                      {formatTicketStatus(ticket.status)}
+                                    </Badge>
+                                    <Badge className={getTicketPriorityTone(ticket.priority)}>
+                                      {getTicketPriorityLabel(ticket.priority)}
+                                    </Badge>
+                                    <p className="text-[10px] text-zinc-500">
+                                      {ticket.protocol || `#${ticket.id.slice(0, 8)}`}
+                                    </p>
+                                  </div>
                                 </TableCell>
                                 <TableCell>
                                   {userProfile?.role === 'admin' ? (
@@ -1204,6 +1749,22 @@ export default function AdminPage() {
                                         </DropdownMenuSub>
                                       )}
 
+                                      {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
+                                        <DropdownMenuSub>
+                                          <DropdownMenuSubTrigger
+                                            className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200 focus:bg-zinc-100 dark:focus:bg-zinc-800 data-[state=open]:bg-zinc-100 dark:data-[state=open]:bg-zinc-800"
+                                          >
+                                            Prioridade
+                                          </DropdownMenuSubTrigger>
+                                          <DropdownMenuSubContent className="w-44 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 shadow-xl">
+                                            <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "low")}>Baixa</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "medium")}>Média</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "high")}>Alta</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "urgent")}>Urgente</DropdownMenuItem>
+                                          </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                      )}
+
                                       {userProfile?.role === 'admin' && (
                                         <>
                                           <DropdownMenuSeparator />
@@ -1225,12 +1786,372 @@ export default function AdminPage() {
                       </TableBody>
                     </Table>
                   </div>
+                  <div className="px-4 md:px-6 pb-4 flex items-center justify-between gap-2 border-t border-zinc-100 dark:border-zinc-800">
+                    <p className="text-xs text-zinc-500 font-medium">
+                      Página {supportPage} de {supportTotalPages || 1} • {ticketsTotal} chamado(s)
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-8 p-0 rounded-lg"
+                        disabled={supportPage === 1}
+                        onClick={() => setSupportPage((p) => p - 1)}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-8 p-0 rounded-lg"
+                        disabled={supportPage === supportTotalPages || supportTotalPages === 0}
+                        onClick={() => setSupportPage((p) => p + 1)}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>
           )}
 
           {/* --- USERS TAB --- */}
+          {activeTab === "audit" && (
+            <div className={`${fadeInUp} delay-200 space-y-4`}>
+              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
+                <CardHeader className="py-4 px-6 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+                  <CardTitle className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5 text-emerald-600" /> Auditoria Operacional
+                  </CardTitle>
+                  <CardDescription>
+                    Histórico das alterações administrativas e ações sensíveis no sistema.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-4 md:p-5 space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center gap-3">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 h-4 w-4" />
+                      <Input
+                        value={auditSearch}
+                        onChange={(e) => {
+                          setAuditSearch(e.target.value);
+                          setAuditPage(1);
+                        }}
+                        className="pl-10 h-10 rounded-xl"
+                        placeholder="Buscar por ação, rota, ator, alvo..."
+                      />
+                    </div>
+                    <Badge variant="outline" className="rounded-xl px-3 py-1.5 text-xs">
+                      {auditTotal} registros
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <Select
+                      value={auditActionFilter}
+                      onValueChange={(value) => {
+                        setAuditActionFilter(value);
+                        setAuditPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="rounded-xl h-10">
+                        <SelectValue placeholder="Ação" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas ações</SelectItem>
+                        <SelectItem value="admin.users.patch">Atualização de usuário</SelectItem>
+                        <SelectItem value="admin.users.normalize">Normalização</SelectItem>
+                        <SelectItem value="admin.users.reset_financial_data">Reset financeiro</SelectItem>
+                        <SelectItem value="admin.users.soft_delete">Exclusão de usuário</SelectItem>
+                        <SelectItem value="admin.users.restore">Restauração de usuário</SelectItem>
+                        <SelectItem value="admin.users.recount_transaction_count">Recontagem de transações</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <Input
+                      value={auditActorUidFilter}
+                      onChange={(e) => {
+                        setAuditActorUidFilter(e.target.value);
+                        setAuditPage(1);
+                      }}
+                      className="h-10 rounded-xl"
+                      placeholder="UID do ator"
+                    />
+
+                    <Input
+                      value={auditTargetUidFilter}
+                      onChange={(e) => {
+                        setAuditTargetUidFilter(e.target.value);
+                        setAuditPage(1);
+                      }}
+                      className="h-10 rounded-xl"
+                      placeholder="UID do alvo"
+                    />
+
+                    <Input
+                      type="date"
+                      value={auditFromDate}
+                      onChange={(e) => {
+                        setAuditFromDate(e.target.value);
+                        setAuditPage(1);
+                      }}
+                      className="h-10 rounded-xl"
+                    />
+
+                    <Input
+                      type="date"
+                      value={auditToDate}
+                      onChange={(e) => {
+                        setAuditToDate(e.target.value);
+                        setAuditPage(1);
+                      }}
+                      className="h-10 rounded-xl"
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    {isLoadingAuditLogs ? (
+                      <div className="h-28 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando auditoria...
+                      </div>
+                    ) : auditLogs.length === 0 ? (
+                      <div className="h-28 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500">
+                        Nenhum registro encontrado.
+                      </div>
+                    ) : (
+                      auditLogs.map((log) => (
+                        <div key={log.id} className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-3 md:p-4 space-y-2 bg-white dark:bg-zinc-950/40">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{formatAuditAction(log.action)}</p>
+                            <Badge className="bg-zinc-800 text-white">{(log.method || "N/A").toUpperCase()}</Badge>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+                            <p><span className="font-semibold">Ator:</span> {log.actorUid || "-"}</p>
+                            <p><span className="font-semibold">Alvo:</span> {log.targetUid || "-"}</p>
+                            <p><span className="font-semibold">Quando:</span> {formatDateSafe(log.createdAt)}</p>
+                            <p className="md:col-span-2 break-all"><span className="font-semibold">Rota:</span> {log.route || "-"}</p>
+                            <p className="break-all"><span className="font-semibold">IP:</span> {log.ip || "-"}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <p className="text-xs text-zinc-500">
+                      Página {auditPage} de {Math.max(1, Math.ceil(auditTotal / auditPerPage))}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-8 p-0 rounded-lg"
+                        disabled={auditPage <= 1}
+                        onClick={() => setAuditPage((prev) => Math.max(prev - 1, 1))}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-8 p-0 rounded-lg"
+                        disabled={auditPage >= Math.max(1, Math.ceil(auditTotal / auditPerPage))}
+                        onClick={() =>
+                          setAuditPage((prev) =>
+                            Math.min(prev + 1, Math.max(1, Math.ceil(auditTotal / auditPerPage)))
+                          )
+                        }
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {activeTab === "metrics" && (
+            <div className={`${fadeInUp} delay-200 space-y-4`}>
+              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
+                <CardHeader className="py-4 px-6 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+                  <CardTitle className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                    <Calculator className="h-5 w-5 text-blue-600" /> Métricas Operacionais
+                  </CardTitle>
+                  <CardDescription>
+                    Tráfego, erros, rate limit e latência das APIs monitoradas.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-4 md:p-5 space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center gap-3">
+                    <Select value={metricsWindowMinutes} onValueChange={setMetricsWindowMinutes}>
+                      <SelectTrigger className="rounded-xl h-10 w-full md:w-56">
+                        <SelectValue placeholder="Janela" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="15">Últimos 15 minutos</SelectItem>
+                        <SelectItem value="60">Última 1 hora</SelectItem>
+                        <SelectItem value="180">Últimas 3 horas</SelectItem>
+                        <SelectItem value="1440">Últimas 24 horas</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {healthData && (
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      <Card className={`rounded-2xl border ${healthData.dbHealthy ? "border-emerald-200" : "border-red-300"}`}>
+                        <CardContent className="p-3">
+                          <p className="text-xs text-zinc-500">Banco</p>
+                          <p className={`text-base font-bold ${healthData.dbHealthy ? "text-emerald-700" : "text-red-700"}`}>
+                            {healthData.dbHealthy ? "Saudável" : "Falha"}
+                          </p>
+                        </CardContent>
+                      </Card>
+                      <Card className="rounded-2xl border border-zinc-200">
+                        <CardContent className="p-3">
+                          <p className="text-xs text-zinc-500">Webhook MP (min)</p>
+                          <p className="text-base font-bold">{healthData.webhookDelayMinutes ?? "-"} min</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="rounded-2xl border border-zinc-200">
+                        <CardContent className="p-3">
+                          <p className="text-xs text-zinc-500">Falhas pagamento 24h</p>
+                          <p className="text-base font-bold">{healthData.failedPayments24h}</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="rounded-2xl border border-zinc-200">
+                        <CardContent className="p-3">
+                          <p className="text-xs text-zinc-500">Recuperação pendente</p>
+                          <p className="text-base font-bold">{healthData.pendingRecoveryUsers}</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+
+                  {!isLoadingMetrics && healthAlerts.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {healthAlerts.map((alert, idx) => (
+                        <div key={`${alert.code}-${idx}`} className={`rounded-2xl border px-4 py-3 ${getMetricsAlertTone(alert.level)}`}>
+                          <p className="text-sm font-bold">{alert.title}</p>
+                          <p className="text-xs mt-1">{alert.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {!isLoadingMetrics && metricsAlerts.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {metricsAlerts.map((alert, idx) => (
+                        <div
+                          key={`${alert.code ?? alert.title}-${idx}`}
+                          className={`rounded-2xl border px-4 py-3 ${getMetricsAlertTone(alert.level)}`}
+                        >
+                          <p className="text-sm font-bold">{alert.title}</p>
+                          <p className="text-xs mt-1">{alert.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {isLoadingMetrics ? (
+                    <div className="h-24 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500">
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando métricas...
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 lg:grid-cols-8 gap-3">
+                        <Card className="rounded-2xl border border-zinc-200">
+                          <CardContent className="p-3">
+                            <p className="text-xs text-zinc-500">Total Requests</p>
+                            <p className="text-xl font-bold">{metricsSummary?.total ?? 0}</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="rounded-2xl border border-red-200">
+                          <CardContent className="p-3">
+                            <p className="text-xs text-red-600">Erros 5xx</p>
+                            <p className="text-xl font-bold text-red-600">{metricsSummary?.errors ?? 0}</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="rounded-2xl border border-amber-200">
+                          <CardContent className="p-3">
+                            <p className="text-xs text-amber-700">Rate Limited (429)</p>
+                            <p className="text-xl font-bold text-amber-700">{metricsSummary?.rateLimited ?? 0}</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="rounded-2xl border border-blue-200">
+                          <CardContent className="p-3">
+                            <p className="text-xs text-blue-700">Latência Média</p>
+                            <p className="text-xl font-bold text-blue-700">{metricsSummary?.avgDurationMs ?? 0} ms</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="rounded-2xl border border-red-200">
+                          <CardContent className="p-3">
+                            <p className="text-xs text-red-600">Taxa de Erro</p>
+                            <p className="text-xl font-bold text-red-600">{metricsSummary?.errorRatePct ?? 0}%</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="rounded-2xl border border-amber-200">
+                          <CardContent className="p-3">
+                            <p className="text-xs text-amber-700">Taxa 429</p>
+                            <p className="text-xl font-bold text-amber-700">{metricsSummary?.rateLimitedPct ?? 0}%</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="rounded-2xl border border-zinc-200">
+                          <CardContent className="p-3">
+                            <p className="text-xs text-zinc-500">Janela Anterior</p>
+                            <p className="text-xl font-bold">{metricsSummary?.previousTotal ?? 0}</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="rounded-2xl border border-zinc-200">
+                          <CardContent className="p-3">
+                            <p className="text-xs text-zinc-500">Variação Tráfego</p>
+                            <p className={`text-xl font-bold ${(metricsSummary?.trafficDropPct ?? 0) > 0 ? "text-orange-700" : "text-emerald-700"}`}>
+                              {(metricsSummary?.trafficDropPct ?? 0).toFixed(2)}%
+                            </p>
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Rota</TableHead>
+                              <TableHead>Total</TableHead>
+                              <TableHead>Erros</TableHead>
+                              <TableHead>429</TableHead>
+                              <TableHead>Latência Média</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {metricsByRoute.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={5} className="h-20 text-center text-zinc-500">
+                                  Sem dados de métricas para o período.
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              metricsByRoute.map((row) => (
+                                <TableRow key={row.route}>
+                                  <TableCell className="font-medium">{row.route}</TableCell>
+                                  <TableCell>{row.total}</TableCell>
+                                  <TableCell className="text-red-600">{row.errors}</TableCell>
+                                  <TableCell className="text-amber-700">{row.rateLimited}</TableCell>
+                                  <TableCell>{row.avgDurationMs} ms</TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           {activeTab === "users" && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               {/* Filtros e Busca */}
@@ -1413,7 +2334,7 @@ export default function AdminPage() {
 
                             <div className="flex items-center justify-between">
                               <Badge variant="secondary" className="bg-zinc-100 text-zinc-600 border-zinc-200">
-                                Registros: {Number.isNaN(u.transactionCount) ? "..." : u.transactionCount ?? "..."}
+                                Registros: {Number.isNaN(u.transactionCount) ? "..." : (u.transactionCount ?? "...")}
                               </Badge>
                               <Badge variant={u.status === "active" ? "default" : "destructive"} className={u.status === "active" ? "bg-emerald-500" : ""}>
                                 {u.status === "active" ? "Ativo" : u.status === "blocked" ? "Bloqueado" : "Inativo"}
@@ -1542,7 +2463,7 @@ export default function AdminPage() {
 
                               <TableCell className="text-center">
                                 <Badge variant="secondary" className="bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400">
-                                  {Number.isNaN(u.transactionCount) ? "..." : u.transactionCount ?? "..."}
+                                  {Number.isNaN(u.transactionCount) ? "..." : (u.transactionCount ?? "...")}
                                 </Badge>
                               </TableCell>
 
@@ -2138,6 +3059,33 @@ export default function AdminPage() {
                   <span className="font-semibold block">Status Atual:</span>
                   <Badge variant="secondary" className="mt-1">{formatTicketStatus(viewTicket.status)}</Badge>
                 </div>
+                <div>
+                  <span className="font-semibold block">Protocolo:</span>
+                  <span className="text-zinc-600">{viewTicket.protocol || `#${viewTicket.id.slice(0, 8)}`}</span>
+                </div>
+                <div>
+                  <span className="font-semibold block">Prioridade:</span>
+                  <Badge className={`mt-1 ${getTicketPriorityTone(viewTicket.priority)}`}>
+                    {getTicketPriorityLabel(viewTicket.priority)}
+                  </Badge>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-10 rounded-xl"
+                    onClick={clearUsersFilters}
+                  >
+                    <FilterX className="mr-2 h-4 w-4" /> Limpar filtros
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-10 rounded-xl"
+                    onClick={handleExportUsersCsv}
+                    disabled={filteredUsers.length === 0}
+                  >
+                    <Download className="mr-2 h-4 w-4" /> Exportar CSV ({filteredUsers.length})
+                  </Button>
+                </div>
               </div>
               <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
                 <span className="font-semibold block text-sm mb-2">Mensagem:</span>
@@ -2173,5 +3121,6 @@ export default function AdminPage() {
     </div>
   );
 }
+
 
 

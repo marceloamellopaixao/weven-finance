@@ -15,14 +15,66 @@ import {
 import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home, UserCog, CreditCard, PiggyBank } from "lucide-react";
 import Link from "next/link";
 import { useImpersonation } from "@/hooks/useImpersonation";
+import { useNotifications } from "@/hooks/useNotifications";
+import { Bell } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 
 export function Header() {
   const { user, userProfile, logout } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
   const { isImpersonating, impersonationTargetUid, stopImpersonation } = useImpersonation();
+  const { items: notifications, unreadCount, markOneAsRead, markAllAsRead, clearAll } = useNotifications();
 
   const handleStopImpersonation = () => {
     stopImpersonation();
     window.location.href = "/admin";
+  };
+
+  const resolveNotificationHref = (href: string | null) => {
+    if (!href) return null;
+    let value = href.trim();
+    if (!value) return null;
+
+    if (value.startsWith("http://") || value.startsWith("https://")) {
+      try {
+        const parsed = new URL(value);
+        if (typeof window !== "undefined" && parsed.origin === window.location.origin) {
+          value = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+        } else {
+          return value;
+        }
+      } catch {
+        return null;
+      }
+    }
+
+    if (value.startsWith("?")) {
+      value = `${pathname}${value}`;
+    }
+    if (!value.startsWith("/")) {
+      value = `/${value.replace(/^\/+/, "")}`;
+    }
+
+    const role = userProfile?.role;
+    const isStaff = role === "admin" || role === "moderator" || role === "support";
+    if (value.startsWith("/admin") && !isStaff) return "/dashboard";
+    if (value.startsWith("/settings") && !user) return "/login";
+    return value;
+  };
+
+  const handleNotificationClick = async (id: string, href: string | null) => {
+    try {
+      await markOneAsRead(id);
+    } finally {
+      const target = resolveNotificationHref(href);
+      if (!target) return;
+      if (target.startsWith("http://") || target.startsWith("https://")) {
+        window.location.assign(target);
+        return;
+      }
+      router.push(target);
+    }
   };
 
   // Considera logado se houver usuário OU se o perfil já foi carregado.
@@ -71,6 +123,56 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="icon" className="relative h-9 w-9 rounded-full border-zinc-200 dark:border-zinc-800">
+              <Bell className="h-4 w-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] px-1 flex items-center justify-center">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-80 rounded-xl p-2">
+            <div className="flex items-center justify-between px-2 py-1">
+              <DropdownMenuLabel className="p-0">Notificações</DropdownMenuLabel>
+              <button
+                type="button"
+                onClick={() => void markAllAsRead()}
+                className="text-[11px] text-violet-600 hover:underline"
+              >
+                Marcar todas como lidas
+              </button>
+              <button
+                type="button"
+                onClick={() => void clearAll()}
+                className="text-[11px] text-zinc-500 hover:underline"
+              >
+                Limpar
+              </button>
+            </div>
+            <DropdownMenuSeparator />
+            {notifications.length === 0 ? (
+              <div className="px-2 py-6 text-center text-xs text-zinc-500">Sem notificações no momento.</div>
+            ) : (
+              notifications.slice(0, 8).map((item) => (
+                <DropdownMenuItem
+                  key={item.id}
+                  className={`cursor-pointer rounded-lg flex-col items-start gap-1 ${item.isRead ? "opacity-70" : ""}`}
+                  onClick={() => void handleNotificationClick(item.id, item.href)}
+                >
+                  <div className="flex items-center gap-2 w-full">
+                    {!item.isRead && <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />}
+                    <p className="text-xs font-semibold truncate">{item.title}</p>
+                  </div>
+                  <p className="text-[11px] text-zinc-500 line-clamp-2">{item.message}</p>
+                </DropdownMenuItem>
+              ))
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         {isImpersonating && (
           <>
             <Button

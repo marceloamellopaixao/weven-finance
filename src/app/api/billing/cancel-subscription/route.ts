@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cancelSubscriptionForUser } from "@/lib/billing/mercadopago";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { supabaseSelect } from "@/services/supabase/admin";
+import { pushNotification } from "@/lib/notifications/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +24,15 @@ export async function POST(request: NextRequest) {
     const result = await cancelSubscriptionForUser({
       uid: decoded.uid,
       userEmail,
+    });
+
+    await pushNotification({
+      uid: decoded.uid,
+      kind: "billing",
+      title: "Assinatura cancelada",
+      message: "Seu plano voltou para Free. Você pode reativar quando quiser.",
+      href: "/settings?tab=billing",
+      meta: { targetPlan: result.targetPlan, targetPaymentStatus: result.targetPaymentStatus },
     });
 
     return NextResponse.json(result, { status: 200 });

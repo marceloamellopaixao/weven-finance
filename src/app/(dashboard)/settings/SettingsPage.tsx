@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -32,8 +32,8 @@ import { getKeyFingerprint } from "@/lib/crypto";
 import { usePlans } from "@/hooks/usePlans";
 import { migrateCryptography } from "@/services/transactionService";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { sendFeatureRequest, sendSupportRequest } from "@/hooks/supportService";
-import { cancelSubscription, confirmPreapproval, getCheckoutLink } from "@/services/billingService";
+import { sendFeatureRequest, sendSupportRequest, subscribeToSupportTickets, type SupportTicket } from "@/hooks/supportService";
+import { BillingHistoryItem, cancelSubscription, confirmPreapproval, getBillingHistory, getCheckoutLink } from "@/services/billingService";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -65,6 +65,8 @@ export default function SettingsPage() {
   const [isConfirmingPreapproval, setIsConfirmingPreapproval] = useState(false);
   const [isCancelingSubscription, setIsCancelingSubscription] = useState(false);
   const [showCancelSubscriptionModal, setShowCancelSubscriptionModal] = useState(false);
+  const [billingHistory, setBillingHistory] = useState<BillingHistoryItem[]>([]);
+  const [isLoadingBillingHistory, setIsLoadingBillingHistory] = useState(false);
 
   // Estados para Suporte
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
@@ -76,6 +78,8 @@ export default function SettingsPage() {
   const [featureMessage, setFeatureMessage] = useState("");
   const [isSendingFeature, setIsSendingFeature] = useState(false);
   const [isCopyingSwaggerToken, setIsCopyingSwaggerToken] = useState(false);
+  const [mySupportTickets, setMySupportTickets] = useState<SupportTicket[]>([]);
+  const [isLoadingMySupportTickets, setIsLoadingMySupportTickets] = useState(false);
 
   // Estado para feedback modal
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
@@ -86,20 +90,59 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (userProfile) {
-      setDisplayName(userProfile.displayName);
-      setCompleteName(userProfile.completeName);
-      setPhone(userProfile.phone);
+      setDisplayName(userProfile?.displayName);
+      setCompleteName(userProfile?.completeName);
+      setPhone(userProfile?.phone);
     }
   }, [userProfile]);
 
   useEffect(() => {
     if (user?.uid) {
-      getKeyFingerprint(user.uid).then(setKeyFingerprint);
+      getKeyFingerprint(user?.uid).then(setKeyFingerprint);
     }
   }, [user]);
 
   const showFeedback = (type: 'success' | 'error' | 'info', title: string, message: string) => {
     setFeedbackModal({ isOpen: true, type, title, message });
+  };
+
+  const formatBillingEventLabel = (item: BillingHistoryItem) => {
+    const action = item.action.toLowerCase();
+    const eventType = item.eventType.toLowerCase();
+    const paymentStatus = (item.paymentStatus || "").toLowerCase();
+
+    if (action.includes("cancel")) return "Assinatura cancelada";
+    if (action.includes("confirm") || action.includes("authorized")) return "Assinatura confirmada";
+    if (action.includes("pending") || paymentStatus === "pending") return "Pagamento pendente";
+    if (action.includes("rejected") || action.includes("fail") || paymentStatus === "rejected") return "Pagamento recusado";
+    if (eventType.includes("subscription")) return "Atualizacao de assinatura";
+    return "Evento de cobranca";
+  };
+
+  const formatSupportStatus = (status: string) => {
+    const normalized = String(status || "").toLowerCase();
+    if (normalized === "pending") return "Pendente";
+    if (normalized === "in_progress") return "Em progresso";
+    if (normalized === "resolved") return "Resolvido";
+    if (normalized === "rejected") return "Rejeitado";
+    if (normalized === "under_review") return "Em analise";
+    if (normalized === "approved") return "Aprovado";
+    if (normalized === "implemented") return "Implementado";
+    return "Aberto";
+  };
+
+  const getSupportStatusBadgeClass = (status: string) => {
+    const normalized = String(status || "").toLowerCase();
+    if (normalized === "resolved" || normalized === "approved" || normalized === "implemented") {
+      return "bg-emerald-100 text-emerald-700 border-emerald-200";
+    }
+    if (normalized === "rejected") {
+      return "bg-red-100 text-red-700 border-red-200";
+    }
+    if (normalized === "in_progress" || normalized === "under_review") {
+      return "bg-blue-100 text-blue-700 border-blue-200";
+    }
+    return "bg-amber-100 text-amber-700 border-amber-200";
   };
 
   const handleTabChange = (tab: "account" | "billing" | "security" | "help") => {
@@ -113,7 +156,7 @@ export default function SettingsPage() {
     if (!user) return;
     setIsSaving(true);
     try {
-      await updateOwnProfile(user.uid, { displayName, completeName, phone });
+      await updateOwnProfile(user?.uid, { displayName, completeName, phone });
       showFeedback('success', 'Sucesso', 'Perfil atualizado com sucesso!');
     } catch (error) {
       console.error("Erro ao salvar perfil:", error);
@@ -129,7 +172,7 @@ export default function SettingsPage() {
     setIsDeleting(true);
 
     try {
-      const token = await user.getIdToken();
+      const token = await user?.getIdToken();
       await requestOwnAccountDeletion(token);
       await logout();
       router.push("/goodbye");
@@ -146,7 +189,7 @@ export default function SettingsPage() {
     if (!user) return;
     setIsCancelingSubscription(true);
     try {
-      const token = await user.getIdToken();
+      const token = await user?.getIdToken();
       await cancelSubscription(token);
       showFeedback("success", "Assinatura cancelada", "Seu plano foi alterado para Free.");
     } catch (error) {
@@ -161,7 +204,7 @@ export default function SettingsPage() {
     if (!user) return;
     setIsMigrating(true);
     try {
-      const count = await migrateCryptography(user.uid);
+      const count = await migrateCryptography(user?.uid);
       showFeedback('success', 'Migração Concluída', `${count} transações foram atualizadas para a nova segurança.`);
     } catch (e) {
       console.error(e);
@@ -180,7 +223,7 @@ export default function SettingsPage() {
     if (!user) return;
     setIsCopyingSwaggerToken(true);
     try {
-      const token = await user.getIdToken(true);
+      const token = await user?.getIdToken(true);
       await navigator.clipboard.writeText(token);
       showFeedback("success", "Token copiado", "Cole no Authorize do Swagger sem o prefixo Bearer.");
     } catch (error) {
@@ -201,44 +244,50 @@ export default function SettingsPage() {
 
     setIsSendingSupport(true);
     try {
-      await sendSupportRequest(
-        user.uid,
-        user.email || "E-mail não disponível",
-        userProfile?.displayName || "Usuário sem nome",
+      const result = await sendSupportRequest(
+        user?.uid,
+        user?.email || "E-mail nao disponivel",
+        userProfile?.displayName || "Usuario sem nome",
         supportMessage
       );
       setIsSupportModalOpen(false);
       setSupportMessage("");
-      showFeedback('success', 'Solicitação Enviada', 'Nossa equipe de suporte entrará em contato em breve.');
+      showFeedback(
+        'success',
+        'Solicitacao Enviada',
+        `Nossa equipe de suporte entrara em contato em breve.${result.protocol ? ` Protocolo: ${result.protocol}.` : ''}`
+      );
     } catch (error) {
-      console.error("Erro ao enviar solicitação de suporte:", error);
-      showFeedback('error', 'Erro', 'Não foi possível enviar a solicitação. Tente novamente mais tarde.');
+      console.error("Erro ao enviar solicitacao de suporte:", error);
+      showFeedback('error', 'Erro', 'Nao foi possivel enviar a solicitacao. Tente novamente mais tarde.');
     } finally {
       setIsSendingSupport(false);
     }
-  };
-
-  const handleSendFeature = async () => {
+  }; const handleSendFeature = async () => {
     if (!featureMessage.trim()) {
-      showFeedback('error', 'Campo Obrigatório', 'Por favor, descreva sua ideia.');
+      showFeedback('error', 'Campo Obrigatorio', 'Por favor, descreva sua ideia.');
       return;
     }
     if (!user) return;
 
     setIsSendingFeature(true);
     try {
-      await sendFeatureRequest(
-        user.uid, 
-        user.email || "Sem email", 
-        userProfile?.displayName || "Usuário", 
+      const result = await sendFeatureRequest(
+        user?.uid,
+        user?.email || "Sem email",
+        userProfile?.displayName || "Usuario",
         featureMessage
       );
       setIsFeatureModalOpen(false);
       setFeatureMessage("");
-      showFeedback('success', 'Ideia Recebida!', 'Obrigado por contribuir! Sua sugestão foi enviada para nosso time de produto.');
+      showFeedback(
+        'success',
+        'Ideia Recebida!',
+        `Obrigado por contribuir! Sua sugestao foi enviada para nosso time de produto.${result.protocol ? ` Protocolo: ${result.protocol}.` : ''}`
+      );
     } catch (error) {
       console.error(error);
-      showFeedback('error', 'Erro', 'Não foi possível enviar sua sugestão. Tente novamente.');
+      showFeedback('error', 'Erro', 'Nao foi possivel enviar sua sugestao. Tente novamente.');
     } finally {
       setIsSendingFeature(false);
     }
@@ -256,7 +305,7 @@ export default function SettingsPage() {
 
     setIsOpeningCheckout(plan);
     try {
-      const token = await user.getIdToken();
+      const token = await user?.getIdToken();
       const session = await getCheckoutLink(plan, token);
       window.open(session.checkoutUrl, "_blank", "noopener,noreferrer");
     } catch (error) {
@@ -273,7 +322,7 @@ export default function SettingsPage() {
 
     setIsConfirmingPreapproval(true);
     try {
-      const token = await user.getIdToken();
+      const token = await user?.getIdToken();
       const result = await confirmPreapproval(preapprovalId?.trim() || pendingPreapprovalId, token, expectedPlan);
       showFeedback("success", "Assinatura confirmada", `Plano atualizado para ${result.targetPlan}.`);
       setManualPreapprovalId("");
@@ -294,6 +343,22 @@ export default function SettingsPage() {
   const effectivePaymentStatus = isBillingExemptRole ? "free" : (userProfile?.paymentStatus || "pending");
   const canUpgrade = !isBillingExemptRole && effectivePlan !== "pro";
   const pendingPreapprovalId = userProfile?.billing?.pendingPreapprovalId;
+  const pendingPlan = userProfile?.billing?.pendingPlan;
+  const recoveryPlan: "premium" | "pro" =
+    pendingPlan === "pro" || currentPlan === "pro" ? "pro" : "premium";
+  const shouldShowRecoveryCTA =
+    !isBillingExemptRole &&
+    (effectivePaymentStatus === "pending" ||
+      effectivePaymentStatus === "overdue" ||
+      effectivePaymentStatus === "not_paid");
+
+  const handleRecoverPayment = async () => {
+    if (pendingPreapprovalId) {
+      await handleConfirmPreapproval(pendingPreapprovalId, recoveryPlan);
+      return;
+    }
+    await handleStartCheckout(recoveryPlan);
+  };
 
   useEffect(() => {
     if (isTabBootstrapped) return;
@@ -315,6 +380,28 @@ export default function SettingsPage() {
   }, [activeTab, isTabBootstrapped, pathname, router, searchParams]);
 
   useEffect(() => {
+    if (!user || !userProfile || activeTab !== "help") return;
+    setIsLoadingMySupportTickets(true);
+    const unsubscribe = subscribeToSupportTickets(
+      user.uid,
+      userProfile.role,
+      (tickets) => {
+        setMySupportTickets(
+          tickets
+            .slice()
+            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+            .slice(0, 10)
+        );
+        setIsLoadingMySupportTickets(false);
+      },
+      () => {
+        setIsLoadingMySupportTickets(false);
+      }
+    );
+    return () => unsubscribe();
+  }, [user, userProfile, activeTab]);
+
+  useEffect(() => {
     const preapprovalId = searchParams.get("preapproval_id") || searchParams.get("preapprovalId");
     const billingReturn = searchParams.get("billing_return");
     const planParam = searchParams.get("plan");
@@ -333,6 +420,36 @@ export default function SettingsPage() {
       router.replace(`${pathname}?${params.toString()}`);
     });
   }, [searchParams, user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!user) return;
+    if (activeTab !== "billing") return;
+    if (isBillingExemptRole) return;
+
+    let cancelled = false;
+
+    const loadHistory = async () => {
+      try {
+        setIsLoadingBillingHistory(true);
+        const token = await user?.getIdToken();
+        const history = await getBillingHistory(token);
+        if (!cancelled) setBillingHistory(history);
+      } catch (error) {
+        console.error("Erro ao carregar historico de cobranca:", error);
+        if (!cancelled) setBillingHistory([]);
+      } finally {
+        if (!cancelled) setIsLoadingBillingHistory(false);
+      }
+    };
+
+    void loadHistory();
+    const timer = setInterval(() => void loadHistory(), 30000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [activeTab, isBillingExemptRole, user]);
 
   return (
     <div className="font-sans p-4 md:p-8 pb-20">
@@ -391,7 +508,7 @@ export default function SettingsPage() {
                   <div className="relative group">
                     <Avatar className="h-24 w-24 border-4 border-zinc-50 dark:border-zinc-800 shadow-xl transition-transform duration-300 group-hover:scale-105">
                       <AvatarImage src={user?.photoURL || ""} className="object-cover" />
-                      <AvatarFallback className="text-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500">{user?.displayName?.charAt(0) || "U"}</AvatarFallback>
+                      <AvatarFallback className="text-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500">{user?.displayName.charAt(0) || "U"}</AvatarFallback>
                     </Avatar>
                     <div className="absolute bottom-0 right-0 p-1.5 bg-green-500 border-4 border-white dark:border-zinc-900 rounded-full animate-pulse" title="Online"></div>
                   </div>
@@ -403,10 +520,11 @@ export default function SettingsPage() {
                         {isBillingExemptRole ? "Plano Staff (Isento)" : `Plano ${effectivePlan}`}
                       </Badge>
                       <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 gap-1">
-                        {user?.emailVerified ?
-                          <><CheckCircle2 className="h-3 w-3" /> Verificado</> :
+                        {user?.emailVerified ? (
+                          <><CheckCircle2 className="h-3 w-3" /> Verificado</>
+                        ) : (
                           <><X className="h-3 w-3" /> Não Verificado</>
-                        }
+                        )}
                       </Badge>
                     </div>
                   </div>
@@ -458,13 +576,13 @@ export default function SettingsPage() {
           {activeTab === "billing" && (
             <div className={`${fadeInUp} delay-200 space-y-6`}>
               <Card
-                className={`border-none shadow-xl rounded-3xl relative overflow-hidden text-white flex flex-col justify-center min-h-[10px]"
-                  ${effectivePlan === 'free'
-                    ? 'bg-linear-to-br from-amber-700 to-amber-900 shadow-amber-700/30'
-                    : effectivePlan === 'premium'
-                      ? 'bg-linear-to-br from-slate-600 to-slate-800 shadow-slate-500/30'
-                      : 'bg-linear-to-br from-yellow-500 to-amber-600 shadow-yellow-500/30'
-                  }`}
+                className={`border-none shadow-xl rounded-3xl relative overflow-hidden text-white flex flex-col justify-center min-h-[10px] ${
+                  effectivePlan === "free"
+                    ? "bg-linear-to-br from-amber-700 to-amber-900 shadow-amber-700/30"
+                    : effectivePlan === "premium"
+                      ? "bg-linear-to-br from-slate-600 to-slate-800 shadow-slate-500/30"
+                      : "bg-linear-to-br from-yellow-500 to-amber-600 shadow-yellow-500/30"
+                }`}
               >
                 <div className="absolute top-0 right-0 p-40 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
                 <CardHeader className="relative z-10 flex-1 flex items-center">
@@ -551,7 +669,7 @@ export default function SettingsPage() {
 
                       {/* Renovação */}
                       <Badge className="bg-white/10 backdrop-blur-md text-white border-none flex gap-2 items-center px-3 py-1.5 text-xs">
-                        {(isBillingExemptRole || effectivePaymentStatus === 'paid') ? (
+                        {(isBillingExemptRole || effectivePaymentStatus === 'paid' ) ? (
                           <>
                             <RefreshCw className="h-4 w-4 text-white/70" /> Renovação Automática
                           </>
@@ -593,12 +711,12 @@ export default function SettingsPage() {
                     </p>
                     <p>
                       Última sincronização:{" "}
-                      <strong>{userProfile?.billing?.lastSyncAt ? new Date(userProfile.billing.lastSyncAt).toLocaleString() : "Sem sincronização"}</strong>
+                      <strong>{userProfile?.billing?.lastSyncAt ? new Date(userProfile?.billing?.lastSyncAt).toLocaleString() : "Sem sincronização"}</strong>
                     </p>
                   </div>
                   {!isBillingExemptRole && (
                     <div className="rounded-xl border border-white/15 bg-black/10 p-3 text-xs text-white/85 space-y-2">
-                      <p className="font-semibold">Ja concluiu o pagamento?</p>
+                      <p className="font-semibold">Ja concluiu o pagamento</p>
                       <p>Se o retorno automatico falhar, confirme com o ID da assinatura (preapproval_id).</p>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <Input
@@ -620,6 +738,23 @@ export default function SettingsPage() {
                       )}
                     </div>
                   )}
+                  {shouldShowRecoveryCTA && (
+                    <div className="rounded-xl border border-amber-200/30 bg-amber-500/10 p-3 text-xs text-white/90 space-y-2">
+                      <p className="font-semibold">Pagamento em aberto detectado.</p>
+                      <p>Use a recuperação automática para regularizar sem perder contexto da assinatura.</p>
+                      <Button
+                        onClick={() => void handleRecoverPayment()}
+                        disabled={isOpeningCheckout !== null || isConfirmingPreapproval}
+                        className="h-9 bg-amber-500 hover:bg-amber-600 text-white"
+                      >
+                        {isConfirmingPreapproval
+                          ? "Validando pagamento..."
+                          : isOpeningCheckout
+                            ? "Abrindo checkout..."
+                            : "Regularizar pagamento agora"}
+                      </Button>
+                    </div>
+                  )}
                   {!isBillingExemptRole && effectivePlan !== "free" && (
                     <div className="pt-1">
                       <Button
@@ -633,6 +768,49 @@ export default function SettingsPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {!isBillingExemptRole && (
+                <Card className="border-none shadow-lg rounded-3xl bg-white dark:bg-zinc-900">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-zinc-600" /> Historico de cobranca
+                    </CardTitle>
+                    <CardDescription>
+                      Ultimos eventos de assinatura e pagamento.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {isLoadingBillingHistory ? (
+                      <div className="h-20 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando historico...
+                      </div>
+                    ) : billingHistory.length === 0 ? (
+                      <div className="h-20 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
+                        Nenhum evento encontrado.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {billingHistory.slice(0, 8).map((item) => (
+                          <div key={item.id} className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-zinc-900">{formatBillingEventLabel(item)}</p>
+                              <Badge variant="secondary" className="text-[10px] uppercase">
+                                {item.paymentStatus || "n/a"}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-zinc-600 mt-1">
+                              {item.createdAt ? new Date(item.createdAt).toLocaleString() : "Data indisponivel"}
+                              {item.plan ? ` • Plano ${item.plan}` : ""}
+                              {typeof item.amount === "number" ? ` • ${item.currency || "BRL"} ${item.amount.toFixed(2)}` : ""}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               {canUpgrade && (
                 <div className="grid gap-6 md:grid-cols-2">
                   {effectivePlan !== 'premium' && (
@@ -852,9 +1030,48 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Enviar Ideia ou Sugestão</h4>
-                      <p className="text-sm text-zinc-500">Tem uma ideia incrível? Queremos ouvir você!</p>
+                      <p className="text-sm text-zinc-500">Tem uma ideia incrível Queremos ouvir você!</p>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200">
+                    <HelpCircle className="h-5 w-5" /> Meus chamados
+                  </CardTitle>
+                  <CardDescription>
+                    Acompanhe o protocolo e o status do atendimento em tempo real.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {isLoadingMySupportTickets ? (
+                    <div className="h-20 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando chamados...
+                    </div>
+                  ) : mySupportTickets.length === 0 ? (
+                    <div className="h-20 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
+                      Nenhum chamado aberto ainda.
+                    </div>
+                  ) : (
+                    mySupportTickets.map((ticket) => (
+                      <div key={ticket.id} className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-zinc-900">
+                            Protocolo {ticket.protocol || `#${ticket.id.slice(0, 8)}`}
+                          </p>
+                          <Badge variant="outline" className={getSupportStatusBadgeClass(ticket.status)}>
+                            {formatSupportStatus(ticket.status)}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-zinc-600 mt-1 line-clamp-1">{ticket.message}</p>
+                        <p className="text-[11px] text-zinc-500 mt-1">
+                          {ticket.createdAt.toLocaleString("pt-BR")}
+                        </p>
+                      </div>
+                    ))
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -908,7 +1125,7 @@ export default function SettingsPage() {
           <DialogContent className="sm:max-w-[425px] rounded-3xl p-6">
             <DialogHeader>
               <DialogTitle className="text-red-600 flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" /> Cancelar assinatura?
+                <AlertTriangle className="h-5 w-5" /> Cancelar assinatura
               </DialogTitle>
               <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
                 Sua assinatura recorrente no Mercado Pago sera cancelada.
@@ -984,7 +1201,7 @@ export default function SettingsPage() {
           <DialogContent className="sm:max-w-[425px] rounded-3xl p-6">
             <DialogHeader>
               <DialogTitle className="text-red-600 flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" /> Tem certeza absoluta?
+                <AlertTriangle className="h-5 w-5" /> Tem certeza absoluta
               </DialogTitle>
               <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
                 Esta ação não pode ser desfeita.
@@ -1030,3 +1247,7 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+
+
+

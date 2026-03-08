@@ -79,6 +79,61 @@ export async function supabaseSelect(
   return data;
 }
 
+export async function supabaseSelectPaged(
+  table: string,
+  options?: {
+    select?: string;
+    filters?: Record<string, QueryValue>;
+    order?: string;
+    page?: number;
+    limit?: number;
+  }
+) {
+  const baseUrl = getSupabaseBaseUrl();
+  const serviceKey = getSupabaseServerKey();
+
+  const page = Math.max(1, Number(options?.page || 1));
+  const limit = Math.max(1, Math.min(200, Number(options?.limit || 20)));
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  const params = new URLSearchParams();
+  params.set("select", options?.select || "*");
+  if (options?.order) params.set("order", options.order);
+
+  if (options?.filters) {
+    for (const [field, value] of Object.entries(options.filters)) {
+      if (value === undefined) continue;
+      params.set(field, toFilterValue(value));
+    }
+  }
+
+  const response = await fetch(`${baseUrl}/rest/v1/${table}?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+      Prefer: "count=exact",
+      "Range-Unit": "items",
+      Range: `${from}-${to}`,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`supabase_select_paged_failed_${table}_${response.status}:${body}`);
+  }
+
+  const data = (await response.json()) as Array<Record<string, unknown>>;
+  const contentRange = response.headers.get("content-range") || "";
+  const match = contentRange.match(/\/(\d+)$/);
+  const total = match ? Number(match[1]) : data.length;
+
+  return { data, total, page, limit };
+}
+
 export async function supabaseUpsertRows(
   table: string,
   rows: Array<Record<string, unknown>>,

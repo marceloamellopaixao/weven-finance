@@ -1,6 +1,6 @@
-type OpenApiServer = {
+﻿type OpenApiServer = {
   url: string;
-  description?: string;
+  description: string;
 };
 
 export function buildOpenApiSpec(servers: OpenApiServer[]) {
@@ -17,6 +17,8 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       { name: "Account", description: "Gestão de conta do proprio usuário" },
       { name: "Profile", description: "Perfil do usuário autenticado e bootstrap de conta" },
       { name: "AdminUsers", description: "Gestão administrativa de usuários e operacoes de manutencao" },
+      { name: "AdminAudit", description: "Consulta de trilha de auditoria administrativa" },
+      { name: "AdminMetrics", description: "Metricas operacionais das APIs" },
       { name: "Impersonation", description: "Solicitacao e aprovacao de acesso da equipe ao ambiente do usuário" },
       { name: "Categories", description: "Gestão de categorias personalizadas e visibilidade das padrao" },
       { name: "Transactions", description: "CRUD e operacoes em lote de transações" },
@@ -27,13 +29,15 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       { name: "Support", description: "Chamados de suporte e solicitacoes de feature" },
       { name: "System", description: "Configurações globais do sistema" },
       { name: "MercadoPago", description: "Webhook e sincronizacao com gateway" },
+      { name: "Notifications", description: "Notificacoes in-app em tempo real para o usuario autenticado" },
+      { name: "Onboarding", description: "Progresso guiado de primeiros passos do usuario" },
     ],
     components: {
       securitySchemes: {
         BearerAuth: {
           type: "http",
           scheme: "bearer",
-          bearerFormat: "Firebase ID Token",
+          bearerFormat: "Supabase JWT",
         },
       },
       schemas: {
@@ -159,7 +163,19 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
         },
       },
-      "/api/account/delete": {
+      "/api/billing/history": {
+        get: {
+          tags: ["Billing"],
+          summary: "Historico de eventos de cobranca do usuario autenticado",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: { description: "Historico retornado" },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },      "/api/account/delete": {
         post: {
           tags: ["Account"],
           summary: "Excluir (soft-delete) a propria conta",
@@ -256,6 +272,100 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
         },
       },
+      "/api/notifications": {
+        get: {
+          tags: ["Notifications"],
+          summary: "Listar notificacoes in-app do usuario autenticado",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: { description: "Notificacoes retornadas" },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+        patch: {
+          tags: ["Notifications"],
+          summary: "Marcar notificacao como lida (ou todas)",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string", nullable: true },
+                    markAllRead: { type: "boolean", nullable: true },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Notificacoes atualizadas" },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+        delete: {
+          tags: ["Notifications"],
+          summary: "Limpar todas as notificacoes do usuario autenticado",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: { description: "Notificacoes removidas" },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/onboarding": {
+        get: {
+          tags: ["Onboarding"],
+          summary: "Consultar progresso de onboarding do usuario autenticado",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: { description: "Progresso retornado" },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+        put: {
+          tags: ["Onboarding"],
+          summary: "Atualizar flags do onboarding (dismiss e steps)",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    dismissed: { type: "boolean", nullable: true },
+                    steps: {
+                      type: "object",
+                      properties: {
+                        firstTransaction: { type: "boolean", nullable: true },
+                        firstCard: { type: "boolean", nullable: true },
+                        firstGoal: { type: "boolean", nullable: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Onboarding atualizado" },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
       "/api/admin/users": {
         get: {
           tags: ["AdminUsers"],
@@ -327,6 +437,61 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             400: { description: "Payload/acao invalida", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/admin/metrics": {
+        get: {
+          tags: ["AdminMetrics"],
+          summary: "Resumo operacional de mtricas das APIs",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "windowMinutes", in: "query", required: false, schema: { type: "integer", minimum: 5, maximum: 1440, default: 60 } },
+          ],
+          responses: {
+            200: { description: "Mtricas retornadas" },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/admin/health": {
+        get: {
+          tags: ["AdminMetrics"],
+          summary: "Painel de saude operacional (DB, webhook, pagamentos e API)",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: { description: "Saude operacional retornada" },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/admin/audit-logs": {
+        get: {
+          tags: ["AdminAudit"],
+          summary: "Listar trilha de auditoria administrativa com filtros",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "page", in: "query", required: false, schema: { type: "integer", minimum: 1, default: 1 } },
+            { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } },
+            { name: "q", in: "query", required: false, schema: { type: "string" } },
+            { name: "action", in: "query", required: false, schema: { type: "string" } },
+            { name: "actorUid", in: "query", required: false, schema: { type: "string" } },
+            { name: "targetUid", in: "query", required: false, schema: { type: "string" } },
+            { name: "from", in: "query", required: false, schema: { type: "string", format: "date" } },
+            { name: "to", in: "query", required: false, schema: { type: "string", format: "date" } },
+          ],
+          responses: {
+            200: { description: "Logs retornados" },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -1008,3 +1173,4 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
     },
   };
 }
+

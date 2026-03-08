@@ -3,6 +3,7 @@ import { confirmLatestPreapprovalForUser, confirmPreapprovalForUser } from "@/li
 import { UserPlan } from "@/types/user";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { supabaseSelect } from "@/services/supabase/admin";
+import { pushNotification } from "@/lib/notifications/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,6 +74,18 @@ export async function POST(request: NextRequest) {
         checkoutStartedAt: pendingCheckoutAt,
       });
     }
+
+    await pushNotification({
+      uid: decoded.uid,
+      kind: "billing",
+      title: "Assinatura atualizada",
+      message: `Seu plano foi atualizado para ${result.targetPlan}.`,
+      href: "/settings?tab=billing",
+      meta: {
+        targetPlan: result.targetPlan,
+        targetPaymentStatus: result.targetPaymentStatus,
+      },
+    });
 
     return NextResponse.json(result, { status: 200 });
   } catch (error) {

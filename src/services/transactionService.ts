@@ -113,6 +113,13 @@ type ApiTransaction = Omit<Transaction, "createdAt" | "amount" | "description"> 
   isEncrypted?: boolean;
 };
 
+type TransactionsPage = {
+  transactions: Transaction[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
 async function fetchTransactions(uid: string, groupId?: string): Promise<Transaction[]> {
   const cryptoUid = resolveCryptoUid(uid);
   const query = groupId ? `?groupId=${encodeURIComponent(groupId)}` : "";
@@ -153,6 +160,66 @@ async function fetchTransactions(uid: string, groupId?: string): Promise<Transac
   );
 
   return parsed.filter((t) => !t.isArchived);
+}
+
+export async function fetchTransactionsPage(
+  uid: string,
+  params?: { page?: number; limit?: number }
+): Promise<TransactionsPage> {
+  const cryptoUid = resolveCryptoUid(uid);
+  const page = Math.max(1, Number(params?.page || 1));
+  const limit = Math.max(1, Math.min(200, Number(params?.limit || 50)));
+  const query = `?page=${page}&limit=${limit}`;
+  const response = await apiFetch(`/api/transactions${query}`, { method: "GET" });
+  const payload = (await response.json()) as {
+    ok: boolean;
+    error?: string;
+    transactions?: ApiTransaction[];
+    total?: number;
+    page?: number;
+    limit?: number;
+  };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Não foi possível carregar transações");
+  }
+
+  const transactions = payload.transactions || [];
+  const parsed = await Promise.all(
+    transactions.map(async (tx) => {
+      let decryptedDesc = tx.description;
+      let decryptedAmount = String(tx.amount);
+
+      if (tx.isEncrypted) {
+        decryptedDesc = await decryptData(tx.description, cryptoUid);
+        decryptedAmount = await decryptData(String(tx.amount), cryptoUid);
+      }
+
+      const parsedAmount = Number(decryptedAmount);
+      const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
+      const isDecryptionFailed =
+        tx.isEncrypted &&
+        decryptedDesc === tx.description &&
+        typeof tx.description === "string" &&
+        tx.description.length > 50;
+
+      return {
+        ...tx,
+        description: isDecryptionFailed
+          ? "Dados Protegidos (Migracao Necessaria)"
+          : decryptedDesc,
+        amount: safeAmount,
+        createdAt: tx.createdAt ? new Date(tx.createdAt) : new Date(),
+      } as Transaction;
+    })
+  );
+
+  const visible = parsed.filter((t) => !t.isArchived);
+  return {
+    transactions: visible,
+    total: Number(payload.total || visible.length),
+    page: Number(payload.page || page),
+    limit: Number(payload.limit || limit),
+  };
 }
 
 export const migrateCryptography = async (uid: string) => {
