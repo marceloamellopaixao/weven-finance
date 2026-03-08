@@ -1,76 +1,103 @@
 import { NextRequest, NextResponse } from "next/server";
-import { FieldValue } from "firebase-admin/firestore";
-import { adminAuth, adminDb } from "@/services/firebase/admin";
+import { verifyRequestAuth } from "@/lib/auth/server";
+import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function archiveUserTransactions(uid: string) {
-  const transactionsRef = adminDb.collection("users").doc(uid).collection("transactions");
-  const snapshot = await transactionsRef.get();
-  if (snapshot.empty) return;
+  const rows = await supabaseSelect("transactions", {
+    select: "id,uid,source_id,raw",
+    filters: { uid },
+  });
+  if (rows.length === 0) return;
 
-  let batch = adminDb.batch();
-  let opCount = 0;
+  const upserts = rows.map((row) => {
+    const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+    raw.isArchived = true;
+    return {
+      id: row.id,
+      uid,
+      source_id: row.source_id,
+      raw,
+      updated_at: new Date().toISOString(),
+    };
+  });
 
-  for (const doc of snapshot.docs) {
-    batch.set(doc.ref, { isArchived: true }, { merge: true });
-    opCount += 1;
-
-    if (opCount >= 400) {
-      await batch.commit();
-      batch = adminDb.batch();
-      opCount = 0;
-    }
-  }
-
-  if (opCount > 0) {
-    await batch.commit();
-  }
+  await supabaseUpsertRows("transactions", upserts, { onConflict: "id" });
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("authorization");
-    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : null;
-    if (!token) {
-      return NextResponse.json({ ok: false, error: "missing_auth_token" }, { status: 401 });
-    }
-
-    const decoded = await adminAuth.verifyIdToken(token);
+    const decoded = await verifyRequestAuth(request);
     const uid = decoded.uid;
 
     await archiveUserTransactions(uid);
-    await adminDb.collection("users").doc(uid).set(
-      {
-        status: "deleted",
-        role: "client",
-        plan: "free",
-        paymentStatus: "canceled",
-        blockReason: "Conta excluida pelo usuário",
-        deletedAt: new Date().toISOString(),
-        billing: {
-          source: "system",
-          lastSyncAt: new Date().toISOString(),
-          pendingPreapprovalId: null,
-          pendingPlan: null,
-          pendingCheckoutAt: null,
-          lastError: null,
+
+    const profileRows = await supabaseSelect("profiles", {
+      filters: { uid },
+      limit: 1,
+    });
+    const profileRaw = ((profileRows[0]?.raw as Record<string, unknown> | undefined) ?? {});
+
+    const billing = {
+      source: "system",
+      lastSyncAt: new Date().toISOString(),
+      pendingPreapprovalId: null,
+      pendingPlan: null,
+      pendingCheckoutAt: null,
+      lastError: null,
+    };
+
+    await supabaseUpsertRows(
+      "profiles",
+      [
+        {
+          uid,
+          status: "deleted",
+          role: "client",
+          plan: "free",
+          payment_status: "canceled",
+          block_reason: "Conta excluida pelo usuario",
+          deleted_at: new Date().toISOString(),
+          billing,
+          raw: {
+            ...profileRaw,
+            status: "deleted",
+            role: "client",
+            plan: "free",
+            paymentStatus: "canceled",
+            blockReason: "Conta excluida pelo usuario",
+            deletedAt: new Date().toISOString(),
+            billing,
+          },
+          updated_at: new Date().toISOString(),
         },
-      },
-      { merge: true }
+      ],
+      { onConflict: "uid" }
     );
 
-    await adminDb.collection("billing_events").doc(`account_delete_${uid}_${Date.now()}`).set(
-      {
-        topic: "account_delete",
-        action: "self_delete",
-        resourceId: uid,
-        uid,
-        status: "processed",
-        processedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
+    await supabaseUpsertRows(
+      "billing_events",
+      [
+        {
+          id: `account_delete_${uid}_${Date.now()}`,
+          uid,
+          event_type: "account_delete",
+          action: "self_delete",
+          provider: "system",
+          raw: {
+            topic: "account_delete",
+            action: "self_delete",
+            resourceId: uid,
+            uid,
+            status: "processed",
+            processedAt: new Date().toISOString(),
+          },
+          created_at: new Date().toISOString(),
+        },
+      ],
+      { onConflict: "id" }
     );
 
     return NextResponse.json({ ok: true }, { status: 200 });
@@ -82,3 +109,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

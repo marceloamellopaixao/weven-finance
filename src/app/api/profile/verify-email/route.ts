@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/services/firebase/admin";
+import { verifyRequestAuth } from "@/lib/auth/server";
+import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 async function getUidFromBearer(request: NextRequest): Promise<string> {
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : null;
-  if (!token) throw new Error("missing_auth_token");
-  const decoded = await adminAuth.verifyIdToken(token);
-  return decoded.uid;
+  const auth = await verifyRequestAuth(request);
+  return auth.uid;
 }
 
 export const runtime = "nodejs";
@@ -15,12 +13,22 @@ export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest) {
   try {
     const uid = await getUidFromBearer(request);
-    await adminDb.collection("users").doc(uid).set(
-      {
-        verifiedEmail: true,
-        status: "active",
-      },
-      { merge: true }
+    const existingRows = await supabaseSelect("profiles", { filters: { uid }, limit: 1 });
+    const raw = ((existingRows[0]?.raw as Record<string, unknown> | undefined) || {});
+    raw.verifiedEmail = true;
+    raw.status = "active";
+
+    await supabaseUpsertRows(
+      "profiles",
+      [
+        {
+          uid,
+          verified_email: true,
+          status: "active",
+          raw,
+        },
+      ],
+      { onConflict: "uid" }
     );
 
     return NextResponse.json({ ok: true }, { status: 200 });
@@ -30,3 +38,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
+

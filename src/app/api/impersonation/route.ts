@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/services/firebase/admin";
 import {
   buildApprovedRequestPatch,
   buildRejectedRequestPatch,
@@ -10,6 +9,7 @@ import {
   type SupportAccessRequestDoc,
 } from "@/lib/impersonation/server";
 import { UserRole } from "@/types/user";
+import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 function toUserRole(value: unknown): UserRole {
   if (value === "admin" || value === "moderator" || value === "support" || value === "client") {
@@ -21,19 +21,30 @@ function toUserRole(value: unknown): UserRole {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function mapAccessRows(rows: Array<Record<string, unknown>>) {
+  return rows.map((row) => ({
+    id: String(row.id || ""),
+    ...(((row.raw as SupportAccessRequestDoc | null) ?? {}) as SupportAccessRequestDoc),
+  }));
+}
+
+function mapActionRows(rows: Array<Record<string, unknown>>) {
+  return rows.map((row) => ({
+    id: String(row.id || ""),
+    ...(((row.raw as ImpersonationActionRequestDoc | null) ?? {}) as ImpersonationActionRequestDoc),
+  }));
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthContextFromRequest(request);
     const mode = request.nextUrl.searchParams.get("mode") || "pending";
 
     if (mode === "pending") {
-      const snapshot = await adminDb
-        .collection("support_access_requests")
-        .where("targetUid", "==", auth.uid)
-        .get();
-
-      const requests = snapshot.docs
-        .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as SupportAccessRequestDoc) }))
+      const rows = await supabaseSelect("support_access_requests", {
+        filters: { target_uid: auth.uid },
+      });
+      const requests = mapAccessRows(rows)
         .filter((item) => item.status === "pending")
         .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 
@@ -45,14 +56,12 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
       const targetUid = request.nextUrl.searchParams.get("targetUid")?.trim();
-      let query = adminDb.collection("support_access_requests").where("requesterUid", "==", auth.uid);
-      if (targetUid) {
-        query = query.where("targetUid", "==", targetUid);
-      }
+      const rows = await supabaseSelect("support_access_requests", {
+        filters: { requester_uid: auth.uid },
+      });
 
-      const snapshot = await query.get();
-      const requests = snapshot.docs
-        .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as SupportAccessRequestDoc) }))
+      const requests = mapAccessRows(rows)
+        .filter((item) => (targetUid ? item.targetUid === targetUid : true))
         .sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
 
       return NextResponse.json({ ok: true, requests }, { status: 200 });
@@ -67,34 +76,37 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "missing_target_uid" }, { status: 400 });
       }
 
-      const snapshot = await adminDb
-        .collection("support_access_requests")
-        .where("requesterUid", "==", auth.uid)
-        .get();
+      const rows = await supabaseSelect("support_access_requests", {
+        filters: { requester_uid: auth.uid },
+      });
 
-      const latest = snapshot.docs
-        .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as SupportAccessRequestDoc) }))
+      const latest = mapAccessRows(rows)
         .filter((item) => item.targetUid === targetUid)
         .sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)))[0];
 
       const nowIso = new Date().toISOString();
-      const approved = !!latest && latest.status === "approved" && latest.permissionImpersonate === true && (!latest.expiresAt || latest.expiresAt > nowIso);
+      const approved =
+        !!latest &&
+        latest.status === "approved" &&
+        latest.permissionImpersonate === true &&
+        (!latest.expiresAt || latest.expiresAt > nowIso);
 
-      return NextResponse.json({
-        ok: true,
-        approved,
-        request: latest || null,
-      }, { status: 200 });
+      return NextResponse.json(
+        {
+          ok: true,
+          approved,
+          request: latest || null,
+        },
+        { status: 200 }
+      );
     }
 
     if (mode === "pending-actions") {
-      const snapshot = await adminDb
-        .collection("impersonation_action_requests")
-        .where("targetUid", "==", auth.uid)
-        .get();
+      const rows = await supabaseSelect("impersonation_action_requests", {
+        filters: { target_uid: auth.uid },
+      });
 
-      const requests = snapshot.docs
-        .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as ImpersonationActionRequestDoc) }))
+      const requests = mapActionRows(rows)
         .filter((item) => item.status === "pending")
         .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 
@@ -110,16 +122,23 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "missing_action_request_id" }, { status: 400 });
       }
 
-      const actionSnap = await adminDb.collection("impersonation_action_requests").doc(actionRequestId).get();
-      if (!actionSnap.exists) {
+      const rows = await supabaseSelect("impersonation_action_requests", {
+        filters: { id: actionRequestId },
+        limit: 1,
+      });
+      if (rows.length === 0) {
         return NextResponse.json({ ok: false, error: "action_request_not_found" }, { status: 404 });
       }
-      const action = actionSnap.data() as ImpersonationActionRequestDoc;
+
+      const action = ((rows[0].raw as ImpersonationActionRequestDoc | null) ?? null);
+      if (!action) {
+        return NextResponse.json({ ok: false, error: "action_request_not_found" }, { status: 404 });
+      }
       if (action.requesterUid !== auth.uid) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
 
-      return NextResponse.json({ ok: true, request: { id: actionSnap.id, ...action } }, { status: 200 });
+      return NextResponse.json({ ok: true, request: { id: rows[0].id, ...action } }, { status: 200 });
     }
 
     return NextResponse.json({ ok: false, error: "invalid_mode" }, { status: 400 });
@@ -150,49 +169,68 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "cannot_impersonate_self" }, { status: 400 });
       }
 
-      const targetSnap = await adminDb.collection("users").doc(targetUid).get();
-      if (!targetSnap.exists) {
+      const targetRows = await supabaseSelect("profiles", {
+        filters: { uid: targetUid },
+        limit: 1,
+      });
+      if (targetRows.length === 0) {
         return NextResponse.json({ ok: false, error: "target_not_found" }, { status: 404 });
       }
-      const targetData = targetSnap.data() as Record<string, unknown>;
+      const targetRaw = (targetRows[0].raw as Record<string, unknown> | null) ?? {};
 
-      const existingPendingSnapshot = await adminDb
-        .collection("support_access_requests")
-        .where("requesterUid", "==", auth.uid)
-        .get();
+      const existingRows = await supabaseSelect("support_access_requests", {
+        filters: { requester_uid: auth.uid },
+      });
 
-      const existingPending = existingPendingSnapshot.docs
-        .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as SupportAccessRequestDoc) }))
-        .find((item) => item.targetUid === targetUid && item.status === "pending");
+      const existingPending = mapAccessRows(existingRows).find(
+        (item) => item.targetUid === targetUid && item.status === "pending"
+      );
 
       if (existingPending) {
-        return NextResponse.json({
-          ok: true,
-          requestId: existingPending.id,
-          status: "pending",
-          alreadyPending: true,
-        }, { status: 200 });
+        return NextResponse.json(
+          {
+            ok: true,
+            requestId: existingPending.id,
+            status: "pending",
+            alreadyPending: true,
+          },
+          { status: 200 }
+        );
       }
 
       const nowIso = new Date().toISOString();
-      const requestRef = await adminDb.collection("support_access_requests").add({
+      const requestId = crypto.randomUUID();
+      const raw: SupportAccessRequestDoc = {
         requesterUid: auth.uid,
         requesterDisplayName: auth.displayName,
         requesterEmail: auth.email,
         requesterRole: auth.role,
         targetUid,
-        targetDisplayName: String(targetData.displayName || "Usuário"),
-        targetEmail: String(targetData.email || ""),
-        targetRole: toUserRole(targetData.role),
+        targetDisplayName: String(targetRows[0].display_name || targetRaw.displayName || "Usuario"),
+        targetEmail: String(targetRows[0].email || targetRaw.email || ""),
+        targetRole: toUserRole(targetRows[0].role || targetRaw.role),
         status: "pending",
         permissionImpersonate: null,
         createdAt: nowIso,
         updatedAt: nowIso,
         handledAt: null,
         expiresAt: null,
-      } satisfies SupportAccessRequestDoc);
+      };
 
-      return NextResponse.json({ ok: true, requestId: requestRef.id, status: "pending" }, { status: 200 });
+      await supabaseUpsertRows("support_access_requests", [
+        {
+          id: requestId,
+          requester_uid: auth.uid,
+          target_uid: targetUid,
+          request_status: "pending",
+          permission_impersonate: null,
+          raw,
+          created_at: nowIso,
+          updated_at: nowIso,
+        },
+      ]);
+
+      return NextResponse.json({ ok: true, requestId, status: "pending" }, { status: 200 });
     }
 
     if (body.action === "respond") {
@@ -201,13 +239,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
       }
 
-      const requestRef = adminDb.collection("support_access_requests").doc(requestId);
-      const requestSnap = await requestRef.get();
-      if (!requestSnap.exists) {
+      const rows = await supabaseSelect("support_access_requests", {
+        filters: { id: requestId },
+        limit: 1,
+      });
+      if (rows.length === 0) {
         return NextResponse.json({ ok: false, error: "request_not_found" }, { status: 404 });
       }
 
-      const requestData = requestSnap.data() as SupportAccessRequestDoc;
+      const requestData = ((rows[0].raw as SupportAccessRequestDoc | null) ?? null);
+      if (!requestData) {
+        return NextResponse.json({ ok: false, error: "request_not_found" }, { status: 404 });
+      }
       if (requestData.targetUid !== auth.uid) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
@@ -216,7 +259,23 @@ export async function POST(request: NextRequest) {
       }
 
       const patch = body.approved ? buildApprovedRequestPatch() : buildRejectedRequestPatch();
-      await requestRef.set(patch, { merge: true });
+      const raw = { ...requestData, ...patch };
+
+      await supabaseUpsertRows(
+        "support_access_requests",
+        [
+          {
+            id: requestId,
+            requester_uid: requestData.requesterUid,
+            target_uid: requestData.targetUid,
+            request_status: raw.status,
+            permission_impersonate: raw.permissionImpersonate,
+            raw,
+            updated_at: raw.updatedAt,
+          },
+        ],
+        { onConflict: "id" }
+      );
 
       await createSupportAccessLog({
         idUser: requestData.targetUid,
@@ -231,11 +290,14 @@ export async function POST(request: NextRequest) {
         requestId,
       });
 
-      return NextResponse.json({
-        ok: true,
-        requestId,
-        status: body.approved ? "approved" : "rejected",
-      }, { status: 200 });
+      return NextResponse.json(
+        {
+          ok: true,
+          requestId,
+          status: body.approved ? "approved" : "rejected",
+        },
+        { status: 200 }
+      );
     }
 
     if (body.action === "respond-action") {
@@ -244,12 +306,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
       }
 
-      const actionRef = adminDb.collection("impersonation_action_requests").doc(actionRequestId);
-      const actionSnap = await actionRef.get();
-      if (!actionSnap.exists) {
+      const rows = await supabaseSelect("impersonation_action_requests", {
+        filters: { id: actionRequestId },
+        limit: 1,
+      });
+      if (rows.length === 0) {
         return NextResponse.json({ ok: false, error: "action_request_not_found" }, { status: 404 });
       }
-      const actionData = actionSnap.data() as ImpersonationActionRequestDoc;
+
+      const actionData = ((rows[0].raw as ImpersonationActionRequestDoc | null) ?? null);
+      if (!actionData) {
+        return NextResponse.json({ ok: false, error: "action_request_not_found" }, { status: 404 });
+      }
       if (actionData.targetUid !== auth.uid) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
@@ -274,7 +342,22 @@ export async function POST(request: NextRequest) {
             expiresAt: null,
           };
 
-      await actionRef.set(patch, { merge: true });
+      const raw = { ...actionData, ...patch };
+      await supabaseUpsertRows(
+        "impersonation_action_requests",
+        [
+          {
+            id: actionRequestId,
+            requester_uid: actionData.requesterUid,
+            target_uid: actionData.targetUid,
+            action_type: actionData.actionType,
+            action_status: raw.status,
+            raw,
+            updated_at: raw.updatedAt,
+          },
+        ],
+        { onConflict: "id" }
+      );
       await createSupportAccessLog({
         idUser: actionData.targetUid,
         userDisplayName: actionData.targetDisplayName,
@@ -288,11 +371,14 @@ export async function POST(request: NextRequest) {
         requestId: actionRequestId,
       });
 
-      return NextResponse.json({
-        ok: true,
-        actionRequestId,
-        status: body.approved ? "approved" : "rejected",
-      }, { status: 200 });
+      return NextResponse.json(
+        {
+          ok: true,
+          actionRequestId,
+          status: body.approved ? "approved" : "rejected",
+        },
+        { status: 200 }
+      );
     }
 
     return NextResponse.json({ ok: false, error: "invalid_action" }, { status: 400 });
@@ -302,3 +388,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
+

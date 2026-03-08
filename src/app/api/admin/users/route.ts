@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/services/firebase/admin";
+import { verifyRequestAuth } from "@/lib/auth/server";
+import { supabaseDeleteByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 type UserRole = "admin" | "moderator" | "support" | "client";
 
 async function getAuthContext(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : null;
-  if (!token) throw new Error("missing_auth_token");
-  const decoded = await adminAuth.verifyIdToken(token);
-  const userSnap = await adminDb.collection("users").doc(decoded.uid).get();
-  if (!userSnap.exists) throw new Error("user_not_found");
-  const role = String((userSnap.data() as { role?: string }).role || "client") as UserRole;
+  const decoded = await verifyRequestAuth(request);
+  const rows = await supabaseSelect("profiles", { filters: { uid: decoded.uid }, limit: 1 });
+  if (rows.length === 0) throw new Error("user_not_found");
+  const row = rows[0];
+  const raw = (row.raw as Record<string, unknown> | null) ?? {};
+  const role = String(row.role || raw.role || "client") as UserRole;
   return { uid: decoded.uid, role };
 }
 
@@ -19,40 +19,61 @@ function isManager(role: UserRole) {
 }
 
 async function setArchiveForAllTransactions(uid: string, value: boolean) {
-  const snapshot = await adminDb.collection("users").doc(uid).collection("transactions").get();
-  if (snapshot.empty) return;
-  let batch = adminDb.batch();
-  let count = 0;
-  for (const docSnap of snapshot.docs) {
-    batch.set(docSnap.ref, { isArchived: value }, { merge: true });
-    count += 1;
-    if (count >= 400) {
-      await batch.commit();
-      batch = adminDb.batch();
-      count = 0;
-    }
-  }
-  if (count > 0) await batch.commit();
+  const rows = await supabaseSelect("transactions", {
+    select: "id,uid,source_id,raw",
+    filters: { uid },
+  });
+  if (rows.length === 0) return;
+
+  await supabaseUpsertRows(
+    "transactions",
+    rows.map((row) => {
+      const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+      raw.isArchived = value;
+      return {
+        id: row.id,
+        uid,
+        source_id: row.source_id,
+        raw,
+        updated_at: new Date().toISOString(),
+      };
+    }),
+    { onConflict: "id" }
+  );
 }
 
 async function deleteAllTransactions(uid: string) {
-  const snapshot = await adminDb.collection("users").doc(uid).collection("transactions").get();
-  if (snapshot.empty) return 0;
-  let batch = adminDb.batch();
-  let count = 0;
-  let deleted = 0;
-  for (const docSnap of snapshot.docs) {
-    batch.delete(docSnap.ref);
-    count += 1;
-    deleted += 1;
-    if (count >= 400) {
-      await batch.commit();
-      batch = adminDb.batch();
-      count = 0;
-    }
+  const rows = await supabaseSelect("transactions", {
+    select: "source_id",
+    filters: { uid },
+  });
+  for (const row of rows) {
+    await supabaseDeleteByFilters("transactions", {
+      uid,
+      source_id: String(row.source_id || ""),
+    });
   }
-  if (count > 0) await batch.commit();
-  return deleted;
+  return rows.length;
+}
+
+function mapProfileRowToUser(row: Record<string, unknown>) {
+  const raw = (row.raw as Record<string, unknown> | null) ?? {};
+  return {
+    uid: String(row.uid || ""),
+    email: row.email ?? raw.email ?? "",
+    displayName: row.display_name ?? raw.displayName ?? "",
+    completeName: row.complete_name ?? raw.completeName ?? "",
+    phone: row.phone ?? raw.phone ?? "",
+    role: row.role ?? raw.role ?? "client",
+    plan: row.plan ?? raw.plan ?? "free",
+    status: row.status ?? raw.status ?? "active",
+    paymentStatus: row.payment_status ?? raw.paymentStatus ?? "pending",
+    transactionCount: row.transaction_count ?? raw.transactionCount ?? 0,
+    verifiedEmail: row.verified_email ?? raw.verifiedEmail ?? false,
+    blockReason: row.block_reason ?? raw.blockReason ?? "",
+    createdAt: row.created_at ?? raw.createdAt ?? "",
+    deletedAt: row.deleted_at ?? raw.deletedAt ?? null,
+  };
 }
 
 export const runtime = "nodejs";
@@ -66,27 +87,12 @@ export async function GET(request: NextRequest) {
     }
 
     const scope = request.nextUrl.searchParams.get("scope");
+    const rows = await supabaseSelect("profiles", { order: "created_at.desc.nullslast" });
+    let users = rows.map(mapProfileRowToUser);
+
     if (scope === "staff") {
-      const usersRef = adminDb.collection("users");
-      const [admins, moderators] = await Promise.all([
-        usersRef.where("role", "==", "admin").get(),
-        usersRef.where("role", "==", "moderator").get(),
-      ]);
-
-      const staff = [...admins.docs, ...moderators.docs].map((docSnap) => ({
-        uid: docSnap.id,
-        ...docSnap.data(),
-      })) as Array<Record<string, unknown>>;
-      return NextResponse.json({ ok: true, users: staff }, { status: 200 });
+      users = users.filter((user) => user.role === "admin" || user.role === "moderator");
     }
-
-    const usersSnapshot = await adminDb.collection("users").get();
-    const users = (usersSnapshot.docs.map((docSnap) => ({
-      uid: docSnap.id,
-      ...docSnap.data(),
-    })) as Array<Record<string, unknown>>).sort((a, b) =>
-      String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
-    );
 
     return NextResponse.json({ ok: true, users }, { status: 200 });
   } catch (error) {
@@ -115,7 +121,31 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
-    await adminDb.collection("users").doc(body.uid).set(body.updates, { merge: true });
+    const rows = await supabaseSelect("profiles", { filters: { uid: body.uid }, limit: 1 });
+    if (rows.length === 0) {
+      return NextResponse.json({ ok: false, error: "user_not_found" }, { status: 404 });
+    }
+    const row = rows[0];
+    const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+    const mergedRaw = { ...raw, ...body.updates };
+
+    await supabaseUpsertRows(
+      "profiles",
+      [
+        {
+          uid: body.uid,
+          ...(body.updates.role !== undefined ? { role: body.updates.role } : {}),
+          ...(body.updates.plan !== undefined ? { plan: body.updates.plan } : {}),
+          ...(body.updates.status !== undefined ? { status: body.updates.status } : {}),
+          ...(body.updates.paymentStatus !== undefined ? { payment_status: body.updates.paymentStatus } : {}),
+          ...(body.updates.blockReason !== undefined ? { block_reason: body.updates.blockReason } : {}),
+          raw: mergedRaw,
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      { onConflict: "uid" }
+    );
+
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
@@ -141,28 +171,33 @@ export async function POST(request: NextRequest) {
       if (auth.role !== "admin") {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
-      const snapshot = await adminDb.collection("users").get();
+      const snapshot = await supabaseSelect("profiles");
       let updateCount = 0;
-      const batch = adminDb.batch();
-      snapshot.docs.forEach((docSnap) => {
-        const data = docSnap.data();
-        const updates: Record<string, unknown> = {};
+      const upserts: Array<Record<string, unknown>> = [];
+
+      snapshot.forEach((row) => {
+        const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
         let needsUpdate = false;
-        if (data.phone === undefined) { updates.phone = ""; needsUpdate = true; }
-        if (data.completeName === undefined) { updates.completeName = data.displayName || ""; needsUpdate = true; }
-        if (data.transactionCount === undefined) { updates.transactionCount = 0; needsUpdate = true; }
-        if (data.paymentStatus === undefined) { updates.paymentStatus = "pending"; needsUpdate = true; }
-        if (data.verifiedEmail === undefined) { updates.verifiedEmail = false; needsUpdate = true; }
-        if (data.blockReason === undefined) { updates.blockReason = ""; needsUpdate = true; }
-        if (data.role === undefined) { updates.role = "client"; needsUpdate = true; }
-        if (data.plan === undefined) { updates.plan = "free"; needsUpdate = true; }
-        if (data.status === undefined) { updates.status = "active"; needsUpdate = true; }
+
+        if (row.phone === undefined && raw.phone === undefined) { raw.phone = ""; needsUpdate = true; }
+        if (row.complete_name === undefined && raw.completeName === undefined) { raw.completeName = raw.displayName || ""; needsUpdate = true; }
+        if (row.transaction_count === undefined && raw.transactionCount === undefined) { raw.transactionCount = 0; needsUpdate = true; }
+        if (row.payment_status === undefined && raw.paymentStatus === undefined) { raw.paymentStatus = "pending"; needsUpdate = true; }
+        if (row.verified_email === undefined && raw.verifiedEmail === undefined) { raw.verifiedEmail = false; needsUpdate = true; }
+        if (row.block_reason === undefined && raw.blockReason === undefined) { raw.blockReason = ""; needsUpdate = true; }
+        if (row.role === undefined && raw.role === undefined) { raw.role = "client"; needsUpdate = true; }
+        if (row.plan === undefined && raw.plan === undefined) { raw.plan = "free"; needsUpdate = true; }
+        if (row.status === undefined && raw.status === undefined) { raw.status = "active"; needsUpdate = true; }
+
         if (needsUpdate) {
-          batch.set(docSnap.ref, updates, { merge: true });
+          upserts.push({ uid: row.uid, raw, updated_at: new Date().toISOString() });
           updateCount += 1;
         }
       });
-      if (updateCount > 0) await batch.commit();
+
+      if (upserts.length > 0) {
+        await supabaseUpsertRows("profiles", upserts, { onConflict: "uid" });
+      }
       return NextResponse.json({ ok: true, count: updateCount }, { status: 200 });
     }
 
@@ -172,7 +207,9 @@ export async function POST(request: NextRequest) {
 
     if (body.action === "resetFinancialData") {
       const deleted = await deleteAllTransactions(body.uid);
-      await adminDb.collection("users").doc(body.uid).set({ transactionCount: 0 }, { merge: true });
+      await supabaseUpsertRows("profiles", [{ uid: body.uid, transaction_count: 0, updated_at: new Date().toISOString() }], {
+        onConflict: "uid",
+      });
       return NextResponse.json({ ok: true, deleted }, { status: 200 });
     }
 
@@ -181,15 +218,20 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
       await setArchiveForAllTransactions(body.uid, true);
-      await adminDb.collection("users").doc(body.uid).set(
-        {
-          status: "deleted",
-          role: "client",
-          paymentStatus: "canceled",
-          blockReason: "Usuário solicitado exclusão",
-          deletedAt: new Date().toISOString(),
-        },
-        { merge: true }
+      await supabaseUpsertRows(
+        "profiles",
+        [
+          {
+            uid: body.uid,
+            status: "deleted",
+            role: "client",
+            payment_status: "canceled",
+            block_reason: "Usuario solicitado exclusao",
+            deleted_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+        { onConflict: "uid" }
       );
       return NextResponse.json({ ok: true }, { status: 200 });
     }
@@ -198,22 +240,34 @@ export async function POST(request: NextRequest) {
       if (body.restoreData !== false) {
         await setArchiveForAllTransactions(body.uid, false);
       }
-      await adminDb.collection("users").doc(body.uid).set(
-        {
-          status: "active",
-          paymentStatus: "pending",
-          blockReason: "",
-          deletedAt: null,
-        },
-        { merge: true }
+      await supabaseUpsertRows(
+        "profiles",
+        [
+          {
+            uid: body.uid,
+            status: "active",
+            payment_status: "pending",
+            block_reason: "",
+            deleted_at: null,
+            updated_at: new Date().toISOString(),
+          },
+        ],
+        { onConflict: "uid" }
       );
       return NextResponse.json({ ok: true }, { status: 200 });
     }
 
     if (body.action === "recountTransactionCount") {
-      const countSnapshot = await adminDb.collection("users").doc(body.uid).collection("transactions").count().get();
-      const total = countSnapshot.data().count;
-      await adminDb.collection("users").doc(body.uid).set({ transactionCount: total }, { merge: true });
+      const rows = await supabaseSelect("transactions", {
+        select: "source_id",
+        filters: { uid: body.uid },
+      });
+      const total = rows.length;
+      await supabaseUpsertRows(
+        "profiles",
+        [{ uid: body.uid, transaction_count: total, updated_at: new Date().toISOString() }],
+        { onConflict: "uid" }
+      );
       return NextResponse.json({ ok: true, count: total }, { status: 200 });
     }
 
@@ -224,3 +278,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
+

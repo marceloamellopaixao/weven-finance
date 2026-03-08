@@ -1,22 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { FieldValue } from "firebase-admin/firestore";
-import { adminDb } from "@/services/firebase/admin";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { PiggyBankGoalType } from "@/types/piggyBank";
 import { enforceCreditCardPolicy } from "@/lib/credit-card/limit";
+import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function toIsoDate(value: unknown): string | null {
-  if (!value) return null;
-  if (typeof value === "string") return value;
-  if (typeof value === "object" && value !== null && "toDate" in value && typeof (value as { toDate: () => Date }).toDate === "function") {
-    return (value as { toDate: () => Date }).toDate().toISOString();
-  }
-  return null;
-}
 
 function sanitizeGoalType(value: unknown): PiggyBankGoalType {
   if (
@@ -55,7 +45,7 @@ function slugifyGoalName(value: string) {
 }
 
 function getDefaultGoalName(goalType: PiggyBankGoalType) {
-  if (goalType === "card_limit") return "Cofrinho do Cartão";
+  if (goalType === "card_limit") return "Cofrinho do Cartao";
   if (goalType === "emergency_reserve") return "Reserva de Emergencia";
   if (goalType === "travel") return "Fazer uma Viagem";
   if (goalType === "home_renovation") return "Reformar a Casa";
@@ -66,19 +56,23 @@ function getDefaultGoalName(goalType: PiggyBankGoalType) {
 export async function GET(request: NextRequest) {
   try {
     const { actingUid } = await resolveActingContext(request);
-    const snapshot = await adminDb.collection("users").doc(actingUid).collection("piggy_banks").get();
+    const rows = await supabaseSelect("piggy_banks", {
+      select: "source_id,slug,name,goal_type,total_saved,withdrawal_mode,yield_type,created_at,updated_at,raw",
+      filters: { uid: actingUid },
+      order: "updated_at.desc.nullslast",
+    });
 
-    const piggyBanks = snapshot.docs.map((docSnap) => {
-      const data = docSnap.data() as Record<string, unknown>;
+    const piggyBanks = rows.map((row) => {
+      const raw = (row.raw as Record<string, unknown> | null) ?? {};
       return {
-        id: docSnap.id,
-        slug: String(data.slug || docSnap.id),
-        name: String(data.name || "Cofrinho"),
-        goalType: sanitizeGoalType(data.goalType),
-        totalSaved: Number(data.totalSaved || 0),
-        createdAt: toIsoDate(data.createdAtServer) || (typeof data.createdAt === "string" ? data.createdAt : null),
-        updatedAt: toIsoDate(data.updatedAtServer) || (typeof data.updatedAt === "string" ? data.updatedAt : null),
-        lastDepositAt: toIsoDate(data.lastDepositAtServer) || (typeof data.lastDepositAt === "string" ? data.lastDepositAt : null),
+        id: String(row.source_id || ""),
+        slug: String(row.slug || raw.slug || row.source_id || ""),
+        name: String(row.name || raw.name || "Cofrinho"),
+        goalType: sanitizeGoalType(row.goal_type || raw.goalType),
+        totalSaved: Number(row.total_saved || raw.totalSaved || 0),
+        createdAt: String(row.created_at || raw.createdAt || ""),
+        updatedAt: String(row.updated_at || raw.updatedAt || ""),
+        lastDepositAt: typeof raw.lastDepositAt === "string" ? raw.lastDepositAt : null,
       };
     });
 
@@ -139,52 +133,95 @@ export async function POST(request: NextRequest) {
     const today = nowIso.slice(0, 10);
     const slug = slugifyGoalName(goalName);
 
-    const piggyRef = adminDb.collection("users").doc(uid).collection("piggy_banks").doc(slug);
-    const historyRef = piggyRef.collection("history").doc();
-
     let cardLabel: string | undefined;
     if (goalType === "card_limit" && cardId) {
-      const cardRef = adminDb.collection("users").doc(uid).collection("payment_cards").doc(cardId);
-      const cardSnap = await cardRef.get();
-      if (!cardSnap.exists) {
+      const cardRows = await supabaseSelect("payment_cards", {
+        filters: { uid, source_id: cardId },
+        limit: 1,
+      });
+      if (cardRows.length === 0) {
         return NextResponse.json({ ok: false, error: "card_not_found" }, { status: 404 });
       }
-      const cardData = cardSnap.data() as Record<string, unknown>;
-      const currentLimit = Number(cardData.creditLimit || 0);
+
+      const cardRow = cardRows[0];
+      const cardRaw = (cardRow.raw as Record<string, unknown> | null) ?? {};
+      const bankName = String(cardRow.bank_name || cardRaw.bankName || "Cartao");
+      const last4 = String(cardRow.last4 || cardRaw.last4 || "");
+      const currentLimit = Number(cardRow.credit_limit || cardRaw.creditLimit || 0);
       const nextLimit = currentLimit + amount;
-      cardLabel = `${String(cardData.bankName || "Cartão")} •••• ${String(cardData.last4 || "")}`;
-      await cardRef.set(
-        {
-          creditLimit: nextLimit,
-          limitEnabled: true,
-          updatedAt: nowIso,
-        },
-        { merge: true }
+
+      cardLabel = `${bankName} •••• ${last4}`;
+      cardRaw.creditLimit = nextLimit;
+      cardRaw.limitEnabled = true;
+      cardRaw.updatedAt = nowIso;
+
+      await supabaseUpsertRows(
+        "payment_cards",
+        [
+          {
+            id: cardRow.id,
+            uid,
+            source_id: cardId,
+            bank_name: bankName,
+            last4,
+            card_type: cardRow.card_type || cardRaw.type || "credit_card",
+            credit_limit: nextLimit,
+            limit_enabled: true,
+            raw: cardRaw,
+            updated_at: nowIso,
+          },
+        ],
+        { onConflict: "id" }
       );
     }
 
-    const batch = adminDb.batch();
-    batch.set(
-      piggyRef,
-      {
-        slug,
-        name: goalName,
-        goalType,
-        totalSaved: FieldValue.increment(amount),
-        ...(withdrawalMode ? { withdrawalMode } : {}),
-        ...(yieldType ? { yieldType } : {}),
-        lastDepositAt: nowIso,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        createdBy: acting.requesterUid,
-        createdAtServer: FieldValue.serverTimestamp(),
-        updatedAtServer: FieldValue.serverTimestamp(),
-        lastDepositAtServer: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
+    const piggyRows = await supabaseSelect("piggy_banks", {
+      filters: { uid, source_id: slug },
+      limit: 1,
+    });
+
+    const piggyRaw = ((piggyRows[0]?.raw as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
+    const currentTotal = Number(piggyRows[0]?.total_saved || piggyRaw.totalSaved || 0);
+    const nextTotal = currentTotal + amount;
+
+    const mergedPiggyRaw: Record<string, unknown> = {
+      ...piggyRaw,
+      slug,
+      name: goalName,
+      goalType,
+      totalSaved: nextTotal,
+      ...(withdrawalMode ? { withdrawalMode } : {}),
+      ...(yieldType ? { yieldType } : {}),
+      lastDepositAt: nowIso,
+      createdAt: String(piggyRaw.createdAt || nowIso),
+      updatedAt: nowIso,
+      createdBy: acting.requesterUid,
+    };
+
+    const piggyId = String(piggyRows[0]?.id || `${uid}__${slug}`);
+    await supabaseUpsertRows(
+      "piggy_banks",
+      [
+        {
+          id: piggyId,
+          uid,
+          source_id: slug,
+          slug,
+          name: goalName,
+          goal_type: goalType,
+          total_saved: nextTotal,
+          withdrawal_mode: withdrawalMode || null,
+          yield_type: yieldType || null,
+          raw: mergedPiggyRaw,
+          created_at: piggyRows[0]?.created_at || nowIso,
+          updated_at: nowIso,
+        },
+      ],
+      { onConflict: "id" }
     );
 
-    batch.set(historyRef, {
+    const historyId = crypto.randomUUID();
+    const historyRaw = {
       piggyBankId: slug,
       amount,
       sourceType,
@@ -194,12 +231,29 @@ export async function POST(request: NextRequest) {
       ...(cardLabel ? { cardLabel } : {}),
       appliedToCardLimit: goalType === "card_limit",
       createdAt: nowIso,
-      createdAtServer: FieldValue.serverTimestamp(),
       createdBy: acting.requesterUid,
-    });
+    };
 
-    const txRef = adminDb.collection("users").doc(uid).collection("transactions").doc();
-    batch.set(txRef, {
+    await supabaseUpsertRows("piggy_bank_history", [
+      {
+        id: historyId,
+        piggy_bank_id: piggyId,
+        uid,
+        source_id: historyId,
+        amount,
+        withdrawal_mode: withdrawalMode || null,
+        yield_type: yieldType || null,
+        source_type: sourceType,
+        card_id: cardId || null,
+        card_label: cardLabel || null,
+        applied_to_card_limit: goalType === "card_limit",
+        raw: historyRaw,
+        created_at: nowIso,
+      },
+    ]);
+
+    const txId = crypto.randomUUID();
+    const txRaw = {
       userId: uid,
       description: `Aporte no Cofrinho: ${goalName}`,
       amount,
@@ -215,11 +269,55 @@ export async function POST(request: NextRequest) {
       ...(cardId ? { cardId } : {}),
       ...(cardLabel ? { cardLabel } : {}),
       ...(goalType === "card_limit" ? { cardType: "credit_card" } : {}),
-      createdAt: FieldValue.serverTimestamp(),
-    });
-    batch.set(adminDb.collection("users").doc(uid), { transactionCount: FieldValue.increment(1) }, { merge: true });
+      createdAt: nowIso,
+    };
 
-    await batch.commit();
+    await supabaseUpsertRows("transactions", [
+      {
+        id: `${uid}__${txId}`,
+        uid,
+        source_id: txId,
+        description: txRaw.description,
+        amount,
+        amount_text: String(amount),
+        amount_for_limit: amount,
+        tx_type: "expense",
+        category: txRaw.category,
+        tx_status: "paid",
+        payment_method: txRaw.paymentMethod,
+        card_id: cardId || null,
+        card_label: cardLabel || null,
+        card_type: goalType === "card_limit" ? "credit_card" : null,
+        tx_date: today,
+        due_date: today,
+        raw: txRaw,
+        created_at: nowIso,
+      },
+    ]);
+
+    const profileRows = await supabaseSelect("profiles", {
+      select: "uid,transaction_count,raw",
+      filters: { uid },
+      limit: 1,
+    });
+    if (profileRows.length > 0) {
+      const profileRaw = ((profileRows[0].raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+      const nextCount = Number(profileRows[0].transaction_count || profileRaw.transactionCount || 0) + 1;
+      profileRaw.transactionCount = nextCount;
+      await supabaseUpsertRows(
+        "profiles",
+        [
+          {
+            uid,
+            transaction_count: nextCount,
+            raw: profileRaw,
+            updated_at: nowIso,
+          },
+        ],
+        { onConflict: "uid" }
+      );
+    }
+
     await enforceCreditCardPolicy(uid);
 
     return NextResponse.json({ ok: true, slug }, { status: 200 });
@@ -229,3 +327,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
+

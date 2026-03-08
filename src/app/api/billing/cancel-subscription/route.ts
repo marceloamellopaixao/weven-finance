@@ -1,23 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/services/firebase/admin";
 import { cancelSubscriptionForUser } from "@/lib/billing/mercadopago";
+import { verifyRequestAuth } from "@/lib/auth/server";
+import { supabaseSelect } from "@/services/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("authorization");
-    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : null;
-    if (!token) {
-      return NextResponse.json({ ok: false, error: "missing_auth_token" }, { status: 401 });
-    }
-
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userRef = adminDb.collection("users").doc(decoded.uid);
-    const userSnap = await userRef.get();
-    const userData = userSnap.data() ?? {};
-    const userEmail = ((userData.email as string | undefined) ?? decoded.email ?? "").trim();
+    const decoded = await verifyRequestAuth(request);
+    const userRows = await supabaseSelect("profiles", {
+      filters: { uid: decoded.uid },
+      limit: 1,
+    });
+    const userRow = userRows[0];
+    const userRaw = ((userRow?.raw as Record<string, unknown> | undefined) ?? {});
+    const userEmail = (String(userRow?.email || decoded.email || userRaw.email || "")).trim();
     if (!userEmail) {
       return NextResponse.json({ ok: false, error: "missing_user_email" }, { status: 400 });
     }
@@ -36,3 +34,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

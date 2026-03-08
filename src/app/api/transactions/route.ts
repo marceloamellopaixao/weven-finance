@@ -1,44 +1,94 @@
 import { NextRequest, NextResponse } from "next/server";
-import { FieldValue } from "firebase-admin/firestore";
-import { adminDb } from "@/services/firebase/admin";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { enforceCreditCardPolicy } from "@/lib/credit-card/limit";
 import { resolveApiErrorStatus } from "@/lib/api/error";
-
-function toIsoDate(value: unknown): string | null {
-  if (!value) return null;
-  if (typeof value === "string") return value;
-  if (typeof value === "object" && value !== null && "toDate" in value && typeof (value as { toDate: () => Date }).toDate === "function") {
-    return (value as { toDate: () => Date }).toDate().toISOString();
-  }
-  return null;
-}
+import {
+  supabaseDeleteByFilters,
+  supabaseSelect,
+  supabaseUpsertRows,
+} from "@/services/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toTxRow(uid: string, sourceId: string, data: Record<string, unknown>) {
+  return {
+    id: `${uid}__${sourceId}`,
+    uid,
+    source_id: sourceId,
+    description: data.description ?? null,
+    amount: asNumber(data.amount),
+    amount_text: data.amount == null ? null : String(data.amount),
+    amount_for_limit: asNumber(data.amountForLimit),
+    tx_type: data.type ?? null,
+    category: data.category ?? null,
+    tx_status: data.status ?? null,
+    payment_method: data.paymentMethod ?? null,
+    card_id: data.cardId ?? null,
+    card_label: data.cardLabel ?? null,
+    card_type: data.cardType ?? null,
+    tx_date: typeof data.date === "string" ? data.date : null,
+    due_date: typeof data.dueDate === "string" ? data.dueDate : null,
+    group_id: data.groupId ?? null,
+    installment_current:
+      typeof data.installmentCurrent === "number" ? data.installmentCurrent : null,
+    installment_total:
+      typeof data.installmentTotal === "number" ? data.installmentTotal : null,
+    raw: data,
+    created_at: typeof data.createdAt === "string" ? data.createdAt : new Date().toISOString(),
+  };
+}
+
+function toClientTx(uid: string, row: Record<string, unknown>) {
+  const raw = (row.raw as Record<string, unknown> | null) ?? {};
+  return {
+    id: String(row.source_id || ""),
+    description: row.description ?? raw.description ?? "",
+    amount: row.amount_text ?? row.amount ?? raw.amount ?? 0,
+    amountForLimit: row.amount_for_limit ?? raw.amountForLimit ?? null,
+    type: row.tx_type ?? raw.type ?? "expense",
+    category: row.category ?? raw.category ?? "",
+    status: row.tx_status ?? raw.status ?? "pending",
+    paymentMethod: row.payment_method ?? raw.paymentMethod ?? "cash",
+    cardId: row.card_id ?? raw.cardId ?? undefined,
+    cardLabel: row.card_label ?? raw.cardLabel ?? undefined,
+    cardType: row.card_type ?? raw.cardType ?? undefined,
+    date: row.tx_date ?? raw.date ?? null,
+    dueDate: row.due_date ?? raw.dueDate ?? undefined,
+    groupId: row.group_id ?? raw.groupId ?? undefined,
+    installmentCurrent: row.installment_current ?? raw.installmentCurrent ?? undefined,
+    installmentTotal: row.installment_total ?? raw.installmentTotal ?? undefined,
+    createdAt: typeof row.created_at === "string" ? row.created_at : null,
+    isEncrypted: typeof raw.isEncrypted === "boolean" ? raw.isEncrypted : false,
+    isArchived: typeof raw.isArchived === "boolean" ? raw.isArchived : false,
+    userId: uid,
+  };
+}
+
+async function fetchUserTransactions(uid: string) {
+  return supabaseSelect("transactions", {
+    select:
+      "source_id,description,amount,amount_text,amount_for_limit,tx_type,category,tx_status,payment_method,card_id,card_label,card_type,tx_date,due_date,group_id,installment_current,installment_total,created_at,raw",
+    filters: { uid },
+    order: "due_date.desc.nullslast",
+  });
+}
 
 export async function GET(request: NextRequest) {
   try {
     const { actingUid: uid } = await resolveActingContext(request);
     const groupId = request.nextUrl.searchParams.get("groupId")?.trim();
 
-    let queryRef: FirebaseFirestore.Query = adminDb.collection("users").doc(uid).collection("transactions");
-    if (groupId) {
-      queryRef = queryRef.where("groupId", "==", groupId);
-    }
+    const rows = await fetchUserTransactions(uid);
+    const filtered = groupId ? rows.filter((row) => String(row.group_id || "") === groupId) : rows;
+    const transactions = filtered.map((row) => toClientTx(uid, row));
 
-    const snapshot = await queryRef.get();
-    const transactions: Array<Record<string, unknown> & { id: string; createdAt: string | null; dueDate?: string }> = snapshot.docs.map((docSnap) => {
-      const data = docSnap.data() as Record<string, unknown>;
-      return {
-        id: docSnap.id,
-        ...data,
-        createdAt: toIsoDate(data.createdAt),
-        dueDate: typeof data.dueDate === "string" ? data.dueDate : undefined,
-      };
-    });
-
-    transactions.sort((a, b) => String(b.dueDate || "").localeCompare(String(a.dueDate || "")));
     return NextResponse.json({ ok: true, transactions }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
@@ -73,23 +123,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
       }
 
-      const batch = adminDb.batch();
-      txs.forEach((tx) => {
-        const ref = adminDb.collection("users").doc(uid).collection("transactions").doc();
-        batch.set(ref, {
-          ...tx,
-          userId: uid,
-          createdAt: FieldValue.serverTimestamp(),
-        });
+      const nowIso = new Date().toISOString();
+      const rows = txs.map((tx) => {
+        const id = crypto.randomUUID();
+        return toTxRow(uid, id, { ...tx, userId: uid, createdAt: nowIso });
       });
-      batch.set(
-        adminDb.collection("users").doc(uid),
-        { transactionCount: FieldValue.increment(txs.length) },
-        { merge: true }
-      );
-      await batch.commit();
+
+      await supabaseUpsertRows("transactions", rows, { onConflict: "id" });
       await enforceCreditCardPolicy(uid);
-      return NextResponse.json({ ok: true, created: txs.length }, { status: 200 });
+      return NextResponse.json({ ok: true, created: rows.length }, { status: 200 });
     }
 
     if (body.action === "updateMany") {
@@ -107,15 +149,25 @@ export async function POST(request: NextRequest) {
       if (updates.length === 0) {
         return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
       }
-      const batch = adminDb.batch();
-      updates.forEach((entry) => {
-        if (!entry?.id) return;
-        const ref = adminDb.collection("users").doc(uid).collection("transactions").doc(entry.id);
-        batch.set(ref, entry.updates || {}, { merge: true });
-      });
-      await batch.commit();
+
+      const current = await fetchUserTransactions(uid);
+      const byId = new Map(current.map((row) => [String(row.source_id || ""), row]));
+      const nextRows: Array<Record<string, unknown>> = [];
+
+      for (const entry of updates) {
+        if (!entry?.id) continue;
+        const existing = byId.get(entry.id);
+        if (!existing) continue;
+        const raw = ((existing.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+        const merged = { ...raw, ...entry.updates };
+        nextRows.push(toTxRow(uid, entry.id, merged));
+      }
+
+      if (nextRows.length > 0) {
+        await supabaseUpsertRows("transactions", nextRows, { onConflict: "id" });
+      }
       await enforceCreditCardPolicy(uid);
-      return NextResponse.json({ ok: true, updated: updates.length }, { status: 200 });
+      return NextResponse.json({ ok: true, updated: nextRows.length }, { status: 200 });
     }
 
     if (body.action === "toggleStatus") {
@@ -123,7 +175,7 @@ export async function POST(request: NextRequest) {
         request,
         acting,
         actionType: "transactions:toggleStatus",
-        actionLabel: "Alterar status de pagamento de lancamento",
+        actionLabel: "Alterar status de pagamento",
       });
       if (!approval.allowed) {
         return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });
@@ -132,13 +184,19 @@ export async function POST(request: NextRequest) {
       if (!body.transactionId || !body.currentStatus) {
         return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
       }
+
+      const current = await fetchUserTransactions(uid);
+      const existing = current.find((row) => String(row.source_id || "") === body.transactionId);
+      if (!existing) {
+        return NextResponse.json({ ok: false, error: "transaction_not_found" }, { status: 404 });
+      }
+
       const nextStatus = body.currentStatus === "paid" ? "pending" : "paid";
-      await adminDb
-        .collection("users")
-        .doc(uid)
-        .collection("transactions")
-        .doc(body.transactionId)
-        .set({ status: nextStatus }, { merge: true });
+      const raw = ((existing.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+      const merged = { ...raw, status: nextStatus };
+      await supabaseUpsertRows("transactions", [toTxRow(uid, body.transactionId, merged)], {
+        onConflict: "id",
+      });
       await enforceCreditCardPolicy(uid);
 
       return NextResponse.json({ ok: true, status: nextStatus }, { status: 200 });
@@ -159,28 +217,23 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
       }
 
-      const snapshot = await adminDb
-        .collection("users")
-        .doc(uid)
-        .collection("transactions")
-        .where("groupId", "==", body.groupId)
-        .where("dueDate", ">", body.lastInstallmentDate)
-        .get();
+      const current = await fetchUserTransactions(uid);
+      const toDelete = current.filter(
+        (row) =>
+          String(row.group_id || "") === body.groupId &&
+          typeof row.due_date === "string" &&
+          row.due_date > body.lastInstallmentDate
+      );
 
-      if (snapshot.empty) {
-        return NextResponse.json({ ok: true, deleted: 0 }, { status: 200 });
+      for (const row of toDelete) {
+        await supabaseDeleteByFilters("transactions", {
+          uid,
+          source_id: String(row.source_id || ""),
+        });
       }
 
-      const batch = adminDb.batch();
-      snapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
-      batch.set(
-        adminDb.collection("users").doc(uid),
-        { transactionCount: FieldValue.increment(-snapshot.size) },
-        { merge: true }
-      );
-      await batch.commit();
       await enforceCreditCardPolicy(uid);
-      return NextResponse.json({ ok: true, deleted: snapshot.size }, { status: 200 });
+      return NextResponse.json({ ok: true, deleted: toDelete.length }, { status: 200 });
     }
 
     return NextResponse.json({ ok: false, error: "invalid_action" }, { status: 400 });
@@ -210,12 +263,17 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
 
-    await adminDb
-      .collection("users")
-      .doc(uid)
-      .collection("transactions")
-      .doc(body.transactionId)
-      .set(body.updates, { merge: true });
+    const current = await fetchUserTransactions(uid);
+    const existing = current.find((row) => String(row.source_id || "") === body.transactionId);
+    if (!existing) {
+      return NextResponse.json({ ok: false, error: "transaction_not_found" }, { status: 404 });
+    }
+
+    const raw = ((existing.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+    const merged = { ...raw, ...body.updates };
+    await supabaseUpsertRows("transactions", [toTxRow(uid, body.transactionId, merged)], {
+      onConflict: "id",
+    });
     await enforceCreditCardPolicy(uid);
 
     return NextResponse.json({ ok: true }, { status: 200 });
@@ -248,34 +306,19 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (groupId) {
-      const snapshot = await adminDb
-        .collection("users")
-        .doc(uid)
-        .collection("transactions")
-        .where("groupId", "==", groupId)
-        .get();
-
-      if (snapshot.empty) {
-        return NextResponse.json({ ok: true, deleted: 0 }, { status: 200 });
+      const current = await fetchUserTransactions(uid);
+      const toDelete = current.filter((row) => String(row.group_id || "") === groupId);
+      for (const row of toDelete) {
+        await supabaseDeleteByFilters("transactions", {
+          uid,
+          source_id: String(row.source_id || ""),
+        });
       }
-
-      const batch = adminDb.batch();
-      snapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
-      batch.set(
-        adminDb.collection("users").doc(uid),
-        { transactionCount: FieldValue.increment(-snapshot.size) },
-        { merge: true }
-      );
-      await batch.commit();
       await enforceCreditCardPolicy(uid);
-      return NextResponse.json({ ok: true, deleted: snapshot.size }, { status: 200 });
+      return NextResponse.json({ ok: true, deleted: toDelete.length }, { status: 200 });
     }
 
-    await adminDb.collection("users").doc(uid).collection("transactions").doc(transactionId as string).delete();
-    await adminDb.collection("users").doc(uid).set(
-      { transactionCount: FieldValue.increment(-1) },
-      { merge: true }
-    );
+    await supabaseDeleteByFilters("transactions", { uid, source_id: transactionId as string });
     await enforceCreditCardPolicy(uid);
     return NextResponse.json({ ok: true, deleted: 1 }, { status: 200 });
   } catch (error) {
@@ -284,3 +327,4 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
+

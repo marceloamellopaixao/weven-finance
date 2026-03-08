@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/services/firebase/admin";
 import { resolveActingContext } from "@/lib/impersonation/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { PiggyBankGoalType } from "@/types/piggyBank";
+import { supabaseSelect } from "@/services/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function toIsoDate(value: unknown): string | null {
-  if (!value) return null;
-  if (typeof value === "string") return value;
-  if (typeof value === "object" && value !== null && "toDate" in value && typeof (value as { toDate: () => Date }).toDate === "function") {
-    return (value as { toDate: () => Date }).toDate().toISOString();
-  }
-  return null;
-}
 
 function sanitizeGoalType(value: unknown): PiggyBankGoalType {
   if (
@@ -39,43 +30,91 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ sl
       return NextResponse.json({ ok: false, error: "invalid_slug" }, { status: 400 });
     }
 
-    const piggyRef = adminDb.collection("users").doc(actingUid).collection("piggy_banks").doc(safeSlug);
-    const piggySnap = await piggyRef.get();
-    if (!piggySnap.exists) {
+    const piggyRows = await supabaseSelect("piggy_banks", {
+      filters: { uid: actingUid, source_id: safeSlug },
+      limit: 1,
+    });
+    if (piggyRows.length === 0) {
       return NextResponse.json({ ok: false, error: "piggy_bank_not_found" }, { status: 404 });
     }
 
-    const data = piggySnap.data() as Record<string, unknown>;
-    const historySnap = await piggyRef.collection("history").get();
-    const history = historySnap.docs
-      .map((docSnap) => {
-        const entry = docSnap.data() as Record<string, unknown>;
+    const piggy = piggyRows[0];
+    const piggyRaw = (piggy.raw as Record<string, unknown> | null) ?? {};
+
+    const historyRows = await supabaseSelect("piggy_bank_history", {
+      filters: { uid: actingUid, piggy_bank_id: String(piggy.id) },
+      order: "created_at.desc.nullslast",
+    });
+
+    const history = historyRows
+      .map((row) => {
+        const entry = (row.raw as Record<string, unknown> | null) ?? {};
         return {
-          id: docSnap.id,
+          id: String(row.source_id || row.id || ""),
           piggyBankId: safeSlug,
-          amount: Number(entry.amount || 0),
-          withdrawalMode: typeof entry.withdrawalMode === "string" ? entry.withdrawalMode : undefined,
-          yieldType: typeof entry.yieldType === "string" ? entry.yieldType : undefined,
-          sourceType: entry.sourceType === "cash" ? "cash" : "bank",
-          cardId: typeof entry.cardId === "string" ? entry.cardId : undefined,
-          cardLabel: typeof entry.cardLabel === "string" ? entry.cardLabel : undefined,
-          appliedToCardLimit: Boolean(entry.appliedToCardLimit),
-          createdAt: toIsoDate(entry.createdAtServer) || (typeof entry.createdAt === "string" ? entry.createdAt : undefined),
+          amount: Number(row.amount || entry.amount || 0),
+          withdrawalMode:
+            typeof row.withdrawal_mode === "string"
+              ? row.withdrawal_mode
+              : typeof entry.withdrawalMode === "string"
+                ? entry.withdrawalMode
+                : undefined,
+          yieldType:
+            typeof row.yield_type === "string"
+              ? row.yield_type
+              : typeof entry.yieldType === "string"
+                ? entry.yieldType
+                : undefined,
+          sourceType: row.source_type === "cash" || entry.sourceType === "cash" ? "cash" : "bank",
+          cardId: typeof row.card_id === "string" ? row.card_id : typeof entry.cardId === "string" ? entry.cardId : undefined,
+          cardLabel:
+            typeof row.card_label === "string"
+              ? row.card_label
+              : typeof entry.cardLabel === "string"
+                ? entry.cardLabel
+                : undefined,
+          appliedToCardLimit: Boolean(row.applied_to_card_limit ?? entry.appliedToCardLimit),
+          createdAt:
+            typeof row.created_at === "string"
+              ? row.created_at
+              : typeof entry.createdAt === "string"
+                ? entry.createdAt
+                : undefined,
         };
       })
       .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 
     const piggyBank = {
-      id: piggySnap.id,
-      slug: String(data.slug || piggySnap.id),
-      name: String(data.name || "Cofrinho"),
-      goalType: sanitizeGoalType(data.goalType),
-      totalSaved: Number(data.totalSaved || 0),
-      withdrawalMode: typeof data.withdrawalMode === "string" ? data.withdrawalMode : undefined,
-      yieldType: typeof data.yieldType === "string" ? data.yieldType : undefined,
-      createdAt: toIsoDate(data.createdAtServer) || (typeof data.createdAt === "string" ? data.createdAt : undefined),
-      updatedAt: toIsoDate(data.updatedAtServer) || (typeof data.updatedAt === "string" ? data.updatedAt : undefined),
-      lastDepositAt: toIsoDate(data.lastDepositAtServer) || (typeof data.lastDepositAt === "string" ? data.lastDepositAt : undefined),
+      id: String(piggy.source_id || piggy.id || ""),
+      slug: String(piggy.slug || piggyRaw.slug || safeSlug),
+      name: String(piggy.name || piggyRaw.name || "Cofrinho"),
+      goalType: sanitizeGoalType(piggy.goal_type || piggyRaw.goalType),
+      totalSaved: Number(piggy.total_saved || piggyRaw.totalSaved || 0),
+      withdrawalMode:
+        typeof piggy.withdrawal_mode === "string"
+          ? piggy.withdrawal_mode
+          : typeof piggyRaw.withdrawalMode === "string"
+            ? piggyRaw.withdrawalMode
+            : undefined,
+      yieldType:
+        typeof piggy.yield_type === "string"
+          ? piggy.yield_type
+          : typeof piggyRaw.yieldType === "string"
+            ? piggyRaw.yieldType
+            : undefined,
+      createdAt:
+        typeof piggy.created_at === "string"
+          ? piggy.created_at
+          : typeof piggyRaw.createdAt === "string"
+            ? piggyRaw.createdAt
+            : undefined,
+      updatedAt:
+        typeof piggy.updated_at === "string"
+          ? piggy.updated_at
+          : typeof piggyRaw.updatedAt === "string"
+            ? piggyRaw.updatedAt
+            : undefined,
+      lastDepositAt: typeof piggyRaw.lastDepositAt === "string" ? piggyRaw.lastDepositAt : undefined,
       history,
     };
 

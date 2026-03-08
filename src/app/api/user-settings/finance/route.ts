@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/services/firebase/admin";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
+import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,10 +8,14 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     const { actingUid: uid } = await resolveActingContext(request);
-    const ref = adminDb.collection("users").doc(uid).collection("settings").doc("finance");
-    const snap = await ref.get();
-    const data = snap.exists ? (snap.data() as { currentBalance?: unknown }) : undefined;
-    const currentBalance = typeof data?.currentBalance === "number" ? data.currentBalance : 0;
+    const rows = await supabaseSelect("user_settings", {
+      select: "id,data",
+      filters: { uid, setting_key: "finance" },
+      limit: 1,
+    });
+
+    const data = (rows[0]?.data as { currentBalance?: unknown } | undefined) ?? {};
+    const currentBalance = typeof data.currentBalance === "number" ? data.currentBalance : 0;
     return NextResponse.json({ ok: true, currentBalance }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
@@ -39,8 +43,25 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
 
-    const ref = adminDb.collection("users").doc(uid).collection("settings").doc("finance");
-    await ref.set({ currentBalance: body.currentBalance }, { merge: true });
+    const existing = await supabaseSelect("user_settings", {
+      select: "id,data",
+      filters: { uid, setting_key: "finance" },
+      limit: 1,
+    });
+
+    await supabaseUpsertRows(
+      "user_settings",
+      [
+        {
+          id: String(existing[0]?.id || `${uid}__finance`),
+          uid,
+          setting_key: "finance",
+          data: { ...(existing[0]?.data as Record<string, unknown> | undefined), currentBalance: body.currentBalance },
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      { onConflict: "id" }
+    );
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
@@ -51,3 +72,4 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
+

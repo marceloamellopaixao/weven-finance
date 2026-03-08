@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/services/firebase/admin";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
+import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,18 +34,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "cannot_hide_others" }, { status: 400 });
     }
 
-    const settingsRef = adminDb.collection("users").doc(uid).collection("settings").doc("categories");
-    const settingsSnap = await settingsRef.get();
-    const settingsData = settingsSnap.exists ? (settingsSnap.data() as { hiddenDefaultCategories?: unknown }) : undefined;
-    const currentHidden = Array.isArray(settingsData?.hiddenDefaultCategories)
-      ? settingsData.hiddenDefaultCategories.filter((item): item is string => typeof item === "string")
+    const rows = await supabaseSelect("user_settings", {
+      select: "id,data",
+      filters: { uid, setting_key: "categories" },
+      limit: 1,
+    });
+
+    const existingData = (rows[0]?.data as { hiddenDefaultCategories?: unknown } | undefined) ?? {};
+    const currentHidden = Array.isArray(existingData.hiddenDefaultCategories)
+      ? existingData.hiddenDefaultCategories.filter((item): item is string => typeof item === "string")
       : [];
 
     const next = hidden
       ? Array.from(new Set([...currentHidden, categoryName]))
       : currentHidden.filter((name) => name !== categoryName);
 
-    await settingsRef.set({ hiddenDefaultCategories: next }, { merge: true });
+    const id = String(rows[0]?.id || `${uid}__categories`);
+    await supabaseUpsertRows(
+      "user_settings",
+      [
+        {
+          id,
+          uid,
+          setting_key: "categories",
+          data: { hiddenDefaultCategories: next },
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      { onConflict: "id" }
+    );
+
     return NextResponse.json({ ok: true, hiddenDefaultCategories: next }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
@@ -53,3 +71,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
+
