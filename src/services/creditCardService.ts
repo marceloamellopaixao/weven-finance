@@ -1,12 +1,9 @@
-import { getAuth } from "firebase/auth";
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { CreditCardSettings, CreditCardState } from "@/types/creditCard";
+import { getAccessTokenOrThrow } from "@/services/auth/token";
 
 async function getIdTokenOrThrow() {
-  const auth = getAuth();
-  const user = auth.currentUser;
-  if (!user) throw new Error("missing_auth_user");
-  return user.getIdToken();
+  return getAccessTokenOrThrow();
 }
 
 async function fetchWithAuth(path: string, init?: RequestInit) {
@@ -42,3 +39,4 @@ export async function updateCreditCardSettings(input: Partial<CreditCardSettings
   }
   return { settings: payload.settings, summary: payload.summary };
 }
+
