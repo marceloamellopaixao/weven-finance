@@ -1,10 +1,23 @@
-import { getAuth } from "firebase/auth";
 import { Transaction, UserSettings, CreateTransactionDTO } from "@/types/transaction";
 import { encryptData, decryptData, decryptLegacy } from "@/lib/crypto";
 import { getImpersonationHeader, getImpersonationTargetUid } from "@/lib/impersonation/client";
 import { getImpersonationActionStatus } from "@/services/impersonationService";
+import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { subscribeToTableChanges } from "@/services/supabase/realtime";
 
-const POLLING_INTERVAL_MS = 60000;
+const POLLING_INTERVAL_MS = 20000;
+const TRANSACTIONS_CHANGED_EVENT = "wevenfinance:transactions:changed";
+const USER_SETTINGS_CHANGED_EVENT = "wevenfinance:user-settings:changed";
+
+function emitTransactionsChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(TRANSACTIONS_CHANGED_EVENT));
+}
+
+function emitUserSettingsChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(USER_SETTINGS_CHANGED_EVENT));
+}
 
 function shouldPollNow() {
   if (typeof document === "undefined") return true;
@@ -26,12 +39,7 @@ const addMonthsUTC = (dateStr: string, monthsToAdd: number): string => {
 };
 
 async function getIdTokenOrThrow() {
-  const auth = getAuth();
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
-    throw new Error("missing_auth_user");
-  }
-  return currentUser.getIdToken();
+  return getAccessTokenOrThrow();
 }
 
 async function apiFetch(path: string, init?: RequestInit) {
@@ -205,6 +213,7 @@ export const subscribeToTransactions = (
   onError?: (error: Error) => void
 ) => {
   let cancelled = false;
+  const effectiveUid = resolveCryptoUid(uid);
 
   const run = async () => {
     if (!shouldPollNow()) return;
@@ -218,10 +227,22 @@ export const subscribeToTransactions = (
 
   void run();
   const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
+  const stopRealtime = subscribeToTableChanges({
+    table: "transactions",
+    filter: `uid=eq.${effectiveUid}`,
+    onChange: () => void run(),
+  });
+  const onChangedEvent = () => void run();
+  const onFocus = () => void run();
+  window.addEventListener(TRANSACTIONS_CHANGED_EVENT, onChangedEvent);
+  window.addEventListener("focus", onFocus);
 
   return () => {
     cancelled = true;
     clearInterval(interval);
+    stopRealtime();
+    window.removeEventListener(TRANSACTIONS_CHANGED_EVENT, onChangedEvent);
+    window.removeEventListener("focus", onFocus);
   };
 };
 
@@ -267,6 +288,8 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível adicionar transação");
   }
+  emitTransactionsChanged();
+  emitUserSettingsChanged();
 };
 
 export const deleteTransaction = async (
@@ -285,6 +308,8 @@ export const deleteTransaction = async (
     if (!response.ok || !payload.ok) {
       throw new Error(payload.error || "Não foi possível excluir grupo de transações");
     }
+    emitTransactionsChanged();
+    emitUserSettingsChanged();
     return;
   }
 
@@ -294,6 +319,8 @@ export const deleteTransaction = async (
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível excluir transação");
   }
+  emitTransactionsChanged();
+  emitUserSettingsChanged();
 };
 
 export const cancelFutureInstallments = async (
@@ -312,6 +339,8 @@ export const cancelFutureInstallments = async (
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível cancelar parcelas futuras");
   }
+  emitTransactionsChanged();
+  emitUserSettingsChanged();
 };
 
 export const updateTransaction = async (
@@ -340,6 +369,8 @@ export const updateTransaction = async (
     if (!response.ok || !payload.ok) {
       throw new Error(payload.error || "Não foi possível atualizar transação");
     }
+    emitTransactionsChanged();
+    emitUserSettingsChanged();
     return;
   }
 
@@ -377,6 +408,8 @@ export const updateTransaction = async (
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível atualizar grupo de transações");
   }
+  emitTransactionsChanged();
+  emitUserSettingsChanged();
 };
 
 export const toggleTransactionStatus = async (
@@ -391,6 +424,8 @@ export const toggleTransactionStatus = async (
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível atualizar status da transação");
   }
+  emitTransactionsChanged();
+  emitUserSettingsChanged();
 };
 
 export const syncCreditCardAmountForLimit = async (uid: string, transactions: Transaction[]) => {
@@ -414,6 +449,7 @@ export const syncCreditCardAmountForLimit = async (uid: string, transactions: Tr
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível sincronizar valores do cartão");
   }
+  emitTransactionsChanged();
   return updates.length;
 };
 
@@ -436,7 +472,7 @@ export const subscribeToUserSettings = (
   onChange: (data: UserSettings) => void,
   onError?: (error: Error) => void
 ) => {
-  void uid;
+  const effectiveUid = resolveCryptoUid(uid);
   let cancelled = false;
   const run = async () => {
     if (!shouldPollNow()) return;
@@ -450,9 +486,21 @@ export const subscribeToUserSettings = (
 
   void run();
   const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
+  const stopRealtime = subscribeToTableChanges({
+    table: "user_settings",
+    filter: `uid=eq.${effectiveUid}`,
+    onChange: () => void run(),
+  });
+  const onChangedEvent = () => void run();
+  const onFocus = () => void run();
+  window.addEventListener(USER_SETTINGS_CHANGED_EVENT, onChangedEvent);
+  window.addEventListener("focus", onFocus);
   return () => {
     cancelled = true;
     clearInterval(interval);
+    stopRealtime();
+    window.removeEventListener(USER_SETTINGS_CHANGED_EVENT, onChangedEvent);
+    window.removeEventListener("focus", onFocus);
   };
 };
 
@@ -465,4 +513,6 @@ export const updateUserBalance = async (uid: string, newBalance: number) => {
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível atualizar saldo");
   }
+  emitUserSettingsChanged();
 };
+
