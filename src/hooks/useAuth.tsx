@@ -1,34 +1,31 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import {
-  onAuthStateChanged,
-  User,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signOut,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  updateProfile,
-  sendEmailVerification,
-  AuthErrorCodes,
-  sendPasswordResetEmail,
-} from "firebase/auth";
-import { auth } from "@/services/firebase/client";
+import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { UserProfile } from "@/types/user";
-import { FirebaseError } from "firebase/app";
 import {
   getImpersonationHeader,
   getImpersonationTargetUid,
   subscribeToImpersonationChange,
 } from "@/lib/impersonation/client";
+import { getSupabaseClient } from "@/services/supabase/client";
+import { getAccessTokenOrThrow } from "@/services/auth/token";
 
 const BLOCKED_STATUSES = new Set(["inactive", "blocked"]);
 const PUBLIC_ROUTES = ["/", "/login", "/register", "/forgot-password", "/not-found", "/blocked", "/goodbye"];
 
+export interface AuthUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL?: string;
+  emailVerified: boolean;
+  getIdToken: (forceRefresh?: boolean) => Promise<string>;
+  reload: () => Promise<AuthUser>;
+}
+
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   userProfile: UserProfile | null;
   loading: boolean;
   privacyMode: boolean;
@@ -37,18 +34,58 @@ interface AuthContextType {
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   registerWithEmail: (
     name: string,
+    completeName: string,
     email: string,
     pass: string,
-    phone: string,
-    completeName: string
+    phone: string
   ) => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
+function mapSupabaseUserToAuthUser(input: {
+  id: string;
+  email?: string | null;
+  user_metadata?: Record<string, unknown>;
+  email_confirmed_at?: string | null;
+}) {
+  const supabase = getSupabaseClient();
+  const meta = input.user_metadata || {};
+  const displayName =
+    (typeof meta.displayName === "string" && meta.displayName.trim()) ||
+    (typeof meta.full_name === "string" && meta.full_name.trim()) ||
+    (typeof input.email === "string" ? input.email.split("@")[0] : "Usuario");
+  const uid =
+    typeof meta.firebaseUid === "string" && meta.firebaseUid.trim()
+      ? meta.firebaseUid
+      : input.id;
+
+  const build = (): AuthUser => ({
+    uid,
+    email: String(input.email || ""),
+    displayName: String(displayName),
+    photoURL: typeof meta.avatar_url === "string" ? meta.avatar_url : undefined,
+    emailVerified: Boolean(input.email_confirmed_at),
+    getIdToken: async (forceRefresh?: boolean) => {
+      if (forceRefresh) {
+        await supabase.auth.refreshSession();
+      }
+      const token = await getAccessTokenOrThrow();
+      return token;
+    },
+    reload: async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error || !data.user) throw new Error("missing_auth_user");
+      return mapSupabaseUserToAuthUser(data.user);
+    },
+  });
+
+  return build();
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [privacyMode, setPrivacyMode] = useState(false);
@@ -58,12 +95,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const router = useRouter();
   const pathname = usePathname();
+  const supabase = useMemo(() => getSupabaseClient(), []);
 
   const DISPOSABLE_DOMAINS = [
-    "teste.com", "test.com", "example.com", "mail.com", "1.com",
-    "tempmail.com", "yopmail.com", "mailinator.com", "10minutemail.com",
-    "guerrillamail.com", "sharklasers.com", "dispostable.com", "mailinator.com",
-    "getnada.com", "temp-mail.org"
+    "teste.com",
+    "test.com",
+    "example.com",
+    "mail.com",
+    "1.com",
+    "tempmail.com",
+    "yopmail.com",
+    "mailinator.com",
+    "10minutemail.com",
+    "guerrillamail.com",
+    "sharklasers.com",
+    "dispostable.com",
+    "getnada.com",
+    "temp-mail.org",
   ];
 
   const isValidRealEmail = (email: string): boolean => {
@@ -71,16 +119,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(emailLower)) return false;
     const [prefix, domain] = emailLower.split("@");
-    if (prefix.length < 10 || /^(.)\1+$/.test(prefix)) return false;
+    if (prefix.length < 3 || /^(.)\1+$/.test(prefix)) return false;
     if (DISPOSABLE_DOMAINS.includes(domain)) return false;
-    const forbiddenPrefixes = ["teste", "test", "asdf", "12345", "admin"];
-    if (forbiddenPrefixes.some((p) => prefix.includes(p))) return false;
     return true;
   };
 
   const apiFetchWithToken = async (path: string, init?: RequestInit) => {
-    const token = await auth.currentUser?.getIdToken();
-    if (!token) throw new Error("missing_auth_token");
+    const token = await getAccessTokenOrThrow();
     return fetch(path, {
       ...init,
       headers: {
@@ -94,9 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const storedPrivacy = localStorage.getItem("weven_privacy_mode");
-    if (storedPrivacy === "true") {
-      setPrivacyMode(true);
-    }
+    if (storedPrivacy === "true") setPrivacyMode(true);
   }, []);
 
   useEffect(() => {
@@ -106,59 +149,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      try {
-        if (currentUser) {
-          try {
-            await currentUser.reload();
-          } catch (e) {
-            console.warn("Falha ao recarregar token:", e);
-          }
-          setUser(currentUser);
-        } else {
-          setUser(null);
-          setUserProfile(null);
-        }
-      } catch (error) {
-        console.error("Erro critico no AuthStateChanged:", error);
+    let mounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      if (data.session?.user) {
+        setUser(mapSupabaseUserToAuthUser(data.session.user));
+      } else {
         setUser(null);
-      } finally {
-        if (!currentUser) setLoading(false);
+        setUserProfile(null);
+        setLoading(false);
       }
     });
 
-    return () => unsubscribe();
-  }, []);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser(mapSupabaseUserToAuthUser(session.user));
+      } else {
+        setUser(null);
+        setUserProfile(null);
+      }
+      setLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   useEffect(() => {
     if (!user) return;
 
     setLoading(true);
-
     let cancelled = false;
+
     const syncProfile = async () => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
-        return;
-      }
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       try {
         const response = await apiFetchWithToken("/api/profile/me", { method: "GET" });
         const payload = (await response.json()) as { ok: boolean; error?: string; profile?: UserProfile | null };
         if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao buscar perfil");
-
-        const profile = payload.profile;
-        if (profile) {
-          if (profile.status === "active") {
-            if (profile.verifiedEmail === true && user.emailVerified === false) {
-              user.reload().catch(() => {});
-            }
-          }
-
-          if (!cancelled) setUserProfile(profile);
-        } else if (!cancelled) {
-          setUserProfile(null);
-        }
+        if (!cancelled) setUserProfile(payload.profile ?? null);
       } catch (error) {
-        console.error("Erro na busca do perfil do usuário:", error);
+        console.error("Erro na busca do perfil:", error);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -166,7 +201,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void syncProfile();
     const interval = setInterval(() => void syncProfile(), 60000);
-
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -175,78 +209,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (loading) return;
-
     const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
 
     if (!user) {
-      if (!isPublicRoute) {
-        router.replace("/login");
-      }
+      if (!isPublicRoute) router.replace("/login");
       return;
     }
 
     if (!userProfile) return;
 
     if (userProfile.status === "deleted") {
-      if (pathname !== "/goodbye") {
-        router.replace("/goodbye");
-      }
-      signOut(auth).catch(() => {});
+      if (pathname !== "/goodbye") router.replace("/goodbye");
+      void supabase.auth.signOut();
       return;
     }
 
     if (BLOCKED_STATUSES.has(userProfile.status)) {
-      if (pathname !== "/blocked") {
-        router.replace("/blocked");
-      }
+      if (pathname !== "/blocked") router.replace("/blocked");
       return;
     }
 
-    const isEmailVerified = userProfile.verifiedEmail;
-
-    if (!isEmailVerified) {
-      if (pathname !== "/verify-email") {
-        router.replace("/verify-email");
-      }
+    if (!userProfile.verifiedEmail) {
+      if (pathname !== "/verify-email") router.replace("/verify-email");
       return;
     }
 
-    if (isEmailVerified) {
-      if (pathname === "/verify-email") {
-        router.replace("/");
-        return;
-      }
-
-      if (["/login", "/register", "/goodbye", "/blocked"].includes(pathname)) {
-        router.replace("/");
-        return;
-      }
+    if (pathname === "/verify-email") {
+      router.replace("/");
+      return;
     }
 
-    if (isEmailVerified && pathname.startsWith("/admin")) {
+    if (["/login", "/register", "/goodbye", "/blocked"].includes(pathname)) {
+      router.replace("/");
+      return;
+    }
+
+    if (pathname.startsWith("/admin")) {
       if (userProfile.role !== "admin" && userProfile.role !== "moderator") {
         router.replace("/");
       }
     }
-  }, [user, userProfile, loading, pathname, router]);
+  }, [loading, pathname, router, supabase.auth, user, userProfile]);
 
   const togglePrivacyMode = () => {
     setPrivacyMode((prev) => {
-      const newValue = !prev;
-      localStorage.setItem("weven_privacy_mode", String(newValue));
-      return newValue;
+      const next = !prev;
+      localStorage.setItem("weven_privacy_mode", String(next));
+      return next;
     });
   };
 
-  const registerWithEmail = async (name: string, completeName: string, email: string, pass: string, phone: string) => {
-    try {
-      if (!isValidRealEmail(email)) throw "Por favor, utilize um e-mail valido para cadastro.";
+  const registerWithEmail = async (
+    name: string,
+    completeName: string,
+    email: string,
+    pass: string,
+    phone: string
+  ) => {
+    if (!isValidRealEmail(email)) throw "Por favor, utilize um e-mail valido para cadastro.";
 
-      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-      await updateProfile(userCredential.user, { displayName: name });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: pass,
+      options: {
+        data: { displayName: name, completeName, phone },
+      },
+    });
+    if (error) throw error.message || "Erro ao registrar usuario.";
 
-      const newProfile: UserProfile = {
-        uid: userCredential.user.uid,
+    const token = data.session?.access_token;
+    if (token) {
+      const bootstrapProfile: Partial<UserProfile> = {
+        uid: data.user?.id || "",
         email,
         displayName: name,
         completeName,
@@ -262,109 +296,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
         transactionCount: 0,
         verifiedEmail: false,
-      } as UserProfile;
-
-      const bootstrapResponse = await apiFetchWithToken("/api/profile/bootstrap", {
+      };
+      await fetch("/api/profile/bootstrap", {
         method: "POST",
-        body: JSON.stringify({ profile: newProfile }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ profile: bootstrapProfile }),
       });
-      const bootstrapPayload = (await bootstrapResponse.json()) as { ok: boolean };
-      if (!bootstrapResponse.ok || !bootstrapPayload.ok) {
-        throw new Error("Falha ao inicializar perfil do usuário.");
-      }
-
-      await sendEmailVerification(userCredential.user);
-      router.push("/verify-email");
-    } catch (error) {
-      let message = "Erro ao registrar usuário.";
-      if (error instanceof FirebaseError) {
-        if (error.code === AuthErrorCodes.EMAIL_EXISTS) message = "E-mail ja em uso.";
-        if (error.code === AuthErrorCodes.WEAK_PASSWORD) message = "Senha muito fraca.";
-      } else if (error instanceof Error) {
-        message = error.message;
-      }
-      throw message;
     }
+
+    router.push("/verify-email");
   };
 
   const signInWithGoogle = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: "select_account" });
-
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-
-      if (user) {
-        if (user.email && !isValidRealEmail(user.email)) {
-          await user.delete();
-          throw new Error("E-mail não aceito.");
-        }
-
-        const bootstrapProfile: Partial<UserProfile> = {
-          uid: user.uid,
-          email: user.email || "",
-          displayName: user.displayName || "Usuário",
-          completeName: user.displayName || "",
-          phone: "",
-          role: "client",
-          plan: "free",
-          status: "active",
-          createdAt: new Date().toISOString(),
-          paymentStatus: "pending",
-          billing: {
-            source: "system",
-            lastSyncAt: new Date().toISOString(),
-          },
-          transactionCount: 0,
-          verifiedEmail: true,
-        };
-
-        const bootstrapResponse = await apiFetchWithToken("/api/profile/bootstrap", {
-          method: "POST",
-          body: JSON.stringify({ profile: bootstrapProfile }),
-        });
-        const bootstrapPayload = (await bootstrapResponse.json()) as { ok: boolean; created?: boolean };
-        if (!bootstrapResponse.ok || !bootstrapPayload.ok) {
-          throw new Error("Falha ao sincronizar perfil com o backend.");
-        }
-
-        if (bootstrapPayload.created && user.email) {
-          await sendPasswordResetEmail(auth, user.email);
-          alert("Conta criada! Enviamos um e-mail para definir sua senha.");
-        }
-      }
-
-      router.replace("/dashboard");
-    } catch (error) {
-      console.error("Erro no Google Login:", error);
-      let message = "Erro ao entrar com Google.";
-      if (error instanceof FirebaseError) {
-        if (error.code === AuthErrorCodes.POPUP_CLOSED_BY_USER) message = "Login cancelado.";
-        if (error.code === AuthErrorCodes.NETWORK_REQUEST_FAILED) {
-          message = "Erro de conexao. Verifique se ha bloqueadores de anuncio ativos.";
-        }
-      }
-      throw message;
-    }
+    const redirectTo = `${window.location.origin}/dashboard`;
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo },
+    });
+    if (error) throw error.message || "Erro ao entrar com Google.";
+    if (data.url) window.location.assign(data.url);
   };
 
   const loginWithEmail = async (email: string, pass: string) => {
-    try {
-      await signInWithEmailAndPassword(auth, email, pass);
-      router.replace("/dashboard");
-    } catch (error) {
-      let message = "Erro ao entrar.";
-      if (error instanceof FirebaseError) {
-        if (error.code === AuthErrorCodes.INVALID_LOGIN_CREDENTIALS) message = "Credenciais invalidas.";
-        if (error.code === AuthErrorCodes.USER_DELETED) message = "Usuário não encontrado.";
-      }
-      throw message;
-    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+    if (error) throw error.message || "Erro ao entrar.";
+    router.replace("/dashboard");
   };
 
   const logout = async () => {
-    await signOut(auth);
+    await supabase.auth.signOut();
     router.replace("/");
     router.refresh();
   };
@@ -389,3 +352,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
+
