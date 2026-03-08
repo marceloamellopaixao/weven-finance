@@ -1,12 +1,9 @@
-import { getAuth } from "firebase/auth";
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { PiggyBank, PiggyBankDetail, PiggyBankGoalType } from "@/types/piggyBank";
+import { getAccessTokenOrThrow } from "@/services/auth/token";
 
 async function getIdTokenOrThrow() {
-  const auth = getAuth();
-  const currentUser = auth.currentUser;
-  if (!currentUser) throw new Error("missing_auth_user");
-  return currentUser.getIdToken();
+  return getAccessTokenOrThrow();
 }
 
 async function fetchWithAuth(path: string, init?: RequestInit) {
@@ -64,3 +61,4 @@ export async function savePiggyDeposit(input: SavePiggyDepositInput) {
   }
   return payload.slug;
 }
+
