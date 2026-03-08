@@ -1,4 +1,5 @@
-import { getAuth } from "firebase/auth";
+import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { subscribeToTableChanges } from "@/services/supabase/realtime";
 
 export type SupportRequestStatus = "pending" | "in_progress" | "resolved" | "rejected";
 export type FeatureRequestStatus = "pending" | "under_review" | "approved" | "rejected" | "implemented";
@@ -15,9 +16,10 @@ export interface SupportTicket {
   platform: string;
   assignedTo?: string;
   assignedToName?: string;
+  staffSeenBy?: string[];
 }
 
-const POLLING_INTERVAL_MS = 60000;
+const POLLING_INTERVAL_MS = 20000;
 
 function shouldPollNow() {
   if (typeof document === "undefined") return true;
@@ -25,10 +27,7 @@ function shouldPollNow() {
 }
 
 async function getIdTokenOrThrow() {
-  const auth = getAuth();
-  const currentUser = auth.currentUser;
-  if (!currentUser) throw new Error("missing_auth_user");
-  return currentUser.getIdToken();
+  return getAccessTokenOrThrow();
 }
 
 async function fetchWithAuth(path: string, init?: RequestInit) {
@@ -116,10 +115,18 @@ export const subscribeToSupportTickets = (
 
   void run();
   const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
+  const stopRealtime = subscribeToTableChanges({
+    table: "support_requests",
+    onChange: () => void run(),
+  });
+  const onFocus = () => void run();
+  window.addEventListener("focus", onFocus);
 
   return () => {
     cancelled = true;
     clearInterval(interval);
+    stopRealtime();
+    window.removeEventListener("focus", onFocus);
   };
 };
 
@@ -137,6 +144,22 @@ export const updateTicket = async (ticketId: string, updates: Partial<SupportTic
   }
 };
 
+export const markSupportTicketsAsSeen = async (ticketIds: string[]) => {
+  const ids = ticketIds.map((id) => String(id || "").trim()).filter(Boolean);
+  if (ids.length === 0) return;
+  const response = await fetchWithAuth("/api/support-requests", {
+    method: "PATCH",
+    body: JSON.stringify({
+      action: "markSeen",
+      ticketIds: ids,
+    }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Erro ao marcar chamados como vistos");
+  }
+};
+
 export const deleteTicket = async (ticketId: string) => {
   const response = await fetchWithAuth(`/api/support-requests?ticketId=${encodeURIComponent(ticketId)}`, {
     method: "DELETE",
@@ -146,3 +169,4 @@ export const deleteTicket = async (ticketId: string) => {
     throw new Error(payload.error || "Erro ao deletar chamado");
   }
 };
+
