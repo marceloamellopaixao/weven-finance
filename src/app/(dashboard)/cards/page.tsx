@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createPaymentCard, deletePaymentCard, getPaymentCards, identifyPaymentCard, updatePaymentCard } from "@/services/paymentCardService";
+import { createPaymentCard, deletePaymentCard, getPaymentCards, identifyPaymentCard, subscribeToPaymentCards, updatePaymentCard } from "@/services/paymentCardService";
 import { CreditCard, ShieldAlert, RefreshCw, Save, AlertTriangle, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, CheckCircle2, Settings2, ReceiptText, PiggyBank } from "lucide-react";
 import { CreditCardSettings } from "@/types/creditCard";
 import { PaymentCard, PaymentCardType } from "@/types/paymentCard";
@@ -128,22 +128,23 @@ export default function CreditCardPage() {
   const warning = !danger && Boolean(activeCardCreditSummary && activeCardCreditSummary.usagePct >= settings.alertThresholdPct);
 
   useEffect(() => {
-    if (!user) return;
-    let mounted = true;
-    void (async () => {
-      setIsLoadingState(true);
-      try {
-        const cards = await getPaymentCards();
-        if (!mounted) return;
+    if (!user) {
+      setPaymentCards([]);
+      return;
+    }
+    setIsLoadingState(true);
+    const unsubscribe = subscribeToPaymentCards(
+      user.uid,
+      (cards) => {
         setPaymentCards(cards);
-      } catch (error) {
-        if (!mounted) return;
+        setIsLoadingState(false);
+      },
+      (error) => {
         setFeedback({ type: "error", message: error instanceof Error ? error.message : "Falha ao carregar cartão." });
-      } finally {
-        if (mounted) setIsLoadingState(false);
+        setIsLoadingState(false);
       }
-    })();
-    return () => { mounted = false; };
+    );
+    return () => unsubscribe();
   }, [user]);
 
   useEffect(() => {
