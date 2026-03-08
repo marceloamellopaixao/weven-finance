@@ -9,6 +9,7 @@ import {
     renameCustomCategoryByName,
     setDefaultCategoryHidden,
 } from "@/services/categoryService";
+import { subscribeToTableChanges } from "@/services/supabase/realtime";
 
 export const CATEGORY_PATH_SEPARATOR = "::";
 
@@ -44,6 +45,7 @@ export function useCategories() {
 
     useEffect(() => {
         if (!user) return;
+        let cancelled = false;
 
         const loadCategories = async () => {
             try {
@@ -69,16 +71,36 @@ export function useCategories() {
                     }
                 });
 
+                if (cancelled) return;
                 setHiddenDefaultCategories(hiddenDefaults);
                 setCategories(allCats);
             } catch (error) {
                 console.error("Erro ao carregar categorias:", error);
             } finally {
-                setLoadingCategories(false);
+                if (!cancelled) setLoadingCategories(false);
             }
         };
 
-        loadCategories();
+        void loadCategories();
+        const stopCategories = subscribeToTableChanges({
+            table: "categories",
+            filter: `uid=eq.${user.uid}`,
+            onChange: () => void loadCategories(),
+        });
+        const stopSettings = subscribeToTableChanges({
+            table: "user_settings",
+            filter: `uid=eq.${user.uid}`,
+            onChange: () => void loadCategories(),
+        });
+        const onFocus = () => void loadCategories();
+        window.addEventListener("focus", onFocus);
+
+        return () => {
+            cancelled = true;
+            stopCategories();
+            stopSettings();
+            window.removeEventListener("focus", onFocus);
+        };
     }, [user]);
 
     const addNewCategory = async (
