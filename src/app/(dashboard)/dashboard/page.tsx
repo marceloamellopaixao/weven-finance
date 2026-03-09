@@ -33,7 +33,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { useDashboardTour } from "@/hooks/useDashboardTour";
-import { getCheckoutLink } from "@/services/billingService";
+import { confirmPreapproval, getCheckoutLink } from "@/services/billingService";
 import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
 import { useRouter } from "next/navigation";
@@ -200,6 +200,7 @@ export default function DashboardPage() {
   const [txToCancelSubscription, setTxToCancelSubscription] = useState<Transaction | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
+  const [isRecoveringBilling, setIsRecoveringBilling] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [pendingCheckins, setPendingCheckins] = useState<Transaction[]>([]);
   const [showCheckinModal, setShowCheckinModal] = useState(false);
@@ -1063,7 +1064,7 @@ export default function DashboardPage() {
         {isInstallment && (
           <div className="animate-in slide-in-from-top-2 pt-1">
             <Label className="text-xs font-medium text-zinc-500">
-              {getCategoryRoot(category) === 'Streaming' ? 'Meses de Assinatura (PREVISO)' : 'Número de Parcelas'}
+              {getCategoryRoot(category) === 'Streaming' ? 'Meses de Assinatura (Previsão)' : 'Número de Parcelas'}
             </Label>
             <Input type="number" className="h-10 mt-1.5 bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" min="2" max="60" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
           </div>
@@ -1116,6 +1117,10 @@ export default function DashboardPage() {
     !isBillingExemptRole &&
     effectivePlan !== "free" &&
     (effectivePaymentStatus === "pending" || effectivePaymentStatus === "overdue" || effectivePaymentStatus === "not_paid");
+  const pendingPreapprovalId = typeof userProfile?.billing?.pendingPreapprovalId === "string" ? userProfile.billing.pendingPreapprovalId : "";
+  const pendingPlan = userProfile?.billing?.pendingPlan;
+  const recoveryPlan: "premium" | "pro" =
+    pendingPlan === "pro" || effectivePlan === "pro" ? "pro" : "premium";
 
   const upgradePrompt = (() => {
     if (hasBillingIssue) {
@@ -1182,6 +1187,37 @@ export default function DashboardPage() {
       });
     } finally {
       setIsOpeningCheckout(null);
+    }
+  };
+
+  const handleRecoverPayment = async () => {
+    if (!user) return;
+    setIsRecoveringBilling(true);
+    try {
+      const token = await user.getIdToken();
+      if (pendingPreapprovalId) {
+        const result = await confirmPreapproval(pendingPreapprovalId, token, recoveryPlan);
+        setFeedbackModal({
+          isOpen: true,
+          type: "success",
+          title: "Assinatura confirmada",
+          message: `Plano atualizado para ${result.targetPlan}.`,
+        });
+        return;
+      }
+
+      const session = await getCheckoutLink(recoveryPlan, token);
+      window.open(session.checkoutUrl, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      console.error(error);
+      setFeedbackModal({
+        isOpen: true,
+        type: "error",
+        title: "Falha na recuperação",
+        message: "Não foi possível regularizar o pagamento agora.",
+      });
+    } finally {
+      setIsRecoveringBilling(false);
     }
   };
 
@@ -1328,6 +1364,14 @@ export default function DashboardPage() {
                   {onboardingStatus.steps.firstGoal ? "✓ " : ""}Primeira meta
                 </button>
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.profileMenu ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"}`}
+                >
+                  {onboardingStatus.steps.profileMenu ? "✓ " : ""}Abrir menu da conta (foto no topo)
+                </button>
+              </div>
               <div className="flex justify-end">
                 <Button variant="ghost" size="sm" onClick={() => void dismissOnboarding()} className="text-zinc-500 hover:cursor-pointer">
                   Fechar onboarding
@@ -1388,9 +1432,10 @@ export default function DashboardPage() {
                 {upgradePrompt.kind === "billing" ? (
                   <Button
                     className="h-9 bg-white text-amber-700 hover:bg-zinc-100"
-                    onClick={() => router.push("/settings?tab=billing")}
+                    onClick={() => void handleRecoverPayment()}
+                    disabled={isRecoveringBilling}
                   >
-                    {upgradePrompt.ctaPrimary}
+                    {isRecoveringBilling ? "Processando..." : upgradePrompt.ctaPrimary}
                   </Button>
                 ) : (
                   <>
@@ -1443,12 +1488,12 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* MOVIMENTAO */}
+          {/* MOVIMENTAÇÃO */}
           <Card id="tour-movement-card" className={`${fadeInUp} delay-300 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl`}>
             <div className="absolute inset-0 bg-linear-to-br from-violet-500/5 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">MOVIMENTAO (Mês)</CardTitle>
+                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Movimentação (Mês)</CardTitle>
                 <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
                   {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -1472,11 +1517,11 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* PREVISO */}
+          {/* Previsão */}
           <Card id="tour-forecast-card" className={`${fadeInUp} delay-500 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">PREVISO de Fechamento</CardTitle>
+                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Previsão de Fechamento</CardTitle>
                 <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
                   {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>

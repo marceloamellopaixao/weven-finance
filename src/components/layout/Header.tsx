@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,6 +16,7 @@ import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home, UserCog, 
 import Link from "next/link";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useOnboarding } from "@/hooks/useOnboarding";
 import { Bell } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -25,6 +26,17 @@ export function Header() {
   const pathname = usePathname();
   const { isImpersonating, impersonationTargetUid, stopImpersonation } = useImpersonation();
   const { items: notifications, unreadCount, markOneAsRead, markAllAsRead, clearAll } = useNotifications();
+  const { status: onboardingStatus, loading: onboardingLoading, completeStep } = useOnboarding();
+  const isAuthenticated = !!user || !!userProfile;
+  const displayName = isImpersonating
+    ? (userProfile?.displayName || "Usuário")
+    : (userProfile?.displayName || user?.displayName || "Usuário");
+  const displayEmail = isImpersonating
+    ? (userProfile?.email || impersonationTargetUid || "")
+    : (userProfile?.email || user?.email || "");
+  const displayPhoto = isImpersonating
+    ? (userProfile?.photoURL || "")
+    : (userProfile?.photoURL || user?.photoURL || "");
 
   const handleStopImpersonation = () => {
     stopImpersonation();
@@ -77,8 +89,13 @@ export function Header() {
     }
   };
 
-  // Considera logado se houver usuário OU se o perfil já foi carregado.
-  const isAuthenticated = !!user || !!userProfile;
+  const shouldShowProfileMenuHint = isAuthenticated && !onboardingLoading && !onboardingStatus.steps.profileMenu;
+
+  const handleAvatarMenuOpenChange = (open: boolean) => {
+    if (!open) return;
+    if (onboardingStatus.steps.profileMenu) return;
+    void completeStep("profileMenu");
+  };
 
   // Se não tiver usuário logado, mostra o header da landing page.
   if (!isAuthenticated) {
@@ -123,6 +140,32 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
+        {isImpersonating && (
+          <>
+            <Button
+              variant="outline"
+              size="icon"
+              className="md:hidden h-9 w-9 rounded-full border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:cursor-pointer"
+              onClick={handleStopImpersonation}
+              title="Encerrar impersonação"
+            >
+              <UserCog className="h-4 w-4" />
+            </Button>
+            <div className="hidden md:flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-700">
+              <UserCog className="h-3.5 w-3.5" />
+              <span>Impersonando {displayEmail || impersonationTargetUid}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-amber-700 hover:bg-amber-100 hover:cursor-pointer"
+                onClick={handleStopImpersonation}
+              >
+                Encerrar
+              </Button>
+            </div>
+          </>
+        )}
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon" className="relative h-9 w-9 rounded-full border-zinc-200 dark:border-zinc-800">
@@ -134,6 +177,7 @@ export function Header() {
               )}
             </Button>
           </DropdownMenuTrigger>
+
           <DropdownMenuContent align="end" className="w-80 rounded-xl p-2">
             <div className="flex items-center justify-between px-2 py-1">
               <DropdownMenuLabel className="p-0">Notificações</DropdownMenuLabel>
@@ -153,6 +197,7 @@ export function Header() {
               </button>
             </div>
             <DropdownMenuSeparator />
+
             {notifications.length === 0 ? (
               <div className="px-2 py-6 text-center text-xs text-zinc-500">Sem notificações no momento.</div>
             ) : (
@@ -173,45 +218,18 @@ export function Header() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {isImpersonating && (
-          <>
-            <Button
-              variant="outline"
-              size="icon"
-              className="md:hidden h-9 w-9 rounded-full border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:cursor-pointer"
-              onClick={handleStopImpersonation}
-              title="Encerrar impersonação"
-            >
-              <UserCog className="h-4 w-4" />
-            </Button>
-            <div className="hidden md:flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-700">
-              <UserCog className="h-3.5 w-3.5" />
-              <span>Impersonando {userProfile?.email || impersonationTargetUid}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-amber-700 hover:bg-amber-100 hover:cursor-pointer"
-                onClick={handleStopImpersonation}
-              >
-                Encerrar
-              </Button>
-            </div>
-          </>
-        )}
-
         {/* Informações do Usuário (Desktop) */}
         <div className="text-right hidden md:block">
           <p className="text-sm font-semibold leading-none text-zinc-900 dark:text-zinc-100">
-            {userProfile?.displayName || user?.displayName || "Usuário"}
+            {displayName}
           </p>
           <div className="flex justify-end mt-1">
             <Badge
               variant="secondary"
-              className={`text-[10px] uppercase border h-5 px-1.5 ${
-                userProfile?.plan === "pro" || userProfile?.plan === "premium"
-                  ? "bg-violet-100 text-violet-600 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400"
-                  : "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
-              }`}
+              className={`text-[10px] uppercase border h-5 px-1.5 ${userProfile?.plan === "pro" || userProfile?.plan === "premium"
+                ? "bg-violet-100 text-violet-600 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400"
+                : "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
+                }`}
             >
               {userProfile?.plan || "Free"}
             </Badge>
@@ -219,20 +237,27 @@ export function Header() {
         </div>
 
         {/* Dropdown Menu do Usuário */}
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={handleAvatarMenuOpenChange}>
           <DropdownMenuTrigger asChild>
-            <Avatar className="h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 ring-transparent hover:ring-violet-200 transition-all cursor-pointer">
-              <AvatarImage src={user?.photoURL || userProfile?.photoURL || ""} />
-              <AvatarFallback className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600 font-bold">
-                {(userProfile?.displayName || user?.displayName || "U").charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <div className="relative">
+              {shouldShowProfileMenuHint && (
+                <span className="pointer-events-none absolute -top-7 right-0 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+                  Clique na foto
+                </span>
+              )}
+              <Avatar className={`h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 transition-all cursor-pointer ${shouldShowProfileMenuHint ? "ring-violet-400 animate-pulse" : "ring-transparent hover:ring-violet-200"}`}>
+                <AvatarImage src={displayPhoto} />
+                <AvatarFallback className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600 font-bold">
+                  {(displayName || "U").charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 rounded-xl shadow-xl border-zinc-200 dark:border-zinc-800 p-2">
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none truncate">{userProfile?.displayName || user?.displayName || "Minha Conta"}</p>
-                <p className="text-xs leading-none text-zinc-500 truncate">{userProfile?.email || user?.email}</p>
+                <p className="text-sm font-medium leading-none truncate">{displayName || "Minha Conta"}</p>
+                <p className="text-xs leading-none text-zinc-500 truncate">{displayEmail}</p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
@@ -277,13 +302,12 @@ export function Header() {
                 <DropdownMenuSeparator />
                 <Link href="/admin" className="cursor-pointer">
                   <DropdownMenuItem
-                    className={`cursor-pointer rounded-lg font-medium ${
-                      userProfile.role === "admin"
-                        ? "text-red-600 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-900/10"
-                        : userProfile.role === "moderator"
+                    className={`cursor-pointer rounded-lg font-medium ${userProfile.role === "admin"
+                      ? "text-red-600 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-900/10"
+                      : userProfile.role === "moderator"
                         ? "text-amber-600 focus:text-amber-700 focus:bg-amber-50 dark:focus:bg-amber-900/10"
                         : "text-zinc-600 focus:text-zinc-700 focus:bg-zinc-100 dark:focus:bg-zinc-800"
-                    }`}
+                      }`}
                   >
                     <ShieldAlert className="mr-2 h-4 w-4" />
                     <span>Painel {userProfile.role === "admin" ? "Admin" : userProfile.role === "moderator" ? "Moderador" : "Funcionário"}</span>
@@ -307,4 +331,5 @@ export function Header() {
     </nav>
   );
 }
+
 

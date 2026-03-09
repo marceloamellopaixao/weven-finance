@@ -50,7 +50,7 @@ async function verifySupabaseToken(token: string): Promise<ServerAuthUser> {
     uid: mappedUid,
     rawUid: user.id,
     email: String(user.email || ""),
-    name: String(metadata.displayName || "Usuario"),
+    name: String(metadata.displayName || "Usuário"),
     provider: "supabase",
   };
 }

@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       const newProfile: Partial<UserProfile> = {
         uid: auth.uid,
         email: auth.email,
-        displayName: profile.displayName || "Usuario",
+        displayName: profile.displayName || "Usuário",
         completeName: profile.completeName || profile.displayName || "",
         phone: profile.phone || "",
         role: profile.role || "client",

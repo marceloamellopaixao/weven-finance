@@ -98,6 +98,29 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.total - a.total)
       .slice(0, 12);
 
+    const billingRows = await supabaseSelect("billing_events", {
+      select: "id,event_type,raw,created_at",
+      filters: { provider: "mercadopago" },
+      order: "created_at.desc.nullslast",
+      limit: 1000,
+    });
+    const billingCutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const paymentFailures24h = billingRows.filter((row) => {
+      const createdAt = typeof row.created_at === "string" ? row.created_at : "";
+      if (!createdAt || createdAt < billingCutoff24h) return false;
+      const raw = (row.raw as Record<string, unknown> | null) ?? {};
+      const targetPaymentStatus = String(raw.targetPaymentStatus || "").toLowerCase();
+      return targetPaymentStatus === "not_paid" || targetPaymentStatus === "overdue" || targetPaymentStatus === "canceled";
+    }).length;
+    const delayedThresholdIso = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const webhookDelayedCount = billingRows.filter((row) => {
+      const createdAt = typeof row.created_at === "string" ? row.created_at : "";
+      if (!createdAt || createdAt > delayedThresholdIso) return false;
+      const raw = (row.raw as Record<string, unknown> | null) ?? {};
+      const status = String(raw.status || "").toLowerCase();
+      return status === "accepted" || status === "pending" || status === "retry_failed" || status === "error";
+    }).length;
+
     const alerts: MetricsAlert[] = [];
     const errorRatePct = total > 0 ? Number(((errors / total) * 100).toFixed(2)) : 0;
     const rateLimitedPct = total > 0 ? Number(((rateLimited / total) * 100).toFixed(2)) : 0;
@@ -169,6 +192,26 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    if (paymentFailures24h > 0) {
+      alerts.push({
+        code: "payment_failures_detected",
+        level: paymentFailures24h >= 5 ? "high" : "medium",
+        title: "Falhas de pagamento detectadas",
+        description: `${paymentFailures24h} evento(s) com status de inadimplencia nas ultimas 24h.`,
+        value: paymentFailures24h,
+      });
+    }
+
+    if (webhookDelayedCount > 0) {
+      alerts.push({
+        code: "webhook_delayed_detected",
+        level: webhookDelayedCount >= 3 ? "high" : "medium",
+        title: "Webhook com atraso de processamento",
+        description: `${webhookDelayedCount} evento(s) de billing pendente(s) ha mais de 10 minutos.`,
+        value: webhookDelayedCount,
+      });
+    }
+
     return NextResponse.json(
       {
         ok: true,
@@ -182,6 +225,8 @@ export async function GET(request: NextRequest) {
           rateLimitedPct,
           previousTotal,
           trafficDropPct,
+          paymentFailures24h,
+          webhookDelayedCount,
         },
         alerts,
         byRoute,

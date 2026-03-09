@@ -19,6 +19,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       { name: "AdminUsers", description: "Gestão administrativa de usuários e operacoes de manutencao" },
       { name: "AdminAudit", description: "Consulta de trilha de auditoria administrativa" },
       { name: "AdminMetrics", description: "Metricas operacionais das APIs" },
+      { name: "AdminJobs", description: "Jobs administrativos de reconciliacao e manutencao" },
       { name: "Impersonation", description: "Solicitacao e aprovacao de acesso da equipe ao ambiente do usuário" },
       { name: "Categories", description: "Gestão de categorias personalizadas e visibilidade das padrao" },
       { name: "Transactions", description: "CRUD e operacoes em lote de transações" },
@@ -351,6 +352,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
                         firstTransaction: { type: "boolean", nullable: true },
                         firstCard: { type: "boolean", nullable: true },
                         firstGoal: { type: "boolean", nullable: true },
+                        profileMenu: { type: "boolean", nullable: true },
                       },
                     },
                   },
@@ -489,6 +491,39 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           ],
           responses: {
             200: { description: "Logs retornados" },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/admin/jobs/billing-reconcile": {
+        post: {
+          tags: ["AdminJobs"],
+          summary: "Reconciliar eventos de billing pendentes/falhos do Mercado Pago",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 100, default: 25 } },
+            { name: "onlyFailed", in: "query", required: false, schema: { type: "boolean", default: false } },
+            { name: "dryRun", in: "query", required: false, schema: { type: "boolean", default: false } },
+          ],
+          responses: {
+            200: { description: "Job executado" },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/admin/jobs/data-retention": {
+        post: {
+          tags: ["AdminJobs"],
+          summary: "Executar limpeza e anonimização de dados (retenção)",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: { description: "Job executado" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },

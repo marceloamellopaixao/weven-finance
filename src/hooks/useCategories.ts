@@ -38,13 +38,14 @@ const INITIAL_CATEGORIES: Category[] = [
 ];
 
 export function useCategories() {
-    const { user } = useAuth();
+    const { user, userProfile } = useAuth();
     const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
     const [loadingCategories, setLoadingCategories] = useState(true);
     const [hiddenDefaultCategories, setHiddenDefaultCategories] = useState<string[]>([]);
 
     useEffect(() => {
-        if (!user) return;
+        const effectiveUid = userProfile?.uid || user?.uid;
+        if (!user || !effectiveUid) return;
         let cancelled = false;
 
         const loadCategories = async () => {
@@ -84,12 +85,12 @@ export function useCategories() {
         void loadCategories();
         const stopCategories = subscribeToTableChanges({
             table: "categories",
-            filter: `uid=eq.${user.uid}`,
+            filter: `uid=eq.${effectiveUid}`,
             onChange: () => void loadCategories(),
         });
         const stopSettings = subscribeToTableChanges({
             table: "user_settings",
-            filter: `uid=eq.${user.uid}`,
+            filter: `uid=eq.${effectiveUid}`,
             onChange: () => void loadCategories(),
         });
         const onFocus = () => void loadCategories();
@@ -101,7 +102,7 @@ export function useCategories() {
             stopSettings();
             window.removeEventListener("focus", onFocus);
         };
-    }, [user]);
+    }, [user, userProfile?.uid]);
 
     const addNewCategory = async (
         name: string,

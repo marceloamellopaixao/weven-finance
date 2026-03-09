@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { UserPaymentStatus, UserPlan, UserRole, UserStatus } from "@/types/user";
+import { pushNotification } from "@/lib/notifications/server";
 
 type MercadoPagoTopic = "payment" | "merchant_order" | "preapproval";
 
@@ -490,6 +491,48 @@ function computeTargetPlan(currentPlan: UserPlan, paymentStatus: UserPaymentStat
   return currentPlan;
 }
 
+async function pushBillingStatusNotification(params: {
+  uid: string;
+  paymentStatus: UserPaymentStatus;
+  targetPlan: UserPlan;
+  source: "webhook" | "confirm";
+}) {
+  if (params.paymentStatus === "paid") {
+    await pushNotification({
+      uid: params.uid,
+      kind: "billing",
+      title: "Pagamento confirmado",
+      message: `Seu plano ${params.targetPlan.toUpperCase()} esta ativo.`,
+      href: "/settings?tab=billing",
+      meta: { source: params.source, paymentStatus: params.paymentStatus, plan: params.targetPlan },
+    });
+    return;
+  }
+
+  if (params.paymentStatus === "pending" || params.paymentStatus === "overdue") {
+    await pushNotification({
+      uid: params.uid,
+      kind: "billing",
+      title: "Pagamento pendente",
+      message: "Detectamos pendencia na assinatura. Regularize para manter seus recursos.",
+      href: "/settings?tab=billing",
+      meta: { source: params.source, paymentStatus: params.paymentStatus, plan: params.targetPlan },
+    });
+    return;
+  }
+
+  if (params.paymentStatus === "canceled" || params.paymentStatus === "not_paid") {
+    await pushNotification({
+      uid: params.uid,
+      kind: "billing",
+      title: "Assinatura em situacao irregular",
+      message: "Seu plano foi ajustado para Free. Voce pode reativar quando quiser.",
+      href: "/settings?tab=billing",
+      meta: { source: params.source, paymentStatus: params.paymentStatus, plan: params.targetPlan },
+    });
+  }
+}
+
 export async function syncFromWebhook(input: WebhookInput) {
   if (!input.topic || !input.resourceId) {
     throw new Error("Webhook payload missing topic/resource");
@@ -592,6 +635,13 @@ export async function syncFromWebhook(input: WebhookInput) {
     targetPlan,
     targetPaymentStatus,
     statusPatch,
+  });
+
+  await pushBillingStatusNotification({
+    uid: userMatch.uid,
+    paymentStatus: targetPaymentStatus,
+    targetPlan,
+    source: "webhook",
   });
 
   return {
@@ -723,6 +773,13 @@ export async function confirmPreapprovalForUser(params: {
     targetPaymentStatus,
     details,
     processedAt: new Date().toISOString(),
+  });
+
+  await pushBillingStatusNotification({
+    uid: params.uid,
+    paymentStatus: targetPaymentStatus,
+    targetPlan,
+    source: "confirm",
   });
 
   return {

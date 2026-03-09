@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyRequestAuth } from "@/lib/auth/server";
+import { resolveActingContext } from "@/lib/impersonation/server";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
@@ -82,12 +83,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const decoded = await verifyRequestAuth(request);
-    uid = decoded.uid;
+    await verifyRequestAuth(request);
+    const acting = await resolveActingContext(request);
+    uid = acting.actingUid;
 
     const rows = await supabaseSelect("billing_events", {
       select: "id,provider,event_type,action,raw,created_at",
-      filters: { uid: decoded.uid },
+      filters: { uid },
       order: "created_at.desc.nullslast",
       limit: 50,
     });

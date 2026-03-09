@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import crypto from "node:crypto";
 import { UserRole } from "@/types/user";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
@@ -7,6 +8,7 @@ export type ImpersonationRequestStatus = "pending" | "approved" | "rejected" | "
 
 export type AuthContext = {
   uid: string;
+  rawUid: string;
   role: UserRole;
   displayName: string;
   email: string;
@@ -14,6 +16,7 @@ export type AuthContext = {
 
 export type ActingContext = {
   requesterUid: string;
+  requesterRawUid: string;
   requesterRole: UserRole;
   actingUid: string;
   isImpersonating: boolean;
@@ -90,7 +93,7 @@ async function getUserProfileSummary(uid: string) {
   const raw = (row.raw as Record<string, unknown> | null) ?? {};
   return {
     uid,
-    displayName: String(row.display_name || raw.displayName || "Usuario"),
+    displayName: String(row.display_name || raw.displayName || "Usuário"),
     email: String(row.email || raw.email || ""),
     role: toUserRole(row.role || raw.role),
   };
@@ -98,21 +101,26 @@ async function getUserProfileSummary(uid: string) {
 
 export async function getAuthContextFromRequest(request: NextRequest): Promise<AuthContext> {
   const decoded = await verifyRequestAuth(request);
-  const rows = await supabaseSelect("profiles", { filters: { uid: decoded.uid }, limit: 1 });
+  let rows = await supabaseSelect("profiles", { filters: { uid: decoded.uid }, limit: 1 });
+  if (rows.length === 0 && decoded.rawUid && decoded.rawUid !== decoded.uid) {
+    rows = await supabaseSelect("profiles", { filters: { uid: decoded.rawUid }, limit: 1 });
+  }
   if (rows.length === 0) {
     return {
       uid: decoded.uid,
+      rawUid: decoded.rawUid,
       role: "client",
-      displayName: String(decoded.name || "Usuario"),
+      displayName: String(decoded.name || "Usuário"),
       email: String(decoded.email || ""),
     };
   }
   const row = rows[0];
   const raw = (row.raw as Record<string, unknown> | null) ?? {};
   return {
-    uid: decoded.uid,
+    uid: String(row.uid || decoded.uid),
+    rawUid: decoded.rawUid,
     role: toUserRole(row.role || raw.role),
-    displayName: String(row.display_name || raw.displayName || decoded.name || "Usuario"),
+    displayName: String(row.display_name || raw.displayName || decoded.name || "Usuário"),
     email: String(row.email || raw.email || decoded.email || ""),
   };
 }
@@ -124,6 +132,7 @@ export async function resolveActingContext(request: NextRequest): Promise<Acting
   if (!targetUid || targetUid === auth.uid) {
     return {
       requesterUid: auth.uid,
+      requesterRawUid: auth.rawUid,
       requesterRole: auth.role,
       actingUid: auth.uid,
       isImpersonating: false,
@@ -134,9 +143,16 @@ export async function resolveActingContext(request: NextRequest): Promise<Acting
     throw new Error("impersonation_forbidden_role");
   }
 
-  const requestRows = await supabaseSelect("support_access_requests", {
+  const requestRowsByUid = await supabaseSelect("support_access_requests", {
     filters: { requester_uid: auth.uid },
   });
+  const requestRowsByRawUid =
+    auth.rawUid && auth.rawUid !== auth.uid
+      ? await supabaseSelect("support_access_requests", {
+          filters: { requester_uid: auth.rawUid },
+        })
+      : [];
+  const requestRows = [...requestRowsByUid, ...requestRowsByRawUid];
   if (requestRows.length === 0) {
     throw new Error("impersonation_not_allowed");
   }
@@ -162,6 +178,7 @@ export async function resolveActingContext(request: NextRequest): Promise<Acting
 
   return {
     requesterUid: auth.uid,
+    requesterRawUid: auth.rawUid,
     requesterRole: auth.role,
     actingUid: targetUid,
     isImpersonating: true,
@@ -230,14 +247,22 @@ export function buildRejectedRequestPatch() {
 
 async function createOrReusePendingActionRequest(input: {
   requesterUid: string;
+  requesterRawUid?: string;
   requesterRole: UserRole;
   targetUid: string;
   actionType: string;
   actionLabel: string;
 }) {
-  const rows = await supabaseSelect("impersonation_action_requests", {
+  const rowsByUid = await supabaseSelect("impersonation_action_requests", {
     filters: { requester_uid: input.requesterUid },
   });
+  const rowsByRawUid =
+    input.requesterRawUid && input.requesterRawUid !== input.requesterUid
+      ? await supabaseSelect("impersonation_action_requests", {
+          filters: { requester_uid: input.requesterRawUid },
+        })
+      : [];
+  const rows = [...rowsByUid, ...rowsByRawUid];
 
   const existing = rows
     .map((row) => ({ id: String(row.id || ""), doc: (row.raw as ImpersonationActionRequestDoc | null) ?? null }))
@@ -346,6 +371,7 @@ export async function ensureImpersonationWriteApproval(input: {
   if (!actionRequestId) {
     const createdId = await createOrReusePendingActionRequest({
       requesterUid: input.acting.requesterUid,
+      requesterRawUid: input.acting.requesterRawUid,
       requesterRole: input.acting.requesterRole,
       targetUid: input.acting.actingUid,
       actionType: input.actionType,

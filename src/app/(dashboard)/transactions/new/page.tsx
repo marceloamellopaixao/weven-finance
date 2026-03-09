@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useCategories } from "@/hooks/useCategories";
+import { useOnboarding } from "@/hooks/useOnboarding";
 import { addTransaction } from "@/services/transactionService";
 import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
@@ -33,6 +34,7 @@ const formatCurrency = (value: number) =>
 export default function NewTransactionPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { status: onboardingStatus, loading: onboardingLoading } = useOnboarding();
   const { transactions } = useTransactions();
   const { categories } = useCategories();
 
@@ -163,6 +165,11 @@ export default function NewTransactionPage() {
             <CardDescription>Fluxo otimizado para mobile e desktop.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.steps.firstTransaction && (
+              <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
+                Onboarding: salve sua primeira transação para completar esta etapa.
+              </div>
+            )}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="grid grid-cols-2 gap-2">
               <Button variant={type === "expense" ? "default" : "outline"} onClick={() => setType("expense")}>Despesa</Button>
@@ -255,4 +262,3 @@ export default function NewTransactionPage() {
     </div>
   );
 }
-

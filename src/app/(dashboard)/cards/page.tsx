@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
+import { useOnboarding } from "@/hooks/useOnboarding";
 import { useTransactions } from "@/hooks/useTransactions";
 import { syncCreditCardAmountForLimit } from "@/services/transactionService";
 import { useSearchParams } from "next/navigation";
@@ -58,6 +59,7 @@ const defaultSettings: CreditCardSettings = { enabled: false, cardName: "Cartão
 
 export default function CreditCardPage() {
   const { user, userProfile, loading: authLoading } = useAuth();
+  const { status: onboardingStatus, loading: onboardingLoading } = useOnboarding();
   const { transactions, loading: txLoading } = useTransactions();
   const searchParams = useSearchParams();
 
@@ -473,6 +475,12 @@ export default function CreditCardPage() {
             {feedback.type === "success" && <CheckCircle2 className="h-4 w-4" />}
             {feedback.type === "error" && <AlertTriangle className="h-4 w-4" />}
             {feedback.message}
+          </div>
+        )}
+
+        {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.steps.firstCard && (
+          <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
+            Onboarding: adicione seu primeiro cartão nesta tela para concluir essa etapa automaticamente.
           </div>
         )}
 

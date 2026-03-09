@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyRequestAuth } from "@/lib/auth/server";
+import { resolveActingContext } from "@/lib/impersonation/server";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
@@ -53,18 +54,26 @@ function computeSlaDueAt(createdAtIso: string, type: SupportType, priority: Tick
 
 async function getAuthContext(request: NextRequest) {
   const decoded = await verifyRequestAuth(request);
-  const rows = await supabaseSelect("profiles", {
+  const acting = await resolveActingContext(request);
+  const requesterRows = await supabaseSelect("profiles", {
     filters: { uid: decoded.uid },
     limit: 1,
   });
-  if (rows.length === 0) throw new Error("user_not_found");
-  const row = rows[0];
+  const actingRows = await supabaseSelect("profiles", {
+    filters: { uid: acting.actingUid },
+    limit: 1,
+  });
+  if (actingRows.length === 0) throw new Error("user_not_found");
+  const row = actingRows[0];
   const raw = (row.raw as Record<string, unknown> | null) ?? {};
+  const requesterRoleRaw = ((requesterRows[0]?.raw as Record<string, unknown> | null) ?? {});
+  const requesterRole = String(requesterRows[0]?.role || requesterRoleRaw.role || "client");
+  const effectiveRole = acting.isImpersonating ? "client" : requesterRole;
   return {
-    uid: decoded.uid,
-    email: decoded.email || String(row.email || raw.email || ""),
-    name: String(row.display_name || raw.displayName || raw.completeName || decoded.email || "Usuario"),
-    role: String(row.role || raw.role || "client"),
+    uid: acting.actingUid,
+    email: String(row.email || raw.email || decoded.email || ""),
+    name: String(row.display_name || raw.displayName || raw.completeName || decoded.email || "Usuário"),
+    role: effectiveRole,
   };
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
 
 export type OnboardingStatus = {
@@ -12,6 +13,7 @@ export type OnboardingStatus = {
     firstTransaction: boolean;
     firstCard: boolean;
     firstGoal: boolean;
+    profileMenu: boolean;
   };
 };
 
@@ -29,6 +31,7 @@ async function apiFetch(path: string, init?: RequestInit) {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
+      ...getImpersonationHeader(),
       ...(init?.headers || {}),
     },
   });
@@ -93,4 +96,3 @@ export function subscribeToOnboarding(
     window.removeEventListener("focus", onFocus);
   };
 }
-

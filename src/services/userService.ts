@@ -321,6 +321,42 @@ export const getStaffUsers = async (): Promise<UserProfile[]> => {
   }
 };
 
+export const downloadAdminCsv = async (
+  kind: "users" | "support" | "audit",
+  filters?: Record<string, string | undefined>
+) => {
+  const query = new URLSearchParams();
+  query.set("kind", kind);
+  if (filters) {
+    for (const [key, value] of Object.entries(filters)) {
+      if (typeof value === "string" && value.trim()) query.set(key, value.trim());
+    }
+  }
+
+  const response = await apiFetch(`/api/admin/export?${query.toString()}`, {
+    method: "GET",
+  });
+  if (!response.ok) {
+    const payload = (await response.json()) as { ok?: boolean; error?: string };
+    throw new Error(payload.error || "Erro ao exportar CSV");
+  }
+
+  const csv = await response.text();
+  const disposition = response.headers.get("content-disposition") || "";
+  const match = disposition.match(/filename=\"([^\"]+)\"/i);
+  const filename = match?.[1] || `export-${kind}.csv`;
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
 export const resetUserFinancialData = async (uid: string) => {
   const response = await apiFetch("/api/admin/users", {
     method: "POST",

@@ -1,6 +1,7 @@
 "use client";
 
 import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
 
 export type AppNotification = {
@@ -23,6 +24,7 @@ async function apiFetch(path: string, init?: RequestInit) {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
+      ...getImpersonationHeader(),
       ...(init?.headers || {}),
     },
   });

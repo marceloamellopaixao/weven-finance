@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyRequestAuth } from "@/lib/auth/server";
+import { resolveActingContext } from "@/lib/impersonation/server";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { writeApiMetric } from "@/lib/observability/metrics";
@@ -12,6 +13,7 @@ type OnboardingData = {
     firstTransaction?: boolean;
     firstCard?: boolean;
     firstGoal?: boolean;
+    profileMenu?: boolean;
   };
 };
 
@@ -24,6 +26,7 @@ function normalizeData(value: unknown): OnboardingData {
       firstTransaction: Boolean(steps.firstTransaction),
       firstCard: Boolean(steps.firstCard),
       firstGoal: Boolean(steps.firstGoal),
+      profileMenu: Boolean(steps.profileMenu),
     },
   };
 }
@@ -43,26 +46,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const decoded = await verifyRequestAuth(request);
-    uid = decoded.uid;
+    await verifyRequestAuth(request);
+    const acting = await resolveActingContext(request);
+    uid = acting.actingUid;
 
     const [settingRow, txRows, cardRows, goalRows] = await Promise.all([
       supabaseSelect("user_settings", {
         select: "id,data",
-        filters: { uid: decoded.uid, setting_key: "onboarding" },
+        filters: { uid, setting_key: "onboarding" },
         limit: 1,
       }),
-      supabaseSelect("transactions", { select: "id", filters: { uid: decoded.uid }, limit: 1 }),
-      supabaseSelect("payment_cards", { select: "id", filters: { uid: decoded.uid }, limit: 1 }),
-      supabaseSelect("piggy_banks", { select: "id", filters: { uid: decoded.uid }, limit: 1 }),
+      supabaseSelect("transactions", { select: "id", filters: { uid }, limit: 1 }),
+      supabaseSelect("payment_cards", { select: "id", filters: { uid }, limit: 1 }),
+      supabaseSelect("piggy_banks", { select: "id", filters: { uid }, limit: 1 }),
     ]);
 
     const stored = normalizeData(settingRow[0]?.data);
     const hasFirstTransaction = Boolean(stored.steps?.firstTransaction) || txRows.length > 0;
     const hasFirstCard = Boolean(stored.steps?.firstCard) || cardRows.length > 0;
     const hasFirstGoal = Boolean(stored.steps?.firstGoal) || goalRows.length > 0;
-    const progress = [hasFirstTransaction, hasFirstCard, hasFirstGoal].filter(Boolean).length;
-    const completed = progress === 3;
+    const hasProfileMenu = Boolean(stored.steps?.profileMenu);
+    const progress = [hasFirstTransaction, hasFirstCard, hasFirstGoal, hasProfileMenu].filter(Boolean).length;
+    const completed = progress === 4;
 
     const response = {
       ok: true,
@@ -70,11 +75,12 @@ export async function GET(request: NextRequest) {
         dismissed: Boolean(stored.dismissed),
         completed,
         progress,
-        total: 3,
+        total: 4,
         steps: {
           firstTransaction: hasFirstTransaction,
           firstCard: hasFirstCard,
           firstGoal: hasFirstGoal,
+          profileMenu: hasProfileMenu,
         },
       },
     };
@@ -108,16 +114,16 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const decoded = await verifyRequestAuth(request);
-    uid = decoded.uid;
+    await verifyRequestAuth(request);
+    const acting = await resolveActingContext(request);
+    uid = acting.actingUid;
     const body = (await request.json()) as OnboardingData;
 
     const rows = await supabaseSelect("user_settings", {
       select: "id,data",
-      filters: { uid: decoded.uid, setting_key: "onboarding" },
+      filters: { uid, setting_key: "onboarding" },
       limit: 1,
     });
-
     const current = normalizeData(rows[0]?.data);
     const next: OnboardingData = {
       dismissed: typeof body.dismissed === "boolean" ? body.dismissed : current.dismissed,
@@ -125,6 +131,7 @@ export async function PUT(request: NextRequest) {
         firstTransaction: Boolean(body.steps?.firstTransaction || current.steps?.firstTransaction),
         firstCard: Boolean(body.steps?.firstCard || current.steps?.firstCard),
         firstGoal: Boolean(body.steps?.firstGoal || current.steps?.firstGoal),
+        profileMenu: Boolean(body.steps?.profileMenu || current.steps?.profileMenu),
       },
     };
 
@@ -132,8 +139,8 @@ export async function PUT(request: NextRequest) {
       "user_settings",
       [
         {
-          id: String(rows[0]?.id || `${decoded.uid}__onboarding`),
-          uid: decoded.uid,
+          id: String(rows[0]?.id || `${uid}__onboarding`),
+          uid,
           setting_key: "onboarding",
           data: next,
           updated_at: new Date().toISOString(),
@@ -158,4 +165,3 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
-

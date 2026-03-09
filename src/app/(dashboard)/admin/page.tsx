@@ -15,6 +15,7 @@ import {
   normalizeDatabaseUsers,
   restoreUserAccount,
   getStaffUsers,
+  downloadAdminCsv,
 } from "@/services/userService";
 import { updatePlansConfig } from "@/services/systemService";
 import {
@@ -190,6 +191,8 @@ function formatDateSafe(value: unknown) {
 // Dono Supremo (Hardcoded para segurança extra na UI)
 const CREATOR_SUPREME = "Z3ciyXudWuZZywhojA6iWJTurH52";
 const ADMIN_USERS_FILTERS_STORAGE_KEY = "wevenfinance:admin:users-filters:v1";
+const ADMIN_SUPPORT_FILTERS_STORAGE_KEY = "wevenfinance:admin:support-filters:v1";
+const ADMIN_AUDIT_FILTERS_STORAGE_KEY = "wevenfinance:admin:audit-filters:v1";
 
 export default function AdminPage() {
   const { user, userProfile, loading } = useAuth();
@@ -217,6 +220,10 @@ export default function AdminPage() {
   const [supportUnseenCount, setSupportUnseenCount] = useState(0);
   const [supportPage, setSupportPage] = useState(1);
   const supportPerPage = 12;
+  const [supportTypeFilter, setSupportTypeFilter] = useState<"support" | "feature" | "all">("all");
+  const [supportStatusFilter, setSupportStatusFilter] = useState("all");
+  const [supportPriorityFilter, setSupportPriorityFilter] = useState<"low" | "medium" | "high" | "urgent" | "all">("all");
+  const [supportSearch, setSupportSearch] = useState("");
   const [staffMembers, setStaffMembers] = useState<UserProfile[]>([]);
   const [viewTicket, setViewTicket] = useState<SupportTicket | null>(null);
   const [ticketToDelete, setTicketToDelete] = useState<SupportTicket | null>(null);
@@ -240,6 +247,7 @@ export default function AdminPage() {
   const [healthData, setHealthData] = useState<AdminHealth | null>(null);
   const [healthAlerts, setHealthAlerts] = useState<AdminMetricsAlert[]>([]);
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
+  const [isExportingCsv, setIsExportingCsv] = useState<"users" | "support" | "audit" | null>(null);
 
   // --- FILTROS ---
   const [searchTerm, setSearchTerm] = useState("");
@@ -445,6 +453,86 @@ export default function AdminPage() {
   }, [searchTerm, roleFilter, planFilter, statusFilter, paymentStatusFilter]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(ADMIN_SUPPORT_FILTERS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<{
+        supportTypeFilter: "support" | "feature" | "all";
+        supportStatusFilter: string;
+        supportPriorityFilter: "low" | "medium" | "high" | "urgent" | "all";
+        supportSearch: string;
+      }>;
+      if (parsed.supportTypeFilter) setSupportTypeFilter(parsed.supportTypeFilter);
+      if (typeof parsed.supportStatusFilter === "string") setSupportStatusFilter(parsed.supportStatusFilter);
+      if (parsed.supportPriorityFilter) setSupportPriorityFilter(parsed.supportPriorityFilter);
+      if (typeof parsed.supportSearch === "string") setSupportSearch(parsed.supportSearch);
+    } catch {
+      // ignora parse invalido
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        ADMIN_SUPPORT_FILTERS_STORAGE_KEY,
+        JSON.stringify({
+          supportTypeFilter,
+          supportStatusFilter,
+          supportPriorityFilter,
+          supportSearch,
+        })
+      );
+    } catch {
+      // ignora falha de storage
+    }
+  }, [supportTypeFilter, supportStatusFilter, supportPriorityFilter, supportSearch]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(ADMIN_AUDIT_FILTERS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<{
+        auditSearch: string;
+        auditActionFilter: string;
+        auditActorUidFilter: string;
+        auditTargetUidFilter: string;
+        auditFromDate: string;
+        auditToDate: string;
+      }>;
+      if (typeof parsed.auditSearch === "string") setAuditSearch(parsed.auditSearch);
+      if (typeof parsed.auditActionFilter === "string") setAuditActionFilter(parsed.auditActionFilter);
+      if (typeof parsed.auditActorUidFilter === "string") setAuditActorUidFilter(parsed.auditActorUidFilter);
+      if (typeof parsed.auditTargetUidFilter === "string") setAuditTargetUidFilter(parsed.auditTargetUidFilter);
+      if (typeof parsed.auditFromDate === "string") setAuditFromDate(parsed.auditFromDate);
+      if (typeof parsed.auditToDate === "string") setAuditToDate(parsed.auditToDate);
+    } catch {
+      // ignora parse invalido
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        ADMIN_AUDIT_FILTERS_STORAGE_KEY,
+        JSON.stringify({
+          auditSearch,
+          auditActionFilter,
+          auditActorUidFilter,
+          auditTargetUidFilter,
+          auditFromDate,
+          auditToDate,
+        })
+      );
+    } catch {
+      // ignora falha de storage
+    }
+  }, [auditSearch, auditActionFilter, auditActorUidFilter, auditTargetUidFilter, auditFromDate, auditToDate]);
+
+  useEffect(() => {
     if (loading || !userProfile || isTabBootstrapped) return;
     const tabFromUrl = searchParams.get("tab");
     if (tabFromUrl && allowedTabs.includes(tabFromUrl)) {
@@ -520,6 +608,10 @@ export default function AdminPage() {
         const payload = await fetchSupportTicketsPage({
           page: supportPage,
           limit: supportPerPage,
+          type: supportTypeFilter,
+          status: supportStatusFilter,
+          priority: supportPriorityFilter,
+          q: supportSearch,
         });
         if (cancelled) return;
         setTickets(payload.tickets);
@@ -546,7 +638,7 @@ export default function AdminPage() {
       clearInterval(interval);
       stopRealtime();
     };
-  }, [activeTab, loading, userProfile, supportPage]);
+  }, [activeTab, loading, userProfile, supportPage, supportTypeFilter, supportStatusFilter, supportPriorityFilter, supportSearch]);
 
   useEffect(() => {
     if (!userProfile) return;
@@ -1211,46 +1303,67 @@ export default function AdminPage() {
     return list.sort((a, b) => rolePriority[a.role] - rolePriority[b.role]);
   }, [users, canViewRole]);
 
-  const handleExportUsersCsv = useCallback(() => {
-    const headers = [
-      "uid",
-      "nome",
-      "email",
-      "plano",
-      "cargo",
-      "status",
-      "pagamento",
-      "lancamentos",
-      "criado_em",
-    ];
-    const escapeCsv = (value: unknown) => {
-      const text = String(value ?? "");
-      if (/[",;\n]/.test(text)) return `"${text.replace(/"/g, "\"\"")}"`;
-      return text;
-    };
-    const rows = filteredUsers.map((u) => [
-      u.uid,
-      u.displayName || "",
-      u.email || "",
-      u.plan || "",
-      u.role || "",
-      u.status || "",
-      u.paymentStatus || "",
-      typeof u.transactionCount === "number" ? String(u.transactionCount) : "",
-      u.createdAt ? new Date(u.createdAt).toISOString() : "",
-    ]);
-    const content = [headers, ...rows].map((line) => line.map(escapeCsv).join(";")).join("\n");
-    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    a.href = url;
-    a.download = `usuarios-filtrados-${stamp}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }, [filteredUsers]);
+  const handleExportUsersCsv = useCallback(async () => {
+    try {
+      setIsExportingCsv("users");
+      await downloadAdminCsv("users", {
+        q: searchTerm,
+        role: roleFilter,
+        plan: planFilter,
+        status: statusFilter,
+        paymentStatus: paymentStatusFilter,
+      });
+    } catch (error) {
+      console.error(error);
+      showFeedback("error", "Exportação falhou", "Não foi possível exportar os usuários agora.");
+    } finally {
+      setIsExportingCsv(null);
+    }
+  }, [searchTerm, roleFilter, planFilter, statusFilter, paymentStatusFilter]);
+
+  const clearSupportFilters = useCallback(() => {
+    setSupportTypeFilter("all");
+    setSupportStatusFilter("all");
+    setSupportPriorityFilter("all");
+    setSupportSearch("");
+    setSupportPage(1);
+  }, []);
+
+  const handleExportSupportCsv = useCallback(async () => {
+    try {
+      setIsExportingCsv("support");
+      await downloadAdminCsv("support", {
+        q: supportSearch,
+        type: supportTypeFilter,
+        status: supportStatusFilter,
+        priority: supportPriorityFilter,
+      });
+    } catch (error) {
+      console.error(error);
+      showFeedback("error", "Exportação falhou", "Não foi possível exportar os chamados agora.");
+    } finally {
+      setIsExportingCsv(null);
+    }
+  }, [supportSearch, supportTypeFilter, supportStatusFilter, supportPriorityFilter]);
+
+  const handleExportAuditCsv = useCallback(async () => {
+    try {
+      setIsExportingCsv("audit");
+      await downloadAdminCsv("audit", {
+        q: auditSearch,
+        action: auditActionFilter,
+        actorUid: auditActorUidFilter,
+        targetUid: auditTargetUidFilter,
+        from: auditFromDate,
+        to: auditToDate,
+      });
+    } catch (error) {
+      console.error(error);
+      showFeedback("error", "Exportação falhou", "Não foi possível exportar a auditoria agora.");
+    } finally {
+      setIsExportingCsv(null);
+    }
+  }, [auditSearch, auditActionFilter, auditActorUidFilter, auditTargetUidFilter, auditFromDate, auditToDate]);
 
   const deletedUsers = useMemo(() => {
     return users.filter(u => u.status === 'deleted');
@@ -1267,6 +1380,10 @@ export default function AdminPage() {
   useEffect(() => {
     if (activeTab === "support") setSupportPage(1);
   }, [activeTab]);
+
+  useEffect(() => {
+    setSupportPage(1);
+  }, [supportTypeFilter, supportStatusFilter, supportPriorityFilter, supportSearch]);
 
   if (
     loading ||
@@ -1398,6 +1515,67 @@ export default function AdminPage() {
                     <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
                       <p className="text-xs text-blue-700">TMA resolução</p>
                       <p className="text-lg font-bold text-blue-700">{supportQueueMetrics.avgResolutionMinutes} min</p>
+                    </div>
+                  </div>
+                  <div className="p-4 md:p-5 border-b border-zinc-100 dark:border-zinc-800 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                      <Input
+                        value={supportSearch}
+                        onChange={(e) => setSupportSearch(e.target.value)}
+                        className="h-10 rounded-xl"
+                        placeholder="Buscar chamado por protocolo, nome ou email"
+                      />
+                      <Select value={supportTypeFilter} onValueChange={(value) => setSupportTypeFilter(value as "support" | "feature" | "all")}>
+                        <SelectTrigger className="h-10 rounded-xl">
+                          <SelectValue placeholder="Tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos os tipos</SelectItem>
+                          <SelectItem value="support">Suporte</SelectItem>
+                          <SelectItem value="feature">Ideias</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={supportStatusFilter} onValueChange={setSupportStatusFilter}>
+                        <SelectTrigger className="h-10 rounded-xl">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos os status</SelectItem>
+                          <SelectItem value="pending">Pendente</SelectItem>
+                          <SelectItem value="in_progress">Em Progresso</SelectItem>
+                          <SelectItem value="resolved">Resolvido</SelectItem>
+                          <SelectItem value="rejected">Rejeitado</SelectItem>
+                          <SelectItem value="under_review">Em Análise</SelectItem>
+                          <SelectItem value="approved">Aprovado</SelectItem>
+                          <SelectItem value="implemented">Implementado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={supportPriorityFilter} onValueChange={(value) => setSupportPriorityFilter(value as "low" | "medium" | "high" | "urgent" | "all")}>
+                        <SelectTrigger className="h-10 rounded-xl">
+                          <SelectValue placeholder="Prioridade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todas prioridades</SelectItem>
+                          <SelectItem value="low">Baixa</SelectItem>
+                          <SelectItem value="medium">Média</SelectItem>
+                          <SelectItem value="high">Alta</SelectItem>
+                          <SelectItem value="urgent">Urgente</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" className="h-10 rounded-xl" onClick={clearSupportFilters}>
+                        <FilterX className="mr-2 h-4 w-4" /> Limpar filtros
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="h-10 rounded-xl"
+                        onClick={() => void handleExportSupportCsv()}
+                        disabled={isExportingCsv === "support"}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        {isExportingCsv === "support" ? "Exportando..." : "Exportar CSV"}
+                      </Button>
                     </div>
                   </div>
                   <div className="p-4 md:p-5 grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -1845,6 +2023,15 @@ export default function AdminPage() {
                     <Badge variant="outline" className="rounded-xl px-3 py-1.5 text-xs">
                       {auditTotal} registros
                     </Badge>
+                    <Button
+                      variant="outline"
+                      className="h-10 rounded-xl"
+                      onClick={() => void handleExportAuditCsv()}
+                      disabled={isExportingCsv === "audit"}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      {isExportingCsv === "audit" ? "Exportando..." : "Exportar CSV"}
+                    </Button>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -2222,6 +2409,24 @@ export default function AdminPage() {
                       <SelectItem value="unpaid_group" className="text-red-500 font-medium">Inadimplentes (Geral)</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-10 rounded-xl"
+                    onClick={clearUsersFilters}
+                  >
+                    <FilterX className="mr-2 h-4 w-4" /> Limpar filtros
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-10 rounded-xl"
+                    onClick={() => void handleExportUsersCsv()}
+                    disabled={isExportingCsv === "users"}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    {isExportingCsv === "users" ? "Exportando..." : "Exportar CSV"}
+                  </Button>
                 </div>
               </div>
 
@@ -3068,23 +3273,6 @@ export default function AdminPage() {
                   <Badge className={`mt-1 ${getTicketPriorityTone(viewTicket.priority)}`}>
                     {getTicketPriorityLabel(viewTicket.priority)}
                   </Badge>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Button
-                    variant="outline"
-                    className="h-10 rounded-xl"
-                    onClick={clearUsersFilters}
-                  >
-                    <FilterX className="mr-2 h-4 w-4" /> Limpar filtros
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-10 rounded-xl"
-                    onClick={handleExportUsersCsv}
-                    disabled={filteredUsers.length === 0}
-                  >
-                    <Download className="mr-2 h-4 w-4" /> Exportar CSV ({filteredUsers.length})
-                  </Button>
                 </div>
               </div>
               <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyRequestAuth } from "@/lib/auth/server";
+import { resolveActingContext } from "@/lib/impersonation/server";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
@@ -49,8 +50,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const decoded = await verifyRequestAuth(request);
-    uid = decoded.uid;
+    await verifyRequestAuth(request);
+    const acting = await resolveActingContext(request);
+    uid = acting.actingUid;
 
     const page = Math.max(1, Number(request.nextUrl.searchParams.get("page") || "1"));
     const limit = Math.max(1, Math.min(100, Number(request.nextUrl.searchParams.get("limit") || "20")));
@@ -60,7 +62,7 @@ export async function GET(request: NextRequest) {
     try {
       const paged = await supabaseSelectPaged("notifications", {
         select: "id,uid,kind,title,message,href,is_read,created_at",
-        filters: { uid: decoded.uid },
+        filters: { uid },
         order: "created_at.desc.nullslast",
         page,
         limit,
@@ -70,7 +72,7 @@ export async function GET(request: NextRequest) {
 
       const unreadPaged = await supabaseSelectPaged("notifications", {
         select: "id",
-        filters: { uid: decoded.uid, is_read: false },
+        filters: { uid, is_read: false },
         page: 1,
         limit: 1,
       });
@@ -112,15 +114,16 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const decoded = await verifyRequestAuth(request);
-    uid = decoded.uid;
+    await verifyRequestAuth(request);
+    const acting = await resolveActingContext(request);
+    uid = acting.actingUid;
     const body = (await request.json()) as { id?: string; markAllRead?: boolean };
 
     let rows: Array<Record<string, unknown>> = [];
     try {
       rows = await supabaseSelect("notifications", {
         select: "id,uid,kind,title,message,href,is_read,meta,created_at",
-        filters: { uid: decoded.uid },
+        filters: { uid },
         order: "created_at.desc.nullslast",
         limit: 100,
       });
@@ -139,7 +142,7 @@ export async function PATCH(request: NextRequest) {
         "notifications",
         targetRows.map((row) => ({
           id: String(row.id || ""),
-          uid: decoded.uid,
+          uid,
           kind: String(row.kind || "system"),
           title: String(row.title || ""),
           message: String(row.message || ""),
@@ -181,11 +184,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const decoded = await verifyRequestAuth(request);
-    uid = decoded.uid;
+    await verifyRequestAuth(request);
+    const acting = await resolveActingContext(request);
+    uid = acting.actingUid;
 
     try {
-      await supabaseDeleteByFilters("notifications", { uid: decoded.uid });
+      await supabaseDeleteByFilters("notifications", { uid });
     } catch (error) {
       if (!isMissingNotificationsTableError(error)) throw error;
     }

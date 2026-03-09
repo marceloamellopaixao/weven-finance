@@ -6,13 +6,14 @@ import { subscribeToTransactions } from "@/services/transactionService";
 import { Transaction } from "@/types/transaction";
 
 export function useTransactions() {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // 1. Caso de Logout: Limpa os dados e retorna
-    if (!user) {
+    const effectiveUid = userProfile?.uid || user?.uid;
+    if (!user || !effectiveUid) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setTransactions([]);
       setLoading(false);
@@ -22,7 +23,7 @@ export function useTransactions() {
     setLoading(true);
 
     // 2. Caso de Login: Cria a subscrição (agora como const)
-    const unsubscribe = subscribeToTransactions(user.uid, (data) => {
+    const unsubscribe = subscribeToTransactions(effectiveUid, (data) => {
       setTransactions(data);
       setLoading(false);
     });
@@ -30,7 +31,7 @@ export function useTransactions() {
     // 3. Cleanup: Executa quando o componente desmonta ou user muda
     return () => unsubscribe();
 
-  }, [user]);
+  }, [user, userProfile?.uid]);
 
   return { transactions, loading };
 }

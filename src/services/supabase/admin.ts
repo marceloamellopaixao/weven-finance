@@ -192,3 +192,30 @@ export async function supabaseDeleteByFilters(
     throw new Error(`supabase_delete_failed_${table}_${response.status}:${body}`);
   }
 }
+
+export async function supabaseRpc(functionName: string, args?: Record<string, unknown>) {
+  const baseUrl = getSupabaseBaseUrl();
+  const serviceKey = getSupabaseServerKey();
+  const response = await fetch(`${baseUrl}/rest/v1/rpc/${functionName}`, {
+    method: "POST",
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(args ?? {}),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`supabase_rpc_failed_${functionName}_${response.status}:${body}`);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    return (await response.json()) as unknown;
+  }
+
+  return null;
+}

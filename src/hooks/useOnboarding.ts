@@ -12,11 +12,12 @@ const DEFAULT_STATUS: OnboardingStatus = {
   dismissed: false,
   completed: false,
   progress: 0,
-  total: 3,
+  total: 4,
   steps: {
     firstTransaction: false,
     firstCard: false,
     firstGoal: false,
+    profileMenu: false,
   },
 };
 

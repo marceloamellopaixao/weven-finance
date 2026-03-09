@@ -1,4 +1,5 @@
 import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
 
 export type SupportRequestStatus = "pending" | "in_progress" | "resolved" | "rejected";
@@ -43,6 +44,7 @@ async function fetchWithAuth(path: string, init?: RequestInit) {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${idToken}`,
+      ...getImpersonationHeader(),
       ...(init?.headers || {}),
     },
   });

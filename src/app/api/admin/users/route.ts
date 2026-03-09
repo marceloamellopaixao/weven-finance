@@ -362,7 +362,7 @@ export async function POST(request: NextRequest) {
             status: "deleted",
             role: "client",
             payment_status: "canceled",
-            block_reason: "Usuario solicitado exclusao",
+            block_reason: "Usuário solicitou exclusão",
             deleted_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           },

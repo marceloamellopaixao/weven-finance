@@ -55,7 +55,7 @@ function mapSupabaseUserToAuthUser(input: {
   const displayName =
     (typeof meta.displayName === "string" && meta.displayName.trim()) ||
     (typeof meta.full_name === "string" && meta.full_name.trim()) ||
-    (typeof input.email === "string" ? input.email.split("@")[0] : "Usuario");
+    (typeof input.email === "string" ? input.email.split("@")[0] : "Usuário");
   const uid =
     typeof meta.firebaseUid === "string" && meta.firebaseUid.trim()
       ? meta.firebaseUid

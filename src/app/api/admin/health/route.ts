@@ -78,6 +78,13 @@ export async function GET(request: NextRequest) {
     const latestWebhook = billingEvents.find((row) => String(row.provider || "").toLowerCase() === "mercadopago");
     const latestWebhookAt = typeof latestWebhook?.created_at === "string" ? latestWebhook.created_at : null;
     const webhookDelayMinutes = minutesSince(latestWebhookAt);
+    const webhookFailures24h = billingEvents.filter((row) => {
+      if (typeof row.created_at !== "string" || row.created_at < last24h) return false;
+      if (String(row.provider || "").toLowerCase() !== "mercadopago") return false;
+      const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+      const status = String(raw.status || "").toLowerCase();
+      return status.includes("fail") || status === "rejected" || status === "invalid_signature";
+    }).length;
 
     const failedPayments24h = billingEvents.filter((row) => {
       if (typeof row.created_at !== "string" || row.created_at < last24h) return false;
@@ -139,6 +146,14 @@ export async function GET(request: NextRequest) {
         description: `${failedPayments24h} falhas nas ultimas 24h.`,
       });
     }
+    if (webhookFailures24h > 0) {
+      alerts.push({
+        code: "webhook_failures_detected",
+        level: webhookFailures24h >= 5 ? "high" : "medium",
+        title: "Falhas no processamento do webhook",
+        description: `${webhookFailures24h} eventos com falha nas ultimas 24h.`,
+      });
+    }
     if (apiErrors1h >= 15) {
       alerts.push({
         code: "api_errors_high",
@@ -163,10 +178,15 @@ export async function GET(request: NextRequest) {
           dbHealthy,
           latestWebhookAt,
           webhookDelayMinutes,
+          webhookFailures24h,
           failedPayments24h,
           pendingRecoveryUsers,
           apiErrors1h,
           apiAvgLatency1h,
+          observability: {
+            sentryConfigured: Boolean(process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN),
+            upstashConfigured: Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
+          },
         },
         alerts,
       },

@@ -34,6 +34,7 @@ import { migrateCryptography } from "@/services/transactionService";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { sendFeatureRequest, sendSupportRequest, subscribeToSupportTickets, type SupportTicket } from "@/hooks/supportService";
 import { BillingHistoryItem, cancelSubscription, confirmPreapproval, getBillingHistory, getCheckoutLink } from "@/services/billingService";
+import { useImpersonation } from "@/hooks/useImpersonation";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -45,6 +46,7 @@ type FeedbackData = {
 
 export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode } = useAuth();
+  const { isImpersonating } = useImpersonation();
   const { plans } = usePlans();
   const router = useRouter();
   const pathname = usePathname();
@@ -83,6 +85,13 @@ export default function SettingsPage() {
 
   // Estado para feedback modal
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
+  const effectiveProfileUid = userProfile?.uid || user?.uid || "";
+  const effectiveProfileEmail = isImpersonating
+    ? (userProfile?.email || "")
+    : (userProfile?.email || user?.email || "");
+  const effectiveProfileDisplayName = isImpersonating
+    ? (userProfile?.displayName || "Usuário")
+    : (userProfile?.displayName || user?.displayName || "Usuário");
 
   // Constantes de Animação (Padrão do Sistema)
   const fadeInUp = "animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both";
@@ -97,10 +106,10 @@ export default function SettingsPage() {
   }, [userProfile]);
 
   useEffect(() => {
-    if (user?.uid) {
-      getKeyFingerprint(user?.uid).then(setKeyFingerprint);
+    if (effectiveProfileUid) {
+      getKeyFingerprint(effectiveProfileUid).then(setKeyFingerprint);
     }
-  }, [user]);
+  }, [effectiveProfileUid]);
 
   const showFeedback = (type: 'success' | 'error' | 'info', title: string, message: string) => {
     setFeedbackModal({ isOpen: true, type, title, message });
@@ -156,7 +165,7 @@ export default function SettingsPage() {
     if (!user) return;
     setIsSaving(true);
     try {
-      await updateOwnProfile(user?.uid, { displayName, completeName, phone });
+      await updateOwnProfile(effectiveProfileUid, { displayName, completeName, phone });
       showFeedback('success', 'Sucesso', 'Perfil atualizado com sucesso!');
     } catch (error) {
       console.error("Erro ao salvar perfil:", error);
@@ -204,7 +213,7 @@ export default function SettingsPage() {
     if (!user) return;
     setIsMigrating(true);
     try {
-      const count = await migrateCryptography(user?.uid);
+      const count = await migrateCryptography(effectiveProfileUid);
       showFeedback('success', 'Migração Concluída', `${count} transações foram atualizadas para a nova segurança.`);
     } catch (e) {
       console.error(e);
@@ -245,9 +254,9 @@ export default function SettingsPage() {
     setIsSendingSupport(true);
     try {
       const result = await sendSupportRequest(
-        user?.uid,
-        user?.email || "E-mail nao disponivel",
-        userProfile?.displayName || "Usuario sem nome",
+        effectiveProfileUid,
+        effectiveProfileEmail || "E-mail nao disponivel",
+        userProfile?.displayName || "Usuário sem nome",
         supportMessage
       );
       setIsSupportModalOpen(false);
@@ -273,9 +282,9 @@ export default function SettingsPage() {
     setIsSendingFeature(true);
     try {
       const result = await sendFeatureRequest(
-        user?.uid,
-        user?.email || "Sem email",
-        userProfile?.displayName || "Usuario",
+        effectiveProfileUid,
+        effectiveProfileEmail || "Sem email",
+        userProfile?.displayName || "Usuário",
         featureMessage
       );
       setIsFeatureModalOpen(false);
@@ -383,7 +392,7 @@ export default function SettingsPage() {
     if (!user || !userProfile || activeTab !== "help") return;
     setIsLoadingMySupportTickets(true);
     const unsubscribe = subscribeToSupportTickets(
-      user.uid,
+      effectiveProfileUid,
       userProfile.role,
       (tickets) => {
         setMySupportTickets(
@@ -399,7 +408,7 @@ export default function SettingsPage() {
       }
     );
     return () => unsubscribe();
-  }, [user, userProfile, activeTab]);
+  }, [activeTab, effectiveProfileUid, user, userProfile]);
 
   useEffect(() => {
     const preapprovalId = searchParams.get("preapproval_id") || searchParams.get("preapprovalId");
@@ -507,20 +516,20 @@ export default function SettingsPage() {
                 <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
                   <div className="relative group">
                     <Avatar className="h-24 w-24 border-4 border-zinc-50 dark:border-zinc-800 shadow-xl transition-transform duration-300 group-hover:scale-105">
-                      <AvatarImage src={user?.photoURL || ""} className="object-cover" />
-                      <AvatarFallback className="text-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500">{user?.displayName.charAt(0) || "U"}</AvatarFallback>
+                      <AvatarImage src={isImpersonating ? (userProfile?.photoURL || "") : (userProfile?.photoURL || user?.photoURL || "")} className="object-cover" />
+                      <AvatarFallback className="text-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500">{effectiveProfileDisplayName.charAt(0) || "U"}</AvatarFallback>
                     </Avatar>
                     <div className="absolute bottom-0 right-0 p-1.5 bg-green-500 border-4 border-white dark:border-zinc-900 rounded-full animate-pulse" title="Online"></div>
                   </div>
                   <div className="space-y-1 text-center sm:text-left">
                     <h3 className="font-bold text-2xl text-zinc-900 dark:text-zinc-100">{displayName || "Usuário"}</h3>
-                    <p className="text-sm text-zinc-500 font-medium">{user?.email}</p>
+                    <p className="text-sm text-zinc-500 font-medium">{effectiveProfileEmail}</p>
                     <div className="flex flex-wrap justify-center sm:justify-start gap-2 pt-2">
                       <Badge variant="secondary" className={`uppercase text-[10px] tracking-wider border ${effectivePlan === 'free' ? 'bg-zinc-100 text-zinc-600 border-zinc-200' : 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300'}`}>
                         {isBillingExemptRole ? "Plano Staff (Isento)" : `Plano ${effectivePlan}`}
                       </Badge>
                       <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 gap-1">
-                        {user?.emailVerified ? (
+                        {(isImpersonating ? userProfile?.verifiedEmail : user?.emailVerified) ? (
                           <><CheckCircle2 className="h-3 w-3" /> Verificado</>
                         ) : (
                           <><X className="h-3 w-3" /> Não Verificado</>
@@ -545,7 +554,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-zinc-500">E-mail de Acesso</Label>
-                    <Input defaultValue={user?.email || ""} disabled className="h-11 rounded-xl bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 opacity-70 cursor-not-allowed" />
+                    <Input defaultValue={effectiveProfileEmail || ""} disabled className="h-11 rounded-xl bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 opacity-70 cursor-not-allowed" />
                   </div>
                 </div>
               </CardContent>

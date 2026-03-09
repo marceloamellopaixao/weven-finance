@@ -8,7 +8,7 @@ import { UserSettings } from "@/types/transaction";
 const DEFAULT_SETTINGS: UserSettings = { currentBalance: 0 };
 
 export function useUserSettings() {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
 
   const initialSettings = useMemo<UserSettings>(() => DEFAULT_SETTINGS, []);
   const [settings, setSettings] = useState<UserSettings>(initialSettings);
@@ -17,10 +17,11 @@ export function useUserSettings() {
   const [hasFirstSnapshot, setHasFirstSnapshot] = useState(false);
 
   useEffect(() => {
-    if (!user?.uid) return;
+    const effectiveUid = userProfile?.uid || user?.uid;
+    if (!effectiveUid) return;
 
     const unsubscribe = subscribeToUserSettings(
-      user.uid,
+      effectiveUid,
       (data) => {
         setSettings(data ?? DEFAULT_SETTINGS);
         setHasFirstSnapshot(true);
@@ -32,9 +33,9 @@ export function useUserSettings() {
     );
 
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [user?.uid, userProfile?.uid]);
 
-  const loading = Boolean(user?.uid) && !hasFirstSnapshot;
+  const loading = Boolean(userProfile?.uid || user?.uid) && !hasFirstSnapshot;
 
   return {
     settings,

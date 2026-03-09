@@ -8,6 +8,7 @@ import { getPiggyBanks, savePiggyDeposit } from "@/services/piggyBankService";
 import { getPaymentCards } from "@/services/paymentCardService";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useAuth } from "@/hooks/useAuth";
+import { useOnboarding } from "@/hooks/useOnboarding";
 import { PaymentCard } from "@/types/paymentCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +40,7 @@ export default function PiggyBankWizardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, userProfile } = useAuth();
+  const { status: onboardingStatus, loading: onboardingLoading } = useOnboarding();
   const { transactions } = useTransactions();
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -159,6 +161,12 @@ export default function PiggyBankWizardPage() {
 
         {feedback && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{feedback}</div>
+        )}
+
+        {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.steps.firstGoal && (
+          <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
+            Onboarding: crie sua primeira meta/porquinho e confirme um aporte para concluir esta etapa.
+          </div>
         )}
 
         <Card className="rounded-3xl border-zinc-200">

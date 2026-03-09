@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "node:crypto";
 import {
   buildApprovedRequestPatch,
   buildRejectedRequestPatch,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/impersonation/server";
 import { UserRole } from "@/types/user";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
+import { apiLogger } from "@/lib/observability/logger";
 
 function toUserRole(value: unknown): UserRole {
   if (value === "admin" || value === "moderator" || value === "support" || value === "client") {
@@ -35,9 +37,26 @@ function mapActionRows(rows: Array<Record<string, unknown>>) {
   }));
 }
 
+function hasMissingPermissionColumnError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return error.message.includes("permission_impersonate") && (error.message.includes("42703") || error.message.includes("column"));
+}
+
+async function upsertSupportAccessRequestRow(row: Record<string, unknown>) {
+  try {
+    await supabaseUpsertRows("support_access_requests", [row], { onConflict: "id" });
+  } catch (error) {
+    if (!hasMissingPermissionColumnError(error)) throw error;
+    const fallbackRow = { ...row };
+    delete fallbackRow.permission_impersonate;
+    await supabaseUpsertRows("support_access_requests", [fallbackRow], { onConflict: "id" });
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthContextFromRequest(request);
+    const requesterCandidates = Array.from(new Set([auth.uid, auth.rawUid].filter(Boolean)));
     const mode = request.nextUrl.searchParams.get("mode") || "pending";
 
     if (mode === "pending") {
@@ -56,9 +75,15 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
       const targetUid = request.nextUrl.searchParams.get("targetUid")?.trim();
-      const rows = await supabaseSelect("support_access_requests", {
-        filters: { requester_uid: auth.uid },
-      });
+      const rows = (
+        await Promise.all(
+          requesterCandidates.map((candidate) =>
+            supabaseSelect("support_access_requests", {
+              filters: { requester_uid: candidate },
+            })
+          )
+        )
+      ).flat();
 
       const requests = mapAccessRows(rows)
         .filter((item) => (targetUid ? item.targetUid === targetUid : true))
@@ -79,8 +104,15 @@ export async function GET(request: NextRequest) {
       const rows = await supabaseSelect("support_access_requests", {
         filters: { requester_uid: auth.uid },
       });
+      const rowsRaw =
+        auth.rawUid && auth.rawUid !== auth.uid
+          ? await supabaseSelect("support_access_requests", {
+              filters: { requester_uid: auth.rawUid },
+            })
+          : [];
+      const allRows = [...rows, ...rowsRaw];
 
-      const latest = mapAccessRows(rows)
+      const latest = mapAccessRows(allRows)
         .filter((item) => item.targetUid === targetUid)
         .sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)))[0];
 
@@ -181,8 +213,15 @@ export async function POST(request: NextRequest) {
       const existingRows = await supabaseSelect("support_access_requests", {
         filters: { requester_uid: auth.uid },
       });
+      const existingRowsRaw =
+        auth.rawUid && auth.rawUid !== auth.uid
+          ? await supabaseSelect("support_access_requests", {
+              filters: { requester_uid: auth.rawUid },
+            })
+          : [];
+      const existingAllRows = [...existingRows, ...existingRowsRaw];
 
-      const existingPending = mapAccessRows(existingRows).find(
+      const existingPending = mapAccessRows(existingAllRows).find(
         (item) => item.targetUid === targetUid && item.status === "pending"
       );
 
@@ -206,7 +245,7 @@ export async function POST(request: NextRequest) {
         requesterEmail: auth.email,
         requesterRole: auth.role,
         targetUid,
-        targetDisplayName: String(targetRows[0].display_name || targetRaw.displayName || "Usuario"),
+        targetDisplayName: String(targetRows[0].display_name || targetRaw.displayName || "Usuário"),
         targetEmail: String(targetRows[0].email || targetRaw.email || ""),
         targetRole: toUserRole(targetRows[0].role || targetRaw.role),
         status: "pending",
@@ -217,18 +256,16 @@ export async function POST(request: NextRequest) {
         expiresAt: null,
       };
 
-      await supabaseUpsertRows("support_access_requests", [
-        {
-          id: requestId,
-          requester_uid: auth.uid,
-          target_uid: targetUid,
-          request_status: "pending",
-          permission_impersonate: null,
-          raw,
-          created_at: nowIso,
-          updated_at: nowIso,
-        },
-      ]);
+      await upsertSupportAccessRequestRow({
+        id: requestId,
+        requester_uid: auth.uid,
+        target_uid: targetUid,
+        request_status: "pending",
+        permission_impersonate: null,
+        raw,
+        created_at: nowIso,
+        updated_at: nowIso,
+      });
 
       return NextResponse.json({ ok: true, requestId, status: "pending" }, { status: 200 });
     }
@@ -261,21 +298,15 @@ export async function POST(request: NextRequest) {
       const patch = body.approved ? buildApprovedRequestPatch() : buildRejectedRequestPatch();
       const raw = { ...requestData, ...patch };
 
-      await supabaseUpsertRows(
-        "support_access_requests",
-        [
-          {
-            id: requestId,
-            requester_uid: requestData.requesterUid,
-            target_uid: requestData.targetUid,
-            request_status: raw.status,
-            permission_impersonate: raw.permissionImpersonate,
-            raw,
-            updated_at: raw.updatedAt,
-          },
-        ],
-        { onConflict: "id" }
-      );
+      await upsertSupportAccessRequestRow({
+        id: requestId,
+        requester_uid: requestData.requesterUid,
+        target_uid: requestData.targetUid,
+        request_status: raw.status,
+        permission_impersonate: raw.permissionImpersonate,
+        raw,
+        updated_at: raw.updatedAt,
+      });
 
       await createSupportAccessLog({
         idUser: requestData.targetUid,
@@ -384,6 +415,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "invalid_action" }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
+    apiLogger.error({
+      message: "impersonation_post_failed",
+      route: "/api/impersonation",
+      method: "POST",
+      meta: { error: message },
+    });
     const status = message === "missing_auth_token" ? 401 : 500;
     return NextResponse.json({ ok: false, error: message }, { status });
   }
