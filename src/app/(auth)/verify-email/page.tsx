@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,7 +50,7 @@ export default function VerifyEmailPage() {
         });
         const payload = (await response.json()) as { ok: boolean };
         if (!response.ok || !payload.ok) {
-          throw new Error("Erro ao atualizar verificacao de e-mail no perfil.");
+          throw new Error("Erro ao atualizar verificação de e-mail no perfil.");
         }
         router.refresh();
         router.replace("/");
@@ -65,43 +65,43 @@ export default function VerifyEmailPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans px-4">
-      <div className="w-full max-w-lg relative z-10">
-        <Card className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border-zinc-200 dark:border-zinc-800 shadow-lg rounded-3xl overflow-hidden">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 font-sans">
+      <div className="relative z-10 w-full max-w-lg">
+        <Card className="overflow-hidden rounded-3xl border-zinc-200 bg-white/80 shadow-lg backdrop-blur-xl dark:border-zinc-800 dark:bg-zinc-900/80">
           <div className="h-2 w-full bg-linear-to-r from-violet-500 to-emerald-500" />
-          <CardHeader className="text-center pb-2 pt-8">
-            <div className="mx-auto mb-4 bg-violet-100 dark:bg-violet-900/30 p-4 rounded-full w-fit">
+          <CardHeader className="pb-2 pt-8 text-center">
+            <div className="mx-auto mb-4 w-fit rounded-full bg-violet-100 p-4 dark:bg-violet-900/30">
               <Mail className="h-8 w-8 text-violet-600 dark:text-violet-400" />
             </div>
-            <CardTitle className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Verifique seu E-mail</CardTitle>
-            <CardDescription className="text-base mt-2 text-zinc-600 dark:text-zinc-400">
+            <CardTitle className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Verifique seu e-mail</CardTitle>
+            <CardDescription className="mt-2 text-base text-zinc-600 dark:text-zinc-400">
               Enviamos um link de confirmação para <strong>{user?.email}</strong>.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 pt-6">
-            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/50 rounded-2xl p-5 flex gap-4 items-start">
-              <div className="bg-emerald-100 dark:bg-emerald-900/50 p-2 rounded-lg shrink-0">
+            <div className="flex items-start gap-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-5 dark:border-emerald-900/50 dark:bg-emerald-900/20">
+              <div className="shrink-0 rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/50">
                 <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
               </div>
-              <p className="text-xs text-emerald-700 dark:text-emerald-300 leading-relaxed">
+              <p className="text-xs leading-relaxed text-emerald-700 dark:text-emerald-300">
                 Após verificar o e-mail, você terá acesso imediato ao painel.
               </p>
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col gap-3 pt-2 pb-8">
+          <CardFooter className="flex flex-col gap-3 pb-8 pt-2">
             <Button
               onClick={checkVerification}
               disabled={isChecking}
-              className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl"
+              className="h-12 w-full rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
             >
-              {isChecking ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              {isChecking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
               Já verifiquei meu e-mail
             </Button>
-            <Button variant="ghost" onClick={handleSendEmailVerification} disabled={isResending} className="w-full h-12 rounded-xl">
-              {isResending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reenviar E-mail"}
+            <Button variant="ghost" onClick={handleSendEmailVerification} disabled={isResending} className="h-12 w-full rounded-xl">
+              {isResending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reenviar e-mail"}
             </Button>
-            <Button onClick={logout} variant="outline" className="w-full h-12 rounded-xl">
-              Voltar para Login <ArrowRight className=" h-4 w-4 ml-1" />
+            <Button onClick={logout} variant="outline" className="h-12 w-full rounded-xl">
+              Voltar para login <ArrowRight className="ml-1 h-4 w-4" />
             </Button>
           </CardFooter>
         </Card>
@@ -109,4 +109,3 @@ export default function VerifyEmailPage() {
     </div>
   );
 }
-
