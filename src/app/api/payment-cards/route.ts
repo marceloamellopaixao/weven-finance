@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
       request,
       acting,
       actionType: "payment-cards:create",
-      actionLabel: "Cadastrar cartao",
+      actionLabel: "Cadastrar cartão",
     });
     if (!approval.allowed) {
       return NextResponse.json(
@@ -203,7 +203,7 @@ export async function PATCH(request: NextRequest) {
       request,
       acting,
       actionType: "payment-cards:update",
-      actionLabel: "Editar cartao",
+      actionLabel: "Editar cartão",
     });
     if (!approval.allowed) {
       return NextResponse.json(
@@ -289,7 +289,7 @@ export async function DELETE(request: NextRequest) {
       request,
       acting,
       actionType: "payment-cards:delete",
-      actionLabel: "Excluir cartao",
+      actionLabel: "Excluir cartão",
     });
     if (!approval.allowed) {
       return NextResponse.json(
