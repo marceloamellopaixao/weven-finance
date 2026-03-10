@@ -5,7 +5,7 @@ import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
-import { supabaseSelect } from "@/services/supabase/admin";
+import { supabaseSelectPaged } from "@/services/supabase/admin";
 
 type BillingHistoryItem = {
   id: string;
@@ -87,14 +87,17 @@ export async function GET(request: NextRequest) {
     const acting = await resolveActingContext(request);
     uid = acting.actingUid;
 
-    const rows = await supabaseSelect("billing_events", {
+    const page = Math.max(1, Number(request.nextUrl.searchParams.get("page") || "1"));
+    const limit = Math.max(1, Math.min(100, Number(request.nextUrl.searchParams.get("limit") || "20")));
+    const paged = await supabaseSelectPaged("billing_events", {
       select: "id,provider,event_type,action,raw,created_at",
       filters: { uid },
       order: "created_at.desc.nullslast",
-      limit: 50,
+      page,
+      limit,
     });
 
-    const history = rows.map(mapBillingHistoryItem);
+    const history = paged.data.map(mapBillingHistoryItem);
 
     await writeApiMetric({
       route: meta.route,
@@ -105,7 +108,7 @@ export async function GET(request: NextRequest) {
       uid,
     });
 
-    return NextResponse.json({ ok: true, history }, { status: 200 });
+    return NextResponse.json({ ok: true, history, page: paged.page, limit: paged.limit, total: paged.total }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     const status = message === "missing_auth_token" ? 401 : 500;
