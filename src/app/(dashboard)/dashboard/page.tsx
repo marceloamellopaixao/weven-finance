@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,6 +8,7 @@ import { CATEGORY_PATH_SEPARATOR, useCategories } from "@/hooks/useCategories";
 import {
   addTransaction,
   deleteTransaction,
+  fetchTransactionsPage,
   updateTransaction,
   toggleTransactionStatus,
   cancelFutureInstallments,
@@ -26,7 +27,7 @@ import {
   DollarSign, CalendarDays, MoreHorizontal, Pencil, Trash2,
   AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown, Search, HelpCircle, CheckCircle2,
   Medal, Info, AlertTriangle,
-  Calculator,
+  Calculator, Loader2,
   Tag, Settings
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -58,7 +59,7 @@ const ITEMS_PER_PAGE = 12;
 const FREE_PLAN_LIMIT = 20;
 const CHECKIN_MODAL_COOLDOWN_MS = 60 * 60 * 1000; // 1 hora
 
-// Tipo para feedback genérico (VALIDAO DE PAGAMENTO)
+// Tipo para feedback genérico (validação de pagamento)
 type FeedbackData = {
   isOpen: boolean;
   type: 'success' | 'error' | 'info';
@@ -178,6 +179,9 @@ export default function DashboardPage() {
 
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
+  const [pagedTransactions, setPagedTransactions] = useState<Transaction[]>([]);
+  const [pagedTransactionsTotal, setPagedTransactionsTotal] = useState(0);
+  const [isPagedTransactionsLoading, setIsPagedTransactionsLoading] = useState(false);
 
   // Form States
   const [desc, setDesc] = useState("");
@@ -250,7 +254,7 @@ export default function DashboardPage() {
     }
   })
 
-  // --- 3. CHECK-IN DIRIO (Pop-up Inteligente) ---
+  // --- 3. CHECK-IN DI?RIO (Pop-up Inteligente) ---
   useEffect(() => {
     if (loading || !user || hasRunCheckin) return;
 
@@ -401,7 +405,7 @@ export default function DashboardPage() {
     if (paymentMethod === "debit_card") {
       return {
         kind: "debit" as const,
-        label: "Saldo disponivel para débito",
+        label: "Saldo disponível para débito",
         value: realCurrentBalance,
       };
     }
@@ -572,6 +576,47 @@ export default function DashboardPage() {
       }
     }
   }, [availablePaymentCards, paymentCards, paymentMethod, selectedPaymentCardId]);
+
+  useEffect(() => {
+    const effectiveUid = userProfile?.uid || user?.uid;
+    if (!effectiveUid) {
+      setPagedTransactions([]);
+      setPagedTransactionsTotal(0);
+      return;
+    }
+
+    let cancelled = false;
+    const loadPage = async () => {
+      try {
+        setIsPagedTransactionsLoading(true);
+        const pageData = await fetchTransactionsPage(effectiveUid, {
+          page: currentPage,
+          limit: ITEMS_PER_PAGE,
+          month: selectedMonth,
+          type: filterType,
+          status: filterStatus,
+          category: filterCategory,
+          q: searchTerm,
+        });
+        if (cancelled) return;
+        setPagedTransactions(pageData.transactions);
+        setPagedTransactionsTotal(pageData.total);
+      } catch (error) {
+        if (!cancelled) {
+          setPagedTransactions([]);
+          setPagedTransactionsTotal(0);
+        }
+        console.error("Erro ao carregar extrato paginado:", error);
+      } finally {
+        if (!cancelled) setIsPagedTransactionsLoading(false);
+      }
+    };
+
+    void loadPage();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPage, filterCategory, filterStatus, filterType, searchTerm, selectedMonth, user?.uid, userProfile?.uid]);
 
   // --- RETORNO CONDICIONAL ---
   if (loading) return <DashboardSkeleton />;
@@ -1085,25 +1130,7 @@ export default function DashboardPage() {
 
   const monthTransactions = transactions.filter(t => t.dueDate && t.dueDate.startsWith(selectedMonth));
 
-  const displayedTransactions = monthTransactions.filter(t => {
-    if (filterType !== 'all' && t.type !== filterType) return false;
-    if (filterStatus !== 'all' && t.status !== filterStatus) return false;
-    if (filterCategory !== 'all' && t.category !== filterCategory) return false;
-
-    if (searchTerm) {
-      const lowerSearch = searchTerm.toLowerCase();
-      const matchDesc = t.description.toLowerCase().includes(lowerSearch);
-      const matchVal = t.amount.toString().includes(lowerSearch);
-      if (!matchDesc && !matchVal) return false;
-    }
-    return true;
-  });
-
-  const totalPages = Math.ceil(displayedTransactions.length / ITEMS_PER_PAGE);
-  const paginatedTransactions = displayedTransactions.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
+  const totalPages = Math.max(1, Math.ceil(pagedTransactionsTotal / ITEMS_PER_PAGE));
 
   const monthIncome = monthTransactions.filter(t => t.type === 'income').reduce((acc, curr) => acc + curr.amount, 0);
   const monthExpense = monthTransactions.filter(t => t.type === 'expense').reduce((acc, curr) => acc + curr.amount, 0);
@@ -1468,12 +1495,26 @@ export default function DashboardPage() {
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
               <div className="flex items-center gap-2">
                 <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Saldo Atual (Hoje)</CardTitle>
-                <button id="tour-privacy-toggle" onClick={togglePrivacyMode} className="block text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                <button
+                  id="tour-privacy-toggle"
+                  type="button"
+                  aria-label={privacyMode ? "Mostrar valores" : "Ocultar valores"}
+                  onClick={togglePrivacyMode}
+                  className="block text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                >
                   {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
-                    <TooltipTrigger><HelpCircle className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" /></TooltipTrigger>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Explicação do saldo atual"
+                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                      >
+                        <HelpCircle className="h-3.5 w-3.5" />
+                      </button>
+                    </TooltipTrigger>
                     <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>Dinheiro que realmente entrou menos o que já saiu (Pago/Recebido).</p></TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -1494,12 +1535,25 @@ export default function DashboardPage() {
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
                 <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Movimentação (Mês)</CardTitle>
-                <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                <button
+                  type="button"
+                  aria-label={privacyMode ? "Mostrar valores" : "Ocultar valores"}
+                  onClick={togglePrivacyMode}
+                  className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                >
                   {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
-                    <TooltipTrigger><HelpCircle className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" /></TooltipTrigger>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Explicação da movimentação do mês"
+                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                      >
+                        <HelpCircle className="h-3.5 w-3.5" />
+                      </button>
+                    </TooltipTrigger>
                     <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>Total de Receitas e Despesas agendadas para este mês.</p></TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -1522,12 +1576,25 @@ export default function DashboardPage() {
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
                 <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Previsão de Fechamento</CardTitle>
-                <button onClick={togglePrivacyMode} className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                <button
+                  type="button"
+                  aria-label={privacyMode ? "Mostrar valores" : "Ocultar valores"}
+                  onClick={togglePrivacyMode}
+                  className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                >
                   {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
-                    <TooltipTrigger><HelpCircle className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" /></TooltipTrigger>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Explicação da previsão de fechamento"
+                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                      >
+                        <HelpCircle className="h-3.5 w-3.5" />
+                      </button>
+                    </TooltipTrigger>
                     <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>Cálculo: Saldo Atual + (A Receber - A Pagar) no mês.</p></TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -1543,7 +1610,7 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* --- Layout Principal (Agora Coluna nica) --- */}
+        {/* --- Layout Principal (Agora coluna única) --- */}
         <div className="w-full space-y-8">
 
           {/* Gráfico do Fluxo Mensal */}
@@ -1608,13 +1675,17 @@ export default function DashboardPage() {
             </CardHeader>
 
             <div className="p-3">
-              {paginatedTransactions.length === 0 ? (
+              {isPagedTransactionsLoading ? (
+                <div className="h-28 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/50 flex items-center justify-center text-sm text-zinc-500">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando extrato...
+                </div>
+              ) : pagedTransactions.length === 0 ? (
                 <div className="h-28 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/50 flex items-center justify-center text-sm text-zinc-400">
                   Nenhum lançamento encontrado com estes filtros.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                {paginatedTransactions.map((tx) => {
+                {pagedTransactions.map((tx) => {
                   const overdue = isOverdue(tx);
                   return (
                     <div key={tx.id} className={`rounded-2xl border p-3 space-y-2.5 ${overdue ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-900/10" : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/40"}`}>
@@ -1683,7 +1754,7 @@ export default function DashboardPage() {
                   size="sm"
                   className="h-8 text-xs disabled:opacity-50 rounded-lg hover:cursor-pointer duration-200"
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
+                  disabled={currentPage === 1 || isPagedTransactionsLoading}
                 >
                   Anterior
                 </Button>
@@ -1692,7 +1763,7 @@ export default function DashboardPage() {
                   size="sm"
                   className="h-8 text-xs disabled:opacity-50 rounded-lg hover:cursor-pointer duration-200"
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage >= totalPages}
+                  disabled={currentPage >= totalPages || isPagedTransactionsLoading}
                 >
                   Próximo
                 </Button>
@@ -1746,7 +1817,7 @@ export default function DashboardPage() {
                       )}
                     </div>
                     <DialogDescription className="mt-1 ml-1">
-                      {editingTx.groupId ? "Este item faz parte de um parcelamento/recorrência." : "Detalhes da transação única."}
+                      {editingTx.groupId ? "Este item faz parte de um parcelamento/recorrência." : "detalhes da transação única."}
                     </DialogDescription>
                   </DialogHeader>
 
