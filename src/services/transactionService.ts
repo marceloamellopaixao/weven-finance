@@ -151,7 +151,7 @@ async function fetchTransactions(uid: string, groupId?: string): Promise<Transac
       return {
         ...tx,
         description: isDecryptionFailed
-          ? "Dados Protegidos (Migracao Necessaria)"
+          ? "Dados Protegidos (Migração Necessária)"
           : decryptedDesc,
         amount: safeAmount,
         createdAt: tx.createdAt ? new Date(tx.createdAt) : new Date(),
@@ -164,12 +164,28 @@ async function fetchTransactions(uid: string, groupId?: string): Promise<Transac
 
 export async function fetchTransactionsPage(
   uid: string,
-  params?: { page?: number; limit?: number }
+  params?: {
+    page?: number;
+    limit?: number;
+    month?: string;
+    type?: "all" | "income" | "expense";
+    status?: "all" | "paid" | "pending";
+    category?: string;
+    q?: string;
+  }
 ): Promise<TransactionsPage> {
   const cryptoUid = resolveCryptoUid(uid);
   const page = Math.max(1, Number(params?.page || 1));
   const limit = Math.max(1, Math.min(200, Number(params?.limit || 50)));
-  const query = `?page=${page}&limit=${limit}`;
+  const search = new URLSearchParams();
+  search.set("page", String(page));
+  search.set("limit", String(limit));
+  if (params?.month) search.set("month", params.month);
+  if (params?.type && params.type !== "all") search.set("type", params.type);
+  if (params?.status && params.status !== "all") search.set("status", params.status);
+  if (params?.category && params.category !== "all") search.set("category", params.category);
+  if (params?.q?.trim()) search.set("q", params.q.trim());
+  const query = `?${search.toString()}`;
   const response = await apiFetch(`/api/transactions${query}`, { method: "GET" });
   const payload = (await response.json()) as {
     ok: boolean;
@@ -205,7 +221,7 @@ export async function fetchTransactionsPage(
       return {
         ...tx,
         description: isDecryptionFailed
-          ? "Dados Protegidos (Migracao Necessaria)"
+          ? "Dados Protegidos (Migração Necessária)"
           : decryptedDesc,
         amount: safeAmount,
         createdAt: tx.createdAt ? new Date(tx.createdAt) : new Date(),
