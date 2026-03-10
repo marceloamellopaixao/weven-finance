@@ -502,7 +502,7 @@ async function pushBillingStatusNotification(params: {
       uid: params.uid,
       kind: "billing",
       title: "Pagamento confirmado",
-      message: `Seu plano ${params.targetPlan.toUpperCase()} esta ativo.`,
+      message: `Seu plano ${params.targetPlan.toUpperCase()} está ativo.`,
       href: "/settings?tab=billing",
       meta: { source: params.source, paymentStatus: params.paymentStatus, plan: params.targetPlan },
     });
@@ -514,7 +514,7 @@ async function pushBillingStatusNotification(params: {
       uid: params.uid,
       kind: "billing",
       title: "Pagamento pendente",
-      message: "Detectamos pendencia na assinatura. Regularize para manter seus recursos.",
+      message: "Detectamos pendência na assinatura. Regularize para manter seus recursos.",
       href: "/settings?tab=billing",
       meta: { source: params.source, paymentStatus: params.paymentStatus, plan: params.targetPlan },
     });
@@ -525,8 +525,8 @@ async function pushBillingStatusNotification(params: {
     await pushNotification({
       uid: params.uid,
       kind: "billing",
-      title: "Assinatura em situacao irregular",
-      message: "Seu plano foi ajustado para Free. Voce pode reativar quando quiser.",
+      title: "Assinatura em situação irregular",
+      message: "Seu plano foi ajustado para Free. Você pode reativar quando quiser.",
       href: "/settings?tab=billing",
       meta: { source: params.source, paymentStatus: params.paymentStatus, plan: params.targetPlan },
     });
