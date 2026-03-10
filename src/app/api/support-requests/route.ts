@@ -77,6 +77,15 @@ async function getAuthContext(request: NextRequest) {
   };
 }
 
+function escapeIlike(value: string) {
+  return String(value || "")
+    .replaceAll("%", "")
+    .replaceAll(",", " ")
+    .replaceAll("(", " ")
+    .replaceAll(")", " ")
+    .trim();
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -109,24 +118,25 @@ export async function GET(request: NextRequest) {
     }
 
     const baseSelect =
-      "id,uid,email,name,message,ticket_type,ticket_status,assigned_to,assigned_to_name,staff_seen_by,votes,created_at,updated_at,raw";
-    const needsFallbackFiltering = Boolean(q || (priorityFilter && priorityFilter !== "all"));
-    const paged = needsFallbackFiltering
-      ? null
-      : await supabaseSelectPaged("support_requests", {
-          select: baseSelect,
-          order: "created_at.desc.nullslast",
-          page,
-          limit,
-          filters,
-        });
-    const rows = paged
-      ? paged.data
-      : await supabaseSelect("support_requests", {
-          select: baseSelect,
-          order: "created_at.desc.nullslast",
-          filters,
-        });
+      "id,uid,email,name,title,message,ticket_type,ticket_status,assigned_to,assigned_to_name,staff_seen_by,votes,created_at,updated_at,raw";
+    const conditions: Record<string, string> = {};
+    if (priorityFilter && priorityFilter !== "all") {
+      conditions.raw = `cs.${JSON.stringify({ priority: priorityFilter })}`;
+    }
+    const safeQ = escapeIlike(q);
+    const or = safeQ
+      ? `title.ilike.*${safeQ}*,message.ilike.*${safeQ}*,name.ilike.*${safeQ}*,email.ilike.*${safeQ}*`
+      : undefined;
+    const paged = await supabaseSelectPaged("support_requests", {
+      select: baseSelect,
+      order: "created_at.desc.nullslast",
+      page,
+      limit,
+      filters,
+      conditions,
+      or,
+    });
+    const rows = paged.data;
 
     const tickets = rows
       .map((row) => {
@@ -136,7 +146,7 @@ export async function GET(request: NextRequest) {
           uid: String(row.uid || raw.uid || ""),
           email: String(row.email || raw.email || ""),
           name: String(row.name || raw.name || ""),
-          protocol: String(raw.protocol || ""),
+          protocol: String(raw.protocol || row.title || ""),
           message: String(row.message || raw.message || ""),
           type: String(row.ticket_type || raw.type || "support"),
           status: String(row.ticket_status || raw.status || "pending"),
@@ -161,21 +171,13 @@ export async function GET(request: NextRequest) {
           updatedAt: String(row.updated_at || raw.updatedAt || ""),
         };
       })
-      .filter((ticket) => {
-        const priority = String(ticket.priority || "").toLowerCase();
-        const matchesPriority = !priorityFilter || priorityFilter === "all" || priority === priorityFilter;
-        if (!matchesPriority) return false;
-        if (!q) return true;
-        const haystack = `${ticket.protocol || ""} ${ticket.message || ""} ${ticket.name || ""} ${ticket.email || ""}`.toLowerCase();
-        return haystack.includes(q);
-      })
       .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 
-    const total = paged ? paged.total : tickets.length;
-    const sliced = paged ? tickets : tickets.slice((page - 1) * limit, page * limit);
+    const total = paged.total;
+    const sliced = tickets;
     const unseenCount =
       auth.role === "admin" || auth.role === "moderator" || auth.role === "support"
-        ? (paged ? tickets : sliced).filter((ticket) => !Array.isArray(ticket.staffSeenBy) || !ticket.staffSeenBy.includes(auth.uid)).length
+        ? sliced.filter((ticket) => !Array.isArray(ticket.staffSeenBy) || !ticket.staffSeenBy.includes(auth.uid)).length
         : 0;
 
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
