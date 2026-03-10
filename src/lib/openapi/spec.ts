@@ -1,4 +1,4 @@
-﻿type OpenApiServer = {
+type OpenApiServer = {
   url: string;
   description: string;
 };
@@ -9,29 +9,29 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
     info: {
       title: "WevenFinance API",
       version: "1.0.0",
-      description: "Documentacao das rotas API do WevenFinance.",
+      description: "Documentação das rotas API do WevenFinance.",
     },
     servers,
     tags: [
       { name: "Billing", description: "Fluxos de checkout, confirmação e cancelamento de assinatura" },
-      { name: "Account", description: "Gestão de conta do proprio usuário" },
+      { name: "Account", description: "Gestão de conta do próprio usuário" },
       { name: "Profile", description: "Perfil do usuário autenticado e bootstrap de conta" },
-      { name: "AdminUsers", description: "Gestão administrativa de usuários e operacoes de manutencao" },
+      { name: "AdminUsers", description: "Gestão administrativa de usuários e operações de manutenção" },
       { name: "AdminAudit", description: "Consulta de trilha de auditoria administrativa" },
-      { name: "AdminMetrics", description: "Metricas operacionais das APIs" },
-      { name: "AdminJobs", description: "Jobs administrativos de reconciliacao e manutencao" },
-      { name: "Impersonation", description: "Solicitacao e aprovacao de acesso da equipe ao ambiente do usuário" },
-      { name: "Categories", description: "Gestão de categorias personalizadas e visibilidade das padrao" },
-      { name: "Transactions", description: "CRUD e operacoes em lote de transações" },
+      { name: "AdminMetrics", description: "Métricas operacionais das APIs" },
+      { name: "AdminJobs", description: "Jobs administrativos de reconciliação e manutenção" },
+      { name: "Impersonation", description: "solicitação e aprovação de acesso da equipe ao ambiente do usuário" },
+      { name: "Categories", description: "Gestão de categorias personalizadas e visibilidade das padrão" },
+      { name: "Transactions", description: "CRUD e operações em lote de transações" },
       { name: "UserSettings", description: "Configurações financeiras do usuário" },
-      { name: "CreditCard", description: "Controle de limite e politicas de cartão de crédito" },
-      { name: "PaymentCards", description: "Cadastro de cartões sem dados sensiveis (banco, final e tipo)" },
+      { name: "CreditCard", description: "Controle de limite e políticas de cartão de crédito" },
+      { name: "PaymentCards", description: "Cadastro de cartões sem dados sensíveis (banco, final e tipo)" },
       { name: "PiggyBanks", description: "Gestão de cofrinhos/porquinhos e aportes com reflexo no extrato" },
-      { name: "Support", description: "Chamados de suporte e solicitacoes de feature" },
+      { name: "Support", description: "Chamados de suporte e solicitações de feature" },
       { name: "System", description: "Configurações globais do sistema" },
-      { name: "MercadoPago", description: "Webhook e sincronizacao com gateway" },
-      { name: "Notifications", description: "Notificacoes in-app em tempo real para o usuario autenticado" },
-      { name: "Onboarding", description: "Progresso guiado de primeiros passos do usuario" },
+      { name: "MercadoPago", description: "Webhook e sincronização com gateway" },
+      { name: "Notifications", description: "Notificações in-app em tempo real para o usuário autenticado" },
+      { name: "Onboarding", description: "Progresso guiado de primeiros passos do usuário" },
     ],
     components: {
       securitySchemes: {
@@ -83,7 +83,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
                 },
               },
             },
-            400: { description: "Plano invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Plano inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             409: { description: "Plano inativo/isento", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             422: { description: "Link não configurado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
@@ -94,7 +94,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/billing/confirm-preapproval": {
         post: {
           tags: ["Billing"],
-          summary: "Confirmar assinatura por preapproval_id (ou fallback automatico)",
+          summary: "Confirmar assinatura por preapproval_id (ou fallback automático)",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: false,
@@ -129,7 +129,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
                 },
               },
             },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
@@ -167,10 +167,10 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/billing/history": {
         get: {
           tags: ["Billing"],
-          summary: "Historico de eventos de cobranca do usuario autenticado",
+          summary: "Histórico de eventos de cobrança do usuário autenticado",
           security: [{ BearerAuth: [] }],
           responses: {
-            200: { description: "Historico retornado" },
+            200: { description: "Histórico retornado" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
@@ -179,7 +179,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       },      "/api/account/delete": {
         post: {
           tags: ["Account"],
-          summary: "Excluir (soft-delete) a propria conta",
+          summary: "Excluir (soft-delete) a própria conta",
           security: [{ BearerAuth: [] }],
           responses: {
             200: {
@@ -212,7 +212,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
         },
         put: {
           tags: ["Profile"],
-          summary: "Atualizar dados basicos do proprio perfil",
+          summary: "Atualizar dados básicos do próprio perfil",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -276,10 +276,10 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/notifications": {
         get: {
           tags: ["Notifications"],
-          summary: "Listar notificacoes in-app do usuario autenticado",
+          summary: "Listar notificações in-app do usuário autenticado",
           security: [{ BearerAuth: [] }],
           responses: {
-            200: { description: "Notificacoes retornadas" },
+            200: { description: "Notificações retornadas" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
@@ -287,7 +287,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
         },
         patch: {
           tags: ["Notifications"],
-          summary: "Marcar notificacao como lida (ou todas)",
+          summary: "Marcar notificação como lida (ou todas)",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -304,7 +304,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             },
           },
           responses: {
-            200: { description: "Notificacoes atualizadas" },
+            200: { description: "Notificações atualizadas" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
@@ -312,10 +312,10 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
         },
         delete: {
           tags: ["Notifications"],
-          summary: "Limpar todas as notificacoes do usuario autenticado",
+          summary: "Limpar todas as notificações do usuário autenticado",
           security: [{ BearerAuth: [] }],
           responses: {
-            200: { description: "Notificacoes removidas" },
+            200: { description: "Notificações removidas" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
@@ -325,7 +325,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/onboarding": {
         get: {
           tags: ["Onboarding"],
-          summary: "Consultar progresso de onboarding do usuario autenticado",
+          summary: "Consultar progresso de onboarding do usuário autenticado",
           security: [{ BearerAuth: [] }],
           responses: {
             200: { description: "Progresso retornado" },
@@ -379,7 +379,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           responses: {
             200: { description: "Usuários retornados" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -405,15 +405,15 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
           responses: {
             200: { description: "Usuário atualizado" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
         post: {
           tags: ["AdminUsers"],
-          summary: "Executar acao administrativa de usuários",
+          summary: "Executar ação administrativa de usuários",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -435,10 +435,10 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             },
           },
           responses: {
-            200: { description: "Acao executada" },
-            400: { description: "Payload/acao invalida", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            200: { description: "Ação executada" },
+            400: { description: "Payload/ação inválida", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -446,15 +446,15 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/admin/metrics": {
         get: {
           tags: ["AdminMetrics"],
-          summary: "Resumo operacional de mtricas das APIs",
+          summary: "Resumo operacional de métricas das APIs",
           security: [{ BearerAuth: [] }],
           parameters: [
             { name: "windowMinutes", in: "query", required: false, schema: { type: "integer", minimum: 5, maximum: 1440, default: 60 } },
           ],
           responses: {
-            200: { description: "Mtricas retornadas" },
+            200: { description: "Métricas retornadas" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
@@ -463,12 +463,12 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/admin/health": {
         get: {
           tags: ["AdminMetrics"],
-          summary: "Painel de saude operacional (DB, webhook, pagamentos e API)",
+          summary: "Painel de saúde operacional (DB, webhook, pagamentos e API)",
           security: [{ BearerAuth: [] }],
           responses: {
-            200: { description: "Saude operacional retornada" },
+            200: { description: "Saúde operacional retornada" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
@@ -492,7 +492,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           responses: {
             200: { description: "Logs retornados" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
@@ -511,7 +511,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           responses: {
             200: { description: "Job executado" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
@@ -525,7 +525,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           responses: {
             200: { description: "Job executado" },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             429: { description: "Rate limit excedido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
@@ -534,7 +534,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/impersonation": {
         get: {
           tags: ["Impersonation"],
-          summary: "Consultar solicitacoes (pending/mine/status)",
+          summary: "Consultar solicitações (pending/mine/status)",
           security: [{ BearerAuth: [] }],
           parameters: [
             { name: "mode", in: "query", required: false, schema: { type: "string", enum: ["pending", "mine", "status"] } },
@@ -542,15 +542,15 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           ],
           responses: {
             200: { description: "Consulta realizada" },
-            400: { description: "Parametros invalidos", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Parâmetros inválidos", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
         post: {
           tags: ["Impersonation"],
-          summary: "Solicitar acesso (staff) ou responder solicitacao (usuário)",
+          summary: "Solicitar acesso (staff) ou responder solicitação (usuário)",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -570,10 +570,10 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             },
           },
           responses: {
-            200: { description: "Operacao executada" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            200: { description: "Operação executada" },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             404: { description: "Recurso não encontrado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             409: { description: "Conflito de estado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
@@ -583,7 +583,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/categories": {
         get: {
           tags: ["Categories"],
-          summary: "Listar categorias personalizadas e padrao ocultas",
+          summary: "Listar categorias personalizadas e padrão ocultas",
           security: [{ BearerAuth: [] }],
           responses: {
             200: {
@@ -639,7 +639,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
           responses: {
             200: { description: "Categoria criada" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             409: { description: "Categoria duplicada", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
@@ -665,7 +665,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
           responses: {
             200: { description: "Categorias renomeadas" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             409: { description: "Categoria duplicada", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
@@ -680,7 +680,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           ],
           responses: {
             200: { description: "Categoria excluida" },
-            400: { description: "Parametros invalidos", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Parâmetros inválidos", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -688,7 +688,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/categories/default-visibility": {
         post: {
           tags: ["Categories"],
-          summary: "Ocultar/mostrar categoria padrao",
+          summary: "Ocultar/mostrar categoria padrão",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -707,7 +707,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
           responses: {
             200: { description: "Visibilidade atualizada" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -745,8 +745,8 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             },
           },
           responses: {
-            200: { description: "Operacao executada" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            200: { description: "Operação executada" },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -771,7 +771,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
           responses: {
             200: { description: "Transação atualizada" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -784,8 +784,8 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             { name: "groupId", in: "query", required: false, schema: { type: "string" } },
           ],
           responses: {
-            200: { description: "Transação/grupo excluido" },
-            400: { description: "Parametros invalidos", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            200: { description: "Transação/grupo excluído" },
+            400: { description: "Parâmetros inválidos", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -820,7 +820,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
           responses: {
             200: { description: "Saldo atualizado" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -860,9 +860,9 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
           responses: {
             200: { description: "Configurações salvas" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            409: { description: "Aprovação de impersonação pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -900,9 +900,9 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
           responses: {
             200: { description: "Cartão criado" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            409: { description: "Aprovação de impersonação pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -934,9 +934,9 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
           responses: {
             200: { description: "Cartão atualizado" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            409: { description: "Aprovação de impersonação pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -948,10 +948,10 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             { name: "cardId", in: "query", required: true, schema: { type: "string" } },
           ],
           responses: {
-            200: { description: "Cartão excluido" },
-            400: { description: "Parametro invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            200: { description: "Cartão excluído" },
+            400: { description: "Parâmetro inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            409: { description: "Aprovação de impersonação pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -965,8 +965,8 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             { name: "bin", in: "query", required: true, schema: { type: "string" } },
           ],
           responses: {
-            200: { description: "Identificacao retornada" },
-            400: { description: "BIN invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            200: { description: "Identificação retornada" },
+            400: { description: "BIN inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
@@ -1013,10 +1013,10 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
           responses: {
             200: { description: "Aporte registrado" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             404: { description: "Cartão não encontrado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            409: { description: "Aprovacao de impersonacao pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            409: { description: "Aprovação de impersonação pendente", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -1031,7 +1031,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           ],
           responses: {
             200: { description: "Porquinho retornado" },
-            400: { description: "Slug invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Slug inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             404: { description: "Porquinho não encontrado", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
@@ -1041,7 +1041,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/support-requests": {
         get: {
           tags: ["Support"],
-          summary: "Listar chamados conforme perfil (admin/mod: todos, support: atribuidos, client: proprios)",
+          summary: "Listar chamados conforme perfil (admin/mod: todos, support: atribuídos, client: próprios)",
           security: [{ BearerAuth: [] }],
           responses: {
             200: { description: "Chamados listados" },
@@ -1071,7 +1071,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
           responses: {
             200: { description: "Chamado criado" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
@@ -1096,9 +1096,9 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
           responses: {
             200: { description: "Chamado atualizado" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
         delete: {
@@ -1107,17 +1107,17 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           security: [{ BearerAuth: [] }],
           parameters: [{ name: "ticketId", in: "query", required: true, schema: { type: "string" } }],
           responses: {
-            200: { description: "Chamado excluido" },
-            400: { description: "Parametros invalidos", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            200: { description: "Chamado excluído" },
+            400: { description: "Parâmetros inválidos", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
       },
       "/api/system/plans": {
         get: {
           tags: ["System"],
-          summary: "Ler configuracao de planos",
+          summary: "Ler configuração de planos",
           responses: {
             200: { description: "Planos retornados" },
             500: { description: "Erro interno", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
@@ -1125,7 +1125,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
         },
         put: {
           tags: ["System"],
-          summary: "Atualizar configuracao de planos (somente admin)",
+          summary: "Atualizar configuração de planos (somente admin)",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -1143,9 +1143,9 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
           responses: {
             200: { description: "Planos atualizados" },
-            400: { description: "Payload invalido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            400: { description: "Payload inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
-            403: { description: "Sem permissao", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
       },
@@ -1173,7 +1173,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
         },
         post: {
           tags: ["MercadoPago"],
-          summary: "Receber notificacoes do Mercado Pago",
+          summary: "Receber notificações do Mercado Pago",
           description: "Endpoint de webhook. Responde rapidamente e sincroniza o status de billing.",
           parameters: [
             { name: "topic", in: "query", required: false, schema: { type: "string" } },
@@ -1199,7 +1199,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
               description: "Evento ignorado por falta de dados",
             },
             401: {
-              description: "Assinatura invalida",
+              description: "Assinatura inválida",
               content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
             },
           },
