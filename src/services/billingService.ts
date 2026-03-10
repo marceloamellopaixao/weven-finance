@@ -13,6 +13,13 @@ export type BillingHistoryItem = {
   currency: string | null;
 };
 
+export type BillingHistoryPage = {
+  history: BillingHistoryItem[];
+  page: number;
+  limit: number;
+  total: number;
+};
+
 function authHeaders(idToken: string, includeJson = false) {
   return {
     ...(includeJson ? { "Content-Type": "application/json" } : {}),
@@ -37,7 +44,7 @@ export async function getCheckoutLink(
     error?: string;
   };
   if (!response.ok || !payload.ok || !payload.checkoutUrl) {
-    throw new Error(payload.error || "Nao foi possivel gerar o link de pagamento");
+    throw new Error(payload.error || "Não foi possível gerar o link de pagamento");
   }
 
   return {
@@ -68,7 +75,7 @@ export async function confirmPreapproval(
   };
 
   if (!response.ok || !payload.ok || !payload.targetPlan || !payload.targetPaymentStatus) {
-    throw new Error(payload.error || "Nao foi possivel confirmar a assinatura");
+    throw new Error(payload.error || "Não foi possível confirmar a assinatura");
   }
 
   return {
@@ -77,8 +84,15 @@ export async function confirmPreapproval(
   };
 }
 
-export async function getBillingHistory(idToken: string): Promise<BillingHistoryItem[]> {
-  const response = await fetch("/api/billing/history", {
+export async function getBillingHistory(
+  idToken: string,
+  params?: { page?: number; limit?: number }
+): Promise<BillingHistoryPage> {
+  const query = new URLSearchParams();
+  query.set("page", String(Math.max(1, Number(params?.page || 1))));
+  query.set("limit", String(Math.max(1, Math.min(100, Number(params?.limit || 8)))));
+
+  const response = await fetch(`/api/billing/history?${query.toString()}`, {
     method: "GET",
     headers: authHeaders(idToken),
   });
@@ -87,13 +101,21 @@ export async function getBillingHistory(idToken: string): Promise<BillingHistory
     ok: boolean;
     error?: string;
     history?: BillingHistoryItem[];
+    page?: number;
+    limit?: number;
+    total?: number;
   };
 
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel carregar o historico");
+    throw new Error(payload.error || "Não foi possível carregar o histórico");
   }
 
-  return Array.isArray(payload.history) ? payload.history : [];
+  return {
+    history: Array.isArray(payload.history) ? payload.history : [],
+    page: Number(payload.page || params?.page || 1),
+    limit: Number(payload.limit || params?.limit || 8),
+    total: Number(payload.total || 0),
+  };
 }
 
 export async function cancelSubscription(
@@ -112,7 +134,7 @@ export async function cancelSubscription(
   };
 
   if (!response.ok || !payload.ok || !payload.targetPlan || !payload.targetPaymentStatus) {
-    throw new Error(payload.error || "Nao foi possivel cancelar a assinatura");
+    throw new Error(payload.error || "Não foi possível cancelar a assinatura");
   }
 
   return {
@@ -120,4 +142,3 @@ export async function cancelSubscription(
     targetPaymentStatus: payload.targetPaymentStatus,
   };
 }
-
