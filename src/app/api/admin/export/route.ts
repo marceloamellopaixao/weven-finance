@@ -211,7 +211,7 @@ export async function GET(request: NextRequest) {
     });
 
     const csv = toCsv(
-      ["id", "ator_uid", "acao", "alvo_uid", "rota", "metodo", "ip", "detalhes", "criado_em"],
+      ["id", "ator_uid", "ação", "alvo_uid", "rota", "método", "ip", "detalhes", "criado_em"],
       filtered.map((row) => [
         row.id,
         row.actor_uid,
