@@ -63,7 +63,7 @@ export const sendSupportRequest = async (_uid: string, _email: string, _name: st
 
   const payload = (await response.json()) as { ok: boolean; error?: string; protocol?: string };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Erro ao enviar solicitacao de suporte");
+    throw new Error(payload.error || "Erro ao enviar solicitação de suporte");
   }
   return { protocol: payload.protocol || null };
 };
@@ -86,24 +86,59 @@ export const sendFeatureRequest = async (_uid: string, _email: string, _name: st
   return { protocol: payload.protocol || null };
 };
 
-async function getTickets(): Promise<SupportTicket[]> {
-  const response = await fetchWithAuth("/api/support-requests?page=1&limit=100", {
+type SupportTicketsPage = {
+  tickets: SupportTicket[];
+  total: number;
+  page: number;
+  limit: number;
+  unseenCount: number;
+};
+
+async function getTickets(params?: {
+  page?: number;
+  limit?: number;
+  type?: "support" | "feature" | "all";
+  status?: string;
+  priority?: "low" | "medium" | "high" | "urgent" | "all";
+  q?: string;
+}): Promise<SupportTicketsPage> {
+  const query = new URLSearchParams();
+  query.set("page", String(Math.max(1, Number(params?.page || 1))));
+  query.set("limit", String(Math.max(1, Math.min(100, Number(params?.limit || 20)))));
+  if (params?.type && params.type !== "all") query.set("type", params.type);
+  if (params?.status && params.status !== "all") query.set("status", params.status);
+  if (params?.priority && params.priority !== "all") query.set("priority", params.priority);
+  if (params?.q?.trim()) query.set("q", params.q.trim());
+
+  const response = await fetchWithAuth(`/api/support-requests?${query.toString()}`, {
     method: "GET",
   });
   const payload = (await response.json()) as {
     ok: boolean;
     error?: string;
     tickets?: Array<Omit<SupportTicket, "createdAt"> & { createdAt?: string | null }>;
+    total?: number;
+    page?: number;
+    limit?: number;
+    unseenCount?: number;
   };
 
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Erro ao buscar tickets de suporte");
   }
 
-  return (payload.tickets || []).map((ticket) => ({
+  const tickets = (payload.tickets || []).map((ticket) => ({
     ...ticket,
     createdAt: ticket.createdAt ? new Date(ticket.createdAt) : new Date(),
   }));
+
+  return {
+    tickets,
+    total: Number(payload.total || 0),
+    page: Number(payload.page || params?.page || 1),
+    limit: Number(payload.limit || params?.limit || 20),
+    unseenCount: Number(payload.unseenCount || 0),
+  };
 }
 
 export async function fetchSupportTicketsPage(params?: {
@@ -153,15 +188,23 @@ export async function fetchSupportTicketsPage(params?: {
 export const subscribeToSupportTickets = (
   _userUid: string,
   _userRole: string,
-  onChange: (tickets: SupportTicket[]) => void,
+  onChange: (result: SupportTicketsPage) => void,
+  options?: {
+    page?: number;
+    limit?: number;
+    type?: "support" | "feature" | "all";
+    status?: string;
+    priority?: "low" | "medium" | "high" | "urgent" | "all";
+    q?: string;
+  },
   onError?: (error: Error) => void
 ) => {
   let cancelled = false;
   const run = async () => {
     if (!shouldPollNow()) return;
     try {
-      const tickets = await getTickets();
-      if (!cancelled) onChange(tickets);
+      const result = await getTickets(options);
+      if (!cancelled) onChange(result);
     } catch (error) {
       if (!cancelled) onError?.(error as Error);
     }
