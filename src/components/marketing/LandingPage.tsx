@@ -16,7 +16,7 @@ export const metadata = {
 };
 
 export default function LandingPage() {
-  const { plans, loading } = usePlans(); // Hook para buscar dados do Firestore
+  const { plans, loading } = usePlans(); // Hook para buscar dados de planos
 
   // Estado de carregamento elegante
   if (loading) {
