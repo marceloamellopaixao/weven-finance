@@ -1,4 +1,4 @@
-import {
+﻿import {
   clearImpersonationTargetUid,
   getImpersonationTargetUid,
   setImpersonationTargetUid,
@@ -88,7 +88,7 @@ export async function getPendingImpersonationRequests() {
     requests?: SupportAccessRequest[];
   };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Não foi possível listar solicitacoes pendentes");
+    throw new Error(payload.error || "Não foi possível listar solicitações pendentes");
   }
   return payload.requests || [];
 }
@@ -104,7 +104,7 @@ export async function respondImpersonationRequest(requestId: string, approved: b
     status?: "approved" | "rejected";
   };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Não foi possível responder solicitacao");
+    throw new Error(payload.error || "Não foi possível responder solicitação");
   }
   return payload;
 }
@@ -120,7 +120,7 @@ export async function getMyImpersonationStatus(targetUid: string) {
     request?: SupportAccessRequest | null;
   };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Não foi possível consultar status da solicitacao");
+    throw new Error(payload.error || "Não foi possível consultar status da solicitação");
   }
   return payload;
 }
@@ -135,7 +135,7 @@ export async function getPendingImpersonationActionRequests() {
     requests?: ImpersonationActionRequest[];
   };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Não foi possível listar solicitacoes de acao");
+    throw new Error(payload.error || "Não foi possível listar solicitações de ação");
   }
   return payload.requests || [];
 }
@@ -147,7 +147,7 @@ export async function respondImpersonationActionRequest(actionRequestId: string,
   });
   const payload = (await response.json()) as { ok: boolean; error?: string };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Não foi possível responder solicitacao de acao");
+    throw new Error(payload.error || "Não foi possível responder solicitação de ação");
   }
 }
 
@@ -161,7 +161,7 @@ export async function getImpersonationActionStatus(actionRequestId: string) {
     request?: ImpersonationActionRequest | null;
   };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Não foi possível consultar status da acao");
+    throw new Error(payload.error || "Não foi possível consultar status da ação");
   }
   return payload;
 }
@@ -177,4 +177,3 @@ export function deactivateImpersonation() {
 export function getActiveImpersonationTargetUid() {
   return getImpersonationTargetUid();
 }
-
