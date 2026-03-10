@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
@@ -126,8 +126,8 @@ export async function GET(request: NextRequest) {
       alerts.push({
         code: "db_unhealthy",
         level: "critical",
-        title: "Banco indisponivel",
-        description: "Nao foi possivel validar leitura basica do banco.",
+        title: "Banco indisponível",
+        description: "Não foi possível validar leitura básica do banco.",
       });
     }
     if (webhookDelayMinutes !== null && webhookDelayMinutes > 120) {
