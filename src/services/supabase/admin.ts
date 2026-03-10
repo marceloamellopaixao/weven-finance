@@ -41,6 +41,8 @@ export async function supabaseSelect(
   options?: {
     select?: string;
     filters?: Record<string, QueryValue>;
+    conditions?: Record<string, string | string[]>;
+    or?: string;
     order?: string;
     limit?: number;
   }
@@ -58,6 +60,22 @@ export async function supabaseSelect(
       if (value === undefined) continue;
       params.set(field, toFilterValue(value));
     }
+  }
+  if (options?.conditions) {
+    for (const [field, condition] of Object.entries(options.conditions)) {
+      if (!condition) continue;
+      if (Array.isArray(condition)) {
+        for (const value of condition) {
+          if (!value) continue;
+          params.append(field, value);
+        }
+        continue;
+      }
+      params.set(field, condition);
+    }
+  }
+  if (options?.or) {
+    params.set("or", options.or.startsWith("(") ? options.or : `(${options.or})`);
   }
 
   const response = await fetch(`${baseUrl}/rest/v1/${table}?${params.toString()}`, {
@@ -84,6 +102,8 @@ export async function supabaseSelectPaged(
   options?: {
     select?: string;
     filters?: Record<string, QueryValue>;
+    conditions?: Record<string, string | string[]>;
+    or?: string;
     order?: string;
     page?: number;
     limit?: number;
@@ -106,6 +126,22 @@ export async function supabaseSelectPaged(
       if (value === undefined) continue;
       params.set(field, toFilterValue(value));
     }
+  }
+  if (options?.conditions) {
+    for (const [field, condition] of Object.entries(options.conditions)) {
+      if (!condition) continue;
+      if (Array.isArray(condition)) {
+        for (const value of condition) {
+          if (!value) continue;
+          params.append(field, value);
+        }
+        continue;
+      }
+      params.set(field, condition);
+    }
+  }
+  if (options?.or) {
+    params.set("or", options.or.startsWith("(") ? options.or : `(${options.or})`);
   }
 
   const response = await fetch(`${baseUrl}/rest/v1/${table}?${params.toString()}`, {
