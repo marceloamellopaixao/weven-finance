@@ -1,0 +1,13 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/billing-reconcile?onlyFailed=true&limit=50",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/data-retention",
+      "schedule": "15 3 * * *"
+    }
+  ]
+}
+
