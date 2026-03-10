@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
@@ -63,7 +63,7 @@ export function ImpersonationActionApprovalModal() {
     <Dialog open={!!currentRequest} onOpenChange={() => {}}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Aprovar alteracao do suporte?</DialogTitle>
+          <DialogTitle>Aprovar alteração do suporte?</DialogTitle>
           <DialogDescription>
             {currentRequest
               ? `${currentRequest.requesterDisplayName} quer executar: ${currentRequest.actionLabel}.`
@@ -71,7 +71,7 @@ export function ImpersonationActionApprovalModal() {
           </DialogDescription>
         </DialogHeader>
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700">
-          Apenas aprove se você reconhece esta acao. Toda tentativa fica registrada em log.
+          Apenas aprove se você reconhece esta ação. Toda tentativa fica registrada em log.
         </div>
         <DialogFooter className="gap-2 sm:justify-end">
           <Button
@@ -80,14 +80,14 @@ export function ImpersonationActionApprovalModal() {
             onClick={() => void handleRespond(false)}
             className="hover:cursor-pointer"
           >
-            Negar acao
+            Negar ação
           </Button>
           <Button
             disabled={isResponding}
             onClick={() => void handleRespond(true)}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white hover:cursor-pointer"
+            className="bg-emerald-600 text-white hover:cursor-pointer hover:bg-emerald-700"
           >
-            Aprovar acao
+            Aprovar ação
           </Button>
         </DialogFooter>
       </DialogContent>
