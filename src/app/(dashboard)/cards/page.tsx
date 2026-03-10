@@ -209,7 +209,7 @@ export default function CreditCardPage() {
 
   const handleSave = async () => {
     if (!activeCard || activeCard.type === "debit_card") {
-      setFeedback({ type: "info", message: "Cartão de débito usa o saldo disponivel. Não ha limite de fatura." });
+      setFeedback({ type: "info", message: "Cartão de débito usa o saldo disponível. Não há limite de fatura." });
       return;
     }
     setIsSaving(true);
@@ -445,8 +445,8 @@ export default function CreditCardPage() {
       <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
         
         {/* HEADER */}
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
               <CreditCard className="h-6 w-6 md:h-8 md:w-8 text-violet-600" />
               Cartões
@@ -455,11 +455,11 @@ export default function CreditCardPage() {
               Gerencie seus cartões e limites inteligentes.
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={handleSyncHistorical} variant="outline" size="icon" className="rounded-full h-10 w-10" disabled={isSyncing} title="Sincronizar Histórico">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+            <Button onClick={handleSyncHistorical} variant="outline" size="icon" className="h-10 w-full rounded-xl sm:h-10 sm:w-10 sm:rounded-full" disabled={isSyncing} title="Sincronizar Histórico" aria-label="Sincronizar histórico">
               <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin text-violet-600" : "text-zinc-600"}`} />
             </Button>
-            <Button onClick={() => setShowSettings(!showSettings)} variant={showSettings ? "default" : "outline"} size="icon" className="rounded-full h-10 w-10" title="Configurações">
+            <Button onClick={() => setShowSettings(!showSettings)} variant={showSettings ? "default" : "outline"} size="icon" className="h-10 w-full rounded-xl sm:h-10 sm:w-10 sm:rounded-full" title="Configurações" aria-label="Abrir configurações do cartão">
               <Settings2 className="h-4 w-4" />
             </Button>
           </div>
@@ -508,32 +508,54 @@ export default function CreditCardPage() {
                   <div className="w-full max-w-[400px] group relative">
                     {paymentCards.length > 1 && (
                       <>
-                        <button onClick={handlePrevCard} className="absolute -left-12 top-1/2 -translate-y-1/2 hidden md:flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md border hover:bg-zinc-50 text-zinc-600 transition-all z-10">
+                        <button
+                          type="button"
+                          aria-label="Cartão anterior"
+                          onClick={handlePrevCard}
+                          className="absolute -left-12 top-1/2 -translate-y-1/2 hidden md:flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md border hover:bg-zinc-50 text-zinc-600 transition-all z-10"
+                        >
                           <ChevronLeft className="h-5 w-5" />
                         </button>
-                        <button onClick={handleNextCard} className="absolute -right-12 top-1/2 -translate-y-1/2 hidden md:flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md border hover:bg-zinc-50 text-zinc-600 transition-all z-10">
+                        <button
+                          type="button"
+                          aria-label="Próximo cartão"
+                          onClick={handleNextCard}
+                          className="absolute -right-12 top-1/2 -translate-y-1/2 hidden md:flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md border hover:bg-zinc-50 text-zinc-600 transition-all z-10"
+                        >
                           <ChevronRight className="h-5 w-5" />
                         </button>
                       </>
                     )}
                     
-                    <div className="transform transition-transform hover:scale-[1.02] cursor-pointer" onClick={() => handleEditCard(activeCard)}>
+                    <button
+                      type="button"
+                      aria-label={`Editar cartão ${activeCard.bankName || "selecionado"}`}
+                      className="w-full text-left transform transition-transform hover:scale-[1.02] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-2xl"
+                      onClick={() => handleEditCard(activeCard)}
+                    >
                       {renderCardFace({
                         bankName: activeCard.bankName,
                         last4: activeCard.last4,
                         type: activeCard.type,
                         dueDate: activeCard.dueDate,
                       })}
-                    </div>
+                    </button>
 
-                    <div className="flex items-center justify-center gap-4 mt-6">
+                    <div className="mt-6 grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-center sm:justify-center sm:gap-4">
                       <Button variant="outline" size="sm" className="rounded-full shadow-sm bg-white" onClick={() => handleEditCard(activeCard)}>
                         <Pencil className="mr-2 h-3.5 w-3.5" /> Editar
                       </Button>
                       <Button variant="outline" size="sm" className="rounded-full shadow-sm bg-white text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100" onClick={() => handleDeleteCard(activeCard.id)}>
                         <Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir
                       </Button>
-                      <Button variant="default" size="sm" className="rounded-full shadow-sm" onClick={() => setShowCardForm(true)}>
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        aria-label="Adicionar novo cartão"
+                        className="rounded-full shadow-sm"
+                        onClick={() => setShowCardForm(true)}
+                      >
                         <Plus className="h-4 w-4" />
                       </Button>
                     </div>
@@ -544,6 +566,7 @@ export default function CreditCardPage() {
                           <button
                             key={card.id}
                             type="button"
+                            aria-label={`Selecionar cartão ${index + 1}`}
                             onClick={() => selectCardByIndex(index)}
                             className={`h-2 rounded-full transition-all duration-300 ${activeCard.id === card.id ? "w-6 bg-violet-600" : "w-2.5 bg-zinc-300"}`}
                           />
@@ -563,7 +586,14 @@ export default function CreditCardPage() {
             <CardHeader className="pb-4 border-b">
               <div className="flex justify-between items-center">
                 <CardTitle>{editingCardId ? "Editar Cartão" : "Novo Cartão"}</CardTitle>
-                <Button variant="ghost" size="icon" onClick={resetCardForm} className="rounded-full h-8 w-8 text-zinc-500">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Fechar formulário de cartão"
+                  onClick={resetCardForm}
+                  className="rounded-full h-8 w-8 text-zinc-500"
+                >
                   <Plus className="h-5 w-5 rotate-45" />
                 </Button>
               </div>
@@ -584,7 +614,7 @@ export default function CreditCardPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">BIN (6 primeiros dígitos) <span className="text-xs text-zinc-400 font-normal">- Opcional</span></Label>
-                  <Label className="flex items-center gap-1"><span className="text-xs text-zinc-400 font-normal">Consulta e preenche automáticaticamente os dados do banco</span></Label>
+                  <Label className="flex items-center gap-1"><span className="text-xs text-zinc-400 font-normal">Consulta e preenche automaticamente os dados do banco</span></Label>
                   <Input value={cardBin} maxLength={8} inputMode="numeric" placeholder="Ex: 539022" onChange={(e) => setCardBin(e.target.value.replace(/\D/g, "").slice(0, 8))} />
                   <div className="h-4">
                     {isIdentifyingCard ? (
@@ -649,7 +679,7 @@ export default function CreditCardPage() {
 
               {activeCard.type === "debit_card" ? (
                 <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-                  Cartão de débito: as compras devem respeitar seu saldo disponivel (Pix, transferencias e entradas).
+                  Cartão de débito: as compras devem respeitar seu saldo disponível (Pix, transferências e entradas).
                 </div>
               ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
@@ -662,7 +692,7 @@ export default function CreditCardPage() {
                   <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{formatCurrency(activeCardCreditSummary?.used || 0)}</p>
                 </div>
                 <div className="col-span-2 md:col-span-1">
-                  <p className="text-sm font-medium text-zinc-500 mb-1">Disponivel</p>
+                  <p className="text-sm font-medium text-zinc-500 mb-1">Disponível</p>
                   <p className={`text-2xl font-bold ${(activeCardCreditSummary?.available || 0) < 0 ? "text-red-600" : "text-emerald-600"}`}>
                     {formatCurrency(activeCardCreditSummary?.available || 0)}
                   </p>
@@ -750,7 +780,7 @@ export default function CreditCardPage() {
             <CardContent className="space-y-6">
               {activeCard.type === "debit_card" ? (
                 <div className="rounded-2xl border border-zinc-700 bg-zinc-800/50 p-4 text-sm text-zinc-300">
-                  Cartão de débito não usa limite de fatura. O controle ocorre pelo saldo disponivel da conta.
+                  Cartão de débito não usa limite de fatura. O controle ocorre pelo saldo disponível da conta.
                 </div>
               ) : (
               <>
