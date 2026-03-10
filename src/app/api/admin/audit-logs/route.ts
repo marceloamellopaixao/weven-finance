@@ -3,7 +3,7 @@ import { verifyRequestAuth } from "@/lib/auth/server";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
-import { supabaseSelect } from "@/services/supabase/admin";
+import { supabaseSelect, supabaseSelectPaged } from "@/services/supabase/admin";
 
 type StaffRole = "admin" | "moderator" | "support" | "client";
 
@@ -19,6 +19,15 @@ async function getAuthContext(request: NextRequest) {
 
 function isStaff(role: StaffRole) {
   return role === "admin" || role === "moderator" || role === "support";
+}
+
+function escapeIlike(value: string) {
+  return String(value || "")
+    .replaceAll("%", "")
+    .replaceAll(",", " ")
+    .replaceAll("(", " ")
+    .replaceAll(")", " ")
+    .trim();
 }
 
 export const runtime = "nodejs";
@@ -46,35 +55,34 @@ export async function GET(request: NextRequest) {
     const to = request.nextUrl.searchParams.get("to")?.trim();
     const q = request.nextUrl.searchParams.get("q")?.trim().toLowerCase();
 
-    const rows = await supabaseSelect("admin_audit_logs", {
+    const filters: Record<string, string | undefined> = {};
+    const conditions: Record<string, string | string[]> = {};
+    if (action) filters.action = action;
+    if (actorUid) filters.actor_uid = actorUid;
+    if (targetUid) filters.target_uid = targetUid;
+    if (from || to) {
+      const dateConditions: string[] = [];
+      if (from) dateConditions.push(`gte.${from}T00:00:00.000Z`);
+      if (to) dateConditions.push(`lte.${to}T23:59:59.999Z`);
+      conditions.created_at = dateConditions;
+    }
+
+    const safeQ = escapeIlike(q || "");
+    const or = safeQ
+      ? `action.ilike.*${safeQ}*,actor_uid.ilike.*${safeQ}*,target_uid.ilike.*${safeQ}*,route.ilike.*${safeQ}*,method.ilike.*${safeQ}*`
+      : undefined;
+
+    const paged = await supabaseSelectPaged("admin_audit_logs", {
       select: "id,actor_uid,action,target_uid,request_id,route,method,ip,user_agent,details,created_at",
       order: "created_at.desc.nullslast",
-      limit: 500,
+      page,
+      limit,
+      filters,
+      conditions,
+      or,
     });
 
-    const filtered = rows.filter((row) => {
-      if (action && String(row.action || "") !== action) return false;
-      if (actorUid && String(row.actor_uid || "") !== actorUid) return false;
-      if (targetUid && String(row.target_uid || "") !== targetUid) return false;
-      if (from && typeof row.created_at === "string" && row.created_at < `${from}T00:00:00.000Z`) return false;
-      if (to && typeof row.created_at === "string" && row.created_at > `${to}T23:59:59.999Z`) return false;
-      if (q) {
-        const blob = JSON.stringify({
-          action: row.action,
-          actor_uid: row.actor_uid,
-          target_uid: row.target_uid,
-          route: row.route,
-          method: row.method,
-          details: row.details,
-        }).toLowerCase();
-        if (!blob.includes(q)) return false;
-      }
-      return true;
-    });
-
-    const total = filtered.length;
-    const start = (page - 1) * limit;
-    const data = filtered.slice(start, start + limit).map((row) => ({
+    const data = paged.data.map((row) => ({
       id: String(row.id || ""),
       actorUid: String(row.actor_uid || ""),
       action: String(row.action || ""),
@@ -88,7 +96,7 @@ export async function GET(request: NextRequest) {
       createdAt: row.created_at ? String(row.created_at) : null,
     }));
 
-    return NextResponse.json({ ok: true, page, limit, total, data }, { status: 200 });
+    return NextResponse.json({ ok: true, page, limit, total: paged.total, data }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     apiLogger.error({
