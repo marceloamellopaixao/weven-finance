@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
@@ -185,7 +185,7 @@ function formatDateSafe(value: unknown) {
   ) {
     return (value as { toDate: () => Date }).toDate().toLocaleDateString();
   }
-  return "Data invalida";
+  return "Data inválida";
 }
 
 // Dono Supremo (Hardcoded para segurança extra na UI)
@@ -260,7 +260,7 @@ export default function AdminPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const usersPerPage = 10;
 
-  // --- MODAIS DE A?O ---
+  // --- Modais de Ação ---
   const [userToReset, setUserToReset] = useState<UserProfile | null>(null);
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const [deletedUserData, setDeletedUserData] = useState<DeletionSuccessData>(null);
@@ -289,7 +289,7 @@ export default function AdminPage() {
   const [editedPlans, setEditedPlans] = useState<PlansConfig | null>(null);
   const [isSavingPlans, setIsSavingPlans] = useState(false);
 
-  // --- PERMISS?ES ---
+  // --- Permissões ---
   const canManageSensitive = userProfile?.role === "admin";
   const canRestore = userProfile?.role === "admin" || userProfile?.role === "moderator";
   const canImpersonateUsers =
@@ -1438,16 +1438,16 @@ export default function AdminPage() {
 
         <div className={`${fadeInUp} delay-150 space-y-6`}>
           {/* Navegação de Abas Moderna */}
-          <div className="bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 w-full md:w-fit grid grid-cols-2 md:grid-flow-col gap-1 shadow-sm">
+          <div className="grid w-full grid-cols-1 gap-1 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-2 xl:w-fit xl:grid-flow-col">
             {/* Aba Usuários: Apenas Admin e Moderator */}
             {(userProfile?.role === 'admin' || userProfile?.role === 'moderator') && (
-              <button onClick={() => setActiveTabAndPersist("users")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "users" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-pressed={activeTab === "users"} onClick={() => setActiveTabAndPersist("users")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "users" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <UserIcon className="h-4 w-4" /> Gerenciar Usuários
               </button>
             )}
 
             {/* Aba Suporte: Todos da Equipe */}
-            <button onClick={() => setActiveTabAndPersist("support")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "support" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button type="button" aria-pressed={activeTab === "support"} onClick={() => setActiveTabAndPersist("support")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "support" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <HeadphonesIcon className="h-4 w-4" /> Suporte & Ideias
               {unseenSupportCount > 0 && (
                 <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">
@@ -1456,18 +1456,18 @@ export default function AdminPage() {
               )}
             </button>
 
-            <button onClick={() => setActiveTabAndPersist("audit")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "audit" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button type="button" aria-pressed={activeTab === "audit"} onClick={() => setActiveTabAndPersist("audit")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "audit" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <ShieldCheck className="h-4 w-4" /> Auditoria
             </button>
 
             {canRestore && (
-              <button onClick={() => setActiveTabAndPersist("restore")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "restore" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-pressed={activeTab === "restore"} onClick={() => setActiveTabAndPersist("restore")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "restore" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <History className="h-4 w-4" /> Restaurar Dados
               </button>
             )}
 
             {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
-              <button onClick={() => setActiveTabAndPersist("metrics")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "metrics" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-pressed={activeTab === "metrics"} onClick={() => setActiveTabAndPersist("metrics")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "metrics" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <Calculator className="h-4 w-4" /> Métricas
                 {criticalMetricsAlerts.length > 0 && (
                   <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-bold">
@@ -1478,7 +1478,7 @@ export default function AdminPage() {
             )}
 
             {canManageSensitive && (
-              <button onClick={() => setActiveTabAndPersist("plans")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "plans" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-pressed={activeTab === "plans"} onClick={() => setActiveTabAndPersist("plans")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "plans" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <CreditCard className="h-4 w-4" /> Gerenciar Planos
               </button>
             )}
@@ -1642,7 +1642,7 @@ export default function AdminPage() {
                                     value={ticket.assignedTo || "unassigned"}
                                     onValueChange={(val) => handleAssignTicket(ticket.id, val)}
                                   >
-                                    <SelectTrigger className="w-[220px] h-8 text-xs">
+                                    <SelectTrigger className="h-8 w-full max-w-full text-xs sm:w-[260px]">
                                       <SelectValue placeholder="Atribuir" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1812,7 +1812,7 @@ export default function AdminPage() {
                                       value={ticket.assignedTo || "unassigned"}
                                       onValueChange={(val) => handleAssignTicket(ticket.id, val)}
                                     >
-                                      <SelectTrigger className="w-[140px] h-8 text-xs">
+                                      <SelectTrigger className="h-8 w-full max-w-full text-xs sm:w-[220px]">
                                         <SelectValue placeholder="Atribuir" />
                                       </SelectTrigger>
                                       <SelectContent>
@@ -2945,7 +2945,7 @@ export default function AdminPage() {
                       <CardTitle className="text-amber-700 font-bold text-lg">
                         Plano {plans.free.name} · Bronze
                       </CardTitle>
-                      <CardDescription className="text-amber-600/70">Configurações.</CardDescription>
+                      <CardDescription className="text-amber-600/70">Configurações</CardDescription>
                     </div>
                     <Switch checked={editedPlans.free.active} onCheckedChange={(c) => handlePlanEdit("free", "active", c)} className="data-[state=checked]:bg-amber-600" />
                   </CardHeader>
@@ -2981,7 +2981,7 @@ export default function AdminPage() {
                       <CardTitle className="text-slate-600 dark:text-slate-400 font-bold text-lg">
                         Plano {plans.premium.name} · Prata
                       </CardTitle>
-                      <CardDescription className="text-slate-500/70">Configurações.</CardDescription>
+                      <CardDescription className="text-slate-500/70">Configurações</CardDescription>
                     </div>
                     <Switch checked={editedPlans.premium.active} onCheckedChange={(c) => handlePlanEdit("premium", "active", c)} className="data-[state=checked]:bg-slate-600" />
                   </CardHeader>
@@ -3026,7 +3026,7 @@ export default function AdminPage() {
                       <CardTitle className="text-yellow-600 font-bold text-lg">
                         Plano {editedPlans.pro.name} · Ouro
                       </CardTitle>
-                      <CardDescription className="text-yellow-600/70">Configurações.</CardDescription>
+                      <CardDescription className="text-yellow-600/70">Configurações</CardDescription>
                     </div>
                     <Switch checked={editedPlans.pro.active} onCheckedChange={(c) => handlePlanEdit("pro", "active", c)} className="data-[state=checked]:bg-yellow-500" />
                   </CardHeader>
@@ -3095,7 +3095,7 @@ export default function AdminPage() {
 
       {/* Modal Confirmação Normalização */}
       <Dialog open={showNormalizeConfirm} onOpenChange={setShowNormalizeConfirm}>
-        <DialogContent className="rounded-2xl">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[460px] rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-600">
               <Wrench className="h-5 w-5" /> Normalizar Banco de Dados?
@@ -3115,7 +3115,7 @@ export default function AdminPage() {
 
       {/* Modal Confirmação Restauração */}
       <Dialog open={!!userToRestore} onOpenChange={(open) => !open && setUserToRestore(null)}>
-        <DialogContent className="rounded-2xl">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[460px] rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-orange-600">
               <ArchiveRestore className="h-5 w-5" /> Confirmar Restauração
@@ -3135,7 +3135,7 @@ export default function AdminPage() {
 
       {/* Modal Resetar Dados */}
       <Dialog open={!!userToReset} onOpenChange={(open) => !open && setUserToReset(null)}>
-        <DialogContent className="rounded-2xl">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[460px] rounded-2xl">
           <DialogHeader>
             <DialogTitle>Resetar Dados?</DialogTitle>
             <DialogDescription>Confirme para apagar todas as transações.</DialogDescription>
@@ -3149,7 +3149,7 @@ export default function AdminPage() {
 
       {/* Modal Excluir Usuário */}
       <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
-        <DialogContent className="rounded-2xl">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[460px] rounded-2xl">
           <DialogHeader>
             <DialogTitle>Excluir Usuário?</DialogTitle>
             <DialogDescription>Confirme para remover permanentemente.</DialogDescription>
@@ -3163,7 +3163,7 @@ export default function AdminPage() {
 
       {/* Modal Sucesso Exclusão */}
       <Dialog open={!!deletedUserData} onOpenChange={(open) => !open && setDeletedUserData(null)}>
-        <DialogContent className="rounded-3xl">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[460px] rounded-3xl">
           <DialogHeader>
             <div className="mx-auto bg-emerald-100 dark:bg-emerald-900/30 p-3 rounded-full w-fit mb-2">
               <CheckCircle2 className="h-8 w-8 text-emerald-600" />
