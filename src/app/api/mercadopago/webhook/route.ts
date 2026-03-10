@@ -4,6 +4,7 @@ import { supabaseUpsertRows } from "@/services/supabase/admin";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { sendExternalAlert } from "@/lib/observability/alerts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -109,6 +110,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, accepted: true, result }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
+    await sendExternalAlert({
+      source: "mercadopago_webhook",
+      title: "Falha no webhook do Mercado Pago",
+      message,
+      level: "critical",
+      meta: { requestId: meta.requestId, route: meta.route, method: meta.method },
+    });
     apiLogger.error({
       message: "mercadopago_webhook_failed",
       requestId: meta.requestId,
