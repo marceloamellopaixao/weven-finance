@@ -69,6 +69,9 @@ export default function SettingsPage() {
   const [showCancelSubscriptionModal, setShowCancelSubscriptionModal] = useState(false);
   const [billingHistory, setBillingHistory] = useState<BillingHistoryItem[]>([]);
   const [isLoadingBillingHistory, setIsLoadingBillingHistory] = useState(false);
+  const [billingHistoryPage, setBillingHistoryPage] = useState(1);
+  const [billingHistoryPerPage] = useState(8);
+  const [billingHistoryTotal, setBillingHistoryTotal] = useState(0);
 
   // Estados para Suporte
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
@@ -82,6 +85,9 @@ export default function SettingsPage() {
   const [isCopyingSwaggerToken, setIsCopyingSwaggerToken] = useState(false);
   const [mySupportTickets, setMySupportTickets] = useState<SupportTicket[]>([]);
   const [isLoadingMySupportTickets, setIsLoadingMySupportTickets] = useState(false);
+  const [mySupportPage, setMySupportPage] = useState(1);
+  const [mySupportPerPage] = useState(8);
+  const [mySupportTotal, setMySupportTotal] = useState(0);
 
   // Estado para feedback modal
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
@@ -124,8 +130,8 @@ export default function SettingsPage() {
     if (action.includes("confirm") || action.includes("authorized")) return "Assinatura confirmada";
     if (action.includes("pending") || paymentStatus === "pending") return "Pagamento pendente";
     if (action.includes("rejected") || action.includes("fail") || paymentStatus === "rejected") return "Pagamento recusado";
-    if (eventType.includes("subscription")) return "Atualizacao de assinatura";
-    return "Evento de cobranca";
+    if (eventType.includes("subscription")) return "Atualização de assinatura";
+    return "Evento de cobrança";
   };
 
   const formatSupportStatus = (status: string) => {
@@ -134,7 +140,7 @@ export default function SettingsPage() {
     if (normalized === "in_progress") return "Em progresso";
     if (normalized === "resolved") return "Resolvido";
     if (normalized === "rejected") return "Rejeitado";
-    if (normalized === "under_review") return "Em analise";
+    if (normalized === "under_review") return "Em análise";
     if (normalized === "approved") return "Aprovado";
     if (normalized === "implemented") return "Implementado";
     return "Aberto";
@@ -255,7 +261,7 @@ export default function SettingsPage() {
     try {
       const result = await sendSupportRequest(
         effectiveProfileUid,
-        effectiveProfileEmail || "E-mail nao disponivel",
+        effectiveProfileEmail || "E-mail não disponível",
         userProfile?.displayName || "Usuário sem nome",
         supportMessage
       );
@@ -268,7 +274,7 @@ export default function SettingsPage() {
       );
     } catch (error) {
       console.error("Erro ao enviar solicitacao de suporte:", error);
-      showFeedback('error', 'Erro', 'Nao foi possivel enviar a solicitacao. Tente novamente mais tarde.');
+      showFeedback('error', 'Erro', 'Não foi possível enviar a solicitação. Tente novamente mais tarde.');
     } finally {
       setIsSendingSupport(false);
     }
@@ -296,7 +302,7 @@ export default function SettingsPage() {
       );
     } catch (error) {
       console.error(error);
-      showFeedback('error', 'Erro', 'Nao foi possivel enviar sua sugestao. Tente novamente.');
+      showFeedback('error', 'Erro', 'Não foi possível enviar sua sugestão. Tente novamente.');
     } finally {
       setIsSendingFeature(false);
     }
@@ -394,21 +400,30 @@ export default function SettingsPage() {
     const unsubscribe = subscribeToSupportTickets(
       effectiveProfileUid,
       userProfile.role,
-      (tickets) => {
+      (result) => {
         setMySupportTickets(
-          tickets
+          result.tickets
             .slice()
             .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-            .slice(0, 10)
         );
+        setMySupportTotal(result.total);
         setIsLoadingMySupportTickets(false);
+      },
+      {
+        page: mySupportPage,
+        limit: mySupportPerPage,
       },
       () => {
         setIsLoadingMySupportTickets(false);
       }
     );
     return () => unsubscribe();
-  }, [activeTab, effectiveProfileUid, user, userProfile]);
+  }, [activeTab, effectiveProfileUid, mySupportPage, mySupportPerPage, user, userProfile]);
+
+  useEffect(() => {
+    if (activeTab !== "help") return;
+    setMySupportPage(1);
+  }, [activeTab]);
 
   useEffect(() => {
     const preapprovalId = searchParams.get("preapproval_id") || searchParams.get("preapprovalId");
@@ -441,11 +456,20 @@ export default function SettingsPage() {
       try {
         setIsLoadingBillingHistory(true);
         const token = await user?.getIdToken();
-        const history = await getBillingHistory(token);
-        if (!cancelled) setBillingHistory(history);
+        const historyPage = await getBillingHistory(token, {
+          page: billingHistoryPage,
+          limit: billingHistoryPerPage,
+        });
+        if (!cancelled) {
+          setBillingHistory(historyPage.history);
+          setBillingHistoryTotal(historyPage.total);
+        }
       } catch (error) {
-        console.error("Erro ao carregar historico de cobranca:", error);
-        if (!cancelled) setBillingHistory([]);
+        console.error("Erro ao carregar histórico de cobrança:", error);
+        if (!cancelled) {
+          setBillingHistory([]);
+          setBillingHistoryTotal(0);
+        }
       } finally {
         if (!cancelled) setIsLoadingBillingHistory(false);
       }
@@ -458,7 +482,12 @@ export default function SettingsPage() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [activeTab, isBillingExemptRole, user]);
+  }, [activeTab, billingHistoryPage, billingHistoryPerPage, isBillingExemptRole, user]);
+
+  useEffect(() => {
+    if (activeTab !== "billing") return;
+    setBillingHistoryPage(1);
+  }, [activeTab]);
 
   return (
     <div className="font-sans p-4 md:p-8 pb-20">
@@ -489,16 +518,16 @@ export default function SettingsPage() {
         {/* Navegação de Abas Personalizada */}
         <div className={`${fadeInUp} delay-150 space-y-6`}>
           <div className="bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 grid grid-cols-2 md:grid-cols-4 w-full md:w-[640px] shadow-sm gap-1">
-            <button onClick={() => handleTabChange("account")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "account" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button type="button" aria-pressed={activeTab === "account"} onClick={() => handleTabChange("account")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "account" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <User className="h-4 w-4" /> Geral
             </button>
-            <button onClick={() => handleTabChange("billing")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "billing" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "billing" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <CreditCard className="h-4 w-4" /> Planos
             </button>
-            <button onClick={() => handleTabChange("security")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "security" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button type="button" aria-pressed={activeTab === "security"} onClick={() => handleTabChange("security")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "security" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <ShieldCheck className="h-4 w-4" /> Privacidade
             </button>
-            <button onClick={() => handleTabChange("help")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer ${activeTab === "help" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button type="button" aria-pressed={activeTab === "help"} onClick={() => handleTabChange("help")} className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "help" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <HelpCircle className="h-4 w-4" /> Ajuda
             </button>
           </div>
@@ -614,7 +643,7 @@ export default function SettingsPage() {
                       <CardDescription className="text-base text-white/75 max-w-md leading-relaxed">
                         {effectivePlan === 'free'
                           ? plans.free.description
-                          : isBillingExemptRole ? 'Conta da equipe com acesso isento de cobranca.' : 'Obrigado por apoiar nosso desenvolvimento!'}
+                          : isBillingExemptRole ? 'Conta da equipe com acesso isento de cobrança.' : 'Obrigado por apoiar nosso desenvolvimento!'}
                       </CardDescription>
                     </div>
 
@@ -701,7 +730,7 @@ export default function SettingsPage() {
                   <div className="rounded-xl border border-white/15 bg-black/10 p-3 text-xs text-white/85 space-y-1">
                     {isBillingExemptRole && (
                       <p>
-                        Regra de cobranca: <strong>Isento para {userProfile?.role === "admin" ? "Admin" : "Moderador"}</strong>
+                        Regra de cobrança: <strong>Isento para {userProfile?.role === "admin" ? "Admin" : "Moderador"}</strong>
                       </p>
                     )}
                     <p>
@@ -725,8 +754,8 @@ export default function SettingsPage() {
                   </div>
                   {!isBillingExemptRole && (
                     <div className="rounded-xl border border-white/15 bg-black/10 p-3 text-xs text-white/85 space-y-2">
-                      <p className="font-semibold">Ja concluiu o pagamento</p>
-                      <p>Se o retorno automatico falhar, confirme com o ID da assinatura (preapproval_id).</p>
+                        <p className="font-semibold">Já concluiu o pagamento?</p>
+                      <p>Se o retorno automático falhar, confirme com o ID da assinatura (`preapproval_id`).</p>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <Input
                           value={manualPreapprovalId}
@@ -750,7 +779,7 @@ export default function SettingsPage() {
                   {shouldShowRecoveryCTA && (
                     <div className="rounded-xl border border-amber-200/30 bg-amber-500/10 p-3 text-xs text-white/90 space-y-2">
                       <p className="font-semibold">Pagamento em aberto detectado.</p>
-                      <p>Use a recuperação automática para regularizar sem perder contexto da assinatura.</p>
+                      <p>Use a recuperação automática para regularizar sem perder o contexto da assinatura.</p>
                       <Button
                         onClick={() => void handleRecoverPayment()}
                         disabled={isOpeningCheckout !== null || isConfirmingPreapproval}
@@ -782,16 +811,16 @@ export default function SettingsPage() {
                 <Card className="border-none shadow-lg rounded-3xl bg-white dark:bg-zinc-900">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-zinc-600" /> Historico de cobranca
+                      <Clock className="h-4 w-4 text-zinc-600" /> Histórico de cobrança
                     </CardTitle>
                     <CardDescription>
-                      Ultimos eventos de assinatura e pagamento.
+                      Últimos eventos de assinatura e pagamento.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {isLoadingBillingHistory ? (
                       <div className="h-20 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando historico...
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando histórico...
                       </div>
                     ) : billingHistory.length === 0 ? (
                       <div className="h-20 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
@@ -799,7 +828,7 @@ export default function SettingsPage() {
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {billingHistory.slice(0, 8).map((item) => (
+                        {billingHistory.map((item) => (
                           <div key={item.id} className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <p className="text-sm font-semibold text-zinc-900">{formatBillingEventLabel(item)}</p>
@@ -808,12 +837,45 @@ export default function SettingsPage() {
                               </Badge>
                             </div>
                             <p className="text-xs text-zinc-600 mt-1">
-                              {item.createdAt ? new Date(item.createdAt).toLocaleString() : "Data indisponivel"}
+                              {item.createdAt ? new Date(item.createdAt).toLocaleString() : "Data indisponível"}
                               {item.plan ? ` • Plano ${item.plan}` : ""}
                               {typeof item.amount === "number" ? ` • ${item.currency || "BRL"} ${item.amount.toFixed(2)}` : ""}
                             </p>
                           </div>
                         ))}
+                      </div>
+                    )}
+                    {!isLoadingBillingHistory && billingHistoryTotal > billingHistoryPerPage && (
+                      <div className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 py-2 mt-2">
+                        <p className="text-xs text-zinc-500">
+                          Página {billingHistoryPage} de {Math.max(1, Math.ceil(billingHistoryTotal / billingHistoryPerPage))} • {billingHistoryTotal} evento(s)
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-lg"
+                            disabled={billingHistoryPage <= 1}
+                            onClick={() => setBillingHistoryPage((prev) => Math.max(1, prev - 1))}
+                          >
+                            Anterior
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-lg"
+                            disabled={billingHistoryPage >= Math.ceil(billingHistoryTotal / billingHistoryPerPage)}
+                            onClick={() =>
+                              setBillingHistoryPage((prev) =>
+                                Math.min(Math.ceil(billingHistoryTotal / billingHistoryPerPage), prev + 1)
+                              )
+                            }
+                          >
+                            Próxima
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </CardContent>
@@ -1016,9 +1078,10 @@ export default function SettingsPage() {
                   </a>
 
                   {/* Solicitar Suporte via Sistema */}
-                  <div
+                  <button
+                    type="button"
                     onClick={() => setIsSupportModalOpen(true)}
-                    className="flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer"
+                    className="w-full text-left flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
                   >
                     <div className="p-3 bg-violet-100 dark:bg-violet-900/30 rounded-full text-violet-600 group-hover:scale-110 transition-transform">
                       <LifeBuoy className="h-6 w-6" />
@@ -1027,21 +1090,22 @@ export default function SettingsPage() {
                       <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Abrir Chamado</h4>
                       <p className="text-sm text-zinc-500">Relate problemas ou tire dúvidas técnicas.</p>
                     </div>
-                  </div>
+                  </button>
 
                   {/* Enviar Ideia / Sugestão */}
-                  <div
+                  <button
+                    type="button"
                     onClick={() => setIsFeatureModalOpen(true)}
-                    className="flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer"
+                    className="w-full text-left flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                   >
                     <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-full text-amber-600 group-hover:scale-110 transition-transform">
                       <Lightbulb className="h-6 w-6" />
                     </div>
                     <div>
                       <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Enviar Ideia ou Sugestão</h4>
-                      <p className="text-sm text-zinc-500">Tem uma ideia incrível Queremos ouvir você!</p>
+                      <p className="text-sm text-zinc-500">Tem uma ideia incrível? Queremos ouvir você.</p>
                     </div>
-                  </div>
+                  </button>
                 </CardContent>
               </Card>
 
@@ -1081,6 +1145,37 @@ export default function SettingsPage() {
                       </div>
                     ))
                   )}
+                  {!isLoadingMySupportTickets && mySupportTotal > mySupportPerPage && (
+                    <div className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 py-2 mt-3">
+                      <p className="text-xs text-zinc-500">
+                        Página {mySupportPage} de {Math.max(1, Math.ceil(mySupportTotal / mySupportPerPage))} • {mySupportTotal} chamado(s)
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-lg"
+                          disabled={mySupportPage <= 1}
+                          onClick={() => setMySupportPage((prev) => Math.max(1, prev - 1))}
+                        >
+                          Anterior
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-lg"
+                          disabled={mySupportPage >= Math.ceil(mySupportTotal / mySupportPerPage)}
+                          onClick={() =>
+                            setMySupportPage((prev) => Math.min(Math.ceil(mySupportTotal / mySupportPerPage), prev + 1))
+                          }
+                        >
+                          Próxima
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -1089,7 +1184,7 @@ export default function SettingsPage() {
 
         {/* Modal de Suporte */}
         <Dialog open={isSupportModalOpen} onOpenChange={setIsSupportModalOpen}>
-          <DialogContent className="sm:max-w-[500px] rounded-3xl p-6">
+          <DialogContent className="w-[calc(100vw-1rem)] max-w-[500px] rounded-3xl p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-violet-700 dark:text-violet-400">
                 <LifeBuoy className="h-6 w-6" /> Solicitar Suporte
@@ -1116,11 +1211,11 @@ export default function SettingsPage() {
             </div>
 
             <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="ghost" onClick={() => setIsSupportModalOpen(false)} className="rounded-xl">Cancelar</Button>
+              <Button variant="ghost" onClick={() => setIsSupportModalOpen(false)} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
               <Button
                 onClick={handleSendSupport}
                 disabled={isSendingSupport}
-                className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl gap-2"
+                className="w-full rounded-xl bg-violet-600 text-white gap-2 hover:bg-violet-700 sm:w-auto"
               >
                 {isSendingSupport ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
                 Enviar Solicitação
@@ -1131,16 +1226,16 @@ export default function SettingsPage() {
 
         {/* Modal de Confirmação de Cancelamento de Assinatura */}
         <Dialog open={showCancelSubscriptionModal} onOpenChange={setShowCancelSubscriptionModal}>
-          <DialogContent className="sm:max-w-[425px] rounded-3xl p-6">
+          <DialogContent className="w-[calc(100vw-1rem)] max-w-[425px] rounded-3xl p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="text-red-600 flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5" /> Cancelar assinatura
               </DialogTitle>
               <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
-                Sua assinatura recorrente no Mercado Pago sera cancelada.
+                Sua assinatura recorrente no Mercado Pago será cancelada.
               </DialogDescription>
               <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
-                O plano voltara para Free e os recursos premium/pro serao removidos.
+                O plano voltará para Free e os recursos Premium/Pro serão removidos.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 mt-4">
@@ -1168,7 +1263,7 @@ export default function SettingsPage() {
 
         {/* Modal de Ideia / Feature */}
         <Dialog open={isFeatureModalOpen} onOpenChange={setIsFeatureModalOpen}>
-          <DialogContent className="sm:max-w-[500px] rounded-3xl p-6">
+          <DialogContent className="w-[calc(100vw-1rem)] max-w-[500px] rounded-3xl p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
                 <Sparkles className="h-6 w-6" /> Enviar Sugestão
@@ -1192,11 +1287,11 @@ export default function SettingsPage() {
             </div>
 
             <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="ghost" onClick={() => setIsFeatureModalOpen(false)} className="rounded-xl">Cancelar</Button>
+              <Button variant="ghost" onClick={() => setIsFeatureModalOpen(false)} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
               <Button
                 onClick={handleSendFeature}
                 disabled={isSendingFeature}
-                className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl gap-2"
+                className="w-full rounded-xl bg-amber-600 text-white gap-2 hover:bg-amber-700 sm:w-auto"
               >
                 {isSendingFeature ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
                 Enviar Ideia
@@ -1207,7 +1302,7 @@ export default function SettingsPage() {
 
         {/* Modal de Confirmação de Exclusão */}
         <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-          <DialogContent className="sm:max-w-[425px] rounded-3xl p-6">
+          <DialogContent className="w-[calc(100vw-1rem)] max-w-[425px] rounded-3xl p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="text-red-600 flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5" /> Tem certeza absoluta
