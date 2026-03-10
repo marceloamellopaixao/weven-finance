@@ -22,6 +22,15 @@ function asNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function escapeIlike(value: string) {
+  return String(value || "")
+    .replaceAll("%", "")
+    .replaceAll(",", " ")
+    .replaceAll("(", " ")
+    .replaceAll(")", " ")
+    .trim();
+}
+
 function toTxRow(uid: string, sourceId: string, data: Record<string, unknown>) {
   return {
     id: `${uid}__${sourceId}`,
@@ -97,29 +106,70 @@ export async function GET(request: NextRequest) {
 
     const { actingUid: uid } = await resolveActingContext(request);
     const groupId = request.nextUrl.searchParams.get("groupId")?.trim();
+    const month = request.nextUrl.searchParams.get("month")?.trim();
+    const typeFilter = request.nextUrl.searchParams.get("type")?.trim();
+    const statusFilter = request.nextUrl.searchParams.get("status")?.trim();
+    const categoryFilter = request.nextUrl.searchParams.get("category")?.trim();
+    const q = request.nextUrl.searchParams.get("q")?.trim().toLowerCase() || "";
     const pageParam = request.nextUrl.searchParams.get("page");
     const limitParam = request.nextUrl.searchParams.get("limit");
     const page = Math.max(1, Number(pageParam || "1"));
     const limit = Math.max(1, Math.min(200, Number(limitParam || "50")));
 
     const usePaged = Boolean(pageParam || limitParam) && !groupId;
+    const baseFilters: Record<string, string | undefined> = {
+      uid,
+      ...(typeFilter && typeFilter !== "all" ? { tx_type: typeFilter } : {}),
+      ...(statusFilter && statusFilter !== "all" ? { tx_status: statusFilter } : {}),
+      ...(categoryFilter && categoryFilter !== "all" ? { category: categoryFilter } : {}),
+    };
+    const conditions: Record<string, string | string[]> = {};
+    if (month && month.length === 7) {
+      const [y, m] = month.split("-").map(Number);
+      if (Number.isFinite(y) && Number.isFinite(m) && m >= 1 && m <= 12) {
+        const monthStart = `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-01`;
+        const nextDate = new Date(Date.UTC(y, m, 1));
+        const nextMonthStart = `${String(nextDate.getUTCFullYear()).padStart(4, "0")}-${String(nextDate.getUTCMonth() + 1).padStart(2, "0")}-01`;
+        conditions.due_date = [`gte.${monthStart}`, `lt.${nextMonthStart}`];
+      }
+    }
+    const safeQ = escapeIlike(q);
+    const or = safeQ ? `description.ilike.*${safeQ}*,amount_text.ilike.*${safeQ}*` : undefined;
     const paged = usePaged
       ? await supabaseSelectPaged("transactions", {
           select:
             "source_id,description,amount,amount_text,amount_for_limit,tx_type,category,tx_status,payment_method,card_id,card_label,card_type,tx_date,due_date,group_id,installment_current,installment_total,created_at,raw",
-          filters: { uid },
+          filters: baseFilters,
+          conditions,
+          or,
           order: "due_date.desc.nullslast",
           page,
           limit,
         })
       : null;
     const rows = paged ? paged.data : await fetchUserTransactions(uid);
-    const filtered = groupId ? rows.filter((row) => String(row.group_id || "") === groupId) : rows;
+    const filtered = rows.filter((row) => {
+      if (groupId && String(row.group_id || "") !== groupId) return false;
+      if (typeFilter && typeFilter !== "all" && String(row.tx_type || "") !== typeFilter) return false;
+      if (statusFilter && statusFilter !== "all" && String(row.tx_status || "") !== statusFilter) return false;
+      if (categoryFilter && categoryFilter !== "all" && String(row.category || "") !== categoryFilter) return false;
+      if (!paged && month && month.length === 7) {
+        const due = String(row.due_date || "");
+        if (!due.startsWith(month)) return false;
+      }
+      if (!paged && q) {
+        const desc = String(row.description || "").toLowerCase();
+        const amountTxt = String(row.amount_text || row.amount || "").toLowerCase();
+        if (!desc.includes(q) && !amountTxt.includes(q)) return false;
+      }
+      return true;
+    });
     const transactions = filtered.map((row) => toClientTx(uid, row));
     const total = paged ? paged.total : transactions.length;
+    const result = paged ? transactions : transactions;
 
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
-    return NextResponse.json({ ok: true, transactions, total, page, limit }, { status: 200 });
+    return NextResponse.json({ ok: true, transactions: result, total, page, limit }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     apiLogger.error({
