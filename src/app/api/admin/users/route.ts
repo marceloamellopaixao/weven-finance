@@ -81,6 +81,15 @@ function mapProfileRowToUser(row: Record<string, unknown>) {
   };
 }
 
+function escapeIlike(value: string) {
+  return String(value || "")
+    .replaceAll("%", "")
+    .replaceAll(",", " ")
+    .replaceAll("(", " ")
+    .replaceAll(")", " ")
+    .trim();
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -108,58 +117,41 @@ export async function GET(request: NextRequest) {
     const status = request.nextUrl.searchParams.get("status")?.trim();
     const paymentStatus = request.nextUrl.searchParams.get("paymentStatus")?.trim();
 
-    let users: ReturnType<typeof mapProfileRowToUser>[] = [];
-    let total = 0;
-
-    const unpaidGroup = paymentStatus === "unpaid_group";
+    const filters: Record<string, string | undefined> = {};
+    const conditions: Record<string, string> = {};
 
     if (scope === "staff") {
-      const rows = await supabaseSelect("profiles", { order: "created_at.desc.nullslast" });
-      users = rows.map(mapProfileRowToUser).filter((user) => user.role === "admin" || user.role === "moderator");
-      total = users.length;
-    } else if (q || unpaidGroup) {
-      // Busca textual exige fallback por enquanto (filtro composto em displayName/email)
-      const rows = await supabaseSelect("profiles", { order: "created_at.desc.nullslast" });
-      const filtered = rows
-        .map(mapProfileRowToUser)
-        .filter((user) => {
-          const matchesQ =
-            String(user.displayName || "").toLowerCase().includes(q) ||
-            String(user.email || "").toLowerCase().includes(q);
-          const matchesRole = !role || role === "all" || String(user.role) === role;
-          const matchesPlan = !plan || plan === "all" || String(user.plan) === plan;
-          const matchesStatus = !status || status === "all" || String(user.status) === status;
-          const safePayment = String(user.paymentStatus || "");
-          const matchesPayment =
-            !paymentStatus ||
-            paymentStatus === "all" ||
-            (paymentStatus === "unpaid_group"
-              ? safePayment !== "paid" && safePayment !== "free"
-              : safePayment === paymentStatus);
-          return matchesQ && matchesRole && matchesPlan && matchesStatus && matchesPayment;
-        });
-      total = filtered.length;
-      users = filtered.slice((page - 1) * limit, page * limit);
-    } else {
-      const filters: Record<string, string | undefined> = {};
-      if (role && role !== "all") filters.role = role;
-      if (plan && plan !== "all") filters.plan = plan;
-      if (status && status !== "all") filters.status = status;
-      if (paymentStatus && paymentStatus !== "all" && paymentStatus !== "unpaid_group") {
+      conditions.role = "in.(admin,moderator)";
+    } else if (role && role !== "all") {
+      filters.role = role;
+    }
+    if (plan && plan !== "all") filters.plan = plan;
+    if (status && status !== "all") filters.status = status;
+    if (paymentStatus && paymentStatus !== "all") {
+      if (paymentStatus === "unpaid_group") {
+        conditions.payment_status = "not.in.(paid,free)";
+      } else {
         filters.payment_status = paymentStatus;
       }
-
-      const paged = await supabaseSelectPaged("profiles", {
-        select:
-          "uid,email,display_name,complete_name,phone,role,plan,status,payment_status,transaction_count,verified_email,block_reason,created_at,deleted_at,raw",
-        order: "created_at.desc.nullslast",
-        page,
-        limit,
-        filters,
-      });
-      users = paged.data.map(mapProfileRowToUser);
-      total = paged.total;
     }
+
+    const safeQ = escapeIlike(q);
+    const or = safeQ
+      ? `display_name.ilike.*${safeQ}*,email.ilike.*${safeQ}*`
+      : undefined;
+
+    const paged = await supabaseSelectPaged("profiles", {
+      select:
+        "uid,email,display_name,complete_name,phone,role,plan,status,payment_status,transaction_count,verified_email,block_reason,created_at,deleted_at,raw",
+      order: "created_at.desc.nullslast",
+      page,
+      limit,
+      filters,
+      conditions,
+      or,
+    });
+    const users = paged.data.map(mapProfileRowToUser);
+    const total = paged.total;
 
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
     return NextResponse.json({ ok: true, users, page, limit, total }, { status: 200 });
