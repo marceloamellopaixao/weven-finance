@@ -329,7 +329,7 @@ export const subscribeToTransactions = (
   };
 };
 
-export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
+export const addTransaction = async (uid: string, tx: CreateTransactionDTO & { isRecurring?: boolean }) => {
   const cryptoUid = resolveCryptoUid(uid);
   const groupId = crypto.randomUUID();
   const count = tx.isInstallment ? Math.max(1, Math.floor(tx.installmentsCount)) : 1;
@@ -356,6 +356,7 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO) => {
       dueDate: currentDueDate,
       isEncrypted: true,
       isArchived: false,
+      isRecurring: tx.isRecurring || false, // <-- AQUI: Inserido o isRecurring no Payload da API
       ...(tx.isInstallment && {
         groupId,
         installmentCurrent: i + 1,
@@ -598,4 +599,3 @@ export const updateUserBalance = async (uid: string, newBalance: number) => {
   }
   emitUserSettingsChanged();
 };
-
