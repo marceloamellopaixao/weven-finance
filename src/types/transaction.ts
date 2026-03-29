@@ -29,6 +29,7 @@ export interface Transaction {
   dueDate: string;
   createdAt: TransactionCreatedAt;
   groupId?: string;
+  isRecurring?: boolean;
   installmentCurrent?: number;
   installmentTotal?: number;
 }
