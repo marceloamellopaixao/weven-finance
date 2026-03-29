@@ -1,10 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus } from "lucide-react";
+import { 
+  ArrowLeft, Plus, Calendar, CreditCard, 
+  Tag, AlignLeft, ReceiptText, AlertCircle, Settings2, 
+  Layers, TrendingDown, TrendingUp, Info, Repeat
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CategoryManagerDialog } from "@/components/categories/CategoryManagerDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,7 +21,7 @@ import { addTransaction } from "@/services/transactionService";
 import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
 import { PaymentMethod, TransactionType } from "@/types/transaction";
-import { useEffect } from "react";
+import { formatCategoryLabel, orderCategoryNames } from "@/lib/category-utils";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -42,13 +46,18 @@ export default function NewTransactionPage() {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("debit_card");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState(new Date().toISOString().slice(0, 10));
+  
+  // Controles de Tipo de Cobrança (Com suas correções mantidas)
   const [isInstallment, setIsInstallment] = useState(false);
   const [installmentsCount, setInstallmentsCount] = useState("2");
+  const [isRecurring, setIsRecurring] = useState(false);
+
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
   const [selectedCardId, setSelectedCardId] = useState("");
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -57,10 +66,19 @@ export default function NewTransactionPage() {
     return subscribeToPaymentCards(user.uid, setPaymentCards, () => setPaymentCards([]));
   }, [user]);
 
-  const monthCategories = useMemo(
-    () => categories.filter((c) => c.type === type || c.type === "both"),
-    [categories, type]
-  );
+  const monthCategories = useMemo(() => {
+    const filtered = categories.filter((c) => c.type === type || c.type === "both");
+    const byName = new Map(filtered.map((cat) => [cat.name, cat]));
+    return orderCategoryNames(filtered.map((cat) => cat.name))
+      .map((name) => byName.get(name))
+      .filter((cat): cat is NonNullable<typeof cat> => Boolean(cat));
+  }, [categories, type]);
+
+  useEffect(() => {
+    if (!category) return;
+    if (monthCategories.some((item) => item.name === category)) return;
+    setCategory("");
+  }, [category, monthCategories]);
 
   const showDueDateInput = useMemo(() => {
     const method = PAYMENT_METHODS.find((m) => m.value === paymentMethod);
@@ -99,6 +117,17 @@ export default function NewTransactionPage() {
     return amountTotal <= Math.max(0, Number(card.creditLimit || 0) - used);
   };
 
+  // Funções de Exclusividade Mútua mantidas intactas
+  const handleToggleInstallment = (checked: boolean) => {
+    setIsInstallment(checked);
+    if (checked) setIsRecurring(false);
+  };
+
+  const handleToggleRecurring = (checked: boolean) => {
+    setIsRecurring(checked);
+    if (checked) setIsInstallment(false);
+  };
+
   const onSubmit = async () => {
     if (!user) return;
     setError("");
@@ -128,6 +157,7 @@ export default function NewTransactionPage() {
 
     setSaving(true);
     try {
+      // Passando as propriedades exatamente como nas suas correções
       await addTransaction(user.uid, {
         description: description.trim(),
         amount: value,
@@ -136,12 +166,12 @@ export default function NewTransactionPage() {
         paymentMethod,
         cardId: selectedCard?.id,
         cardLabel: selectedCard ? `${selectedCard.bankName} •••• ${selectedCard.last4}` : undefined,
-        cardType:
-          paymentMethod === "credit_card" || paymentMethod === "debit_card" ? paymentMethod : undefined,
+        cardType: paymentMethod === "credit_card" || paymentMethod === "debit_card" ? paymentMethod : undefined,
         date,
         dueDate: showDueDateInput ? dueDate : date,
         isInstallment,
         installmentsCount: count,
+        isRecurring, 
       });
       router.push("/dashboard");
     } catch (e) {
@@ -151,114 +181,270 @@ export default function NewTransactionPage() {
     }
   };
 
+  const isIncome = type === "income";
+
   return (
-    <div className="p-3 md:p-6">
-      <div className="mx-auto max-w-2xl">
-        <Button variant="ghost" className="mb-2" onClick={() => router.back()}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
-        </Button>
-        <Card className="rounded-2xl">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Plus className="h-5 w-5 text-violet-600" /> Nova Transação
-            </CardTitle>
-            <CardDescription>Fluxo otimizado para mobile e desktop.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.steps.firstTransaction && (
-              <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
-                Onboarding: salve sua primeira transação para completar esta etapa.
+    <div className="min-h-screen bg-zinc-50/30 dark:bg-zinc-950/30 p-4 md:p-8 pb-32 font-sans">
+      <div className="mx-auto max-w-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+        
+        {/* HEADER NOVO DESIGN */}
+        <div className="flex items-center gap-3 mb-6">
+          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-zinc-200/50 bg-white dark:bg-zinc-900 shadow-sm border" onClick={() => router.back()}>
+            <ArrowLeft className="h-5 w-5 text-zinc-600 dark:text-zinc-300" />
+          </Button>
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+            Novo Lançamento
+          </h1>
+        </div>
+
+        {/* ONBOARDING MESSAGE */}
+        {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.steps.firstTransaction && (
+          <div className="mb-6 rounded-2xl border border-violet-200 bg-violet-50 p-4 flex items-center gap-3 text-violet-800 text-sm shadow-sm">
+            <Info className="h-5 w-5 shrink-0 text-violet-600" />
+            <p><strong>Primeiros Passos:</strong> Salve sua primeira transação para completar o onboarding.</p>
+          </div>
+        )}
+
+        {/* ERROR MESSAGE */}
+        {error && (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 flex items-center gap-3 text-red-700 text-sm shadow-sm animate-in fade-in slide-in-from-top-2">
+            <AlertCircle className="h-5 w-5 shrink-0" />
+            <p>{error}</p>
+          </div>
+        )}
+
+        {/* MAIN CONTAINER UNIFICADO */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-4xl shadow-lg overflow-hidden mb-6">
+          
+          {/* HERO: TIPO & VALOR */}
+          <div className={`p-6 md:p-8 border-b border-zinc-100 dark:border-zinc-800/50 transition-colors duration-500 ${isIncome ? 'bg-emerald-300/50 dark:bg-emerald-950/20' : 'bg-red-300/50 dark:bg-red-950/20'}`}>
+            
+            {/* TOGGLE TIPO DE TRANSAÇÃO ELEGANTE */}
+            <div className="flex justify-center mb-8">
+              <div className="bg-white/60 dark:bg-zinc-950/40 p-1.5 rounded-2xl flex backdrop-blur-md shadow-sm border border-black/5 dark:border-white/5 w-full max-w-full">
+                  <button
+                    type="button"
+                    onClick={() => setType("expense")}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all hover:cursor-pointer ${!isIncome ? 'bg-white dark:bg-zinc-800 text-red-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                  >
+                  <TrendingDown className="h-4 w-4" /> Despesa
+                </button>
+                  <button
+                    type="button"
+                    onClick={() => setType("income")}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all hover:cursor-pointer ${isIncome ? 'bg-white dark:bg-zinc-800 text-emerald-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                  >
+                  <TrendingUp className="h-4 w-4" /> Receita
+                </button>
               </div>
-            )}
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant={type === "expense" ? "default" : "outline"} onClick={() => setType("expense")}>Despesa</Button>
-              <Button variant={type === "income" ? "default" : "outline"} onClick={() => setType("income")}>Receita</Button>
             </div>
+
+            {/* INPUT DE VALOR SEM BORDAS */}
+            <Label className="text-zinc-500 font-medium text-sm flex justify-start mb-2">Valor do lançamento</Label>
+            <div className="flex items-center justify-center gap-2">
+              <span className={`text-3xl font-bold transition-colors ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>R$</span>
+              <Input 
+                type="number" 
+                value={amount} 
+                onChange={(e) => setAmount(e.target.value)} 
+                placeholder="0,00"
+                className={`w-full max-w-full h-auto p-0 border-none shadow-none text-4xl md:text-5xl font-bold bg-transparent focus-visible:ring-0 text-start ${isIncome ? 'text-emerald-500 placeholder:text-emerald-500' : 'text-red-500 placeholder:text-red-500'}`}
+              />
+            </div>
+          </div>
+
+          {/* FORMULÁRIO GERAL */}
+          <div className="p-6 md:p-8 space-y-6">
+            
+            {/* DESCRIÇÃO */}
             <div className="space-y-2">
-              <Label>Descrição</Label>
-              <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex: Mercado" />
+              <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium">
+                <AlignLeft className="h-4 w-4 text-zinc-400" /> Descrição
+              </Label>
+              <Input 
+                value={description} 
+                onChange={(e) => setDescription(e.target.value)} 
+                className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 focus-visible:ring-violet-500 text-base font-medium"
+                placeholder="Ex: Supermercado"
+              />
             </div>
-            <div className="space-y-2">
-              <Label>Valor</Label>
-              <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
-            </div>
-            <div className="space-y-2">
-              <Label>Categoria</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {monthCategories.map((cat) => (
-                    <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Método de pagamento</Label>
-              <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PAYMENT_METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            {(paymentMethod === "credit_card" || paymentMethod === "debit_card") && (
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* CATEGORIA */}
               <div className="space-y-2">
-                <Label>Cartão vinculado</Label>
-                <Select value={selectedCardId} onValueChange={setSelectedCardId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione um cartão" /></SelectTrigger>
+                <div className="flex items-center justify-between">
+                  <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium">
+                    <Tag className="h-4 w-4 text-zinc-400" /> Categoria
+                  </Label>
+                  <button type="button" onClick={() => setIsCategoryManagerOpen(true)} className="text-xs font-semibold text-violet-600 hover:text-violet-700 flex items-center gap-1 hover:cursor-pointer">
+                    <Settings2 className="h-3 w-3" /> Gerenciar
+                  </button>
+                </div>
+                <Select value={category} onValueChange={setCategory}>
+                  <SelectTrigger className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 font-medium">
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
                   <SelectContent>
-                    {paymentCards.length === 0 ? (
-                      <SelectItem value="__none" disabled>Nenhum cartão cadastrado</SelectItem>
-                    ) : paymentCards.map((card) => (
-                      <SelectItem key={card.id} value={card.id}>
-                        {card.bankName} •••• {card.last4}
+                    {monthCategories.map((cat) => (
+                      <SelectItem key={cat.name} value={cat.name}>
+                        {formatCategoryLabel(cat.name)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              {/* DATA */}
               <div className="space-y-2">
-                <Label>Data</Label>
-                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium">
+                  <Calendar className="h-4 w-4 text-zinc-400" /> Data da Compra
+                </Label>
+                <Input 
+                  type="date" 
+                  value={date} 
+                  onChange={(e) => setDate(e.target.value)} 
+                  className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 font-medium"
+                />
               </div>
+
+              {/* MÉTODO DE PAGAMENTO */}
+              <div className="space-y-2">
+                <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium">
+                  <CreditCard className="h-4 w-4 text-zinc-400" /> Forma de Pagamento
+                </Label>
+                <Select
+                  value={paymentMethod}
+                  onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
+                >
+                  <SelectTrigger className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 font-medium">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* DATA DE VENCIMENTO (Condicional) */}
               {showDueDateInput && (
-                <div className="space-y-2">
-                  <Label>Vencimento</Label>
-                  <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                <div className="space-y-2 animate-in fade-in zoom-in-95">
+                  <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium">
+                    <Calendar className="h-4 w-4 text-zinc-400" /> Data de Vencimento
+                  </Label>
+                  <Input 
+                    type="date" 
+                    value={dueDate} 
+                    onChange={(e) => setDueDate(e.target.value)} 
+                    className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 font-medium"
+                  />
+                </div>
+              )}
+
+              {/* CARTÃO VINCULADO (Condicional) */}
+              {(paymentMethod === "credit_card" || paymentMethod === "debit_card") && (
+                <div className="space-y-2 md:col-span-2 animate-in fade-in slide-in-from-top-2">
+                  <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium">
+                    <ReceiptText className="h-4 w-4 text-zinc-400" /> Cartão Vinculado
+                  </Label>
+                  <Select
+                    value={selectedCardId}
+                    onValueChange={setSelectedCardId}
+                  >
+                    <SelectTrigger className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 font-medium">
+                      <SelectValue placeholder="Selecione um cartão para vincular" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {paymentCards.length === 0 ? (
+                        <SelectItem value="__none" disabled>Nenhum cartão cadastrado</SelectItem>
+                      ) : (
+                        paymentCards.map((card) => (
+                          <SelectItem key={card.id} value={card.id}>{card.bankName} •••• {card.last4}</SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
             </div>
-            {type === "expense" && (
-              <div className="rounded-xl border bg-zinc-50 p-3 space-y-2">
+
+            {/* OPÇÕES AVANÇADAS: RECORRÊNCIA E PARCELAMENTO */}
+            <div className="pt-6 mt-6 space-y-4 border-t border-zinc-100 dark:border-zinc-800/50">
+              <Label className="text-zinc-500 font-semibold text-xs tracking-wider uppercase">Opções Avançadas</Label>
+              
+              {/* ASSINATURA / FIXA (Disponível para Receita e Despesa) */}
+              <div className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${isRecurring ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900' : 'bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 hover:border-blue-200'}`} onClick={() => handleToggleRecurring(!isRecurring)}>
                 <div className="flex items-center justify-between">
-                  <Label>Compra parcelada</Label>
-                  <Switch checked={isInstallment} onCheckedChange={setIsInstallment} />
+                  <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium cursor-pointer">
+                    <Repeat className={`h-4 w-4 ${isRecurring ? 'text-blue-600' : 'text-zinc-400'}`} /> 
+                    Lançamento Fixo / Assinatura
+                  </Label>
+                  <Switch checked={isRecurring} onCheckedChange={handleToggleRecurring} onClick={(e) => e.stopPropagation()} />
                 </div>
-                {isInstallment && (
-                  <Input
-                    type="number"
-                    min={2}
-                    max={360}
-                    value={installmentsCount}
-                    onChange={(e) => setInstallmentsCount(e.target.value)}
-                    placeholder="Número de parcelas"
-                  />
+                {isRecurring && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 ml-6 animate-in fade-in">
+                    Este lançamento será repetido automaticamente todos os meses.
+                  </p>
                 )}
               </div>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
-              <Button variant="destructive" onClick={() => router.back()}>Cancelar</Button>
-              <Button onClick={onSubmit} disabled={saving} className="bg-violet-600 hover:bg-violet-700">
-                {saving ? "Salvando..." : "Salvar Transação"}
-              </Button>
+
+              {/* PARCELAMENTO (Apenas para Despesas) */}
+              {!isIncome && (
+                <div className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${isInstallment ? 'bg-violet-50/50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-900' : 'bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 hover:border-violet-200'}`} onClick={() => handleToggleInstallment(!isInstallment)}>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium cursor-pointer">
+                      <Layers className={`h-4 w-4 ${isInstallment ? 'text-violet-600' : 'text-zinc-400'}`} /> 
+                      Compra Parcelada
+                    </Label>
+                    <Switch checked={isInstallment} onCheckedChange={handleToggleInstallment} onClick={(e) => e.stopPropagation()} />
+                  </div>
+                  
+                  {isInstallment && (
+                    <div className="pt-4 mt-3 border-t border-violet-100 dark:border-violet-900/50 animate-in fade-in slide-in-from-top-2" onClick={(e) => e.stopPropagation()}>
+                      <Label className="text-zinc-500 text-xs mb-1.5 block">Em quantas vezes?</Label>
+                      <Input
+                        type="number"
+                        min={2}
+                        max={360}
+                        value={installmentsCount}
+                        onChange={(e) => setInstallmentsCount(e.target.value)}
+                        placeholder="Número de parcelas"
+                        className="h-11 rounded-xl bg-white dark:bg-zinc-900 border-violet-200 dark:border-violet-800 focus-visible:ring-violet-500 font-medium"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </CardContent>
-        </Card>
+
+          </div>
+        </div>
+
+        {/* ACTIONS */}
+        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          <Button variant="outline" onClick={() => router.back()} className="h-14 sm:flex-1 rounded-2xl border-zinc-200 text-zinc-700 bg-white hover:bg-zinc-50 text-base shadow-sm hover:cursor-pointer">
+            Cancelar
+          </Button>
+          <Button onClick={onSubmit} disabled={saving} className="h-14 sm:flex-2 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white shadow-sm text-base hover:cursor-pointer">
+            {saving ? (
+              <span className="flex items-center gap-2">
+                <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> Salvando...
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">{saving ? <><div className="h-10 w-10 rounded-full border-4 border-zinc-200 border-t-violet-600 animate-spin" /> Salvando...</> : <><Plus className="h-5 w-5" /> Adicionar Lançamento</>}</span>
+            )}
+          </Button>
+        </div>
+
       </div>
+
+      <CategoryManagerDialog
+        open={isCategoryManagerOpen}
+        onOpenChange={setIsCategoryManagerOpen}
+        type={type}
+        selectedCategory={category}
+        onSelectCategory={setCategory}
+      />
     </div>
   );
 }
