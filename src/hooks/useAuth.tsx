@@ -235,18 +235,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (pathname === "/verify-email") {
-      router.replace("/");
+      router.replace("/dashboard");
       return;
     }
 
     if (["/login", "/register", "/goodbye", "/blocked"].includes(pathname)) {
-      router.replace("/");
+      router.replace("/dashboard");
       return;
     }
 
     if (pathname.startsWith("/admin")) {
       if (userProfile.role !== "admin" && userProfile.role !== "moderator" && userProfile.role !== "support") {
-        router.replace("/");
+        router.replace("/dashboard");
       }
     }
   }, [loading, pathname, router, supabase.auth, user, userProfile]);
