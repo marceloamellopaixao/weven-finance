@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/billing-reconcile?onlyFailed=true&limit=50",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 4 * * *"
     },
     {
       "path": "/api/cron/data-retention",
