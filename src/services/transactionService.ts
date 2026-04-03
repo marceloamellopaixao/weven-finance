@@ -5,7 +5,6 @@ import { getImpersonationActionStatus } from "@/services/impersonationService";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
 
-const POLLING_INTERVAL_MS = 20000;
 const TRANSACTIONS_CHANGED_EVENT = "wevenfinance:transactions:changed";
 const USER_SETTINGS_CHANGED_EVENT = "wevenfinance:user-settings:changed";
 
@@ -17,11 +16,6 @@ function emitTransactionsChanged() {
 function emitUserSettingsChanged() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(USER_SETTINGS_CHANGED_EVENT));
-}
-
-function shouldPollNow() {
-  if (typeof document === "undefined") return true;
-  return document.visibilityState === "visible";
 }
 
 const addMonthsUTC = (dateStr: string, monthsToAdd: number): string => {
@@ -299,7 +293,6 @@ export const subscribeToTransactions = (
   const effectiveUid = resolveCryptoUid(uid);
 
   const run = async () => {
-    if (!shouldPollNow()) return;
     try {
       const data = await fetchTransactions(uid);
       if (!cancelled) onChange(data);
@@ -309,23 +302,18 @@ export const subscribeToTransactions = (
   };
 
   void run();
-  const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
   const stopRealtime = subscribeToTableChanges({
     table: "transactions",
     filter: `uid=eq.${effectiveUid}`,
     onChange: () => void run(),
   });
   const onChangedEvent = () => void run();
-  const onFocus = () => void run();
   window.addEventListener(TRANSACTIONS_CHANGED_EVENT, onChangedEvent);
-  window.addEventListener("focus", onFocus);
 
   return () => {
     cancelled = true;
-    clearInterval(interval);
     stopRealtime();
     window.removeEventListener(TRANSACTIONS_CHANGED_EVENT, onChangedEvent);
-    window.removeEventListener("focus", onFocus);
   };
 };
 
@@ -559,7 +547,6 @@ export const subscribeToUserSettings = (
   const effectiveUid = resolveCryptoUid(uid);
   let cancelled = false;
   const run = async () => {
-    if (!shouldPollNow()) return;
     try {
       const data = await fetchUserSettings();
       if (!cancelled) onChange(data);
@@ -569,22 +556,17 @@ export const subscribeToUserSettings = (
   };
 
   void run();
-  const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
   const stopRealtime = subscribeToTableChanges({
     table: "user_settings",
     filter: `uid=eq.${effectiveUid}`,
     onChange: () => void run(),
   });
   const onChangedEvent = () => void run();
-  const onFocus = () => void run();
   window.addEventListener(USER_SETTINGS_CHANGED_EVENT, onChangedEvent);
-  window.addEventListener("focus", onFocus);
   return () => {
     cancelled = true;
-    clearInterval(interval);
     stopRealtime();
     window.removeEventListener(USER_SETTINGS_CHANGED_EVENT, onChangedEvent);
-    window.removeEventListener("focus", onFocus);
   };
 };
 
