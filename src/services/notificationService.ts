@@ -15,8 +15,6 @@ export type AppNotification = {
   createdAt: string | null;
 };
 
-const POLLING_INTERVAL_MS = 15000;
-
 async function apiFetch(path: string, init?: RequestInit) {
   const token = await getAccessTokenOrThrow();
   return fetch(path, {
@@ -98,19 +96,14 @@ export function subscribeToNotifications(
   };
 
   void run();
-  const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
   const stopRealtime = subscribeToTableChanges({
     table: "notifications",
     filter: `uid=eq.${uid}`,
     onChange: () => void run(),
   });
-  const onFocus = () => void run();
-  window.addEventListener("focus", onFocus);
 
   return () => {
     cancelled = true;
-    clearInterval(interval);
     stopRealtime();
-    window.removeEventListener("focus", onFocus);
   };
 }
