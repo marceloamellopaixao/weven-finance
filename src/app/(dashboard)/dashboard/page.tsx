@@ -8,7 +8,6 @@ import { CATEGORY_PATH_SEPARATOR, useCategories } from "@/hooks/useCategories";
 import {
   addTransaction,
   deleteTransaction,
-  fetchTransactionsPage,
   updateTransaction,
   toggleTransactionStatus,
   cancelFutureInstallments,
@@ -27,7 +26,7 @@ import {
   DollarSign, CalendarDays, MoreHorizontal, Pencil, Trash2,
   AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown, Search, HelpCircle, CheckCircle2,
   Medal, Info, AlertTriangle,
-  Calculator, Loader2,
+  Calculator,
   Tag, Settings
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -37,8 +36,9 @@ import { useDashboardTour } from "@/hooks/useDashboardTour";
 import { confirmPreapproval, getCheckoutLink } from "@/services/billingService";
 import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useOnboarding } from "@/hooks/useOnboarding";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -153,6 +153,8 @@ const orderCategoryNames = (names: unknown[]) => {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user, userProfile, privacyMode, togglePrivacyMode } = useAuth();
   const { transactions, loading } = useTransactions();
   const { plans } = usePlans();
@@ -170,6 +172,7 @@ export default function DashboardPage() {
 
   // --- 1. STATES ---
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [isMonthBootstrapped, setIsMonthBootstrapped] = useState(false);
 
   // Filtros do Extrato
   const [filterType, setFilterType] = useState<"all" | "income" | "expense">("all");
@@ -179,9 +182,6 @@ export default function DashboardPage() {
 
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
-  const [pagedTransactions, setPagedTransactions] = useState<Transaction[]>([]);
-  const [pagedTransactionsTotal, setPagedTransactionsTotal] = useState(0);
-  const [isPagedTransactionsLoading, setIsPagedTransactionsLoading] = useState(false);
 
   // Form States
   const [desc, setDesc] = useState("");
@@ -201,6 +201,9 @@ export default function DashboardPage() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
+  const [bulkDeleteTargetIds, setBulkDeleteTargetIds] = useState<string[] | null>(null);
+  const [optimisticallyDeletedIds, setOptimisticallyDeletedIds] = useState<string[]>([]);
   const [txToCancelSubscription, setTxToCancelSubscription] = useState<Transaction | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
@@ -424,32 +427,56 @@ export default function DashboardPage() {
     };
   }, [selectedPaymentCard, paymentMethod, realCurrentBalance, getLinkedCardTransactions]);
 
-  const monthlyInsights = useMemo(() => {
-    const monthTransactions = transactions.filter(
-      (t) => typeof t.dueDate === "string" && t.dueDate.startsWith(selectedMonth)
-    );
+  const filteredStatementTransactions = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
 
-    const biggestExpense = monthTransactions
-      .filter((t) => t.type === "expense")
-      .sort((a, b) => b.amount - a.amount)[0];
-
-    const creditRisks = paymentCards
-      .filter((card) => card.type !== "debit_card")
-      .map((card) => {
-        const linked = getLinkedCardTransactions(card).filter((tx) => tx.paymentMethod === "credit_card" && tx.status === "pending");
-        const used = linked.reduce((acc, tx) => acc + Number(tx.amountForLimit ?? tx.amount ?? 0), 0);
-        const limit = Number(card.creditLimit || 0);
-        const usagePct = limit > 0 ? (used / limit) * 100 : 0;
-        return { card, used, limit, usagePct };
+    return transactions
+      .filter((tx) => typeof tx.dueDate === "string" && tx.dueDate.startsWith(selectedMonth))
+      .filter((tx) => !optimisticallyDeletedIds.includes(String(tx.id || "")))
+      .filter((tx) => filterType === "all" || tx.type === filterType)
+      .filter((tx) => filterStatus === "all" || tx.status === filterStatus)
+      .filter((tx) => filterCategory === "all" || tx.category === filterCategory)
+      .filter((tx) => {
+        if (!normalizedSearch) return true;
+        const description = String(tx.description || "").toLowerCase();
+        const amount = String(tx.amount || "").toLowerCase();
+        return description.includes(normalizedSearch) || amount.includes(normalizedSearch);
       })
-      .filter((item) => item.limit > 0 && item.usagePct >= 80)
-      .sort((a, b) => b.usagePct - a.usagePct);
+      .sort((a, b) => {
+        const dueCompare = String(b.dueDate || "").localeCompare(String(a.dueDate || ""));
+        if (dueCompare !== 0) return dueCompare;
+        const createdCompare = String(b.date || "").localeCompare(String(a.date || ""));
+        if (createdCompare !== 0) return createdCompare;
+        return String(b.id || "").localeCompare(String(a.id || ""));
+      });
+  }, [transactions, selectedMonth, filterType, filterStatus, filterCategory, searchTerm, optimisticallyDeletedIds]);
 
-    return {
-      biggestExpense,
-      topRisk: creditRisks[0] || null,
-    };
-  }, [transactions, selectedMonth, paymentCards, getLinkedCardTransactions]);
+  const pagedTransactions = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredStatementTransactions.slice(start, start + ITEMS_PER_PAGE);
+  }, [currentPage, filteredStatementTransactions]);
+
+  const currentPageSelectableIds = useMemo(
+    () => pagedTransactions.map((tx) => String(tx.id || "")).filter(Boolean),
+    [pagedTransactions]
+  );
+
+  const bulkDeleteTransactions = useMemo(() => {
+    const selectedIdSet = new Set(bulkDeleteTargetIds || []);
+    return transactions.filter((tx) => {
+      const id = String(tx.id || "");
+      return id && selectedIdSet.has(id);
+    });
+  }, [bulkDeleteTargetIds, transactions]);
+
+  const showAutomaticInsights = false;
+  const monthlyInsights: {
+    biggestExpense: Transaction | null;
+    topRisk: { card: PaymentCard; usagePct: number } | null;
+  } = {
+    biggestExpense: null,
+    topRisk: null,
+  };
 
   const validateCardLimitBeforeSave = ({
     card,
@@ -527,7 +554,41 @@ export default function DashboardPage() {
 
   // --- 5. EFFECTS ---
 
+  useEffect(() => {
+    if (isMonthBootstrapped) return;
+    const monthFromUrl = searchParams.get("month");
+    if (monthFromUrl && /^\d{4}-(0[1-9]|1[0-2])$/.test(monthFromUrl)) {
+      setSelectedMonth(monthFromUrl);
+    }
+    setIsMonthBootstrapped(true);
+  }, [isMonthBootstrapped, searchParams]);
+
+  useEffect(() => {
+    if (!isMonthBootstrapped) return;
+    const monthFromUrl = searchParams.get("month");
+    if (monthFromUrl !== selectedMonth) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("month", selectedMonth);
+      router.replace(`${pathname}?${params.toString()}`);
+    }
+  }, [isMonthBootstrapped, pathname, router, searchParams, selectedMonth]);
+
   useEffect(() => { setCurrentPage(1); }, [selectedMonth, filterType, filterStatus, filterCategory, searchTerm]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(filteredStatementTransactions.length / ITEMS_PER_PAGE));
+    setCurrentPage((prev) => Math.min(prev, totalPages));
+  }, [filteredStatementTransactions.length]);
+
+  useEffect(() => {
+    const validIds = new Set(filteredStatementTransactions.map((tx) => String(tx.id || "")).filter(Boolean));
+    setSelectedTransactionIds((prev) => prev.filter((id) => validIds.has(id)));
+  }, [filteredStatementTransactions]);
+
+  useEffect(() => {
+    const liveIds = new Set(transactions.map((tx) => String(tx.id || "")).filter(Boolean));
+    setOptimisticallyDeletedIds((prev) => prev.filter((id) => liveIds.has(id)));
+  }, [transactions]);
 
   useEffect(() => {
     const categoryRoot = getCategoryRoot(category);
@@ -576,47 +637,6 @@ export default function DashboardPage() {
       }
     }
   }, [availablePaymentCards, paymentCards, paymentMethod, selectedPaymentCardId]);
-
-  useEffect(() => {
-    const effectiveUid = userProfile?.uid || user?.uid;
-    if (!effectiveUid) {
-      setPagedTransactions([]);
-      setPagedTransactionsTotal(0);
-      return;
-    }
-
-    let cancelled = false;
-    const loadPage = async () => {
-      try {
-        setIsPagedTransactionsLoading(true);
-        const pageData = await fetchTransactionsPage(effectiveUid, {
-          page: currentPage,
-          limit: ITEMS_PER_PAGE,
-          month: selectedMonth,
-          type: filterType,
-          status: filterStatus,
-          category: filterCategory,
-          q: searchTerm,
-        });
-        if (cancelled) return;
-        setPagedTransactions(pageData.transactions);
-        setPagedTransactionsTotal(pageData.total);
-      } catch (error) {
-        if (!cancelled) {
-          setPagedTransactions([]);
-          setPagedTransactionsTotal(0);
-        }
-        console.error("Erro ao carregar extrato paginado:", error);
-      } finally {
-        if (!cancelled) setIsPagedTransactionsLoading(false);
-      }
-    };
-
-    void loadPage();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentPage, filterCategory, filterStatus, filterType, searchTerm, selectedMonth, user?.uid, userProfile?.uid]);
 
   // --- RETORNO CONDICIONAL ---
   if (loading) return <DashboardSkeleton />;
@@ -845,8 +865,74 @@ export default function DashboardPage() {
 
   const handleConfirmDelete = async (deleteGroup: boolean) => {
     if (!user || !txToDelete || !txToDelete.id) return;
+    const deletedIds = deleteGroup && txToDelete.groupId
+      ? transactions
+          .filter((tx) => tx.groupId === txToDelete.groupId)
+          .map((tx) => String(tx.id || ""))
+          .filter(Boolean)
+      : [String(txToDelete.id)];
+    setOptimisticallyDeletedIds((prev) => Array.from(new Set([...prev, ...deletedIds])));
     await deleteTransaction(user.uid, txToDelete.id, deleteGroup);
+    setSelectedTransactionIds((prev) => prev.filter((id) => id !== String(txToDelete.id)));
     setTxToDelete(null);
+  };
+
+  const handleConfirmBulkDelete = async (deleteGroup: boolean) => {
+    if (!user || !bulkDeleteTargetIds || bulkDeleteTargetIds.length === 0) return;
+
+    const selectedIdSet = new Set(bulkDeleteTargetIds);
+    const selected = transactions.filter((tx) => {
+      const id = String(tx.id || "");
+      return id && selectedIdSet.has(id);
+    });
+
+    if (selected.length === 0) {
+      setBulkDeleteTargetIds(null);
+      setSelectedTransactionIds([]);
+      return;
+    }
+
+    if (deleteGroup) {
+      const processedGroupIds = new Set<string>();
+      const optimisticIds: string[] = [];
+      for (const tx of selected) {
+        if (!tx.id) continue;
+        if (tx.groupId) {
+          if (processedGroupIds.has(tx.groupId)) continue;
+          processedGroupIds.add(tx.groupId);
+          optimisticIds.push(
+            ...transactions
+              .filter((item) => item.groupId === tx.groupId)
+              .map((item) => String(item.id || ""))
+              .filter(Boolean)
+          );
+          continue;
+        }
+        optimisticIds.push(String(tx.id));
+      }
+      setOptimisticallyDeletedIds((prev) => Array.from(new Set([...prev, ...optimisticIds])));
+      processedGroupIds.clear();
+      for (const tx of selected) {
+        if (!tx.id) continue;
+        if (tx.groupId) {
+          if (processedGroupIds.has(tx.groupId)) continue;
+          processedGroupIds.add(tx.groupId);
+          await deleteTransaction(user.uid, tx.id, true);
+          continue;
+        }
+        await deleteTransaction(user.uid, tx.id, false);
+      }
+    } else {
+      const optimisticIds = selected.map((tx) => String(tx.id || "")).filter(Boolean);
+      setOptimisticallyDeletedIds((prev) => Array.from(new Set([...prev, ...optimisticIds])));
+      for (const tx of selected) {
+        if (!tx.id) continue;
+        await deleteTransaction(user.uid, tx.id, false);
+      }
+    }
+
+    setSelectedTransactionIds([]);
+    setBulkDeleteTargetIds(null);
   };
 
   const handleConfirmCancelSubscription = async () => {
@@ -1130,7 +1216,7 @@ export default function DashboardPage() {
 
   const monthTransactions = transactions.filter(t => t.dueDate && t.dueDate.startsWith(selectedMonth));
 
-  const totalPages = Math.max(1, Math.ceil(pagedTransactionsTotal / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredStatementTransactions.length / ITEMS_PER_PAGE));
 
   const monthIncome = monthTransactions.filter(t => t.type === 'income').reduce((acc, curr) => acc + curr.amount, 0);
   const monthExpense = monthTransactions.filter(t => t.type === 'expense').reduce((acc, curr) => acc + curr.amount, 0);
@@ -1408,6 +1494,7 @@ export default function DashboardPage() {
           </Card>
         )}
 
+        {showAutomaticInsights && (
         <Card className={`${fadeInUp} delay-120 border-none shadow-lg bg-white dark:bg-zinc-900 rounded-2xl`}>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Insights Automáticos</CardTitle>
@@ -1440,6 +1527,7 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+        )}
 
         {upgradePrompt && (
           <Card className={`${fadeInUp} delay-130 border-none shadow-lg rounded-2xl ${
@@ -1672,14 +1760,48 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+              <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <label className="flex items-center gap-2 text-xs text-zinc-500">
+                  <Checkbox
+                    checked={currentPageSelectableIds.length > 0 && currentPageSelectableIds.every((id) => selectedTransactionIds.includes(id))}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedTransactionIds((prev) => Array.from(new Set([...prev, ...currentPageSelectableIds])));
+                        return;
+                      }
+                      setSelectedTransactionIds((prev) => prev.filter((id) => !currentPageSelectableIds.includes(id)));
+                    }}
+                    className="cursor-pointer"
+                  />
+                  Selecionar itens desta página
+                </label>
+                {selectedTransactionIds.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-zinc-500">
+                      {selectedTransactionIds.length} selecionada(s)
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs rounded-lg hover:cursor-pointer duration-200"
+                      onClick={() => setSelectedTransactionIds([])}
+                    >
+                      Limpar seleção
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs rounded-lg bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200"
+                      onClick={() => setBulkDeleteTargetIds(selectedTransactionIds)}
+                    >
+                      <Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir selecionadas
+                    </Button>
+                  </div>
+                )}
+              </div>
             </CardHeader>
 
             <div className="p-3">
-              {isPagedTransactionsLoading ? (
-                <div className="h-28 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/50 flex items-center justify-center text-sm text-zinc-500">
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando extrato...
-                </div>
-              ) : pagedTransactions.length === 0 ? (
+              {pagedTransactions.length === 0 ? (
                 <div className="h-28 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/50 flex items-center justify-center text-sm text-zinc-400">
                   Nenhum lançamento encontrado com estes filtros.
                 </div>
@@ -1687,10 +1809,23 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
                 {pagedTransactions.map((tx) => {
                   const overdue = isOverdue(tx);
+                  const txId = String(tx.id || "");
                   return (
                     <div key={tx.id} className={`rounded-2xl border p-3 space-y-2.5 ${overdue ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-900/10" : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/40"}`}>
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <Checkbox
+                            checked={selectedTransactionIds.includes(txId)}
+                            onCheckedChange={(checked) => {
+                              if (!txId) return;
+                              setSelectedTransactionIds((prev) => {
+                                if (checked) return Array.from(new Set([...prev, txId]));
+                                return prev.filter((id) => id !== txId);
+                              });
+                            }}
+                            className="mt-0.5 cursor-pointer"
+                          />
+                          <div className="min-w-0">
                           <p className={`text-sm font-semibold truncate ${tx.status === "paid" ? "line-through text-zinc-400" : "text-zinc-800 dark:text-zinc-100"}`}>
                             {tx.description}
                           </p>
@@ -1699,6 +1834,7 @@ export default function DashboardPage() {
                             {formatDateDisplay(tx.dueDate)}
                             {overdue && <AlertCircle className="h-3.5 w-3.5 text-red-500" />}
                           </p>
+                          </div>
                         </div>
                         {renderTransactionActions(tx)}
                       </div>
@@ -1754,7 +1890,7 @@ export default function DashboardPage() {
                   size="sm"
                   className="h-8 text-xs disabled:opacity-50 rounded-lg hover:cursor-pointer duration-200"
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1 || isPagedTransactionsLoading}
+                  disabled={currentPage === 1}
                 >
                   Anterior
                 </Button>
@@ -1763,7 +1899,7 @@ export default function DashboardPage() {
                   size="sm"
                   className="h-8 text-xs disabled:opacity-50 rounded-lg hover:cursor-pointer duration-200"
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage >= totalPages || isPagedTransactionsLoading}
+                  disabled={currentPage >= totalPages}
                 >
                   Próximo
                 </Button>
@@ -2053,6 +2189,56 @@ export default function DashboardPage() {
                 </Button>
               )}
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!bulkDeleteTargetIds} onOpenChange={(open) => !open && setBulkDeleteTargetIds(null)}>
+          <DialogContent className="sm:max-w-[425px] rounded-2xl p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <AlertCircle className="h-6 w-6" /> Excluir Selecionadas
+              </DialogTitle>
+              <DialogDescription className="pt-2 text-base">
+                Você selecionou <strong>{bulkDeleteTransactions.length}</strong> lançamento(s).
+                {bulkDeleteTransactions.some((tx) => !!tx.groupId)
+                  ? " Alguns itens fazem parte de parcelamentos ou recorrências."
+                  : " Essa ação não poderá ser desfeita."}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="mt-4 flex flex-col gap-2">
+              {bulkDeleteTransactions.some((tx) => !!tx.groupId) ? (
+                <>
+                  <Button
+                    className="w-full rounded-xl h-10 hover:cursor-pointer duration-200"
+                    variant="outline"
+                    onClick={() => void handleConfirmBulkDelete(false)}
+                  >
+                    Excluir apenas os itens selecionados
+                  </Button>
+                  <Button
+                    className="w-full rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200"
+                    onClick={() => void handleConfirmBulkDelete(true)}
+                  >
+                    Excluir também todas as parcelas dos grupos
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  className="w-full rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200"
+                  onClick={() => void handleConfirmBulkDelete(false)}
+                >
+                  Confirmar exclusao
+                </Button>
+              )}
+              <Button
+                className="w-full rounded-xl h-10 hover:cursor-pointer duration-200"
+                variant="ghost"
+                onClick={() => setBulkDeleteTargetIds(null)}
+              >
+                Cancelar
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
 
