@@ -254,7 +254,7 @@ export default function PiggyBankDetailPage() {
           <DialogContent className="rounded-2xl">
             <DialogHeader>
               <DialogTitle>Ajustar saldo do porquinho</DialogTitle>
-              <DialogDescription>Voce pode adicionar mais valor ou retirar parte do saldo guardado.</DialogDescription>
+              <DialogDescription>Você pode adicionar mais valor ou retirar parte do saldo guardado.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -271,7 +271,7 @@ export default function PiggyBankDetailPage() {
                 <Label>Valor</Label>
                 <Input value={adjustAmount} onChange={(e) => setAdjustAmount(e.target.value)} placeholder="R$ 0,00" inputMode="decimal" />
                 {adjustDirection === "withdraw" && (
-                  <p className="text-xs text-zinc-500">Saldo disponivel para retirada: {formatCurrency(detail.totalSaved)}</p>
+                  <p className="text-xs text-zinc-500">Saldo disponível para retirada: {formatCurrency(detail.totalSaved)}</p>
                 )}
               </div>
               <div className="space-y-2">
@@ -298,7 +298,7 @@ export default function PiggyBankDetailPage() {
           <DialogContent className="rounded-2xl">
             <DialogHeader>
               <DialogTitle>Editar porquinho</DialogTitle>
-              <DialogDescription>Atualize o nome e as informacoes complementares deste porquinho.</DialogDescription>
+              <DialogDescription>Atualize o nome e as informações complementares deste porquinho.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -317,7 +317,7 @@ export default function PiggyBankDetailPage() {
             <DialogFooter>
               <Button variant="ghost" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
               <Button onClick={handleEdit} disabled={isSubmitting || !editName.trim()}>
-                {isSubmitting ? "Salvando..." : "Salvar alteracoes"}
+                {isSubmitting ? "Salvando..." : "Salvar alterações"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -328,7 +328,7 @@ export default function PiggyBankDetailPage() {
             <DialogHeader>
               <DialogTitle>Excluir porquinho</DialogTitle>
               <DialogDescription>
-                Essa acao remove o porquinho, o histórico dele e desfaz vinculos aplicados, como aumento de limite em cartao.
+                Essa ação remove o porquinho, o histórico dele e desfaz vínculos aplicados, como aumento de limite em cartão.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
