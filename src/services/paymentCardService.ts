@@ -123,17 +123,12 @@ export const subscribeToPaymentCards = (
     onChange: () => void run(),
   });
   const onChangedEvent = () => void run();
-  const interval = setInterval(() => void run(), 20000);
-  const onFocus = () => void run();
   window.addEventListener(PAYMENT_CARDS_CHANGED_EVENT, onChangedEvent);
-  window.addEventListener("focus", onFocus);
 
   return () => {
     cancelled = true;
     stopRealtime();
-    clearInterval(interval);
     window.removeEventListener(PAYMENT_CARDS_CHANGED_EVENT, onChangedEvent);
-    window.removeEventListener("focus", onFocus);
   };
 };
 
