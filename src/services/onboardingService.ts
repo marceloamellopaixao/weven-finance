@@ -22,8 +22,6 @@ type OnboardingUpdatePayload = {
   steps?: Partial<OnboardingStatus["steps"]>;
 };
 
-const POLLING_INTERVAL_MS = 20000;
-
 async function apiFetch(path: string, init?: RequestInit) {
   const token = await getAccessTokenOrThrow();
   return fetch(path, {
@@ -78,21 +76,16 @@ export function subscribeToOnboarding(
   };
 
   void run();
-  const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
   const stopTransactions = subscribeToTableChanges({ table: "transactions", filter: `uid=eq.${uid}`, onChange: () => void run() });
   const stopCards = subscribeToTableChanges({ table: "payment_cards", filter: `uid=eq.${uid}`, onChange: () => void run() });
   const stopGoals = subscribeToTableChanges({ table: "piggy_banks", filter: `uid=eq.${uid}`, onChange: () => void run() });
   const stopSettings = subscribeToTableChanges({ table: "user_settings", filter: `uid=eq.${uid}`, onChange: () => void run() });
-  const onFocus = () => void run();
-  window.addEventListener("focus", onFocus);
 
   return () => {
     cancelled = true;
-    clearInterval(interval);
     stopTransactions();
     stopCards();
     stopGoals();
     stopSettings();
-    window.removeEventListener("focus", onFocus);
   };
 }
