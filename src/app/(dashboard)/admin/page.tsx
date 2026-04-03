@@ -370,6 +370,7 @@ export default function AdminPage() {
   // Permissão de Edição de Plano/Status
   const canEditPlan = useCallback((targetUser: UserProfile) => {
     if (!userProfile) return false;
+    if (targetUser.uid === userProfile.uid) return userProfile.role === "admin";
 
     const hierarchy = { admin: 3, moderator: 2, support: 1, client: 0 };
     const myRank = hierarchy[userProfile.role];
@@ -386,7 +387,10 @@ export default function AdminPage() {
     if (!userProfile) return false;
 
     // Ninguém edita a si mesmo nestas ações
-    if (targetUser.uid === userProfile.uid) return false;
+    if (targetUser.uid === userProfile.uid) return userProfile.uid === CREATOR_SUPREME;
+
+    // Criador Supremo pode se editar
+    if (userProfile.uid === CREATOR_SUPREME) return true;
 
     const hierarchy: Record<UserRole, number> = { admin: 3, moderator: 2, support: 1, client: 0 };
     const myRank = hierarchy[userProfile.role];
@@ -398,6 +402,24 @@ export default function AdminPage() {
     // Regra geral: Só edita quem está abaixo na hierarquia
     return myRank > targetRank;
   }, [userProfile]);
+
+  const canResetUser = useCallback((targetUser: UserProfile) => {
+    if (!userProfile) return false;
+    if (targetUser.uid === userProfile.uid) return userProfile.uid === CREATOR_SUPREME;
+    return canEditUser(targetUser);
+  }, [canEditUser, userProfile]);
+
+  const canDeleteUser = useCallback((targetUser: UserProfile) => {
+    if (!userProfile) return false;
+    if (targetUser.uid === userProfile.uid) return false;
+    return canEditUser(targetUser);
+  }, [canEditUser, userProfile]);
+
+  const canToggleUserStatus = useCallback((targetUser: UserProfile) => {
+    if (!userProfile) return false;
+    if (targetUser.uid === userProfile.uid) return false;
+    return canEditUser(targetUser);
+  }, [canEditUser, userProfile]);
 
   // --- Guards ---
   useEffect(() => {
@@ -770,13 +792,13 @@ export default function AdminPage() {
       finished.length === 0
         ? 0
         : Math.round(
-            finished.reduce((acc, ticket) => {
-              const start = parseIsoToMs(ticket.createdAt);
-              const end = parseIsoToMs(ticket.resolvedAt || null);
-              if (!start || !end || end < start) return acc;
-              return acc + (end - start) / 60000;
-            }, 0) / finished.length
-          );
+          finished.reduce((acc, ticket) => {
+            const start = parseIsoToMs(ticket.createdAt);
+            const end = parseIsoToMs(ticket.resolvedAt || null);
+            if (!start || !end || end < start) return acc;
+            return acc + (end - start) / 60000;
+          }, 0) / finished.length
+        );
 
     return {
       open: openTickets.length,
@@ -1438,16 +1460,16 @@ export default function AdminPage() {
 
         <div className={`${fadeInUp} delay-150 space-y-6`}>
           {/* Navegação de Abas Moderna */}
-          <div className="grid w-full grid-cols-1 gap-1 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-2 xl:w-fit xl:grid-flow-col">
+          <div className="grid w-full grid-cols-1 gap-1 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-2 xl:w-full xl:grid-flow-col">
             {/* Aba Usuários: Apenas Admin e Moderator */}
             {(userProfile?.role === 'admin' || userProfile?.role === 'moderator') && (
-              <button type="button" aria-pressed={activeTab === "users"} onClick={() => setActiveTabAndPersist("users")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "users" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-pressed={activeTab === "users"} onClick={() => setActiveTabAndPersist("users")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "users" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <UserIcon className="h-4 w-4" /> Gerenciar Usuários
               </button>
             )}
 
             {/* Aba Suporte: Todos da Equipe */}
-            <button type="button" aria-pressed={activeTab === "support"} onClick={() => setActiveTabAndPersist("support")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "support" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button type="button" aria-pressed={activeTab === "support"} onClick={() => setActiveTabAndPersist("support")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "support" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <HeadphonesIcon className="h-4 w-4" /> Suporte & Ideias
               {unseenSupportCount > 0 && (
                 <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">
@@ -1456,18 +1478,18 @@ export default function AdminPage() {
               )}
             </button>
 
-            <button type="button" aria-pressed={activeTab === "audit"} onClick={() => setActiveTabAndPersist("audit")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "audit" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button type="button" aria-pressed={activeTab === "audit"} onClick={() => setActiveTabAndPersist("audit")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "audit" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <ShieldCheck className="h-4 w-4" /> Auditoria
             </button>
 
             {canRestore && (
-              <button type="button" aria-pressed={activeTab === "restore"} onClick={() => setActiveTabAndPersist("restore")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "restore" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-pressed={activeTab === "restore"} onClick={() => setActiveTabAndPersist("restore")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "restore" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <History className="h-4 w-4" /> Restaurar Dados
               </button>
             )}
 
             {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
-              <button type="button" aria-pressed={activeTab === "metrics"} onClick={() => setActiveTabAndPersist("metrics")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "metrics" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-pressed={activeTab === "metrics"} onClick={() => setActiveTabAndPersist("metrics")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "metrics" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <Calculator className="h-4 w-4" /> Métricas
                 {criticalMetricsAlerts.length > 0 && (
                   <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-bold">
@@ -1478,13 +1500,13 @@ export default function AdminPage() {
             )}
 
             {canManageSensitive && (
-              <button type="button" aria-pressed={activeTab === "plans"} onClick={() => setActiveTabAndPersist("plans")} className={`flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "plans" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-pressed={activeTab === "plans"} onClick={() => setActiveTabAndPersist("plans")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "plans" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <CreditCard className="h-4 w-4" /> Gerenciar Planos
               </button>
             )}
           </div>
 
-          {/* --- SUPORTE TAB --- */}
+          {/* --- SUPPORT TAB --- */}
           {activeTab === "support" && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
@@ -1994,7 +2016,7 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* --- USERS TAB --- */}
+          {/* --- AUDIT TAB --- */}
           {activeTab === "audit" && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
@@ -2159,6 +2181,7 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* --- METRICS TAB --- */}
           {activeTab === "metrics" && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
@@ -2339,6 +2362,7 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* --- USERS TAB --- */}
           {activeTab === "users" && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               {/* Filtros e Busca */}
@@ -2450,6 +2474,9 @@ export default function AdminPage() {
                         const canChangeRole = canEditRole(u);
                         const canChangePlan = canEditPlan(u);
                         const canEditThisUser = canEditUser(u);
+                        const canResetThisUser = canResetUser(u);
+                        const canDeleteThisUser = canDeleteUser(u);
+                        const canChangePayment = canEditThisUser || (userProfile?.role === "admin" && u.uid === userProfile.uid);
                         return (
                           <div key={u.uid} className="rounded-2xl border border-zinc-200 bg-white p-3 space-y-3">
                             <div className="flex items-start justify-between gap-2">
@@ -2469,7 +2496,7 @@ export default function AdminPage() {
                                 <DropdownMenuContent align="end" className="rounded-xl p-1 shadow-xl border-zinc-200 dark:border-zinc-800">
                                   <DropdownMenuLabel className="text-xs">Ações</DropdownMenuLabel>
                                   <DropdownMenuSeparator />
-                                  {canImpersonateUsers && (
+                                  {canImpersonateUsers && u.uid !== userProfile?.uid && (
                                     <DropdownMenuItem
                                       onClick={() => handleRequestImpersonation(u)}
                                       disabled={!canEditThisUser}
@@ -2482,7 +2509,7 @@ export default function AdminPage() {
                                     <>
                                       <DropdownMenuItem
                                         onClick={() => setUserToReset(u)}
-                                        disabled={!canEditThisUser}
+                                        disabled={!canResetThisUser}
                                         className="cursor-pointer rounded-lg text-xs font-medium disabled:opacity-50"
                                       >
                                         <RefreshCcw className="mr-2 h-4 w-4" /> Resetar Dados
@@ -2490,7 +2517,7 @@ export default function AdminPage() {
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
                                         onClick={() => setUserToDelete(u)}
-                                        disabled={!canEditThisUser}
+                                        disabled={!canDeleteThisUser}
                                         className="text-red-600 focus:text-red-700 focus:bg-red-50 cursor-pointer rounded-lg text-xs font-medium dark:focus:bg-red-900/20 disabled:opacity-50"
                                       >
                                         <Trash2 className="mr-2 h-4 w-4" /> Excluir Conta
@@ -2556,7 +2583,7 @@ export default function AdminPage() {
                                 <Select
                                   value={u.paymentStatus || "free"}
                                   onValueChange={(val) => handlePaymentStatusChange(u.uid, val)}
-                                  disabled={!canEditThisUser}
+                                  disabled={!canChangePayment}
                                 >
                                   <SelectTrigger className="w-full h-8 text-xs rounded-lg"><SelectValue /></SelectTrigger>
                                   <SelectContent>
@@ -2611,6 +2638,10 @@ export default function AdminPage() {
                           const canChangeRole = canEditRole(u);
                           const canChangePlan = canEditPlan(u);
                           const canEditThisUser = canEditUser(u);
+                          const canResetThisUser = canResetUser(u);
+                          const canDeleteThisUser = canDeleteUser(u);
+                          const canToggleStatusForUser = canToggleUserStatus(u);
+                          const canChangePayment = canEditThisUser || (userProfile?.role === "admin" && u.uid === userProfile.uid);
 
                           return (
                             <TableRow key={u.uid} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-zinc-100 dark:border-zinc-800 transition-colors">
@@ -2680,33 +2711,33 @@ export default function AdminPage() {
                                   </div>
                                 ) : (
                                   <div className="space-y-1">
-                                  <Select
-                                    value={u.paymentStatus || 'free'}
-                                    onValueChange={(val) => handlePaymentStatusChange(u.uid, val)}
-                                    disabled={!canEditThisUser}
-                                  >
-                                    <SelectTrigger className={`w-[110px] h-8 text-xs border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 rounded-lg ${u.paymentStatus === 'overdue' || u.paymentStatus === 'not_paid' ? 'text-red-600 font-bold' :
-                                      u.paymentStatus === 'paid' ? 'text-emerald-600 font-medium' : ''
-                                      }`}>
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="free">Grátis</SelectItem>
-                                      <SelectItem value="paid">Pago</SelectItem>
-                                      <SelectItem value="pending">Pendente</SelectItem>
-                                      <SelectItem value="not_paid">Não Pago</SelectItem>
-                                      <SelectItem value="overdue">Atrasado</SelectItem>
-                                      <SelectItem value="canceled">Cancelado</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                  <p className="text-[10px] text-zinc-500 leading-none">
-                                    {u.billing?.source === "mercadopago_webhook" ? "Fonte: Webhook MP" : "Fonte: Manual"}
-                                  </p>
-                                  {u.billing?.lastSyncAt && (
-                                    <p className="text-[10px] text-zinc-400 leading-none">
-                                      Sync: {new Date(u.billing.lastSyncAt).toLocaleDateString()}
+                                    <Select
+                                      value={u.paymentStatus || 'free'}
+                                      onValueChange={(val) => handlePaymentStatusChange(u.uid, val)}
+                                      disabled={!canChangePayment}
+                                    >
+                                      <SelectTrigger className={`w-[110px] h-8 text-xs border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 rounded-lg ${u.paymentStatus === 'overdue' || u.paymentStatus === 'not_paid' ? 'text-red-600 font-bold' :
+                                        u.paymentStatus === 'paid' ? 'text-emerald-600 font-medium' : ''
+                                        }`}>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="free">Grátis</SelectItem>
+                                        <SelectItem value="paid">Pago</SelectItem>
+                                        <SelectItem value="pending">Pendente</SelectItem>
+                                        <SelectItem value="not_paid">Não Pago</SelectItem>
+                                        <SelectItem value="overdue">Atrasado</SelectItem>
+                                        <SelectItem value="canceled">Cancelado</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <p className="text-[10px] text-zinc-500 leading-none">
+                                      {u.billing?.source === "mercadopago_webhook" ? "Fonte: Webhook MP" : "Fonte: Manual"}
                                     </p>
-                                  )}
+                                    {u.billing?.lastSyncAt && (
+                                      <p className="text-[10px] text-zinc-400 leading-none">
+                                        Sync: {new Date(u.billing.lastSyncAt).toLocaleDateString()}
+                                      </p>
+                                    )}
                                   </div>
                                 )}
                               </TableCell>
@@ -2727,8 +2758,8 @@ export default function AdminPage() {
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      disabled={!canEditThisUser}
-                                      className="h-8 w-8 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                      disabled={!canToggleStatusForUser}
+                                      className="h-8 w-8 text-zinc-400 hover:text-red-500 hover:bg-red-50 hover:cursor-pointer dark:hover:bg-red-900/20 rounded-lg transition-colors"
                                       title="Bloquear Usuário"
                                       onClick={() => handleStatusChange(u.uid, "blocked")}
                                     >
@@ -2738,8 +2769,8 @@ export default function AdminPage() {
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      disabled={!canEditThisUser}
-                                      className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
+                                      disabled={!canToggleStatusForUser}
+                                      className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 hover:cursor-pointer dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
                                       title="Reativar Usuário"
                                       onClick={() => handleStatusChange(u.uid, "active")}
                                     >
@@ -2756,7 +2787,7 @@ export default function AdminPage() {
                                     <DropdownMenuContent align="end" className="rounded-xl p-1 shadow-xl border-zinc-200 dark:border-zinc-800">
                                       <DropdownMenuLabel className="text-xs">Ações</DropdownMenuLabel>
                                       <DropdownMenuSeparator />
-                                      {canImpersonateUsers && (
+                                      {canImpersonateUsers && u.uid !== userProfile?.uid && (
                                         <>
                                           <DropdownMenuItem
                                             onClick={() => handleRequestImpersonation(u)}
@@ -2771,14 +2802,14 @@ export default function AdminPage() {
                                         <>
                                           <DropdownMenuItem
                                             onClick={() => setUserToReset(u)}
-                                            disabled={!canEditThisUser}
+                                            disabled={!canResetThisUser}
                                             className="cursor-pointer rounded-lg text-xs font-medium disabled:opacity-50">
                                             <RefreshCcw className="mr-2 h-4 w-4" /> Resetar Dados
                                           </DropdownMenuItem>
                                           <DropdownMenuSeparator />
                                           <DropdownMenuItem
                                             onClick={() => setUserToDelete(u)}
-                                            disabled={!canEditThisUser}
+                                            disabled={!canDeleteThisUser}
                                             className="text-red-600 focus:text-red-700 focus:bg-red-50 cursor-pointer rounded-lg text-xs font-medium dark:focus:bg-red-900/20 disabled:opacity-50"
                                           >
                                             <Trash2 className="mr-2 h-4 w-4" /> Excluir Conta
