@@ -715,7 +715,7 @@ export default function CreditCardPage() {
                 </div>
                 {activeCard && (
                   <div className="pt-2">
-                    <Link href={`/porquinho?goal=card_limit&cardId=${encodeURIComponent(activeCard.id)}`}>
+                    <Link href={`/porquinho/novo?goal=card_limit&cardId=${encodeURIComponent(activeCard.id)}`}>
                       <Button className="rounded-xl bg-violet-600 hover:bg-violet-700 text-white">
                         <PiggyBank className="mr-2 h-4 w-4" />
                         Aumentar limite com Cofrinho do Cartão
