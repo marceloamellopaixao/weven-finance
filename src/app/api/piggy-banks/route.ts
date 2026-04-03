@@ -190,6 +190,8 @@ export async function POST(request: NextRequest) {
       name: goalName,
       goalType,
       totalSaved: nextTotal,
+      ...(cardId ? { cardId } : {}),
+      ...(cardLabel ? { cardLabel } : {}),
       ...(withdrawalMode ? { withdrawalMode } : {}),
       ...(yieldType ? { yieldType } : {}),
       lastDepositAt: nowIso,
@@ -255,6 +257,7 @@ export async function POST(request: NextRequest) {
     const txId = crypto.randomUUID();
     const txRaw = {
       userId: uid,
+      piggyBankSlug: slug,
       description: `Aporte no Cofrinho: ${goalName}`,
       amount,
       amountForLimit: amount,
