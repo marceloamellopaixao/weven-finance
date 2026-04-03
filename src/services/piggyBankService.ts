@@ -114,4 +114,3 @@ export async function deletePiggyBank(slug: string) {
     throw new Error(payload.error || "Não foi possível excluir o porquinho");
   }
 }
-
