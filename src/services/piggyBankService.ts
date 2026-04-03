@@ -62,3 +62,56 @@ export async function savePiggyDeposit(input: SavePiggyDepositInput) {
   return payload.slug;
 }
 
+export interface UpdatePiggyBankInput {
+  name: string;
+  withdrawalMode?: string;
+  yieldType?: string;
+}
+
+export async function updatePiggyBank(slug: string, input: UpdatePiggyBankInput) {
+  const response = await fetchWithAuth(`/api/piggy-banks/${encodeURIComponent(slug)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      action: "edit",
+      ...input,
+    }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string; piggyBank?: PiggyBankDetail };
+  if (!response.ok || !payload.ok || !payload.piggyBank) {
+    throw new Error(payload.error || "Não foi possível atualizar o porquinho");
+  }
+  return payload.piggyBank;
+}
+
+export async function adjustPiggyBankBalance(
+  slug: string,
+  input: {
+    amount: number;
+    direction: "deposit" | "withdraw";
+    sourceType?: "bank" | "cash";
+  }
+) {
+  const response = await fetchWithAuth(`/api/piggy-banks/${encodeURIComponent(slug)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      action: "adjustBalance",
+      ...input,
+    }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string; piggyBank?: PiggyBankDetail };
+  if (!response.ok || !payload.ok || !payload.piggyBank) {
+    throw new Error(payload.error || "Não foi possível ajustar o saldo do porquinho");
+  }
+  return payload.piggyBank;
+}
+
+export async function deletePiggyBank(slug: string) {
+  const response = await fetchWithAuth(`/api/piggy-banks/${encodeURIComponent(slug)}`, {
+    method: "DELETE",
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Não foi possível excluir o porquinho");
+  }
+}
+
