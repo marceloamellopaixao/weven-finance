@@ -151,10 +151,32 @@ export async function GET(request: NextRequest) {
       or,
     });
     const users = paged.data.map(mapProfileRowToUser);
+    const userIds = users.map((user) => user.uid).filter(Boolean);
+    const transactionCountByUid = new Map<string, number>();
+
+    if (userIds.length > 0) {
+      const transactionRows = await supabaseSelect("transactions", {
+        select: "uid",
+        conditions: {
+          uid: `in.(${userIds.join(",")})`,
+        },
+      });
+
+      for (const row of transactionRows) {
+        const uid = String(row.uid || "");
+        if (!uid) continue;
+        transactionCountByUid.set(uid, (transactionCountByUid.get(uid) || 0) + 1);
+      }
+    }
+
+    const usersWithLiveCounts = users.map((user) => ({
+      ...user,
+      transactionCount: transactionCountByUid.get(user.uid) || 0,
+    }));
     const total = paged.total;
 
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
-    return NextResponse.json({ ok: true, users, page, limit, total }, { status: 200 });
+    return NextResponse.json({ ok: true, users: usersWithLiveCounts, page, limit, total }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     apiLogger.error({
