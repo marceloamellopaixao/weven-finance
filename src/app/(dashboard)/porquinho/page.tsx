@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PiggyBank as PiggyBankIcon, ChevronLeft, ChevronRight, Wallet, Landmark, ShieldCheck, Plane, Home, Sparkles, PlusCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Home, Landmark, PiggyBank as PiggyBankIcon, Plane, PlusCircle, ShieldCheck, Sparkles, Wallet } from "lucide-react";
 
 type GoalOption = {
   type: PiggyBankGoalType;
@@ -29,7 +29,7 @@ const GOAL_OPTIONS: GoalOption[] = [
   { type: "emergency_reserve", label: "Reserva de Emergência", description: "Cobrir imprevistos com segurança.", icon: ShieldCheck },
   { type: "travel", label: "Fazer uma Viagem", description: "Guardar para transporte, hospedagem e passeios.", icon: Plane },
   { type: "home_renovation", label: "Reformar a Casa", description: "Separar valor para materiais e mão de obra.", icon: Home },
-  { type: "dream_purchase", label: "Sonho de Consumo", description: "Chegar no seu objetivo sem bagunçar o orçamento.", icon: Sparkles },
+  { type: "dream_purchase", label: "Sonho de Consumo", description: "Chegar no seu objetivo sem baguncar o orçamento.", icon: Sparkles },
   { type: "custom", label: "Criar Novo Objetivo", description: "Defina seu próprio porquinho.", icon: PlusCircle },
 ];
 
@@ -43,7 +43,10 @@ export default function PiggyBankWizardPage() {
   const { status: onboardingStatus, loading: onboardingLoading } = useOnboarding();
   const { transactions } = useTransactions();
 
+  const hasDeepLinkGoal = Boolean(searchParams.get("goal")) || Boolean(searchParams.get("cardId"));
+
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [isCreatorOpen, setIsCreatorOpen] = useState(hasDeepLinkGoal);
   const [goalType, setGoalType] = useState<PiggyBankGoalType>(
     (searchParams.get("goal") as PiggyBankGoalType) || "emergency_reserve"
   );
@@ -104,14 +107,46 @@ export default function PiggyBankWizardPage() {
         setFeedback(error instanceof Error ? error.message : "Não foi possível carregar os dados do porquinho.");
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [user]);
+
+  useEffect(() => {
+    if (!hasDeepLinkGoal) return;
+    setIsCreatorOpen(true);
+  }, [hasDeepLinkGoal]);
 
   const canGoStep2 = goalType !== "custom" || goalName.trim().length > 1;
   const canGoStep3 =
     parsedAmount > 0 &&
     parsedAmount <= Math.max(0, availableBalance) &&
     (goalType !== "card_limit" || Boolean(cardId));
+
+  const resetWizard = () => {
+    setStep(1);
+    setGoalType((searchParams.get("goal") as PiggyBankGoalType) || "emergency_reserve");
+    setGoalName("");
+    setAmountInput("");
+    setWithdrawalMode("");
+    setYieldType("");
+    setSourceType("bank");
+    setCardId(searchParams.get("cardId") || cards[0]?.id || "");
+    setFeedback(null);
+  };
+
+  const openWizard = (nextGoalType?: PiggyBankGoalType) => {
+    if (nextGoalType) {
+      setGoalType(nextGoalType);
+    }
+    setIsCreatorOpen(true);
+    setStep(1);
+  };
+
+  const closeWizard = () => {
+    setIsCreatorOpen(false);
+    resetWizard();
+  };
 
   const handleSubmit = async () => {
     if (!user || !userProfile || !canGoStep3) return;
@@ -146,17 +181,28 @@ export default function PiggyBankWizardPage() {
   return (
     <div className="min-h-screen bg-zinc-50/40 p-3 sm:p-6 md:p-8">
       <div className="mx-auto max-w-5xl space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-zinc-900 flex items-center gap-2">
+            <h1 className="flex items-center gap-2 text-2xl font-bold text-zinc-900 md:text-3xl">
               <PiggyBankIcon className="h-7 w-7 text-violet-600" />
               Cofrinho / Porquinho
             </h1>
-            <p className="text-sm text-zinc-500 mt-1">Monte metas e guarde valores com fluxo guiado em etapas.</p>
+            <p className="mt-1 text-sm text-zinc-500">
+              Acompanhe seus porquinhos e abra um novo somente quando quiser criar uma meta.
+            </p>
           </div>
-          <Link href="/cards">
-            <Button variant="outline" className="rounded-xl">Voltar para Cartões</Button>
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              className="rounded-xl bg-violet-600 hover:bg-violet-700"
+              onClick={() => openWizard()}
+            >
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Criar um Cofrinho
+            </Button>
+            <Link href="/cards">
+              <Button variant="outline" className="rounded-xl">Voltar para Cartões</Button>
+            </Link>
+          </div>
         </div>
 
         {feedback && (
@@ -165,222 +211,267 @@ export default function PiggyBankWizardPage() {
 
         {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.steps.firstGoal && (
           <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
-            Onboarding: crie sua primeira meta/porquinho e confirme um aporte para concluir esta etapa.
+            Onboarding: crie sua primeira meta e confirme um aporte para concluir esta etapa.
           </div>
         )}
 
-        <Card className="rounded-3xl border-zinc-200">
-          <CardHeader className="pb-4">
-            <CardTitle>Etapa {step} de 3</CardTitle>
-            <CardDescription>
-              {step === 1 && "Escolha o objetivo do seu cofrinho."}
-              {step === 2 && "Informe quanto vai guardar e as opções adicionais."}
-              {step === 3 && "Revise os dados antes de confirmar o envio para o porquinho."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {step === 1 && (
-              <div className="space-y-5">
-                <Label className="text-base">Qual é o seu objetivo para esse Cofrinho?</Label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {GOAL_OPTIONS.map((goal) => {
-                    const Icon = goal.icon;
-                    const selected = goalType === goal.type;
-                    return (
-                      <button
-                        key={goal.type}
-                        type="button"
-                        onClick={() => setGoalType(goal.type)}
-                        className={`rounded-2xl border p-4 text-left transition-all ${
-                          selected
-                            ? "border-violet-400 bg-violet-50 shadow-sm"
-                            : "border-zinc-200 bg-white hover:border-violet-300 hover:bg-violet-50/40"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Icon className={`h-5 w-5 ${selected ? "text-violet-700" : "text-zinc-500"}`} />
-                          <p className={`font-semibold ${selected ? "text-violet-800" : "text-zinc-800"}`}>{goal.label}</p>
-                        </div>
-                        <p className="text-xs text-zinc-500 mt-2">{goal.description}</p>
-                      </button>
-                    );
-                  })}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Card className="rounded-3xl md:col-span-2">
+            <CardHeader>
+              <CardTitle>Seus Porquinhos</CardTitle>
+              <CardDescription>Acesse os porquinhos ja criados para ver total e histórico.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {piggies.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 p-6 text-sm text-zinc-500">
+                  Nenhum porquinho criado ainda. Use o botão &quot;Criar um Cofrinho&quot; para abrir o assistente.
                 </div>
+              ) : piggies.map((piggy) => (
+                <Link
+                  key={piggy.id}
+                  href={`/porquinho/${piggy.slug}`}
+                  className="rounded-2xl border border-zinc-200 p-4 transition-colors hover:border-violet-300 hover:bg-violet-50/40"
+                >
+                  <p className="font-semibold text-zinc-900">{piggy.name}</p>
+                  <p className="mt-1 text-xs text-zinc-500">Total guardado: {formatCurrency(piggy.totalSaved)}</p>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
 
-                {goalType === "custom" && (
-                  <div className="space-y-2">
-                    <Label>Nome do novo objetivo</Label>
-                    <Input
-                      value={goalName}
-                      onChange={(e) => setGoalName(e.target.value)}
-                      placeholder="Ex: Trocar de notebook"
-                      maxLength={80}
-                    />
-                  </div>
-                )}
+          <Card className="rounded-3xl">
+            <CardHeader>
+              <CardTitle>Atalhos</CardTitle>
+              <CardDescription>Comece mais rápido com uma meta sugerida.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {GOAL_OPTIONS.filter((goal) => goal.type !== "custom").slice(0, 4).map((goal) => {
+                const Icon = goal.icon;
+                return (
+                  <button
+                    key={goal.type}
+                    type="button"
+                    onClick={() => openWizard(goal.type)}
+                    className="flex w-full items-center gap-3 rounded-2xl border border-zinc-200 bg-white p-4 text-left transition-colors hover:cursor-pointer hover:border-violet-300 hover:bg-violet-50/40"
+                  >
+                    <Icon className="h-5 w-5 text-violet-600" />
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-900">{goal.label}</p>
+                      <p className="text-xs text-zinc-500">{goal.description}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </div>
+
+        {isCreatorOpen && (
+          <Card className="rounded-3xl border-zinc-200">
+            <CardHeader className="pb-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle>Etapa {step} de 3</CardTitle>
+                  <CardDescription>
+                    {step === 1 && "Escolha o objetivo do seu cofrinho."}
+                    {step === 2 && "Informe quanto vai guardar e as opções adicionais."}
+                    {step === 3 && "Revise os dados antes de confirmar o envio para o porquinho."}
+                  </CardDescription>
+                </div>
+                <Button variant="ghost" className="rounded-xl" onClick={closeWizard}>
+                  Fechar criacao
+                </Button>
               </div>
-            )}
-
-            {step === 2 && (
-              <div className="space-y-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Quanto você guardou no Cofrinho?</Label>
-                    <Input
-                      value={amountInput}
-                      onChange={(e) => setAmountInput(e.target.value)}
-                      placeholder="R$ 0,00"
-                      inputMode="decimal"
-                    />
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {step === 1 && (
+                <div className="space-y-5">
+                  <Label className="text-base">Qual é o objetivo deste porquinho?</Label>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {GOAL_OPTIONS.map((goal) => {
+                      const Icon = goal.icon;
+                      const selected = goalType === goal.type;
+                      return (
+                        <button
+                          key={goal.type}
+                          type="button"
+                          onClick={() => setGoalType(goal.type)}
+                          className={`rounded-2xl border p-4 text-left transition-all ${
+                            selected
+                              ? "border-violet-400 bg-violet-50 shadow-sm"
+                              : "border-zinc-200 bg-white hover:border-violet-300 hover:bg-violet-50/40"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <Icon className={`h-5 w-5 ${selected ? "text-violet-700" : "text-zinc-500"}`} />
+                            <p className={`font-semibold ${selected ? "text-violet-800" : "text-zinc-800"}`}>{goal.label}</p>
+                          </div>
+                          <p className="mt-2 text-xs text-zinc-500">{goal.description}</p>
+                        </button>
+                      );
+                    })}
                   </div>
-                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
-                    <p className="text-xs text-zinc-500">Saldo Disponível</p>
-                    <p className="text-lg font-bold text-zinc-900 mt-1">{formatCurrency(availableBalance)}</p>
-                    {parsedAmount > availableBalance && (
-                      <p className="text-xs text-red-600 mt-2">O valor informado excede seu saldo disponível.</p>
+
+                  {goalType === "custom" && (
+                    <div className="space-y-2">
+                      <Label>Nome do novo objetivo</Label>
+                      <Input
+                        value={goalName}
+                        onChange={(e) => setGoalName(e.target.value)}
+                        placeholder="Ex: Trocar de notebook"
+                        maxLength={80}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {step === 2 && (
+                <div className="space-y-5">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Quanto você quer guardar?</Label>
+                      <Input
+                        value={amountInput}
+                        onChange={(e) => setAmountInput(e.target.value)}
+                        placeholder="R$ 0,00"
+                        inputMode="decimal"
+                      />
+                    </div>
+                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+                      <p className="text-xs text-zinc-500">Saldo disponível</p>
+                      <p className="mt-1 text-lg font-bold text-zinc-900">{formatCurrency(availableBalance)}</p>
+                      {parsedAmount > availableBalance && (
+                        <p className="mt-2 text-xs text-red-600">O valor informado excede seu saldo disponível.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Modalidade de retirada (opcional)</Label>
+                      <Input
+                        value={withdrawalMode}
+                        onChange={(e) => setWithdrawalMode(e.target.value)}
+                        placeholder="Ex: Dinheiro sempre disponível"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Tipo de rendimento (opcional)</Label>
+                      <Input
+                        value={yieldType}
+                        onChange={(e) => setYieldType(e.target.value)}
+                        placeholder="Ex: CDB, Tesouro Direto e etc"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Origem do valor</Label>
+                      <Select value={sourceType} onValueChange={(value) => setSourceType(value as "bank" | "cash")}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="bank">Saldo em Banco</SelectItem>
+                          <SelectItem value="cash">Dinheiro Vivo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {goalType === "card_limit" && (
+                      <div className="space-y-2">
+                        <Label>Cartao para aumento de limite</Label>
+                        <Select value={cardId} onValueChange={setCardId}>
+                          <SelectTrigger><SelectValue placeholder="Selecione um cartão" /></SelectTrigger>
+                          <SelectContent>
+                            {cards.map((card) => (
+                              <SelectItem key={card.id} value={card.id}>
+                                {card.bankName} •••• {card.last4}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {cards.length === 0 && (
+                          <p className="text-xs text-amber-700">Cadastre ao menos um cartão em `/cards` para usar Cofrinho do Cartao.</p>
+
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Modalidade de Retirada (Opcional)</Label>
-                    <Input
-                      value={withdrawalMode}
-                      onChange={(e) => setWithdrawalMode(e.target.value)}
-                      placeholder="Ex: Dinheiro sempre disponível"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Tipo de Rendimento (Opcional)</Label>
-                    <Input
-                      value={yieldType}
-                      onChange={(e) => setYieldType(e.target.value)}
-                      placeholder="Ex: CDB, Tesouro Direto e etc"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Origem do valor</Label>
-                    <Select value={sourceType} onValueChange={(value) => setSourceType(value as "bank" | "cash")}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="bank">Saldo em Banco</SelectItem>
-                        <SelectItem value="cash">Dinheiro Vivo</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {goalType === "card_limit" && (
-                    <div className="space-y-2">
-                      <Label>Cartão para aumento de limite</Label>
-                      <Select value={cardId} onValueChange={setCardId}>
-                        <SelectTrigger><SelectValue placeholder="Selecione um cartão" /></SelectTrigger>
-                        <SelectContent>
-                          {cards.map((card) => (
-                            <SelectItem key={card.id} value={card.id}>
-                              {card.bankName} •••• {card.last4}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {cards.length === 0 && (
-                        <p className="text-xs text-amber-700">Cadastre ao menos um cartão em `/cards` para usar Cofrinho do Cartão.</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {step === 3 && (
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
-                  <p className="text-xs uppercase tracking-widest text-zinc-500">Revisão</p>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-zinc-500">Qual o Cofrinho?</p>
-                    <p className="font-semibold text-zinc-900">{effectiveGoalName}</p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-zinc-500">Valor</p>
-                    <p className="font-semibold text-zinc-900">{formatCurrency(parsedAmount)}</p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-zinc-500">Origem</p>
-                    <p className="font-semibold text-zinc-900">{sourceType === "cash" ? "Dinheiro Vivo" : "Saldo em Banco"}</p>
-                  </div>
-                  {withdrawalMode.trim() && (
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-zinc-500">Modalidade de Retirada</p>
-                      <p className="font-semibold text-zinc-900">{withdrawalMode}</p>
-                    </div>
-                  )}
-                  {yieldType.trim() && (
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-zinc-500">Tipo de Rendimento</p>
-                      <p className="font-semibold text-zinc-900">{yieldType}</p>
-                    </div>
-                  )}
-                  {goalType === "card_limit" && selectedCard && (
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-zinc-500">Limite aplicado em</p>
-                      <p className="font-semibold text-zinc-900">{selectedCard.bankName} •••• {selectedCard.last4}</p>
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-zinc-500">Ao confirmar, o valor é lançado no extrato da dashboard e o saldo disponível é atualizado.</p>
-              </div>
-            )}
-
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-              <Button variant="outline" className="rounded-xl" disabled={step === 1} onClick={() => setStep((prev) => Math.max(1, prev - 1) as 1 | 2 | 3)}>
-                <ChevronLeft className="mr-1 h-4 w-4" /> Voltar
-              </Button>
-
-              {step < 3 ? (
-                <Button
-                  className="rounded-xl bg-violet-600 hover:bg-violet-700"
-                  onClick={() => setStep((prev) => Math.min(3, prev + 1) as 1 | 2 | 3)}
-                  disabled={(step === 1 && !canGoStep2) || (step === 2 && !canGoStep3)}
-                >
-                  Continuar <ChevronRight className="ml-1 h-4 w-4" />
-                </Button>
-              ) : (
-                <Button
-                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
-                  onClick={handleSubmit}
-                  disabled={!canGoStep3 || isSubmitting}
-                >
-                  <Wallet className="mr-1 h-4 w-4" />
-                  {isSubmitting ? "Guardando..." : "Confirmar e Guardar"}
-                </Button>
               )}
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card className="rounded-3xl">
-          <CardHeader>
-            <CardTitle>Seus Porquinhos</CardTitle>
-            <CardDescription>Acesse os porquinhos já criados para ver total e histórico.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {piggies.length === 0 ? (
-              <p className="text-sm text-zinc-500">Nenhum porquinho criado ainda.</p>
-            ) : piggies.map((piggy) => (
-              <Link
-                key={piggy.id}
-                href={`/porquinho/${piggy.slug}`}
-                className="rounded-2xl border border-zinc-200 p-4 hover:border-violet-300 hover:bg-violet-50/40 transition-colors"
-              >
-                <p className="font-semibold text-zinc-900">{piggy.name}</p>
-                <p className="text-xs text-zinc-500 mt-1">Total guardado: {formatCurrency(piggy.totalSaved)}</p>
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
+              {step === 3 && (
+                <div className="space-y-4">
+                  <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-5">
+                    <p className="text-xs uppercase tracking-widest text-zinc-500">Revisao</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-zinc-500">Objetivo</p>
+                      <p className="font-semibold text-zinc-900">{effectiveGoalName}</p>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-zinc-500">Valor</p>
+                      <p className="font-semibold text-zinc-900">{formatCurrency(parsedAmount)}</p>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-zinc-500">Origem</p>
+                      <p className="font-semibold text-zinc-900">{sourceType === "cash" ? "Dinheiro Vivo" : "Saldo em Banco"}</p>
+                    </div>
+                    {withdrawalMode.trim() && (
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-zinc-500">Modalidade de retirada</p>
+                        <p className="font-semibold text-zinc-900">{withdrawalMode}</p>
+                      </div>
+                    )}
+                    {yieldType.trim() && (
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-zinc-500">Tipo de rendimento</p>
+                        <p className="font-semibold text-zinc-900">{yieldType}</p>
+                      </div>
+                    )}
+                    {goalType === "card_limit" && selectedCard && (
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-zinc-500">Limite aplicado em</p>
+                        <p className="font-semibold text-zinc-900">{selectedCard.bankName} •••• {selectedCard.last4}</p>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-zinc-500">Ao confirmar, o valor e lancado no extrato da dashboard e o saldo disponivel e atualizado.</p>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+                <Button
+                  variant="outline"
+                  className="rounded-xl"
+                  disabled={step === 1}
+                  onClick={() => setStep((prev) => Math.max(1, prev - 1) as 1 | 2 | 3)}
+                >
+                  <ChevronLeft className="mr-1 h-4 w-4" /> Voltar
+                </Button>
+
+                {step < 3 ? (
+                  <Button
+                    className="rounded-xl bg-violet-600 hover:bg-violet-700"
+                    onClick={() => setStep((prev) => Math.min(3, prev + 1) as 1 | 2 | 3)}
+                    disabled={(step === 1 && !canGoStep2) || (step === 2 && !canGoStep3)}
+                  >
+                    Continuar <ChevronRight className="ml-1 h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button
+                    className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                    onClick={handleSubmit}
+                    disabled={!canGoStep3 || isSubmitting}
+                  >
+                    <Wallet className="mr-1 h-4 w-4" />
+                    {isSubmitting ? "Guardando..." : "Confirmar e Guardar"}
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
