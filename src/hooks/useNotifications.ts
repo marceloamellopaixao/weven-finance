@@ -10,14 +10,14 @@ import {
   subscribeToNotifications,
 } from "@/services/notificationService";
 
-export function useNotifications() {
+export function useNotifications(enabled: boolean = true) {
   const { userProfile } = useAuth();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!userProfile?.uid) {
+    if (!enabled || !userProfile?.uid) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setItems([]);
       setUnreadCount(0);
@@ -37,7 +37,7 @@ export function useNotifications() {
     );
 
     return () => unsubscribe();
-  }, [userProfile?.uid]);
+  }, [enabled, userProfile?.uid]);
 
   const markOneAsRead = async (id: string) => {
     await markNotificationAsRead(id);
