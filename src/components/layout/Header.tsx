@@ -16,17 +16,17 @@ import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home, UserCog, 
 import Link from "next/link";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { useNotifications } from "@/hooks/useNotifications";
-import { useOnboarding } from "@/hooks/useOnboarding";
 import { Bell } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 
 export function Header() {
   const { user, userProfile, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const { isImpersonating, impersonationTargetUid, stopImpersonation } = useImpersonation();
-  const { items: notifications, unreadCount, markOneAsRead, markAllAsRead, clearAll } = useNotifications();
-  const { status: onboardingStatus, loading: onboardingLoading, completeStep } = useOnboarding();
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const { items: notifications, unreadCount, markOneAsRead, markAllAsRead, clearAll } = useNotifications(isNotificationsOpen);
   const isAuthenticated = !!user || !!userProfile;
   const displayName = isImpersonating
     ? (userProfile?.displayName || "Usuário")
@@ -87,14 +87,6 @@ export function Header() {
       }
       router.push(target);
     }
-  };
-
-  const shouldShowProfileMenuHint = isAuthenticated && !onboardingLoading && !onboardingStatus.steps.profileMenu;
-
-  const handleAvatarMenuOpenChange = (open: boolean) => {
-    if (!open) return;
-    if (onboardingStatus.steps.profileMenu) return;
-    void completeStep("profileMenu");
   };
 
   // Se não tiver usuário logado, mostra o header da landing page.
@@ -166,7 +158,7 @@ export function Header() {
           </>
         )}
 
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={setIsNotificationsOpen}>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon" className="relative h-9 w-9 rounded-full border-zinc-200 dark:border-zinc-800">
               <Bell className="h-4 w-4" />
@@ -237,15 +229,10 @@ export function Header() {
         </div>
 
         {/* Dropdown Menu do Usuário */}
-        <DropdownMenu onOpenChange={handleAvatarMenuOpenChange}>
+        <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <div className="relative">
-              {shouldShowProfileMenuHint && (
-                <span className="pointer-events-none absolute -top-7 right-0 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
-                  Clique na foto
-                </span>
-              )}
-              <Avatar className={`h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 transition-all cursor-pointer ${shouldShowProfileMenuHint ? "ring-violet-400 animate-pulse" : "ring-transparent hover:ring-violet-200"}`}>
+              <Avatar className="h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 ring-transparent transition-all cursor-pointer hover:ring-violet-200">
                 <AvatarImage src={displayPhoto} />
                 <AvatarFallback className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600 font-bold">
                   {(displayName || "U").charAt(0).toUpperCase()}
