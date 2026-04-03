@@ -1460,7 +1460,7 @@ export default function AdminPage() {
 
         <div className={`${fadeInUp} delay-150 space-y-6`}>
           {/* Navegação de Abas Moderna */}
-          <div className="grid w-full grid-cols-1 gap-1 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-2 xl:w-full xl:grid-flow-col">
+          <div className="grid grid-cols-1 gap-1 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-2 w-full xl:grid-flow-col">
             {/* Aba Usuários: Apenas Admin e Moderator */}
             {(userProfile?.role === 'admin' || userProfile?.role === 'moderator') && (
               <button type="button" aria-pressed={activeTab === "users"} onClick={() => setActiveTabAndPersist("users")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "users" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
@@ -1469,7 +1469,15 @@ export default function AdminPage() {
             )}
 
             {/* Aba Suporte: Todos da Equipe */}
-            <button type="button" aria-pressed={activeTab === "support"} onClick={() => setActiveTabAndPersist("support")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "support" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button type="button"
+              aria-pressed={activeTab === "support"}
+              onClick={() => setActiveTabAndPersist("support")}
+              className={`
+                  flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 
+                  ${activeTab === "support" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" :
+                  "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`
+              }
+            >
               <HeadphonesIcon className="h-4 w-4" /> Suporte & Ideias
               {unseenSupportCount > 0 && (
                 <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">
