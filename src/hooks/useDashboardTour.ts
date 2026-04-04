@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { driver } from "driver.js";
 
 export function useDashboardTour() {
@@ -175,7 +175,7 @@ export function useDashboardTour() {
     });
   }, []);
 
-  const startTour = (force = false) => {
+  const startTour = useCallback((force = false) => {
     const hasSeen = localStorage.getItem("weven_onboarding_completed");
     
     setTimeout(() => {
@@ -183,7 +183,7 @@ export function useDashboardTour() {
         driverObj.current?.drive();
       }
     }, 1000);
-  };
+  }, []);
 
   return { startTour };
 }
