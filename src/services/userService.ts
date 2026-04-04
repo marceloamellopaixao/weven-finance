@@ -10,6 +10,7 @@ import { getImpersonationActionStatus } from "@/services/impersonationService";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { getSupabaseClient } from "@/services/supabase/client";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
+import { normalizePhone } from "@/lib/phone";
 
 const POLLING_INTERVAL_MS = 20000;
 
@@ -288,12 +289,13 @@ export const updateOwnProfile = async (
   uid: string,
   data: { displayName: string; completeName: string; phone: string }
 ) => {
+  const normalizedPhone = normalizePhone(data.phone);
   const supabase = getSupabaseClient();
   await supabase.auth.updateUser({
     data: {
       displayName: data.displayName,
       completeName: data.completeName,
-      phone: data.phone,
+      phone: normalizedPhone,
     },
   });
 
@@ -302,7 +304,7 @@ export const updateOwnProfile = async (
     body: JSON.stringify({
       displayName: data.displayName,
       completeName: data.completeName,
-      phone: data.phone,
+      phone: normalizedPhone,
     }),
   });
   if (!response.ok || !payload.ok) {
