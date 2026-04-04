@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { Loader2, ArrowLeft, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
-import { getSupabaseClient } from "@/services/supabase/client";
+import { sendPasswordAccessEmail } from "@/services/auth/passwordAccess";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -34,12 +34,7 @@ export default function ForgotPasswordPage() {
 
     setIsLoading(true);
     try {
-      const supabase = getSupabaseClient();
-      const redirectTo = `${window.location.origin}/login`;
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
-      if (resetError) {
-        throw new Error(resetError.message || "Erro ao enviar e-mail.");
-      }
+      await sendPasswordAccessEmail(email, "recovery");
       setIsSent(true);
     } catch {
       setError("Erro ao enviar e-mail. Tente novamente.");
