@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
+import { buildPlanLimitMessage, getPlanCapabilities } from "@/lib/plans/capabilities";
+import { getUserPlanContext } from "@/lib/plans/server";
 import { PiggyBankGoalType } from "@/types/piggyBank";
 import { enforceCreditCardPolicy } from "@/lib/credit-card/limit";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
@@ -132,6 +134,14 @@ export async function POST(request: NextRequest) {
     const nowIso = now.toISOString();
     const today = nowIso.slice(0, 10);
     const slug = slugifyGoalName(goalName);
+    const [planContext, allPiggyRows] = await Promise.all([
+      getUserPlanContext(uid),
+      supabaseSelect("piggy_banks", {
+        select: "source_id",
+        filters: { uid },
+      }),
+    ]);
+    const capabilities = getPlanCapabilities(planContext.plan, planContext.plans);
 
     let cardLabel: string | undefined;
     if (goalType === "card_limit" && cardId) {
@@ -179,6 +189,26 @@ export async function POST(request: NextRequest) {
       filters: { uid, source_id: slug },
       limit: 1,
     });
+
+    if (
+      !planContext.isBillingExempt &&
+      piggyRows.length === 0 &&
+      capabilities.maxGoals !== null &&
+      allPiggyRows.length >= capabilities.maxGoals
+    ) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: buildPlanLimitMessage({
+            plan: planContext.plan,
+            resourceLabel: "meta",
+            resourcePluralLabel: "metas",
+            max: capabilities.maxGoals,
+          }),
+        },
+        { status: 403 }
+      );
+    }
 
     const piggyRaw = ((piggyRows[0]?.raw as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
     const currentTotal = Number(piggyRows[0]?.total_saved || piggyRaw.totalSaved || 0);
