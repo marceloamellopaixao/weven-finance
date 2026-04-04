@@ -16,6 +16,7 @@ import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home, UserCog, 
 import Link from "next/link";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useOnboarding } from "@/hooks/useOnboarding";
 import { Bell } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -27,6 +28,7 @@ export function Header() {
   const { isImpersonating, impersonationTargetUid, stopImpersonation } = useImpersonation();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const { items: notifications, unreadCount, markOneAsRead, markAllAsRead, clearAll } = useNotifications(isNotificationsOpen);
+  const { status: onboardingStatus, completeStep } = useOnboarding();
   const isAuthenticated = !!user || !!userProfile;
   const displayName = isImpersonating
     ? (userProfile?.displayName || "Usuário")
@@ -87,6 +89,11 @@ export function Header() {
       }
       router.push(target);
     }
+  };
+
+  const handleAccountMenuOpenChange = (open: boolean) => {
+    if (!open || onboardingStatus.steps.profileMenu) return;
+    void completeStep("profileMenu");
   };
 
   // Se não tiver usuário logado, mostra o header da landing page.
@@ -229,7 +236,7 @@ export function Header() {
         </div>
 
         {/* Dropdown Menu do Usuário */}
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={handleAccountMenuOpenChange}>
           <DropdownMenuTrigger asChild>
             <div className="relative">
               <Avatar className="h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 ring-transparent transition-all cursor-pointer hover:ring-violet-200">
@@ -270,7 +277,7 @@ export function Header() {
               </DropdownMenuItem>
             </Link>
 
-            <Link href="/porquinho" className="cursor-pointer">
+            <Link href="/piggy-bank" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
                 <PiggyBank className="mr-2 h-4 w-4" />
                 <span>Porquinho</span>
