@@ -25,6 +25,7 @@ import {
   Lightbulb,
   Sparkles,
   Copy,
+  KeyRound,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { requestOwnAccountDeletion, updateOwnProfile } from "@/services/userService";
@@ -35,6 +36,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { sendFeatureRequest, sendSupportRequest, subscribeToSupportTickets, type SupportTicket } from "@/hooks/supportService";
 import { BillingHistoryItem, cancelSubscription, confirmPreapproval, getBillingHistory, getCheckoutLink } from "@/services/billingService";
 import { useImpersonation } from "@/hooks/useImpersonation";
+import { sendPasswordAccessEmail } from "@/services/auth/passwordAccess";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -83,6 +85,7 @@ export default function SettingsPage() {
   const [featureMessage, setFeatureMessage] = useState("");
   const [isSendingFeature, setIsSendingFeature] = useState(false);
   const [isCopyingSwaggerToken, setIsCopyingSwaggerToken] = useState(false);
+  const [isSendingPasswordEmail, setIsSendingPasswordEmail] = useState(false);
   const [mySupportTickets, setMySupportTickets] = useState<SupportTicket[]>([]);
   const [isLoadingMySupportTickets, setIsLoadingMySupportTickets] = useState(false);
   const [mySupportPage, setMySupportPage] = useState(1);
@@ -229,6 +232,20 @@ export default function SettingsPage() {
     }
   };
 
+  const handlePasswordAccess = async () => {
+    if (!user?.email || isImpersonating) return;
+    setIsSendingPasswordEmail(true);
+    try {
+      await sendPasswordAccessEmail(user.email, "change-password");
+      router.push("/first-access?intent=change-password&requested=1");
+    } catch (error) {
+      console.error("Erro ao enviar link de senha:", error);
+      showFeedback("error", "Falha ao enviar link", "Não foi possível enviar o link para definir sua nova senha.");
+    } finally {
+      setIsSendingPasswordEmail(false);
+    }
+  };
+
   const handleReplayTour = () => {
     localStorage.removeItem("weven_onboarding_completed");
     router.push("/dashboard");
@@ -357,6 +374,16 @@ export default function SettingsPage() {
   const effectivePlan = isBillingExemptRole ? "pro" : currentPlan;
   const effectivePaymentStatus = isBillingExemptRole ? "free" : (userProfile?.paymentStatus || "pending");
   const canUpgrade = !isBillingExemptRole && effectivePlan !== "pro";
+  const planRoleLabel = effectivePlan === "free"
+    ? "Registrar"
+    : effectivePlan === "premium"
+      ? "Organizar"
+      : "Decidir";
+  const planValueSummary = effectivePlan === "free"
+    ? "Registre o essencial do mês e sinta valor rápido sem complicação."
+    : effectivePlan === "premium"
+      ? "Organize cartões, parcelas, vencimentos e metas com mais clareza."
+      : "Decida melhor no dia a dia com direção prática para gastar com mais segurança.";
   const pendingPreapprovalId = userProfile?.billing?.pendingPreapprovalId;
   const pendingPlan = userProfile?.billing?.pendingPlan;
   const recoveryPlan: "premium" | "pro" =
@@ -586,6 +613,33 @@ export default function SettingsPage() {
                     <Input defaultValue={effectiveProfileEmail || ""} disabled className="h-11 rounded-xl bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 opacity-70 cursor-not-allowed" />
                   </div>
                 </div>
+
+                {!isImpersonating && (
+                  <>
+                    <Separator className="bg-zinc-100 dark:bg-zinc-800" />
+                    <div className="rounded-2xl border border-violet-100 bg-violet-50/80 p-5 dark:border-violet-900/40 dark:bg-violet-900/10">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 text-violet-700 dark:text-violet-300">
+                            <KeyRound className="h-4 w-4" />
+                            <p className="text-sm font-semibold">Acesso por senha</p>
+                          </div>
+                          <p className="text-sm text-violet-700/80 dark:text-violet-300/80">
+                            Receba um link seguro para criar ou trocar sua senha em `/first-access`.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={handlePasswordAccess}
+                          disabled={isSendingPasswordEmail}
+                          className="h-11 rounded-xl bg-violet-600 hover:bg-violet-700 text-white"
+                        >
+                          {isSendingPasswordEmail ? "Enviando link..." : "Alterar senha"}
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </CardContent>
               <CardFooter className="flex flex-wrap justify-end gap-2 border-t border-zinc-50 dark:border-zinc-800/50 pt-6 bg-zinc-50/50 dark:bg-zinc-900/50 rounded-b-3xl">
                 {showSwaggerTokenButton && (
@@ -633,17 +687,23 @@ export default function SettingsPage() {
                         {effectivePlan === 'premium' && <Medal className="h-8 w-8 text-slate-200" />}
                         {effectivePlan === 'pro' && <Medal className="h-8 w-8 text-yellow-300" />}
                         <span>
-                          Weven{' '}
+                          Plano{' '}
                           <span className="opacity-90">
                             {isBillingExemptRole ? "Staff" : effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)}
                           </span>
                         </span>
                       </CardTitle>
 
+                      {!isBillingExemptRole && (
+                        <Badge className="w-fit border-none bg-white/15 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white/85">
+                          {planRoleLabel}
+                        </Badge>
+                      )}
+
                       <CardDescription className="text-base text-white/75 max-w-md leading-relaxed">
                         {effectivePlan === 'free'
-                          ? plans.free.description
-                          : isBillingExemptRole ? 'Conta da equipe com acesso isento de cobrança.' : 'Obrigado por apoiar nosso desenvolvimento!'}
+                          ? planValueSummary
+                          : isBillingExemptRole ? 'Conta da equipe com acesso isento de cobrança.' : planValueSummary}
                       </CardDescription>
                     </div>
 
@@ -724,7 +784,9 @@ export default function SettingsPage() {
                 <CardContent className="z-10 relative space-y-3">
                   {!isBillingExemptRole && effectivePlan === "free" && (
                     <div className="mt-4">
-                      <p className="text-sm text-zinc-300 mb-2">Faça o upgrade para remover limites e desbloquear todo o potencial.</p>
+                      <p className="text-sm text-zinc-300 mb-2">
+                        Free registra o básico. Premium organiza cartões, parcelas, vencimentos e metas. Pro adiciona direção diária para você decidir melhor.
+                      </p>
                     </div>
                   )}
                   <div className="rounded-xl border border-white/15 bg-black/10 p-3 text-xs text-white/85 space-y-1">
@@ -883,14 +945,33 @@ export default function SettingsPage() {
               )}
 
               {canUpgrade && (
-                <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-4">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Free</p>
+                      <p className="mt-2 text-base font-semibold text-zinc-900">Registrar</p>
+                      <p className="mt-1 text-sm text-zinc-600">Para sair do caos e registrar o essencial do mês.</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Premium</p>
+                      <p className="mt-2 text-base font-semibold text-zinc-900">Organizar</p>
+                      <p className="mt-1 text-sm text-zinc-600">Para controlar cartões, parcelas, vencimentos e metas com clareza.</p>
+                    </div>
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-4">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-amber-600">Pro</p>
+                      <p className="mt-2 text-base font-semibold text-zinc-900">Decidir</p>
+                      <p className="mt-1 text-sm text-zinc-600">Para saber quanto ainda pode gastar hoje e agir com mais segurança.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-6 md:grid-cols-2">
                   {effectivePlan !== 'premium' && (
                     <Card className="relative overflow-hidden h-full flex flex-col border-2 border-slate-300/40 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all bg-white dark:bg-zinc-900 rounded-3xl group transform hover:-translate-y-1 duration-300">
                       <div className="absolute top-0 left-0 w-full h-1 bg-slate-400" />
                       <CardHeader className="flex-1">
                         <CardTitle className="flex justify-between items-center">
                           <span className="flex items-center gap-2">
-                            <Medal className="h-5 w-5 text-slate-500" /> Weven Premium
+                            <Medal className="h-5 w-5 text-slate-500" /> Premium · Organizar
                           </span>
                           <span className="text-xl font-bold text-zinc-900 dark:text-white">
                             R$ {plans.premium.price.toFixed(2).toString().replace(".", ",")}
@@ -899,6 +980,9 @@ export default function SettingsPage() {
                         <CardDescription>
                           {plans.premium.description}
                         </CardDescription>
+                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                          Ideal para quem quer parar de se perder em cartões, parcelas e vencimentos.
+                        </p>
                         <nav>
                           {plans.premium.features &&
                             (
@@ -918,7 +1002,7 @@ export default function SettingsPage() {
                           disabled={isOpeningCheckout === "premium"}
                           className="w-full h-11 rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-lg shadow-slate-500/20 hover:cursor-pointer transition-all active:scale-[0.98]"
                         >
-                          {isOpeningCheckout === "premium" ? "Abrindo checkout..." : "Fazer Upgrade Premium"}
+                          {isOpeningCheckout === "premium" ? "Abrindo checkout..." : "Ir para o Premium"}
                         </Button>
                       </CardFooter>
                     </Card>
@@ -928,7 +1012,7 @@ export default function SettingsPage() {
                     <CardHeader className="flex-1">
                       <CardTitle className="flex justify-between items-center">
                         <span className="flex items-center gap-2">
-                          <Medal className="h-5 w-5 text-yellow-500" /> Weven Pro
+                          <Medal className="h-5 w-5 text-yellow-500" /> Pro · Decidir
                         </span>
                         <span className="text-xl font-bold text-zinc-900 dark:text-white">
                           R$ {plans.pro.price.toFixed(2).toString().replace(".", ",")}
@@ -937,6 +1021,9 @@ export default function SettingsPage() {
                       <CardDescription>
                         {plans.pro.description}
                       </CardDescription>
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-yellow-600">
+                        Ideal para quem quer direção prática no dia a dia, não só histórico do mês.
+                      </p>
                       <nav>
                         {plans.pro.features &&
                           (
@@ -957,10 +1044,11 @@ export default function SettingsPage() {
                         variant="outline"
                         className="w-full h-11 rounded-xl border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 hover:cursor-pointer transition-all active:scale-[0.98]"
                       >
-                        {isOpeningCheckout === "pro" ? "Abrindo checkout..." : "Fazer Upgrade Pro"}
+                        {isOpeningCheckout === "pro" ? "Abrindo checkout..." : "Ir para o Pro"}
                       </Button>
                     </CardFooter>
                   </Card>
+                </div>
                 </div>
               )}
             </div>
@@ -993,11 +1081,11 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <div className="flex items-center gap-2"><Lock className="h-4 w-4 text-violet-500" /><h3 className="font-semibold text-sm uppercase tracking-wider text-zinc-500">Segurança de Dados</h3></div>
                   <div className="p-5 rounded-2xl bg-zinc-950 text-zinc-400 font-mono text-xs break-all relative border border-zinc-800 shadow-inner group transition-all hover:border-zinc-700">
-                    <div className="absolute top-3 right-3"><Badge variant="outline" className="text-[10px] border-zinc-700 text-emerald-500 font-bold px-2 py-0.5">E2EE ATIVO</Badge></div>
+                    <div className="absolute top-3 right-3"><Badge variant="outline" className="text-[10px] border-zinc-700 text-emerald-500 font-bold px-2 py-0.5">PROTEÇÃO ATIVA</Badge></div>
                     <p className="mb-2 text-zinc-600 uppercase tracking-widest text-[10px] font-bold">Identificador Seguro (Hash)</p>
                     {keyFingerprint}
                   </div>
-                  <p className="text-xs text-zinc-500 leading-relaxed">* Seus dados sensíveis são criptografados antes de sair do seu dispositivo.</p>
+                  <p className="text-xs text-zinc-500 leading-relaxed">* Seus dados sensíveis contam com camadas de proteção e privacidade no aplicativo.</p>
                   <Separator className="bg-zinc-300 dark:bg-zinc-800" />
 
                   <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-900/50">
@@ -1016,6 +1104,7 @@ export default function SettingsPage() {
                       {isMigrating ? "Migrando..." : "Corrigir/Migrar Criptografia"}
                     </Button>
                   </div>
+
                 </div>
                 <Separator className="bg-zinc-300 dark:bg-zinc-800" />
                 <div className="space-y-4">
