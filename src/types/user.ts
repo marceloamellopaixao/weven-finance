@@ -41,5 +41,7 @@ export interface UserProfile {
   paymentStatus?: UserPaymentStatus;
   billing?: BillingInfo;
   verifiedEmail: boolean;
+  authProviders?: string[];
+  needsPasswordSetup?: boolean;
   deletedAt?: string; // ISO Date
 }
