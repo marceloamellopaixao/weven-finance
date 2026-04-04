@@ -3,6 +3,8 @@ import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/im
 import { enforceCreditCardPolicy } from "@/lib/credit-card/limit";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { checkRateLimit } from "@/lib/api/rate-limit";
+import { buildMonthlyTransactionLimitMessage, getPlanCapabilities } from "@/lib/plans/capabilities";
+import { getUserPlanContext } from "@/lib/plans/server";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
@@ -92,6 +94,12 @@ async function fetchUserTransactions(uid: string) {
     filters: { uid },
     order: "due_date.desc.nullslast",
   });
+}
+
+function getTransactionMonthKey(value: unknown) {
+  if (typeof value !== "string" || value.length < 7) return null;
+  const monthKey = value.slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(monthKey) ? monthKey : null;
 }
 
 export async function GET(request: NextRequest) {
@@ -217,6 +225,56 @@ export async function POST(request: NextRequest) {
       const txs = Array.isArray(body.transactions) ? body.transactions : [];
       if (txs.length === 0) {
         return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+      }
+
+      const planContext = await getUserPlanContext(uid);
+      const capabilities = getPlanCapabilities(planContext.plan, planContext.plans);
+
+      const hasInstallmentTransactions = txs.some((tx) => {
+        const installmentTotal = Number(tx.installmentTotal ?? 0);
+        return Boolean(tx.groupId) || installmentTotal > 1;
+      });
+
+      if (!planContext.isBillingExempt && hasInstallmentTransactions && !capabilities.hasInstallments) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "Parcelamentos estão disponíveis apenas nos planos Premium e Pro.",
+          },
+          { status: 403 }
+        );
+      }
+
+      if (!planContext.isBillingExempt && capabilities.maxTransactionsPerMonth !== null) {
+        const current = await fetchUserTransactions(uid);
+        const monthlyCounts = new Map<string, number>();
+
+        for (const row of current) {
+          const monthKey = getTransactionMonthKey(row.due_date ?? row.tx_date);
+          if (!monthKey) continue;
+          monthlyCounts.set(monthKey, (monthlyCounts.get(monthKey) ?? 0) + 1);
+        }
+
+        for (const tx of txs) {
+          const monthKey = getTransactionMonthKey(tx.dueDate ?? tx.date);
+          if (!monthKey) continue;
+
+          const nextCount = (monthlyCounts.get(monthKey) ?? 0) + 1;
+          if (nextCount > capabilities.maxTransactionsPerMonth) {
+            return NextResponse.json(
+              {
+                ok: false,
+                error: buildMonthlyTransactionLimitMessage({
+                  plan: planContext.plan,
+                  max: capabilities.maxTransactionsPerMonth,
+                }),
+              },
+              { status: 403 }
+            );
+          }
+
+          monthlyCounts.set(monthKey, nextCount);
+        }
       }
 
       const nowIso = new Date().toISOString();
