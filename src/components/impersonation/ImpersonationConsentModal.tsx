@@ -26,9 +26,10 @@ export function ImpersonationConsentModal() {
   const [isResponding, setIsResponding] = useState(false);
 
   const currentRequest = useMemo(() => pending[0] || null, [pending]);
+  const canPollRequests = Boolean(user?.uid && userProfile?.uid);
 
   useEffect(() => {
-    if (!user || !userProfile) return;
+    if (!canPollRequests) return;
 
     let cancelled = false;
     const run = async () => {
@@ -47,7 +48,7 @@ export function ImpersonationConsentModal() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [user, userProfile]);
+  }, [canPollRequests]);
 
   const handleRespond = async (approved: boolean) => {
     if (!currentRequest) return;
