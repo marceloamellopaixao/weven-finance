@@ -5,26 +5,85 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useAuth } from "@/hooks/useAuth";
 import { Mail, ShieldCheck, ArrowRight, RefreshCw, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { getSupabaseClient } from "@/services/supabase/client";
+import {
+  buildEmailVerificationRedirectUrl,
+  clearPendingVerificationEmail,
+  readPendingVerificationEmail,
+} from "@/services/auth/emailVerification";
 
 export default function VerifyEmailPage() {
-  const { logout, user } = useAuth();
+  const { logout, user, userProfile } = useAuth();
   const router = useRouter();
   const [isChecking, setIsChecking] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingEmail(readPendingVerificationEmail());
+  }, []);
+
+  const displayEmail = useMemo(() => user?.email || pendingEmail || "", [pendingEmail, user?.email]);
+
+  const syncVerifiedEmail = useCallback(async (token: string) => {
+    const response = await fetch("/api/profile/verify-email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({}),
+    });
+    const payload = (await response.json()) as { ok: boolean };
+    if (!response.ok || !payload.ok) {
+      throw new Error("Erro ao atualizar verificação de e-mail no perfil.");
+    }
+    clearPendingVerificationEmail();
+    router.refresh();
+    router.replace("/dashboard");
+  }, [router]);
+
+  useEffect(() => {
+    if (!user || !user.emailVerified || userProfile?.verifiedEmail) return;
+
+    let cancelled = false;
+    const autoSync = async () => {
+      try {
+        const token = await user.getIdToken(true);
+        if (!cancelled) {
+          await syncVerifiedEmail(token);
+        }
+      } catch {
+        // fallback to manual verification button
+      }
+    };
+
+    void autoSync();
+    return () => {
+      cancelled = true;
+    };
+  }, [syncVerifiedEmail, user, user?.emailVerified, userProfile?.verifiedEmail]);
 
   const handleSendEmailVerification = async () => {
     try {
-      if (!user?.email) return;
+      const targetEmail = user?.email || pendingEmail;
+      if (!targetEmail) {
+        toast.error("Nao encontramos um e-mail para reenviar.");
+        return;
+      }
       setIsResending(true);
       const supabase = getSupabaseClient();
       const { error } = await supabase.auth.resend({
         type: "signup",
-        email: user.email,
+        email: targetEmail,
+        options: {
+          emailRedirectTo: buildEmailVerificationRedirectUrl(),
+        },
       });
       if (error) throw new Error(error.message || "Erro ao reenviar e-mail.");
+      setPendingEmail(targetEmail);
       toast.success("E-mail enviado! Verifique sua caixa de entrada.");
     } catch {
       toast.error("Erro ao enviar e-mail.");
@@ -38,22 +97,9 @@ export default function VerifyEmailPage() {
     setIsChecking(true);
     try {
       const refreshed = await user.reload();
-      const token = await refreshed.getIdToken(true);
       if (refreshed.emailVerified) {
-        const response = await fetch("/api/profile/verify-email", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({}),
-        });
-        const payload = (await response.json()) as { ok: boolean };
-        if (!response.ok || !payload.ok) {
-          throw new Error("Erro ao atualizar verificação de e-mail no perfil.");
-        }
-        router.refresh();
-        router.replace("/");
+        const token = await refreshed.getIdToken(true);
+        await syncVerifiedEmail(token);
       } else {
         toast.error("Ainda não detectamos a verificação. Tente novamente em alguns segundos.");
       }
@@ -75,7 +121,7 @@ export default function VerifyEmailPage() {
             </div>
             <CardTitle className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Verifique seu e-mail</CardTitle>
             <CardDescription className="mt-2 text-base text-zinc-600 dark:text-zinc-400">
-              Enviamos um link de confirmação para <strong>{user?.email}</strong>.
+              Enviamos um link de confirmação para <strong>{displayEmail || "seu e-mail"}</strong>.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 pt-6">
@@ -100,9 +146,15 @@ export default function VerifyEmailPage() {
             <Button variant="ghost" onClick={handleSendEmailVerification} disabled={isResending} className="h-12 w-full rounded-xl">
               {isResending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reenviar e-mail"}
             </Button>
-            <Button onClick={logout} variant="outline" className="h-12 w-full rounded-xl">
-              Voltar para login <ArrowRight className="ml-1 h-4 w-4" />
-            </Button>
+            {user ? (
+              <Button onClick={logout} variant="outline" className="h-12 w-full rounded-xl">
+                Voltar para login <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            ) : (
+              <Button onClick={() => router.push("/login")} variant="outline" className="h-12 w-full rounded-xl">
+                Ir para login <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            )}
           </CardFooter>
         </Card>
       </div>
