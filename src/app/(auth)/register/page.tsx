@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { Wallet, Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { formatPhone, normalizePhone } from "@/lib/phone";
 
 export default function RegisterPage() {
   const { registerWithEmail } = useAuth();
@@ -45,19 +46,6 @@ export default function RegisterPage() {
       setError(err as string);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const formatPhone = (value: string) => {
-    if (!value) return "";
-    const digits = value.replace(/\D/g, "");
-
-    if (digits.length <= 10) {
-      // Formato Fixo: (11) 4444-4444
-      return digits.replace(/(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3").replace(/-$/, "");
-    } else {
-      // Formato Celular: (11) 99999-9999
-      return digits.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
     }
   };
 
@@ -105,10 +93,7 @@ export default function RegisterPage() {
                   className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
                   maxLength={15}
                   value={formatPhone(phone)}
-                  onChange={(e) => {
-                    const rawValue = e.target.value.replace(/\D/g, "");
-                    setPhone(rawValue);
-                  }}
+                  onChange={(e) => setPhone(normalizePhone(e.target.value))}
                 />
               </div>
             </div>
