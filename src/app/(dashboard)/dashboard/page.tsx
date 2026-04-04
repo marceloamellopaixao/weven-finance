@@ -39,6 +39,7 @@ import { PaymentCard } from "@/types/paymentCard";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getPlanCapabilities } from "@/lib/plans/capabilities";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -206,6 +207,7 @@ export default function DashboardPage() {
   const [optimisticallyDeletedIds, setOptimisticallyDeletedIds] = useState<string[]>([]);
   const [txToCancelSubscription, setTxToCancelSubscription] = useState<Transaction | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<"transactions" | "installments">("transactions");
   const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
   const [isRecoveringBilling, setIsRecoveringBilling] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -255,7 +257,7 @@ export default function DashboardPage() {
     if (!loading && user) {
       startTour();
     }
-  })
+  }, [loading, startTour, user]);
 
   // --- 3. CHECK-IN DI?RIO (Pop-up Inteligente) ---
   useEffect(() => {
@@ -669,11 +671,20 @@ export default function DashboardPage() {
 
   const canGoBack = availableMonths.findIndex(m => m.value === selectedMonth) > 0;
   const canGoForward = availableMonths.findIndex(m => m.value === selectedMonth) < availableMonths.length - 1;
+  const effectivePlan = userProfile?.plan || "free";
+  const effectivePlanCapabilities = getPlanCapabilities(effectivePlan, plans);
 
   const handleAdd = async () => {
-    const limit = plans.free.limit || FREE_PLAN_LIMIT;
+    const transactionLimit = effectivePlanCapabilities.maxTransactionsPerMonth;
 
-    if (!isBillingExemptRole && userProfile?.plan !== 'pro' && userProfile?.plan !== 'premium' && transactionsThisMonthCount >= limit) {
+    if (!isBillingExemptRole && transactionLimit !== null && transactionsThisMonthCount >= transactionLimit) {
+      setUpgradeReason("transactions");
+      setShowUpgradeModal(true);
+      return;
+    }
+
+    if (!isBillingExemptRole && isInstallment && !effectivePlanCapabilities.hasInstallments) {
+      setUpgradeReason("installments");
       setShowUpgradeModal(true);
       return;
     }
@@ -1190,8 +1201,29 @@ export default function DashboardPage() {
             {type === 'expense' && (getCategoryRoot(category) === 'Streaming' ? 'Recorrência (Mensal)' : 'Compra Parcelada')}
             {type === 'income' && (getCategoryRoot(category) === 'Salário' ? 'Recorrência (Mensal)' : 'Recebimento Parcelado')}
           </Label>
-          <Switch id="inst-switch" className="scale-100 data-[state=checked]:bg-violet-600" checked={isInstallment} onCheckedChange={setIsInstallment} />
+          <Switch
+            id="inst-switch"
+            className="scale-100 data-[state=checked]:bg-violet-600"
+            checked={isInstallment}
+            disabled={!isBillingExemptRole && !effectivePlanCapabilities.hasInstallments}
+            onCheckedChange={(checked) => {
+              if (!isBillingExemptRole && checked && !effectivePlanCapabilities.hasInstallments) {
+                setUpgradeReason("installments");
+                setShowUpgradeModal(true);
+                return;
+              }
+              setIsInstallment(checked);
+            }}
+          />
         </div>
+        {!isBillingExemptRole && !effectivePlanCapabilities.hasInstallments && (
+          <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-3 text-xs text-violet-800">
+            <p className="font-semibold">Parcelamentos disponíveis no Premium e no Pro.</p>
+            <p className="mt-1 text-violet-700">
+              Faça upgrade para lançar compras parceladas e acompanhar melhor o fechamento do mês.
+            </p>
+          </div>
+        )}
         {isInstallment && (
           <div className="animate-in slide-in-from-top-2 pt-1">
             <Label className="text-xs font-medium text-zinc-500">
@@ -1221,9 +1253,8 @@ export default function DashboardPage() {
   const monthIncome = monthTransactions.filter(t => t.type === 'income').reduce((acc, curr) => acc + curr.amount, 0);
   const monthExpense = monthTransactions.filter(t => t.type === 'expense').reduce((acc, curr) => acc + curr.amount, 0);
   const monthBalance = monthIncome - monthExpense;
-  const effectivePlan = userProfile?.plan || "free";
   const effectivePaymentStatus = userProfile?.paymentStatus || "pending";
-  const freeLimit = plans.free.limit || FREE_PLAN_LIMIT;
+  const freeLimit = effectivePlanCapabilities.maxTransactionsPerMonth ?? plans.free.limit ?? FREE_PLAN_LIMIT;
   const freeUsagePct = freeLimit > 0 ? (transactionsThisMonthCount / freeLimit) * 100 : 0;
   const overduePendingCount = transactions.filter((t) => t.status === "pending" && typeof t.dueDate === "string" && t.dueDate < todayStr).length;
   const hasBillingIssue =
@@ -1234,6 +1265,44 @@ export default function DashboardPage() {
   const pendingPlan = userProfile?.billing?.pendingPlan;
   const recoveryPlan: "premium" | "pro" =
     pendingPlan === "pro" || effectivePlan === "pro" ? "pro" : "premium";
+  const selectedMonthLabel =
+    availableMonths.find((month) => month.value === selectedMonth)?.label.toLowerCase() ?? selectedMonth;
+  const currentMonthKey = new Date().toISOString().slice(0, 7);
+  const [selectedYear, selectedMonthNumber] = selectedMonth.split("-").map(Number);
+  const daysInSelectedMonth =
+    Number.isInteger(selectedYear) && Number.isInteger(selectedMonthNumber)
+      ? new Date(selectedYear, selectedMonthNumber, 0).getDate()
+      : 0;
+  const remainingDaysInSelectedMonth =
+    selectedMonth < currentMonthKey
+      ? 0
+      : selectedMonth === currentMonthKey
+        ? Math.max(1, daysInSelectedMonth - new Date().getDate() + 1)
+        : daysInSelectedMonth;
+  const smartDailyLimit =
+    effectivePlanCapabilities.hasSmartDailyLimit && remainingDaysInSelectedMonth > 0
+      ? projectedAccumulatedBalance / remainingDaysInSelectedMonth
+      : null;
+  const smartDailyHeadline =
+    !effectivePlanCapabilities.hasSmartDailyLimit
+      ? ""
+      : remainingDaysInSelectedMonth <= 0 || smartDailyLimit === null
+        ? "Selecione o mês atual ou um mês futuro"
+        : smartDailyLimit > 0.01
+          ? `Você pode gastar até ${formatCurrencyDisplay(smartDailyLimit)} hoje`
+          : smartDailyLimit < -0.01
+            ? "Seu mês já está acima do ideal"
+            : "Hoje você está no limite do mês";
+  const smartDailyDescription =
+    !effectivePlanCapabilities.hasSmartDailyLimit
+      ? ""
+      : remainingDaysInSelectedMonth <= 0 || smartDailyLimit === null
+        ? "Esse cálculo funciona melhor com o mês em andamento para orientar sua decisão diária."
+        : smartDailyLimit > 0.01
+          ? `Com base na sua previsão atual, esse é o valor diário médio para fechar ${selectedMonthLabel} com controle.`
+          : smartDailyLimit < -0.01
+            ? `Para terminar ${selectedMonthLabel} sem aperto, reduza cerca de ${formatCurrencyDisplay(Math.abs(smartDailyLimit))} por dia.`
+            : `Para fechar ${selectedMonthLabel} com segurança, o ideal é evitar novos gastos hoje.`;
 
   const upgradePrompt = (() => {
     if (hasBillingIssue) {
@@ -1251,6 +1320,7 @@ export default function DashboardPage() {
         title: "Você está perto do limite do plano grátis",
         description: `Você já usou ${transactionsThisMonthCount}/${freeLimit} lançamentos neste mês.`,
         ctaPrimary: "Fazer upgrade",
+        targetPlan: "premium" as const,
       };
     }
 
@@ -1260,6 +1330,17 @@ export default function DashboardPage() {
         title: "Seu uso financeiro está evoluindo",
         description: "Upgrade libera mais controle para cartões e crescimento sem limite mensal de lançamentos.",
         ctaPrimary: "Conhecer planos",
+        targetPlan: "premium" as const,
+      };
+    }
+
+    if (!isBillingExemptRole && effectivePlan === "premium") {
+      return {
+        kind: "upgrade" as const,
+        title: "O próximo nível é clareza diária",
+        description: "No Pro, o dashboard mostra quanto você ainda pode gastar hoje sem comprometer o fechamento do mês.",
+        ctaPrimary: "Conhecer o Pro",
+        targetPlan: "pro" as const,
       };
     }
 
@@ -1556,10 +1637,10 @@ export default function DashboardPage() {
                   <>
                     <Button
                       className="h-9 bg-white text-violet-700 hover:bg-zinc-100"
-                      onClick={() => handleStartCheckout("premium")}
-                      disabled={isOpeningCheckout === "premium"}
+                      onClick={() => handleStartCheckout(upgradePrompt.targetPlan)}
+                      disabled={isOpeningCheckout === upgradePrompt.targetPlan}
                     >
-                      {isOpeningCheckout === "premium" ? "Abrindo..." : upgradePrompt.ctaPrimary}
+                      {isOpeningCheckout === upgradePrompt.targetPlan ? "Abrindo..." : upgradePrompt.ctaPrimary}
                     </Button>
                     <Button
                       variant="outline"
@@ -1570,6 +1651,28 @@ export default function DashboardPage() {
                     </Button>
                   </>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {effectivePlanCapabilities.hasSmartDailyLimit && (
+          <Card className={`${fadeInUp} delay-140 border-none shadow-lg rounded-2xl bg-linear-to-r from-zinc-900 to-zinc-800 text-white overflow-hidden`}>
+            <CardContent className="p-5 md:p-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-violet-200">
+                  <CalendarDays className="h-4 w-4" />
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em]">Limite diário inteligente</p>
+                </div>
+                <p className="text-lg md:text-xl font-bold">{smartDailyHeadline}</p>
+                <p className="text-sm text-white/75 max-w-2xl">{smartDailyDescription}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 min-w-[220px]">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/55">Base do cálculo</p>
+                <p className="mt-2 text-2xl font-bold">
+                  {remainingDaysInSelectedMonth > 0 ? `${remainingDaysInSelectedMonth} dia(s)` : "Mês encerrado"}
+                </p>
+                <p className="mt-1 text-xs text-white/60">Restantes para distribuir sua folga prevista.</p>
               </div>
             </CardContent>
           </Card>
@@ -1660,42 +1763,69 @@ export default function DashboardPage() {
           </Card>
 
           {/* Previsão */}
-          <Card id="tour-forecast-card" className={`${fadeInUp} delay-500 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Previsão de Fechamento</CardTitle>
-                <button
-                  type="button"
-                  aria-label={privacyMode ? "Mostrar valores" : "Ocultar valores"}
-                  onClick={togglePrivacyMode}
-                  className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+          {(isBillingExemptRole || effectivePlanCapabilities.hasMonthlyForecast) ? (
+            <Card id="tour-forecast-card" className={`${fadeInUp} delay-500 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Previsão de Fechamento</CardTitle>
+                  <button
+                    type="button"
+                    aria-label={privacyMode ? "Mostrar valores" : "Ocultar valores"}
+                    onClick={togglePrivacyMode}
+                    className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                  >
+                    {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                  <TooltipProvider>
+                    <Tooltip delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="Explicação da previsão de fechamento"
+                          className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                        >
+                          <HelpCircle className="h-3.5 w-3.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>Cálculo: Saldo Atual + (A Receber - A Pagar) no mês.</p></TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <div className="p-2 bg-violet-500/10 rounded-xl text-violet-600 dark:text-violet-400"><Calculator className="h-5 w-5" /></div>
+              </CardHeader>
+              <CardContent className="relative h-full flex flex-col justify-center">
+                <div className={`text-3xl font-bold tracking-tight ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (projectedAccumulatedBalance >= 0 ? 'text-emerald-600' : 'text-red-600')}`}>
+                  {formatCurrencyDisplay(projectedAccumulatedBalance)}
+                </div>
+                <p className="text-xs text-zinc-400 mt-2 font-medium">Estimativa para o fim do mês.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className={`${fadeInUp} delay-500 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-linear-to-br from-violet-600 to-indigo-600 rounded-2xl text-white`}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
+                <div>
+                  <CardTitle className="text-sm font-medium text-white/85">Previsão de Fechamento</CardTitle>
+                  <CardDescription className="text-white/75">Disponível no Premium e no Pro</CardDescription>
+                </div>
+                <div className="p-2 bg-white/10 rounded-xl text-white"><Calculator className="h-5 w-5" /></div>
+              </CardHeader>
+              <CardContent className="relative h-full flex flex-col justify-between gap-4">
+                <div>
+                  <p className="text-xl font-bold tracking-tight">Entenda antes se o mês vai fechar no verde.</p>
+                  <p className="text-sm text-white/80 mt-2">
+                    No Premium, o dashboard mostra sua previsão de fechamento com base no saldo atual, contas a pagar e valores a receber.
+                  </p>
+                </div>
+                <Button
+                  className="h-10 w-full bg-white text-violet-700 hover:bg-zinc-100"
+                  onClick={() => handleStartCheckout("premium")}
+                  disabled={isOpeningCheckout === "premium"}
                 >
-                  {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-                <TooltipProvider>
-                  <Tooltip delayDuration={200}>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        aria-label="Explicação da previsão de fechamento"
-                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-                      >
-                        <HelpCircle className="h-3.5 w-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>Cálculo: Saldo Atual + (A Receber - A Pagar) no mês.</p></TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              <div className="p-2 bg-violet-500/10 rounded-xl text-violet-600 dark:text-violet-400"><Calculator className="h-5 w-5" /></div>
-            </CardHeader>
-            <CardContent className="relative h-full flex flex-col justify-center">
-              <div className={`text-3xl font-bold tracking-tight ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (projectedAccumulatedBalance >= 0 ? 'text-emerald-600' : 'text-red-600')}`}>
-                {formatCurrencyDisplay(projectedAccumulatedBalance)}
-              </div>
-              <p className="text-xs text-zinc-400 mt-2 font-medium">Estimativa para o fim do mês.</p>
-            </CardContent>
-          </Card>
+                  {isOpeningCheckout === "premium" ? "Abrindo..." : "Liberar previsão"}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* --- Layout Principal (Agora coluna única) --- */}
@@ -2325,9 +2455,19 @@ export default function DashboardPage() {
               </DialogTitle>
 
               <DialogDescription className="text-base text-zinc-600 dark:text-zinc-400 mt-2">
-                Você atingiu o limite de {FREE_PLAN_LIMIT} lançamentos mensais do plano Grátis.
-                <br /><br />
-                Faça o upgrade para o <strong>Plano Pro ou Premium</strong> e tenha acesso ilimitado e muito mais.
+                {upgradeReason === "transactions" ? (
+                  <>
+                    Você atingiu o limite de {freeLimit} lançamentos mensais do plano Grátis.
+                    <br /><br />
+                    Faça o upgrade para o <strong>Plano Premium ou Pro</strong> e remova esse limite para continuar organizando sua vida financeira.
+                  </>
+                ) : (
+                  <>
+                    Parcelamentos estão disponíveis apenas nos planos pagos.
+                    <br /><br />
+                    Faça o upgrade para o <strong>Plano Premium ou Pro</strong> para lançar compras parceladas e acompanhar melhor o fechamento do mês.
+                  </>
+                )}
               </DialogDescription>
             </DialogHeader>
 
