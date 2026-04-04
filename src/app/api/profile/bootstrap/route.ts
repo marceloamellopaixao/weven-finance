@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
         displayName: profile.displayName || "Usuário",
         completeName: profile.completeName || profile.displayName || "",
         phone: profile.phone || "",
+        photoURL: profile.photoURL || "",
         role: profile.role || "client",
         plan: profile.plan || "free",
         status: profile.status || "active",
@@ -40,6 +41,8 @@ export async function POST(request: NextRequest) {
         },
         transactionCount: profile.transactionCount ?? 0,
         verifiedEmail: profile.verifiedEmail ?? false,
+        authProviders: profile.authProviders || [],
+        needsPasswordSetup: profile.needsPasswordSetup ?? false,
       };
 
       await supabaseUpsertRows(
@@ -51,6 +54,7 @@ export async function POST(request: NextRequest) {
             display_name: newProfile.displayName ?? "",
             complete_name: newProfile.completeName ?? "",
             phone: newProfile.phone ?? "",
+            photo_url: newProfile.photoURL ?? "",
             role: newProfile.role ?? "client",
             plan: newProfile.plan ?? "free",
             status: newProfile.status ?? "active",
@@ -69,19 +73,71 @@ export async function POST(request: NextRequest) {
 
     const existing = existingRows[0];
     const raw = ((existing.raw as Record<string, unknown> | undefined) || {});
+    const patch: Record<string, unknown> = { uid: auth.uid };
+    let shouldUpdate = false;
+
     if (profile.deletedAt === null) {
       raw.deletedAt = null;
-      await supabaseUpsertRows(
-        "profiles",
-        [
-          {
-            uid: auth.uid,
-            deleted_at: null,
-            raw,
-          },
-        ],
-        { onConflict: "uid" }
-      );
+      patch.deleted_at = null;
+      shouldUpdate = true;
+    }
+
+    if (typeof profile.email === "string" && profile.email.trim() && profile.email !== existing.email) {
+      patch.email = profile.email.trim();
+      raw.email = profile.email.trim();
+      shouldUpdate = true;
+    }
+
+    if (typeof profile.displayName === "string" && profile.displayName !== (existing.display_name ?? raw.displayName ?? "")) {
+      patch.display_name = profile.displayName;
+      raw.displayName = profile.displayName;
+      shouldUpdate = true;
+    }
+
+    if (typeof profile.completeName === "string" && profile.completeName !== (existing.complete_name ?? raw.completeName ?? "")) {
+      patch.complete_name = profile.completeName;
+      raw.completeName = profile.completeName;
+      shouldUpdate = true;
+    }
+
+    if (typeof profile.phone === "string" && profile.phone !== (existing.phone ?? raw.phone ?? "")) {
+      patch.phone = profile.phone;
+      raw.phone = profile.phone;
+      shouldUpdate = true;
+    }
+
+    if (typeof profile.photoURL === "string" && profile.photoURL !== (existing.photo_url ?? raw.photoURL ?? "")) {
+      patch.photo_url = profile.photoURL;
+      raw.photoURL = profile.photoURL;
+      shouldUpdate = true;
+    }
+
+    if (typeof profile.verifiedEmail === "boolean" && profile.verifiedEmail !== (existing.verified_email ?? raw.verifiedEmail ?? false)) {
+      patch.verified_email = profile.verifiedEmail;
+      raw.verifiedEmail = profile.verifiedEmail;
+      shouldUpdate = true;
+    }
+
+    if (typeof profile.needsPasswordSetup === "boolean" && profile.needsPasswordSetup !== (raw.needsPasswordSetup ?? false)) {
+      raw.needsPasswordSetup = profile.needsPasswordSetup;
+      shouldUpdate = true;
+    }
+
+    if (Array.isArray(profile.authProviders)) {
+      const normalizedProviders = profile.authProviders.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+      const currentProviders = Array.isArray(raw.authProviders)
+        ? raw.authProviders.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        : [];
+
+      if (JSON.stringify(normalizedProviders) !== JSON.stringify(currentProviders)) {
+        raw.authProviders = normalizedProviders;
+        shouldUpdate = true;
+      }
+    }
+
+    if (shouldUpdate) {
+      patch.raw = raw;
+      await supabaseUpsertRows("profiles", [patch], { onConflict: "uid" });
     }
 
     return NextResponse.json({ ok: true, created: false }, { status: 200 });
