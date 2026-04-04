@@ -32,6 +32,9 @@ export async function GET(request: NextRequest) {
     }
     const row = rows[0];
     const raw = (row.raw as Record<string, unknown> | null) ?? {};
+    const authProviders = Array.isArray(raw.authProviders)
+      ? raw.authProviders.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      : [];
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json(
       {
@@ -51,6 +54,8 @@ export async function GET(request: NextRequest) {
           transactionCount: row.transaction_count ?? raw.transactionCount ?? 0,
           billing: row.billing ?? raw.billing ?? {},
           verifiedEmail: row.verified_email ?? raw.verifiedEmail ?? false,
+          authProviders,
+          needsPasswordSetup: raw.needsPasswordSetup ?? false,
           deletedAt: row.deleted_at ?? raw.deletedAt ?? undefined,
           createdAt: row.created_at ?? raw.createdAt ?? new Date().toISOString(),
         },
