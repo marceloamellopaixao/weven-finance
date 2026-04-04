@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
+import { buildPlanLimitMessage, getPlanCapabilities } from "@/lib/plans/capabilities";
+import { getUserPlanContext } from "@/lib/plans/server";
 import { PaymentCard, PaymentCardType } from "@/types/paymentCard";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import {
@@ -147,6 +149,27 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as Partial<PaymentCard>;
+    const [existingCards, planContext] = await Promise.all([
+      getCards(acting.actingUid),
+      getUserPlanContext(acting.actingUid),
+    ]);
+    const capabilities = getPlanCapabilities(planContext.plan, planContext.plans);
+
+    if (!planContext.isBillingExempt && capabilities.maxCards !== null && existingCards.length >= capabilities.maxCards) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: buildPlanLimitMessage({
+            plan: planContext.plan,
+            resourceLabel: "cartão",
+            resourcePluralLabel: "cartões",
+            max: capabilities.maxCards,
+          }),
+        },
+        { status: 403 }
+      );
+    }
+
     const bankName = sanitizeBankName(body.bankName);
     const last4 = sanitizeLast4(body.last4);
     const type = sanitizeType(body.type);
