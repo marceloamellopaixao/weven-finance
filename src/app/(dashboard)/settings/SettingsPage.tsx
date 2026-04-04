@@ -37,6 +37,7 @@ import { sendFeatureRequest, sendSupportRequest, subscribeToSupportTickets, type
 import { BillingHistoryItem, cancelSubscription, confirmPreapproval, getBillingHistory, getCheckoutLink } from "@/services/billingService";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { sendPasswordAccessEmail } from "@/services/auth/passwordAccess";
+import { formatPhone, normalizePhone } from "@/lib/phone";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -47,7 +48,7 @@ type FeedbackData = {
 };
 
 export default function SettingsPage() {
-  const { user, userProfile, logout, privacyMode, togglePrivacyMode } = useAuth();
+  const { user, userProfile, logout, privacyMode, togglePrivacyMode, refreshProfile } = useAuth();
   const { isImpersonating } = useImpersonation();
   const { plans } = usePlans();
   const router = useRouter();
@@ -110,7 +111,7 @@ export default function SettingsPage() {
     if (userProfile) {
       setDisplayName(userProfile?.displayName);
       setCompleteName(userProfile?.completeName);
-      setPhone(userProfile?.phone);
+      setPhone(normalizePhone(userProfile?.phone));
     }
   }, [userProfile]);
 
@@ -174,7 +175,12 @@ export default function SettingsPage() {
     if (!user) return;
     setIsSaving(true);
     try {
-      await updateOwnProfile(effectiveProfileUid, { displayName, completeName, phone });
+      await updateOwnProfile(effectiveProfileUid, {
+        displayName: displayName.trim(),
+        completeName: completeName.trim(),
+        phone: normalizePhone(phone),
+      });
+      await refreshProfile();
       showFeedback('success', 'Sucesso', 'Perfil atualizado com sucesso!');
     } catch (error) {
       console.error("Erro ao salvar perfil:", error);
@@ -604,10 +610,15 @@ export default function SettingsPage() {
                     <Label className="text-zinc-500">Nome Completo</Label>
                     <Input value={completeName} onChange={(e) => setCompleteName(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500 bg-zinc-50/50 dark:bg-zinc-900/50" />
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-zinc-500">Celular</Label>
-                    <Input value={phone ? phone.toString().replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3") : ""} onChange={(e) => setPhone(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500 bg-zinc-50/50 dark:bg-zinc-900/50" />
-                  </div>
+                    <div className="space-y-2">
+                      <Label className="text-zinc-500">Celular</Label>
+                      <Input
+                        value={formatPhone(phone)}
+                        onChange={(e) => setPhone(normalizePhone(e.target.value))}
+                        maxLength={15}
+                        className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500 bg-zinc-50/50 dark:bg-zinc-900/50"
+                      />
+                    </div>
                   <div className="space-y-2">
                     <Label className="text-zinc-500">E-mail de Acesso</Label>
                     <Input defaultValue={effectiveProfileEmail || ""} disabled className="h-11 rounded-xl bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 opacity-70 cursor-not-allowed" />
