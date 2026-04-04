@@ -34,6 +34,7 @@ interface AuthContextType {
   loading: boolean;
   privacyMode: boolean;
   togglePrivacyMode: () => void;
+  refreshProfile: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   registerWithEmail: (
@@ -147,6 +148,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...(init?.headers || {}),
       },
     });
+  };
+
+  const refreshProfile = async () => {
+    if (!user) return;
+    const response = await apiFetchWithToken("/api/profile/me", { method: "GET" });
+    const payload = (await response.json()) as { ok: boolean; error?: string; profile?: UserProfile | null };
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "Erro ao atualizar perfil");
+    }
+    setUserProfile(payload.profile ?? null);
   };
 
   useEffect(() => {
@@ -421,6 +432,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         privacyMode,
         togglePrivacyMode,
+        refreshProfile,
         signInWithGoogle,
         loginWithEmail,
         registerWithEmail,
