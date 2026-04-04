@@ -8,11 +8,13 @@ import {
   getImpersonationTargetUid,
   subscribeToImpersonationChange,
 } from "@/lib/impersonation/client";
+import { extractAuthProviders, hasEmailPasswordProvider, shouldRequirePasswordSetup } from "@/lib/auth/providers";
 import { getSupabaseClient } from "@/services/supabase/client";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { buildEmailVerificationRedirectUrl, rememberPendingVerificationEmail } from "@/services/auth/emailVerification";
 
 const BLOCKED_STATUSES = new Set(["inactive", "blocked"]);
-const PUBLIC_ROUTES = ["/", "/login", "/register", "/forgot-password", "/not-found", "/blocked", "/goodbye"];
+const PUBLIC_ROUTES = ["/", "/login", "/register", "/forgot-password", "/first-access", "/verify-email", "/not-found", "/blocked", "/goodbye"];
 
 export interface AuthUser {
   uid: string;
@@ -20,6 +22,8 @@ export interface AuthUser {
   displayName: string;
   photoURL?: string;
   emailVerified: boolean;
+  providers: string[];
+  hasPasswordProvider: boolean;
   getIdToken: (forceRefresh?: boolean) => Promise<string>;
   reload: () => Promise<AuthUser>;
 }
@@ -48,10 +52,16 @@ function mapSupabaseUserToAuthUser(input: {
   id: string;
   email?: string | null;
   user_metadata?: Record<string, unknown>;
+  app_metadata?: Record<string, unknown>;
+  identities?: Array<{ provider?: string | null }> | null;
   email_confirmed_at?: string | null;
 }) {
   const supabase = getSupabaseClient();
   const meta = input.user_metadata || {};
+  const providers = extractAuthProviders({
+    app_metadata: input.app_metadata,
+    identities: input.identities,
+  });
   const displayName =
     (typeof meta.displayName === "string" && meta.displayName.trim()) ||
     (typeof meta.full_name === "string" && meta.full_name.trim()) ||
@@ -67,6 +77,8 @@ function mapSupabaseUserToAuthUser(input: {
     displayName: String(displayName),
     photoURL: typeof meta.avatar_url === "string" ? meta.avatar_url : undefined,
     emailVerified: Boolean(input.email_confirmed_at),
+    providers,
+    hasPasswordProvider: hasEmailPasswordProvider(providers),
     getIdToken: async (forceRefresh?: boolean) => {
       if (forceRefresh) {
         await supabase.auth.refreshSession();
@@ -181,17 +193,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!user) return;
-
-    setLoading(true);
     let cancelled = false;
 
-    const syncProfile = async () => {
+    const syncProfile = async (showLoadingState: boolean) => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (showLoadingState) setLoading(true);
       try {
-        const response = await apiFetchWithToken("/api/profile/me", { method: "GET" });
-        const payload = (await response.json()) as { ok: boolean; error?: string; profile?: UserProfile | null };
-        if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao buscar perfil");
-        if (!cancelled) setUserProfile(payload.profile ?? null);
+        const token = await getAccessTokenOrThrow();
+        const bootstrapProfile: Partial<UserProfile> = {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || user.email.split("@")[0] || "Usuário",
+          completeName: user.displayName || user.email.split("@")[0] || "",
+          phone: "",
+          photoURL: user.photoURL || "",
+          role: "client",
+          plan: "free",
+          status: "active",
+          createdAt: new Date().toISOString(),
+          paymentStatus: "pending",
+          billing: {
+            source: "system",
+            lastSyncAt: new Date().toISOString(),
+          },
+          transactionCount: 0,
+          verifiedEmail: user.emailVerified,
+          authProviders: user.providers,
+          needsPasswordSetup: shouldRequirePasswordSetup(user.providers),
+        };
+
+        const fetchProfile = async () => {
+          const response = await apiFetchWithToken("/api/profile/me", { method: "GET" });
+          const payload = (await response.json()) as { ok: boolean; error?: string; profile?: UserProfile | null };
+          if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao buscar perfil");
+          return payload.profile ?? null;
+        };
+
+        let profile = await fetchProfile();
+        const mergedProviders = Array.from(
+          new Set([...(profile?.authProviders || []), ...(bootstrapProfile.authProviders || [])])
+        ).sort((a, b) => a.localeCompare(b));
+
+        const shouldSyncBootstrap =
+          !profile ||
+          (profile.email || "") !== bootstrapProfile.email ||
+          (Boolean(user.emailVerified) && !Boolean(profile.verifiedEmail)) ||
+          JSON.stringify(profile.authProviders || []) !== JSON.stringify(mergedProviders) ||
+          ((profile.photoURL || "") !== (bootstrapProfile.photoURL || "") && Boolean(bootstrapProfile.photoURL));
+
+        if (shouldSyncBootstrap) {
+          const syncPayload: Partial<UserProfile> = !profile
+            ? bootstrapProfile
+            : {
+                email: bootstrapProfile.email,
+                photoURL: bootstrapProfile.photoURL || profile.photoURL || "",
+                verifiedEmail: profile.verifiedEmail || bootstrapProfile.verifiedEmail,
+                authProviders: mergedProviders,
+                needsPasswordSetup: profile.needsPasswordSetup ?? bootstrapProfile.needsPasswordSetup,
+              };
+
+          await fetch("/api/profile/bootstrap", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ profile: syncPayload }),
+          });
+          profile = await fetchProfile();
+        }
+
+        if (!cancelled) setUserProfile(profile ?? null);
       } catch (error) {
         console.error("Erro na busca do perfil:", error);
       } finally {
@@ -199,8 +271,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    void syncProfile();
-    const interval = setInterval(() => void syncProfile(), 60000);
+    void syncProfile(true);
+    const interval = setInterval(() => void syncProfile(false), 60000);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -229,8 +301,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (userProfile.needsPasswordSetup) {
+      if (pathname !== "/first-access") router.replace("/first-access?intent=first-access");
+      return;
+    }
+
     if (!userProfile.verifiedEmail) {
-      if (pathname !== "/verify-email") router.replace("/verify-email");
+      if (pathname !== "/verify-email" && pathname !== "/first-access") router.replace("/verify-email");
       return;
     }
 
@@ -272,10 +349,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       password: pass,
       options: {
+        emailRedirectTo: buildEmailVerificationRedirectUrl(),
         data: { displayName: name, completeName, phone },
       },
     });
     if (error) throw error.message || "Erro ao registrar usuario.";
+    rememberPendingVerificationEmail(email);
 
     const token = data.session?.access_token;
     if (token) {
@@ -296,6 +375,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
         transactionCount: 0,
         verifiedEmail: false,
+        authProviders: ["email"],
+        needsPasswordSetup: false,
       };
       await fetch("/api/profile/bootstrap", {
         method: "POST",
