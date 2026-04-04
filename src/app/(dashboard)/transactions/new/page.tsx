@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, Plus, Calendar, CreditCard, 
   Tag, AlignLeft, ReceiptText, AlertCircle, Settings2, 
-  Layers, TrendingDown, TrendingUp, Info, Repeat
+  Layers, TrendingDown, TrendingUp, Info, Repeat, Crown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CategoryManagerDialog } from "@/components/categories/CategoryManagerDialog";
@@ -14,9 +14,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
+import { usePlans } from "@/hooks/usePlans";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useCategories } from "@/hooks/useCategories";
 import { useOnboarding } from "@/hooks/useOnboarding";
+import { getPlanCapabilities } from "@/lib/plans/capabilities";
 import { addTransaction } from "@/services/transactionService";
 import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
@@ -37,7 +39,8 @@ const formatCurrency = (value: number) =>
 
 export default function NewTransactionPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
+  const { plans } = usePlans();
   const { status: onboardingStatus, loading: onboardingLoading } = useOnboarding();
   const { transactions } = useTransactions();
   const { categories } = useCategories();
@@ -99,6 +102,14 @@ export default function NewTransactionPage() {
     return paid + overdue;
   }, [transactions]);
 
+  const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
+  const effectivePlan = userProfile?.plan || "free";
+  const effectivePlanCapabilities = useMemo(
+    () => getPlanCapabilities(effectivePlan, plans),
+    [effectivePlan, plans]
+  );
+  const canUseInstallments = isBillingExemptRole || effectivePlanCapabilities.hasInstallments;
+
   const linkedCardTransactions = (card: PaymentCard) =>
     transactions.filter((tx) => {
       if (tx.type !== "expense") return false;
@@ -119,6 +130,10 @@ export default function NewTransactionPage() {
 
   // Funções de Exclusividade Mútua mantidas intactas
   const handleToggleInstallment = (checked: boolean) => {
+    if (checked && !canUseInstallments) {
+      setError("Parcelamentos estão disponíveis apenas nos planos Premium e Pro.");
+      return;
+    }
     setIsInstallment(checked);
     if (checked) setIsRecurring(false);
   };
@@ -145,6 +160,11 @@ export default function NewTransactionPage() {
     const value = Number(amount);
     const count = isInstallment ? Math.max(1, Number(installmentsCount || 1)) : 1;
     const totalAmountToReserve = Math.round(value * count * 100) / 100;
+
+    if (isInstallment && !canUseInstallments) {
+      setError("Parcelamentos estão disponíveis apenas nos planos Premium e Pro.");
+      return;
+    }
 
     if (isCardPayment && selectedCard && !validateLimit(selectedCard, paymentMethod, totalAmountToReserve)) {
       setError(
@@ -390,16 +410,48 @@ export default function NewTransactionPage() {
 
               {/* PARCELAMENTO (Apenas para Despesas) */}
               {!isIncome && (
-                <div className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${isInstallment ? 'bg-violet-50/50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-900' : 'bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 hover:border-violet-200'}`} onClick={() => handleToggleInstallment(!isInstallment)}>
+                <div
+                  className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${
+                    !canUseInstallments
+                      ? 'bg-zinc-50/80 dark:bg-zinc-950/40 border-dashed border-zinc-300 dark:border-zinc-700'
+                      : isInstallment
+                        ? 'bg-violet-50/50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-900'
+                        : 'bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 hover:border-violet-200'
+                  }`}
+                  onClick={() => handleToggleInstallment(!isInstallment)}
+                >
                   <div className="flex items-center justify-between">
                     <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium cursor-pointer">
                       <Layers className={`h-4 w-4 ${isInstallment ? 'text-violet-600' : 'text-zinc-400'}`} /> 
                       Compra Parcelada
                     </Label>
-                    <Switch checked={isInstallment} onCheckedChange={handleToggleInstallment} onClick={(e) => e.stopPropagation()} />
+                    <Switch checked={isInstallment} disabled={!canUseInstallments} onCheckedChange={handleToggleInstallment} onClick={(e) => e.stopPropagation()} />
                   </div>
-                  
-                  {isInstallment && (
+
+                  {!canUseInstallments && (
+                    <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-3 text-sm text-violet-800">
+                      <p className="flex items-center gap-2 font-semibold">
+                        <Crown className="h-4 w-4 text-violet-600" />
+                        Disponível no Premium e no Pro
+                      </p>
+                      <p className="mt-1 text-xs text-violet-700">
+                        Faça upgrade para lançar compras parceladas e acompanhar o mês com mais precisão.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="mt-3 h-9 rounded-xl border-violet-200 text-violet-700 hover:bg-violet-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push("/settings?tab=billing");
+                        }}
+                      >
+                        Ver planos
+                      </Button>
+                    </div>
+                  )}
+
+                  {canUseInstallments && isInstallment && (
                     <div className="pt-4 mt-3 border-t border-violet-100 dark:border-violet-900/50 animate-in fade-in slide-in-from-top-2" onClick={(e) => e.stopPropagation()}>
                       <Label className="text-zinc-500 text-xs mb-1.5 block">Em quantas vezes?</Label>
                       <Input
