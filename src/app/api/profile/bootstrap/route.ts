@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { UserProfile } from "@/types/user";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
+import { normalizePhone } from "@/lib/phone";
 
 async function getAuthContext(request: NextRequest) {
   const decoded = await verifyRequestAuth(request);
@@ -16,6 +17,7 @@ export async function POST(request: NextRequest) {
     const auth = await getAuthContext(request);
     const body = (await request.json()) as { profile?: Partial<UserProfile> };
     const profile = body.profile || {};
+    const normalizedPhone = normalizePhone(profile.phone || "");
 
     const existingRows = await supabaseSelect("profiles", {
       filters: { uid: auth.uid },
@@ -28,7 +30,7 @@ export async function POST(request: NextRequest) {
         email: auth.email,
         displayName: profile.displayName || "Usuário",
         completeName: profile.completeName || profile.displayName || "",
-        phone: profile.phone || "",
+        phone: normalizedPhone,
         photoURL: profile.photoURL || "",
         role: profile.role || "client",
         plan: profile.plan || "free",
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
             email: newProfile.email ?? "",
             display_name: newProfile.displayName ?? "",
             complete_name: newProfile.completeName ?? "",
-            phone: newProfile.phone ?? "",
+            phone: normalizedPhone,
             photo_url: newProfile.photoURL ?? "",
             role: newProfile.role ?? "client",
             plan: newProfile.plan ?? "free",
@@ -100,9 +102,9 @@ export async function POST(request: NextRequest) {
       shouldUpdate = true;
     }
 
-    if (typeof profile.phone === "string" && profile.phone !== (existing.phone ?? raw.phone ?? "")) {
-      patch.phone = profile.phone;
-      raw.phone = profile.phone;
+    if (typeof profile.phone === "string" && normalizedPhone !== normalizePhone(String(existing.phone ?? raw.phone ?? ""))) {
+      patch.phone = normalizedPhone;
+      raw.phone = normalizedPhone;
       shouldUpdate = true;
     }
 
