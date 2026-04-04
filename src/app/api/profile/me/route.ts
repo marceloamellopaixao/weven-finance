@@ -6,6 +6,7 @@ import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { normalizePhone } from "@/lib/phone";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
           email: row.email ?? raw.email ?? "",
           displayName: row.display_name ?? raw.displayName ?? raw.completeName ?? "Usuário",
           completeName: row.complete_name ?? raw.completeName ?? "",
-          phone: row.phone ?? raw.phone ?? "",
+          phone: normalizePhone(String(row.phone ?? raw.phone ?? "")),
           photoURL: row.photo_url ?? raw.photoURL ?? "",
           role: row.role ?? raw.role ?? "client",
           plan: row.plan ?? raw.plan ?? "free",
@@ -105,11 +106,12 @@ export async function PUT(request: NextRequest) {
       completeName?: string;
       phone?: string;
     };
+    const normalizedPhone = normalizePhone(body.phone ?? "");
     const existing = await supabaseSelect("profiles", { filters: { uid }, limit: 1 });
     const raw = ((existing[0]?.raw as Record<string, unknown> | undefined) || {});
     raw.displayName = body.displayName ?? "";
     raw.completeName = body.completeName ?? "";
-    raw.phone = body.phone ?? "";
+    raw.phone = normalizedPhone;
 
     await supabaseUpsertRows(
       "profiles",
@@ -118,7 +120,7 @@ export async function PUT(request: NextRequest) {
           uid,
           display_name: body.displayName ?? "",
           complete_name: body.completeName ?? "",
-          phone: body.phone ?? "",
+          phone: normalizedPhone,
           raw,
         },
       ],
