@@ -27,7 +27,7 @@ import {
   AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown, Search, HelpCircle, CheckCircle2,
   Medal, Info, AlertTriangle,
   Calculator,
-  Tag, Settings
+  Tag, Settings, Repeat
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
@@ -1466,6 +1466,30 @@ export default function DashboardPage() {
     </DropdownMenu>
   );
 
+  const renderTransactionStatusButton = (tx: Transaction) => {
+    const isPending = tx.status === "pending";
+    const isIncome = tx.type === "income";
+    const label = isPending
+      ? (isIncome ? "Receber" : "Pagar")
+      : (isIncome ? "Nao recebido" : "Nao pago");
+
+    return (
+      <Button
+        type="button"
+        size="sm"
+        variant={isPending ? "default" : "outline"}
+        className={`h-8 rounded-lg px-2 text-[11px] font-semibold ${
+          isPending
+            ? "bg-emerald-600 text-white hover:bg-emerald-700"
+            : "border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        }`}
+        onClick={() => handleCheckinAction(tx, isPending)}
+      >
+        {label}
+      </Button>
+    );
+  };
+
   return (
     <div className="min-h-screen font-sans selection:bg-primary/20 selection:text-primary pb-20">
 
@@ -1966,7 +1990,10 @@ export default function DashboardPage() {
                           </p>
                           </div>
                         </div>
-                        {renderTransactionActions(tx)}
+                        <div className="flex items-center gap-2 shrink-0">
+                          {renderTransactionStatusButton(tx)}
+                          {renderTransactionActions(tx)}
+                        </div>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
@@ -1992,6 +2019,12 @@ export default function DashboardPage() {
                           <span className="flex items-center text-[10px] bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
                             {getCategoryRoot(tx.category) === 'Streaming' ? <Tv className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
                             {(tx.installmentCurrent || 0)}/{(tx.installmentTotal || 0)}
+                          </span>
+                        )}
+                        {tx.isRecurring && (
+                          <span className="flex items-center text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-900">
+                            <Repeat className="mr-1 h-3 w-3" />
+                            Assinatura
                           </span>
                         )}
                       </div>
