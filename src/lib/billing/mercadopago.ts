@@ -618,6 +618,10 @@ export async function syncFromWebhook(input: WebhookInput) {
       paymentId: details.paymentId ?? null,
       preapprovalId: details.preapprovalId ?? null,
       merchantOrderId: details.merchantOrderId ?? null,
+      pendingPreapprovalId: null,
+      pendingPlan: null,
+      pendingCheckoutAt: null,
+      pendingCheckoutAttemptId: null,
       lastEventType: input.topic,
       lastEventAction: input.action ?? null,
       lastEventId: input.eventId ?? null,
@@ -760,6 +764,7 @@ export async function confirmPreapprovalForUser(params: {
       pendingPreapprovalId: null,
       pendingPlan: null,
       pendingCheckoutAt: null,
+      pendingCheckoutAttemptId: null,
     },
   });
 
@@ -958,6 +963,7 @@ export async function cancelSubscriptionForUser(params: {
       pendingPreapprovalId: null,
       pendingPlan: null,
       pendingCheckoutAt: null,
+      pendingCheckoutAttemptId: null,
     },
   });
 
