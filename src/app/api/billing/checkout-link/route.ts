@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { buildCheckoutUrl } from "@/lib/billing/mercadopago";
 import { DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
@@ -73,8 +74,9 @@ export async function GET(request: NextRequest) {
       selectedBaseUrl.startsWith("https://") &&
       !selectedBaseUrl.includes("localhost") &&
       !selectedBaseUrl.includes("127.0.0.1");
+    const checkoutAttemptId = crypto.randomUUID();
     const returnUrl = isPublicHttpsUrl
-      ? `${selectedBaseUrl}/settings?billing_return=1&plan=${plan}`
+      ? `${selectedBaseUrl}/billing/activating?plan=${plan}&attempt=${checkoutAttemptId}`
       : undefined;
     const checkoutUrl = buildCheckoutUrl(selectedPlan.paymentLink, {
       uid,
@@ -89,6 +91,7 @@ export async function GET(request: NextRequest) {
     billing.pendingPreapprovalId = null;
     billing.pendingPlan = plan;
     billing.pendingCheckoutAt = new Date().toISOString();
+    billing.pendingCheckoutAttemptId = checkoutAttemptId;
     billing.lastError = null;
 
     await supabaseUpsertRows(
@@ -105,7 +108,10 @@ export async function GET(request: NextRequest) {
     );
 
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
-    return NextResponse.json({ ok: true, checkoutUrl, preapprovalId: null }, { status: 200 });
+    return NextResponse.json(
+      { ok: true, checkoutUrl, preapprovalId: null, checkoutAttemptId },
+      { status: 200 }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     const status = message === "missing_auth_token" ? 401 : 500;
