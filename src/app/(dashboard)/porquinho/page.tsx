@@ -31,10 +31,19 @@ const formatCurrency = (value: number) =>
 
 export default function PiggyBankPage() {
   const { user, userProfile } = useAuth();
-  const { status: onboardingStatus, loading: onboardingLoading } = useOnboarding();
+  const {
+    status: onboardingStatus,
+    loading: onboardingLoading,
+    activeStep: onboardingActiveStep,
+    isActive: isOnboardingActive,
+  } = useOnboarding();
   const [piggies, setPiggies] = useState<PiggyBank[]>([]);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const isGoalOnboardingActive =
+    isOnboardingActive &&
+    onboardingActiveStep === "firstGoal" &&
+    !onboardingStatus.steps.firstGoal;
 
   useEffect(() => {
     if (!user) return;
@@ -81,7 +90,7 @@ export default function PiggyBankPage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/piggy-bank/new">
-              <Button className="rounded-xl bg-violet-600 hover:bg-violet-700">
+              <Button className={`rounded-xl bg-violet-600 hover:bg-violet-700 ${isGoalOnboardingActive ? "ring-2 ring-violet-300 ring-offset-2" : ""}`}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Criar um Cofrinho
               </Button>
@@ -97,8 +106,12 @@ export default function PiggyBankPage() {
         )}
 
         {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.steps.firstGoal && (
-          <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
-            Onboarding: crie sua primeira meta e confirme um aporte para concluir esta etapa.
+          <div className={`rounded-xl border px-4 py-3 text-sm ${
+            isGoalOnboardingActive
+              ? "border-violet-300 bg-violet-50 text-violet-900 ring-2 ring-violet-200"
+              : "border-violet-200 bg-violet-50 text-violet-800"
+          }`}>
+            Etapa atual: crie sua primeira meta e confirme um aporte para concluir esta etapa.
           </div>
         )}
 
