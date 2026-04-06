@@ -3,6 +3,7 @@ import { UserProfile } from "@/types/user";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { normalizePhone } from "@/lib/phone";
+import { assertPhoneAvailable } from "@/lib/profile/server";
 
 async function getAuthContext(request: NextRequest) {
   const decoded = await verifyRequestAuth(request);
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
     const auth = await getAuthContext(request);
     const body = (await request.json()) as { profile?: Partial<UserProfile> };
     const profile = body.profile || {};
-    const normalizedPhone = normalizePhone(profile.phone || "");
+    const normalizedPhone = await assertPhoneAvailable(profile.phone || "", auth.uid);
 
     const existingRows = await supabaseSelect("profiles", {
       filters: { uid: auth.uid },
@@ -145,7 +146,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, created: false }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "missing_auth_token" ? 401 : 500;
+    const status =
+      message === "missing_auth_token"
+        ? 401
+        : message === "phone_already_in_use"
+          ? 409
+          : 500;
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
