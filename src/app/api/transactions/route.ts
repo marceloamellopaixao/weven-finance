@@ -81,6 +81,7 @@ function toClientTx(uid: string, row: Record<string, unknown>) {
     installmentCurrent: row.installment_current ?? raw.installmentCurrent ?? undefined,
     installmentTotal: row.installment_total ?? raw.installmentTotal ?? undefined,
     isRecurring: typeof raw.isRecurring === "boolean" ? raw.isRecurring : false,
+    recurrenceEnded: typeof raw.recurrenceEnded === "boolean" ? raw.recurrenceEnded : false,
     createdAt: typeof row.created_at === "string" ? row.created_at : null,
     isEncrypted: typeof raw.isEncrypted === "boolean" ? raw.isEncrypted : false,
     isArchived: typeof raw.isArchived === "boolean" ? raw.isArchived : false,
@@ -388,6 +389,26 @@ export async function POST(request: NextRequest) {
           uid,
           source_id: String(row.source_id || ""),
         });
+      }
+
+      const remainingRecurringRows = current.filter(
+        (row) =>
+          String(row.group_id || "") === body.groupId &&
+          typeof row.source_id === "string" &&
+          typeof row.due_date === "string" &&
+          row.due_date <= body.lastInstallmentDate &&
+          Boolean((row.raw as Record<string, unknown> | null)?.isRecurring)
+      );
+
+      if (remainingRecurringRows.length > 0) {
+        const updates = remainingRecurringRows.map((row) => {
+          const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+          return toTxRow(uid, String(row.source_id), {
+            ...raw,
+            recurrenceEnded: true,
+          });
+        });
+        await supabaseUpsertRows("transactions", updates, { onConflict: "id" });
       }
 
       await enforceCreditCardPolicy(uid);
