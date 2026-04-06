@@ -34,10 +34,27 @@ export default function ForgotPasswordPage() {
 
     setIsLoading(true);
     try {
-      await sendPasswordAccessEmail(email, "recovery");
+      const validationResponse = await fetch("/api/auth/password-access", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+
+      const validationPayload = (await validationResponse.json()) as { ok?: boolean; error?: string };
+      if (!validationResponse.ok || !validationPayload.ok) {
+        if (validationPayload.error === "email_not_found") {
+          throw new Error("Nenhuma conta foi encontrada com esse e-mail.");
+        }
+        throw new Error("Nao foi possivel validar este e-mail agora.");
+      }
+
+      await sendPasswordAccessEmail(email.trim().toLowerCase(), "recovery");
       setIsSent(true);
-    } catch {
-      setError("Erro ao enviar e-mail. Tente novamente.");
+    } catch (submitError) {
+      const message = submitError instanceof Error ? submitError.message : "Erro ao enviar e-mail. Tente novamente.";
+      setError(message);
     } finally {
       setIsLoading(false);
     }
