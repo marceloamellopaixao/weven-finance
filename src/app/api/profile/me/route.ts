@@ -7,6 +7,7 @@ import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { normalizePhone } from "@/lib/phone";
+import { assertPhoneAvailable } from "@/lib/profile/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -106,7 +107,7 @@ export async function PUT(request: NextRequest) {
       completeName?: string;
       phone?: string;
     };
-    const normalizedPhone = normalizePhone(body.phone ?? "");
+    const normalizedPhone = await assertPhoneAvailable(body.phone ?? "", uid);
     const existing = await supabaseSelect("profiles", { filters: { uid }, limit: 1 });
     const raw = ((existing[0]?.raw as Record<string, unknown> | undefined) || {});
     raw.displayName = body.displayName ?? "";
@@ -130,7 +131,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = resolveApiErrorStatus(message);
+    const status = message === "phone_already_in_use" ? 409 : resolveApiErrorStatus(message);
     apiLogger.error({
       message: "profile_me_put_failed",
       requestId: meta.requestId,
