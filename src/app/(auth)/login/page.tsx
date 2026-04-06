@@ -1,13 +1,20 @@
 "use client";
 
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Loader2, Wallet } from "lucide-react";
+
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Wallet, Loader2 } from "lucide-react";
-import Link from "next/link";
+import {
+  buildUpgradeCheckoutPath,
+  parseUpgradePlan,
+  readPendingUpgradePlan,
+  rememberPendingUpgradePlan,
+} from "@/services/billing/checkoutIntent";
 
 const GoogleIcon = () => (
   <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
@@ -21,22 +28,30 @@ const GoogleIcon = () => (
 export default function LoginPage() {
   const { signInWithGoogle, loginWithEmail, user } = useAuth();
   const router = useRouter();
-  
+  const searchParams = useSearchParams();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Constantes de Animação (Padrão do Sistema)
+  const pendingUpgradePlan = parseUpgradePlan(searchParams.get("upgrade_plan")) || readPendingUpgradePlan();
+
   const fadeInUp = "animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both";
   const zoomIn = "animate-in fade-in zoom-in-50 duration-500 fill-mode-both";
 
   useEffect(() => {
-    if (user) {
-      router.replace("/dashboard");
+    if (pendingUpgradePlan) {
+      rememberPendingUpgradePlan(pendingUpgradePlan);
     }
-  }, [user, router]);
+  }, [pendingUpgradePlan]);
+
+  useEffect(() => {
+    if (user) {
+      router.replace(pendingUpgradePlan ? buildUpgradeCheckoutPath(pendingUpgradePlan) : "/dashboard");
+    }
+  }, [pendingUpgradePlan, router, user]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,14 +65,14 @@ export default function LoginPage() {
       }
 
       if (password.length < 6) {
-        setError("A senha deve ter no mínimo 6 caracteres.");
+        setError("A senha deve ter no minimo 6 caracteres.");
         setIsLoading(false);
         return;
       }
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
-        setError("Por favor, insira um e-mail válido.");
+        setError("Por favor, insira um e-mail valido.");
         setIsLoading(false);
         return;
       }
@@ -82,16 +97,13 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans px-4">
-      
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-[100px]" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[100px]" />
       </div>
 
-      <div className={`w-full max-w-[400px] relative z-10`}>
-        
+      <div className="w-full max-w-[400px] relative z-10">
         <div className={`${zoomIn} bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl border border-white/20 dark:border-zinc-800 shadow-2xl rounded-3xl p-6 md:p-8`}>
-          
           <div className="text-center mb-6 space-y-2">
             <div className={`${zoomIn} inline-flex items-center justify-center p-3 bg-linear-to-tr from-violet-600 to-indigo-600 rounded-2xl shadow-lg shadow-violet-500/20 mb-4`}>
               <Wallet className="h-8 w-8 text-white" />
@@ -102,18 +114,21 @@ export default function LoginPage() {
             <p className={`${fadeInUp} delay-200 text-sm text-zinc-500 dark:text-zinc-400`}>
               Bem-vindo de volta!
             </p>
+            {pendingUpgradePlan && (
+              <p className="text-xs font-medium text-violet-600 dark:text-violet-300">
+                Depois do login, vamos continuar na contratacao do plano {pendingUpgradePlan === "premium" ? "Premium" : "Pro"}.
+              </p>
+            )}
           </div>
 
           <div className={`${fadeInUp} delay-300 space-y-6`}>
-            
-            {/* Login com Email */}
             <form onSubmit={handleEmailLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">E-mail</Label>
-                <Input 
-                  id="email" 
-                  type="text" 
-                  placeholder="seu@email.com" 
+                <Input
+                  id="email"
+                  type="text"
+                  placeholder="seu@email.com"
                   className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -122,17 +137,17 @@ export default function LoginPage() {
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <Label htmlFor="password">Senha</Label>
-                  <Link 
-                    href="/forgot-password" 
+                  <Link
+                    href={pendingUpgradePlan ? `/forgot-password?upgrade_plan=${pendingUpgradePlan}` : "/forgot-password"}
                     className="text-xs text-violet-600 hover:underline hover:cursor-pointer transition-all duration-200"
                   >
                     Esqueceu?
                   </Link>
                 </div>
-                <Input 
-                  id="password" 
-                  type="password" 
-                  placeholder="******" 
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="******"
                   className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -145,7 +160,7 @@ export default function LoginPage() {
                 </div>
               )}
 
-              <Button 
+              <Button
                 type="submit"
                 disabled={isLoading || isGoogleLoading}
                 className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium shadow-lg shadow-violet-500/20 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
@@ -165,8 +180,8 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button 
-              onClick={handleGoogleLogin} 
+            <Button
+              onClick={handleGoogleLogin}
               disabled={isLoading || isGoogleLoading}
               className="w-full h-11 bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-100 dark:border-zinc-700 font-medium shadow-sm active:scale-[0.98] rounded-xl hover:cursor-pointer transition-all duration-200"
             >
@@ -182,13 +197,18 @@ export default function LoginPage() {
 
             <div className="text-center pt-2">
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Não tem uma conta? <Link href="/register" className="text-violet-600 font-semibold hover:underline hover:cursor-pointer transition-all duration-200">Cadastre-se</Link>
+                Nao tem uma conta?{" "}
+                <Link
+                  href={pendingUpgradePlan ? `/register?upgrade_plan=${pendingUpgradePlan}` : "/register"}
+                  className="text-violet-600 font-semibold hover:underline hover:cursor-pointer transition-all duration-200"
+                >
+                  Cadastre-se
+                </Link>
               </p>
             </div>
-
           </div>
         </div>
-        
+
         <p className={`${fadeInUp} delay-500 text-center text-[10px] text-zinc-400 mt-6 opacity-60`}>
           © 2026 WevenFinance.
         </p>
