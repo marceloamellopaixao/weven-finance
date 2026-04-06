@@ -80,6 +80,7 @@ function toClientTx(uid: string, row: Record<string, unknown>) {
     groupId: row.group_id ?? raw.groupId ?? undefined,
     installmentCurrent: row.installment_current ?? raw.installmentCurrent ?? undefined,
     installmentTotal: row.installment_total ?? raw.installmentTotal ?? undefined,
+    isRecurring: typeof raw.isRecurring === "boolean" ? raw.isRecurring : false,
     createdAt: typeof row.created_at === "string" ? row.created_at : null,
     isEncrypted: typeof raw.isEncrypted === "boolean" ? raw.isEncrypted : false,
     isArchived: typeof raw.isArchived === "boolean" ? raw.isArchived : false,
