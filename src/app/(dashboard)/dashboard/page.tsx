@@ -1499,7 +1499,7 @@ export default function DashboardPage() {
           <Pencil className="mr-2 h-3.5 w-3.5" /> Editar
         </DropdownMenuItem>
 
-        {tx.groupId && tx.isRecurring && (
+        {tx.groupId && tx.isRecurring && !tx.recurrenceEnded && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setTxToCancelSubscription(tx)} className="text-amber-600 focus:text-amber-700 cursor-pointer rounded-lg text-xs font-medium focus:bg-amber-50 dark:focus:bg-amber-900/20">
@@ -2099,7 +2099,7 @@ export default function DashboardPage() {
                         {tx.isRecurring && (
                           <span className="flex items-center text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-900">
                             <Repeat className="mr-1 h-3 w-3" />
-                            Assinatura
+                            {tx.recurrenceEnded ? "Assinatura encerrada" : "Assinatura"}
                           </span>
                         )}
                       </div>
