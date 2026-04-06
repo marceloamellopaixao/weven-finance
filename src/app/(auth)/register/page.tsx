@@ -91,6 +91,7 @@ export default function RegisterPage() {
                 <Label htmlFor="displayName">Apelido</Label>
                 <Input
                   id="displayName"
+                  autoComplete="nickname"
                   placeholder="Ex: Marcelo"
                   className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
                   value={displayName}
@@ -101,6 +102,9 @@ export default function RegisterPage() {
                 <Label htmlFor="phone">Celular</Label>
                 <Input
                   id="phone"
+                  type="tel"
+                  autoComplete="tel-national"
+                  inputMode="tel"
                   placeholder="Ex: 1199..."
                   className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
                   maxLength={15}
@@ -114,6 +118,7 @@ export default function RegisterPage() {
               <Label htmlFor="completeName">Nome Completo</Label>
               <Input
                 id="completeName"
+                autoComplete="name"
                 placeholder="Ex: Marcelo Augusto"
                 className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
                 value={completeName}
@@ -125,6 +130,9 @@ export default function RegisterPage() {
               <Label htmlFor="email">E-mail</Label>
               <Input
                 id="email"
+                type="email"
+                autoComplete="email"
+                inputMode="email"
                 placeholder="Ex: seu@email.com"
                 className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
                 value={email}
@@ -138,6 +146,7 @@ export default function RegisterPage() {
                 <Input
                   id="password"
                   type="password"
+                  autoComplete="new-password"
                   placeholder="******"
                   className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
                   value={password}
@@ -150,6 +159,7 @@ export default function RegisterPage() {
                 <Input
                   id="confirmPassword"
                   type="password"
+                  autoComplete="new-password"
                   placeholder="******"
                   className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
                   value={confirmPassword}
