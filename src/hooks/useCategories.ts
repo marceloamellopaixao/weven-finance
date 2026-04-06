@@ -93,14 +93,11 @@ export function useCategories() {
             filter: `uid=eq.${effectiveUid}`,
             onChange: () => void loadCategories(),
         });
-        const onFocus = () => void loadCategories();
-        window.addEventListener("focus", onFocus);
 
         return () => {
             cancelled = true;
             stopCategories();
             stopSettings();
-            window.removeEventListener("focus", onFocus);
         };
     }, [user, userProfile?.uid]);
 
@@ -114,6 +111,7 @@ export function useCategories() {
         const finalName = parentName
             ? `${parentName}${CATEGORY_PATH_SEPARATOR}${name}`
             : name;
+        await addCustomCategory(await user.getIdToken(), finalName, type);
 
         const newCat: Category = {
             name: finalName,
@@ -122,16 +120,16 @@ export function useCategories() {
             isCustom: true,
         };
 
-        setCategories((prev) => [...prev, newCat]);
-
-        await addCustomCategory(await user.getIdToken(), finalName, type);
+        setCategories((prev) => {
+            if (prev.some((cat) => cat.name === finalName)) return prev;
+            return [...prev, newCat];
+        });
     };
 
     const deleteCategory = async (name: string) => {
         if (!user) return;
-
-        setCategories((prev) => prev.filter((cat) => cat.name !== name && !cat.name.startsWith(`${name}${CATEGORY_PATH_SEPARATOR}`)));
         await deleteCustomCategoryByName(await user.getIdToken(), name, "Outros");
+        setCategories((prev) => prev.filter((cat) => cat.name !== name && !cat.name.startsWith(`${name}${CATEGORY_PATH_SEPARATOR}`)));
     };
 
     const renameCategory = async (oldName: string, newName: string) => {
@@ -139,7 +137,7 @@ export function useCategories() {
 
         const trimmed = newName.trim();
         if (!trimmed) return;
-
+        await renameCustomCategoryByName(await user.getIdToken(), oldName, trimmed);
         setCategories((prev) =>
             prev.map((cat) => {
                 if (cat.name === oldName || cat.name.startsWith(`${oldName}${CATEGORY_PATH_SEPARATOR}`)) {
@@ -149,8 +147,6 @@ export function useCategories() {
                 return cat;
             })
         );
-
-        await renameCustomCategoryByName(await user.getIdToken(), oldName, trimmed);
     };
 
     const toggleDefaultCategoryVisibility = async (name: string, hidden: boolean) => {
