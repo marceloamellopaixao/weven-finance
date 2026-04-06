@@ -24,7 +24,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import {
   Plus, TrendingDown, TrendingUp, Eye, EyeOff,
   DollarSign, CalendarDays, MoreHorizontal, Pencil, Trash2,
-  AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Tv, XCircle, Crown, Search, HelpCircle, CheckCircle2,
+  AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, XCircle, Crown, Search, HelpCircle, CheckCircle2,
   Medal, Info, AlertTriangle,
   Calculator,
   Tag, Settings, Repeat
@@ -40,6 +40,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getPlanCapabilities } from "@/lib/plans/capabilities";
+import { getOnboardingStepHref } from "@/lib/onboarding/flow";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -169,7 +170,13 @@ export default function DashboardPage() {
   } = useCategories();
   const { startTour } = useDashboardTour();
   const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
-  const { status: onboardingStatus, loading: onboardingLoading, dismiss: dismissOnboarding } = useOnboarding();
+  const {
+    status: onboardingStatus,
+    loading: onboardingLoading,
+    dismiss: dismissOnboarding,
+    activeStep: onboardingActiveStep,
+    isActive: isOnboardingActive,
+  } = useOnboarding();
 
   // --- 1. STATES ---
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -195,6 +202,7 @@ export default function DashboardPage() {
   const [selectedPaymentCardId, setSelectedPaymentCardId] = useState("");
   const [dueDate, setDueDate] = useState(new Date().toISOString().split('T')[0]);
   const [isInstallment, setIsInstallment] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
   const [installmentsCount, setInstallmentsCount] = useState("2");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -254,14 +262,14 @@ export default function DashboardPage() {
 
   // --- 2. INICIAR TOUR ---
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && user && !isOnboardingActive) {
       startTour();
     }
-  }, [loading, startTour, user]);
+  }, [isOnboardingActive, loading, startTour, user]);
 
   // --- 3. CHECK-IN DI?RIO (Pop-up Inteligente) ---
   useEffect(() => {
-    if (loading || !user || hasRunCheckin) return;
+    if (loading || !user || hasRunCheckin || isOnboardingActive) return;
 
     if (transactions.length > 0) {
       const todayStr = new Date().toISOString().slice(0, 10);
@@ -284,7 +292,12 @@ export default function DashboardPage() {
 
       setHasRunCheckin(true);
     }
-  }, [transactions, loading, user, hasRunCheckin, checkinStorageKey]);
+  }, [transactions, loading, user, hasRunCheckin, checkinStorageKey, isOnboardingActive]);
+
+  useEffect(() => {
+    if (!isOnboardingActive || !showCheckinModal) return;
+    setShowCheckinModal(false);
+  }, [isOnboardingActive, showCheckinModal]);
 
   // --- 4. MEMOS ---
 
@@ -593,14 +606,6 @@ export default function DashboardPage() {
   }, [transactions]);
 
   useEffect(() => {
-    const categoryRoot = getCategoryRoot(category);
-    if (categoryRoot === 'Streaming' || categoryRoot === 'Salário') {
-      setIsInstallment(true);
-      setInstallmentsCount("12");
-    }
-  }, [category]);
-
-  useEffect(() => {
     if (!isNewCategoryOpen) return;
     setNewCategoryName("");
     setNewCategoryMode("root");
@@ -646,14 +651,41 @@ export default function DashboardPage() {
   // --- 6. HANDLERS ---
   const changeType = (newType: TransactionType) => {
     setType(newType);
+    setIsInstallment(false);
+    setIsRecurring(false);
+    setInstallmentsCount("2");
     if (newType === 'income') {
       setCategory("Salário");
       setPaymentMethod("pix");
-      setIsInstallment(false);
     } else {
       setCategory("");
       setPaymentMethod("credit_card");
     }
+  };
+
+  const handleToggleRecurring = (checked: boolean) => {
+    setIsRecurring(checked);
+    if (checked) setIsInstallment(false);
+  };
+
+  const handleToggleInstallment = (checked: boolean) => {
+    if (!isBillingExemptRole && checked && !effectivePlanCapabilities.hasInstallments) {
+      setUpgradeReason("installments");
+      if (!isOnboardingActive) {
+        setShowUpgradeModal(true);
+      }
+      return;
+    }
+    setIsInstallment(checked);
+    if (checked) setIsRecurring(false);
+  };
+
+  const handleGoToOnboardingStep = (step: "firstTransaction" | "firstCard" | "firstGoal" | "profileMenu") => {
+    if (step === "profileMenu") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    router.push(getOnboardingStepHref(step));
   };
 
   const changeMonth = (offset: number) => {
@@ -703,13 +735,10 @@ export default function DashboardPage() {
     setIsSubmitting(true);
     try {
       let finalAmount = Number(amount);
-      const count = Number(installmentsCount);
-      const categoryRoot = getCategoryRoot(category);
+      const count = isInstallment ? Math.max(1, Number(installmentsCount || 1)) : 1;
 
       if (isInstallment && count > 1) {
-        if (categoryRoot !== 'Streaming' && categoryRoot !== 'Salário') {
-          finalAmount = finalAmount / count;
-        }
+        finalAmount = finalAmount / count;
         finalAmount = Math.round(finalAmount * 100) / 100;
       }
       const totalAmountToReserve = isInstallment && count > 1
@@ -765,13 +794,15 @@ export default function DashboardPage() {
         date: transactionDate, // Data do Gasto (para despesas) ou Data de Crédito (para rendas)
         dueDate: transactionDueDate, // Data de Vencimento (para despesas) ou Data de Crédito (para rendas)
         isInstallment, // Flag de Parcela
-        installmentsCount: count // Número de Parcelas (se aplicável)
+        installmentsCount: count, // Número de Parcelas (se aplicável)
+        isRecurring,
       });
 
       // Resetar form após adicionar
       setDesc("");
       setAmount("");
       setIsInstallment(false);
+      setIsRecurring(false);
       setInstallmentsCount("2");
       if (isCardPayment) setSelectedPaymentCardId("");
       if (type === 'income') setCategory("Salário");
@@ -1081,7 +1112,13 @@ export default function DashboardPage() {
             <span className="absolute left-3.5 top-3 text-zinc-400 font-semibold">R$</span>
             <Input type="number" className="pl-10 h-12 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl font-semibold text-lg" placeholder="0,00" value={amount} onChange={e => setAmount(e.target.value)} />
           </div>
-          <p className="text-[10px] text-zinc-400 mt-1.5 text-right font-medium">{isInstallment && type === 'expense' ? (getCategoryRoot(category) === 'Streaming' ? "Valor Mensal (Assinatura)" : "O sistema dividirá este valor") : "Valor único"}</p>
+          <p className="text-[10px] text-zinc-400 mt-1.5 text-right font-medium">
+            {isInstallment
+              ? "O sistema dividirá este total pelas parcelas."
+              : isRecurring
+                ? "Este valor será repetido nos próximos 12 meses."
+                : "Valor único"}
+          </p>
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1103,9 +1140,13 @@ export default function DashboardPage() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    onClick={() => setIsNewCategoryOpen(true)}
+                    onClick={() => {
+                      if (isOnboardingActive && onboardingActiveStep === "firstTransaction") return;
+                      setIsNewCategoryOpen(true);
+                    }}
                     variant="outline"
-                    className="h-12 w-12 rounded-xl shrink-0 p-0 border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+                    className="h-12 w-12 rounded-xl shrink-0 p-0 border-zinc-200 bg-zinc-50 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={isOnboardingActive && onboardingActiveStep === "firstTransaction"}
                   >
                     <Settings className="h-5 w-5 text-violet-600" />
                   </Button>
@@ -1196,24 +1237,33 @@ export default function DashboardPage() {
           )}
         </div>
         <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
+          <Label htmlFor="recurring-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
+            <Repeat className="h-3.5 w-3.5 text-blue-500" />
+            Lançamento Fixo / Assinatura
+          </Label>
+          <Switch
+            id="recurring-switch"
+            className="scale-100 data-[state=checked]:bg-blue-600"
+            checked={isRecurring}
+            onCheckedChange={handleToggleRecurring}
+          />
+        </div>
+        {isRecurring && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 text-xs text-blue-800 animate-in fade-in">
+            Este lançamento será criado para o mês atual e para os próximos 11 meses.
+          </div>
+        )}
+        <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
           <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
             <Layers className="h-3.5 w-3.5 text-violet-500" />
-            {type === 'expense' && (getCategoryRoot(category) === 'Streaming' ? 'Recorrência (Mensal)' : 'Compra Parcelada')}
-            {type === 'income' && (getCategoryRoot(category) === 'Salário' ? 'Recorrência (Mensal)' : 'Recebimento Parcelado')}
+            {type === 'expense' ? 'Compra Parcelada' : 'Recebimento Parcelado'}
           </Label>
           <Switch
             id="inst-switch"
             className="scale-100 data-[state=checked]:bg-violet-600"
             checked={isInstallment}
             disabled={!isBillingExemptRole && !effectivePlanCapabilities.hasInstallments}
-            onCheckedChange={(checked) => {
-              if (!isBillingExemptRole && checked && !effectivePlanCapabilities.hasInstallments) {
-                setUpgradeReason("installments");
-                setShowUpgradeModal(true);
-                return;
-              }
-              setIsInstallment(checked);
-            }}
+            onCheckedChange={handleToggleInstallment}
           />
         </div>
         {!isBillingExemptRole && !effectivePlanCapabilities.hasInstallments && (
@@ -1227,7 +1277,7 @@ export default function DashboardPage() {
         {isInstallment && (
           <div className="animate-in slide-in-from-top-2 pt-1">
             <Label className="text-xs font-medium text-zinc-500">
-              {getCategoryRoot(category) === 'Streaming' ? 'Meses de Assinatura (Previsão)' : 'Número de Parcelas'}
+              Número de Parcelas
             </Label>
             <Input type="number" className="h-10 mt-1.5 bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" min="2" max="60" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
           </div>
@@ -1449,7 +1499,7 @@ export default function DashboardPage() {
           <Pencil className="mr-2 h-3.5 w-3.5" /> Editar
         </DropdownMenuItem>
 
-        {tx.groupId && getCategoryRoot(tx.category) === 'Streaming' && (
+        {tx.groupId && tx.isRecurring && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setTxToCancelSubscription(tx)} className="text-amber-600 focus:text-amber-700 cursor-pointer rounded-lg text-xs font-medium focus:bg-amber-50 dark:focus:bg-amber-900/20">
@@ -1562,32 +1612,57 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => router.push("/transactions/new")}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstTransaction ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"}`}
+                  onClick={() => handleGoToOnboardingStep("firstTransaction")}
+                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
+                    onboardingStatus.steps.firstTransaction
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : onboardingActiveStep === "firstTransaction"
+                        ? "border-violet-300 bg-violet-50 text-violet-700 ring-2 ring-violet-200"
+                        : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+                  }`}
                 >
-                  {onboardingStatus.steps.firstTransaction ? "✓ " : ""}Primeira transação
+                  {onboardingStatus.steps.firstTransaction ? "✓ " : onboardingActiveStep === "firstTransaction" ? "• " : ""}Primeira transação
                 </button>
                 <button
                   type="button"
-                  onClick={() => router.push("/cards")}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstCard ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"}`}
+                  onClick={() => handleGoToOnboardingStep("firstCard")}
+                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
+                    onboardingStatus.steps.firstCard
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : onboardingActiveStep === "firstCard"
+                        ? "border-violet-300 bg-violet-50 text-violet-700 ring-2 ring-violet-200"
+                        : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+                  }`}
                 >
-                  {onboardingStatus.steps.firstCard ? "✓ " : ""}Primeiro cartão
+                  {onboardingStatus.steps.firstCard ? "✓ " : onboardingActiveStep === "firstCard" ? "• " : ""}Primeiro cartão
                 </button>
                 <button
                   type="button"
-                  onClick={() => router.push("/piggy-bank")}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstGoal ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"}`}
+                  onClick={() => handleGoToOnboardingStep("firstGoal")}
+                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
+                    onboardingStatus.steps.firstGoal
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : onboardingActiveStep === "firstGoal"
+                        ? "border-violet-300 bg-violet-50 text-violet-700 ring-2 ring-violet-200"
+                        : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+                  }`}
                 >
-                  {onboardingStatus.steps.firstGoal ? "✓ " : ""}Primeira meta
+                  {onboardingStatus.steps.firstGoal ? "✓ " : onboardingActiveStep === "firstGoal" ? "• " : ""}Primeira meta
                 </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <button
                   type="button"
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.profileMenu ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"}`}
+                  onClick={() => handleGoToOnboardingStep("profileMenu")}
+                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
+                    onboardingStatus.steps.profileMenu
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : onboardingActiveStep === "profileMenu"
+                        ? "border-violet-300 bg-violet-50 text-violet-700 ring-2 ring-violet-200"
+                        : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+                  }`}
                 >
-                  {onboardingStatus.steps.profileMenu ? "✓ " : ""}Abrir menu da conta (foto no topo)
+                  {onboardingStatus.steps.profileMenu ? "✓ " : onboardingActiveStep === "profileMenu" ? "• " : ""}Abrir menu da conta (foto no topo)
                 </button>
               </div>
               <div className="flex justify-end">
@@ -2017,8 +2092,8 @@ export default function DashboardPage() {
                         )}
                         {tx.groupId && (
                           <span className="flex items-center text-[10px] bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
-                            {getCategoryRoot(tx.category) === 'Streaming' ? <Tv className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
-                            {(tx.installmentCurrent || 0)}/{(tx.installmentTotal || 0)}
+                            {tx.isRecurring ? <Repeat className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
+                            {tx.isRecurring ? "Mensal" : "Parcela"} • {(tx.installmentCurrent || 0)}/{(tx.installmentTotal || 0)}
                           </span>
                         )}
                         {tx.isRecurring && (
