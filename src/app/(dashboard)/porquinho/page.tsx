@@ -80,7 +80,7 @@ export default function PiggyBankPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link href="/porquinho/novo">
+            <Link href="/piggy-bank/new">
               <Button className="rounded-xl bg-violet-600 hover:bg-violet-700">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Criar um Cofrinho
@@ -122,7 +122,7 @@ export default function PiggyBankPage() {
               ) : piggies.map((piggy) => (
                 <Link
                   key={piggy.id}
-                  href={`/porquinho/${piggy.slug}`}
+                  href={`/piggy-bank/${piggy.slug}`}
                   className="rounded-2xl border border-zinc-200 p-4 transition-colors hover:border-violet-300 hover:bg-violet-50/40"
                 >
                   <p className="font-semibold text-zinc-900">{piggy.name}</p>
@@ -143,7 +143,7 @@ export default function PiggyBankPage() {
                 return (
                   <Link
                     key={goal.type}
-                    href={`/porquinho/novo?goal=${encodeURIComponent(goal.type)}`}
+                    href={`/piggy-bank/new?goal=${encodeURIComponent(goal.type)}`}
                     className="flex w-full items-center gap-3 rounded-2xl border border-zinc-200 bg-white p-4 text-left transition-colors hover:cursor-pointer hover:border-violet-300 hover:bg-violet-50/40"
                   >
                     <Icon className="h-5 w-5 text-violet-600" />
