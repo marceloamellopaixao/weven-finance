@@ -105,13 +105,10 @@ export const subscribeToAllUsers = (
     table: "profiles",
     onChange: () => void run(),
   });
-  const onFocus = () => void run();
-  window.addEventListener("focus", onFocus);
   return () => {
     cancelled = true;
     clearInterval(interval);
     stopRealtime();
-    window.removeEventListener("focus", onFocus);
   };
 };
 
@@ -180,13 +177,10 @@ export const subscribeToUserProfile = (
     filter: `uid=eq.${uid}`,
     onChange: () => void run(),
   });
-  const onFocus = () => void run();
-  window.addEventListener("focus", onFocus);
   return () => {
     cancelled = true;
     clearInterval(interval);
     stopRealtime();
-    window.removeEventListener("focus", onFocus);
   };
 };
 
@@ -290,15 +284,6 @@ export const updateOwnProfile = async (
   data: { displayName: string; completeName: string; phone: string }
 ) => {
   const normalizedPhone = normalizePhone(data.phone);
-  const supabase = getSupabaseClient();
-  await supabase.auth.updateUser({
-    data: {
-      displayName: data.displayName,
-      completeName: data.completeName,
-      phone: normalizedPhone,
-    },
-  });
-
   const { response, payload } = await apiFetchWithOptionalApproval("/api/profile/me", {
     method: "PUT",
     body: JSON.stringify({
@@ -308,8 +293,20 @@ export const updateOwnProfile = async (
     }),
   });
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || `Erro ao atualizar perfil do usuário ${uid}`);
+    if (payload.error === "phone_already_in_use") {
+      throw new Error("Este numero ja esta vinculado a outra conta.");
+    }
+    throw new Error(payload.error || `Erro ao atualizar perfil do usuario ${uid}`);
   }
+
+  const supabase = getSupabaseClient();
+  await supabase.auth.updateUser({
+    data: {
+      displayName: data.displayName,
+      completeName: data.completeName,
+      phone: normalizedPhone,
+    },
+  });
 };
 
 export const getStaffUsers = async (): Promise<UserProfile[]> => {
