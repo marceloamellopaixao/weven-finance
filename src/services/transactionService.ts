@@ -145,7 +145,7 @@ async function fetchTransactions(uid: string, groupId?: string): Promise<Transac
       return {
         ...tx,
         description: isDecryptionFailed
-          ? "Dados Protegidos (Migração Necessária)"
+          ? "Dados protegidos no momento"
           : decryptedDesc,
         amount: safeAmount,
         createdAt: tx.createdAt ? new Date(tx.createdAt) : new Date(),
@@ -215,7 +215,7 @@ export async function fetchTransactionsPage(
       return {
         ...tx,
         description: isDecryptionFailed
-          ? "Dados Protegidos (Migração Necessária)"
+          ? "Dados protegidos no momento"
           : decryptedDesc,
         amount: safeAmount,
         createdAt: tx.createdAt ? new Date(tx.createdAt) : new Date(),
