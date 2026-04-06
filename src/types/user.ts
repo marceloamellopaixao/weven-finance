@@ -23,6 +23,7 @@ export interface BillingInfo {
   pendingPreapprovalId?: string;
   pendingPlan?: UserPlan;
   pendingCheckoutAt?: string; // ISO Date
+  pendingCheckoutAttemptId?: string;
 }
 
 export interface UserProfile {
