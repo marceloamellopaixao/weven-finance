@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { Pencil, Trash2, Plus, EyeOff, Eye, FolderTree, Tag, Check, X, FolderOpen } from "lucide-react";
+import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CATEGORY_PATH_SEPARATOR, CategoryType, useCategories } from "@/hooks/useCategories";
+import { CATEGORY_PATH_SEPARATOR, Category, CategoryType } from "@/hooks/useCategories";
 import {
   formatCategoryLabel,
   getCategoryRoot,
@@ -25,6 +26,12 @@ type CategoryManagerDialogProps = {
   type: CategoryType;
   selectedCategory?: string;
   onSelectCategory?: (category: string) => void;
+  categories: Category[];
+  defaultCategories: Array<Category & { hidden?: boolean }>;
+  addNewCategory: (name: string, type: CategoryType, parentName?: string) => Promise<void>;
+  deleteCategory: (name: string) => Promise<void>;
+  renameCategory: (oldName: string, newName: string) => Promise<void>;
+  toggleDefaultCategoryVisibility: (name: string, hidden: boolean) => Promise<void>;
 };
 
 export function CategoryManagerDialog({
@@ -33,16 +40,13 @@ export function CategoryManagerDialog({
   type,
   selectedCategory,
   onSelectCategory,
+  categories,
+  defaultCategories,
+  addNewCategory,
+  deleteCategory,
+  renameCategory,
+  toggleDefaultCategoryVisibility,
 }: CategoryManagerDialogProps) {
-  const {
-    categories,
-    defaultCategories,
-    addNewCategory,
-    deleteCategory,
-    renameCategory,
-    toggleDefaultCategoryVisibility,
-  } = useCategories();
-
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryMode, setNewCategoryMode] = useState<"root" | "sub">("root");
   const [newCategoryParent, setNewCategoryParent] = useState("");
@@ -119,10 +123,20 @@ export function CategoryManagerDialog({
     try {
       await addNewCategory(categoryName, type, parentName);
       onSelectCategory?.(fullCategoryName);
-      resetForm();
-      onOpenChange(false);
+      setNewCategoryName("");
+      if (newCategoryMode === "root") {
+        setCustomParentFilter("all");
+      } else if (parentName) {
+        setCustomParentFilter(parentName);
+      }
+      toast.success("Categoria adicionada com sucesso.");
     } catch (error) {
-      console.error("Erro ao criar categoria:", error);
+      const message = error instanceof Error ? error.message : "Erro ao criar categoria.";
+      if (message === "duplicate_category_name") {
+        toast.error("Essa categoria ja existe.");
+        return;
+      }
+      toast.error("Nao foi possivel criar a categoria.");
     }
   };
 
@@ -137,7 +151,12 @@ export function CategoryManagerDialog({
         onSelectCategory?.("Outros");
       }
     } catch (error) {
-      console.error("Erro ao excluir categoria:", error);
+      const message = error instanceof Error ? error.message : "Erro ao excluir categoria.";
+      if (message === "duplicate_category_name") {
+        toast.error("Ja existe uma categoria com esse nome.");
+        return;
+      }
+      toast.error("Nao foi possivel excluir a categoria.");
     } finally {
       setDeletingCategoryName(null);
     }
@@ -188,7 +207,12 @@ export function CategoryManagerDialog({
 
       handleCancelEditCategory();
     } catch (error) {
-      console.error("Erro ao editar categoria:", error);
+      const message = error instanceof Error ? error.message : "Erro ao editar categoria.";
+      if (message === "duplicate_category_name") {
+        toast.error("Ja existe uma categoria com esse nome.");
+        return;
+      }
+      toast.error("Nao foi possivel salvar a categoria.");
     } finally {
       setRenamingCategoryName(null);
     }
@@ -305,7 +329,7 @@ export function CategoryManagerDialog({
                   const isEditing = editingCategoryName === cat.name;
 
                   return (
-                    <div key={cat.name} className={`p-3 transition-colors ${isEditing ? 'bg-zinc-50 dark:bg-zinc-900/50' : 'hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30'}`}>
+                    <div key={cat.name} className={`group p-3 transition-colors ${isEditing ? 'bg-zinc-50 dark:bg-zinc-900/50' : 'hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30'}`}>
                       {isEditing ? (
                         // MODO EDIÇÃO INLINE
                         <div className="flex flex-col sm:flex-row gap-2 animate-in fade-in zoom-in-95 duration-200">
