@@ -50,7 +50,11 @@ export default function FirstAccessPage() {
   const searchIntent = useMemo(() => resolveIntent(searchParams.get("intent")), [searchParams]);
   const searchType = useMemo(() => searchParams.get("type"), [searchParams]);
   const searchCode = useMemo(() => searchParams.get("code"), [searchParams]);
+  const requiresPasswordSetup = Boolean(userProfile?.needsPasswordSetup);
   const intent = useMemo<PageIntent>(() => {
+    if (requiresPasswordSetup) {
+      return "first-access";
+    }
     if (searchIntent !== "first-access") {
       return searchIntent;
     }
@@ -61,11 +65,11 @@ export default function FirstAccessPage() {
       return storedIntent === "change-password" ? "change-password" : "recovery";
     }
     return searchIntent;
-  }, [isRecoveryMode, searchIntent, storedIntent]);
-  const requiresPasswordSetup = Boolean(userProfile?.needsPasswordSetup);
+  }, [isRecoveryMode, requiresPasswordSetup, searchIntent, storedIntent]);
   const canSetPasswordNow = Boolean(user && requiresPasswordSetup);
-  const canManagePasswordInSession = Boolean(user && (intent === "change-password" || intent === "recovery"));
+  const canManagePasswordInSession = Boolean(user && !requiresPasswordSetup && (intent === "change-password" || intent === "recovery"));
   const showPasswordForm = isRecoveryMode || canSetPasswordNow || canManagePasswordInSession;
+  const canRequestEmailLink = Boolean(!requiresPasswordSetup && user?.email);
 
   const pageTitle =
     intent === "change-password"
@@ -318,7 +322,7 @@ export default function FirstAccessPage() {
                   {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Salvar nova senha"}
                 </Button>
 
-                {requiresPasswordSetup && user?.email && (
+                {canRequestEmailLink && (
                   <Button
                     type="button"
                     variant="outline"
@@ -362,7 +366,7 @@ export default function FirstAccessPage() {
                   </div>
                 )}
 
-                {user?.email && (
+                {canRequestEmailLink && (
                   <Button
                     onClick={handleSendEmail}
                     disabled={isSendingEmail}
