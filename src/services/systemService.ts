@@ -72,13 +72,10 @@ export const subscribeToPlansConfig = (
     table: "system_configs",
     onChange: () => void run(),
   });
-  const onFocus = () => void run();
-  window.addEventListener("focus", onFocus);
   return () => {
     cancelled = true;
     clearInterval(interval);
     stopRealtime();
-    window.removeEventListener("focus", onFocus);
   };
 };
 
