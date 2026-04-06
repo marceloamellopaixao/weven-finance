@@ -124,7 +124,7 @@ export default function NewPiggyBankPage() {
         sourceType,
         cardId: goalType === "card_limit" ? cardId : undefined,
       });
-      router.push(`/porquinho/${slug}`);
+      router.push(`/piggy-bank/${slug}`);
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Falha ao guardar valor no porquinho.");
     } finally {
@@ -153,7 +153,7 @@ export default function NewPiggyBankPage() {
               Configure a meta, informe o valor e confirme o aporte em uma página dedicada.
             </p>
           </div>
-          <Link href="/porquinho">
+          <Link href="/piggy-bank">
             <Button variant="outline" className="rounded-xl">Voltar para Porquinhos</Button>
           </Link>
         </div>
