@@ -18,6 +18,7 @@ import { usePlans } from "@/hooks/usePlans";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useCategories } from "@/hooks/useCategories";
 import { useOnboarding } from "@/hooks/useOnboarding";
+import { formatCurrencyInput, parseCurrencyInput } from "@/lib/money";
 import { getPlanCapabilities } from "@/lib/plans/capabilities";
 import { addTransaction } from "@/services/transactionService";
 import { subscribeToPaymentCards } from "@/services/paymentCardService";
@@ -43,11 +44,19 @@ export default function NewTransactionPage() {
   const { plans } = usePlans();
   const { status: onboardingStatus, loading: onboardingLoading } = useOnboarding();
   const { transactions } = useTransactions();
-  const { categories } = useCategories();
+  const {
+    categories,
+    defaultCategories,
+    loadingCategories,
+    addNewCategory,
+    deleteCategory,
+    renameCategory,
+    toggleDefaultCategoryVisibility,
+  } = useCategories();
 
   const [type, setType] = useState<TransactionType>("expense");
   const [description, setDescription] = useState("");
-  const [amount, setAmount] = useState("");
+  const [amountInput, setAmountInput] = useState("");
   const [category, setCategory] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -63,6 +72,11 @@ export default function NewTransactionPage() {
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const draftStorageKey = useMemo(
+    () => (user ? `wevenfinance:new-transaction-draft:v1:${user.uid}` : null),
+    [user]
+  );
+  const [draftReady, setDraftReady] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -77,11 +91,91 @@ export default function NewTransactionPage() {
       .filter((cat): cat is NonNullable<typeof cat> => Boolean(cat));
   }, [categories, type]);
 
+  const parsedAmount = useMemo(() => parseCurrencyInput(amountInput), [amountInput]);
+
+  useEffect(() => {
+    if (!draftStorageKey) {
+      setDraftReady(true);
+      return;
+    }
+
+    try {
+      const storedDraft = window.localStorage.getItem(draftStorageKey);
+      if (storedDraft) {
+        const draft = JSON.parse(storedDraft) as Partial<{
+          type: TransactionType;
+          description: string;
+          amountInput: string;
+          category: string;
+          paymentMethod: PaymentMethod;
+          date: string;
+          dueDate: string;
+          isInstallment: boolean;
+          installmentsCount: string;
+          isRecurring: boolean;
+          selectedCardId: string;
+        }>;
+
+        if (draft.type === "income" || draft.type === "expense") setType(draft.type);
+        if (typeof draft.description === "string") setDescription(draft.description);
+        if (typeof draft.amountInput === "string") setAmountInput(formatCurrencyInput(draft.amountInput));
+        if (typeof draft.category === "string") setCategory(draft.category);
+        if (draft.paymentMethod) setPaymentMethod(draft.paymentMethod);
+        if (typeof draft.date === "string") setDate(draft.date);
+        if (typeof draft.dueDate === "string") setDueDate(draft.dueDate);
+        if (typeof draft.isInstallment === "boolean") setIsInstallment(draft.isInstallment);
+        if (typeof draft.installmentsCount === "string") setInstallmentsCount(draft.installmentsCount);
+        if (typeof draft.isRecurring === "boolean") setIsRecurring(draft.isRecurring);
+        if (typeof draft.selectedCardId === "string") setSelectedCardId(draft.selectedCardId);
+      }
+    } catch {
+      window.localStorage.removeItem(draftStorageKey);
+    } finally {
+      setDraftReady(true);
+    }
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (!draftStorageKey || !draftReady) return;
+
+    window.localStorage.setItem(
+      draftStorageKey,
+      JSON.stringify({
+        type,
+        description,
+        amountInput,
+        category,
+        paymentMethod,
+        date,
+        dueDate,
+        isInstallment,
+        installmentsCount,
+        isRecurring,
+        selectedCardId,
+      })
+    );
+  }, [
+    amountInput,
+    category,
+    date,
+    description,
+    draftReady,
+    draftStorageKey,
+    dueDate,
+    installmentsCount,
+    isInstallment,
+    isRecurring,
+    paymentMethod,
+    selectedCardId,
+    type,
+  ]);
+
   useEffect(() => {
     if (!category) return;
+    if (loadingCategories) return;
     if (monthCategories.some((item) => item.name === category)) return;
     setCategory("");
-  }, [category, monthCategories]);
+  }, [category, loadingCategories, monthCategories]);
 
   const showDueDateInput = useMemo(() => {
     const method = PAYMENT_METHODS.find((m) => m.value === paymentMethod);
@@ -146,7 +240,7 @@ export default function NewTransactionPage() {
   const onSubmit = async () => {
     if (!user) return;
     setError("");
-    if (!description.trim() || !amount || !category) {
+    if (!description.trim() || parsedAmount <= 0 || !category) {
       setError("Preencha descrição, valor e categoria.");
       return;
     }
@@ -157,7 +251,7 @@ export default function NewTransactionPage() {
       return;
     }
 
-    const value = Number(amount);
+    const value = parsedAmount;
     const count = isInstallment ? Math.max(1, Number(installmentsCount || 1)) : 1;
     const totalAmountToReserve = Math.round(value * count * 100) / 100;
 
@@ -193,6 +287,9 @@ export default function NewTransactionPage() {
         installmentsCount: count,
         isRecurring, 
       });
+      if (draftStorageKey) {
+        window.localStorage.removeItem(draftStorageKey);
+      }
       router.push("/dashboard");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível salvar a transação.");
@@ -264,9 +361,10 @@ export default function NewTransactionPage() {
             <div className="flex items-center justify-center gap-2">
               <span className={`text-3xl font-bold transition-colors ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>R$</span>
               <Input 
-                type="number" 
-                value={amount} 
-                onChange={(e) => setAmount(e.target.value)} 
+                type="text"
+                inputMode="decimal"
+                value={amountInput}
+                onChange={(e) => setAmountInput(formatCurrencyInput(e.target.value))}
                 placeholder="0,00"
                 className={`w-full max-w-full h-auto p-0 border-none shadow-none text-4xl md:text-5xl font-bold bg-transparent focus-visible:ring-0 text-start ${isIncome ? 'text-emerald-500 placeholder:text-emerald-500' : 'text-red-500 placeholder:text-red-500'}`}
               />
@@ -496,6 +594,12 @@ export default function NewTransactionPage() {
         type={type}
         selectedCategory={category}
         onSelectCategory={setCategory}
+        categories={categories}
+        defaultCategories={defaultCategories}
+        addNewCategory={addNewCategory}
+        deleteCategory={deleteCategory}
+        renameCategory={renameCategory}
+        toggleDefaultCategoryVisibility={toggleDefaultCategoryVisibility}
       />
     </div>
   );
