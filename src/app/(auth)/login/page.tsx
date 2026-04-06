@@ -127,7 +127,9 @@ export default function LoginPage() {
                 <Label htmlFor="email">E-mail</Label>
                 <Input
                   id="email"
-                  type="text"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
                   placeholder="seu@email.com"
                   className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
                   value={email}
@@ -147,6 +149,7 @@ export default function LoginPage() {
                 <Input
                   id="password"
                   type="password"
+                  autoComplete="current-password"
                   placeholder="******"
                   className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
                   value={password}
