@@ -233,7 +233,7 @@ export async function POST(request: NextRequest) {
 
       const hasInstallmentTransactions = txs.some((tx) => {
         const installmentTotal = Number(tx.installmentTotal ?? 0);
-        return Boolean(tx.groupId) || installmentTotal > 1;
+        return !Boolean(tx.isRecurring) && (Boolean(tx.groupId) || installmentTotal > 1);
       });
 
       if (!planContext.isBillingExempt && hasInstallmentTransactions && !capabilities.hasInstallments) {
