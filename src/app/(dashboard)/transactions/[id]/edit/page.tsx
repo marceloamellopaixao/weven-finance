@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
   ArrowLeft, Save, Trash2, Calendar, CreditCard, 
-  Tag, AlignLeft, Info, ReceiptText, AlertCircle, Settings2
+  Tag, AlignLeft, Info, ReceiptText, AlertCircle, Settings2, Repeat, Layers
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CategoryManagerDialog } from "@/components/categories/CategoryManagerDialog";
@@ -179,6 +179,15 @@ export default function EditTransactionPage() {
   }
 
   const isIncome = editingTx.type === "income";
+  const isRecurringGroup = Boolean(editingTx.groupId && editingTx.isRecurring);
+  const isEndedRecurring = Boolean(isRecurringGroup && editingTx.recurrenceEnded);
+  const groupLabel = editingTx.groupId
+    ? isRecurringGroup
+      ? isEndedRecurring
+        ? `Recorrência encerrada ${editingTx.installmentCurrent || 1}/${editingTx.installmentTotal || groupedItems.length || 1}`
+        : `Recorrência ${editingTx.installmentCurrent || 1}/${editingTx.installmentTotal || groupedItems.length || 1}`
+      : `Parcela ${editingTx.installmentCurrent || 1}/${editingTx.installmentTotal || groupedItems.length || 1}`
+    : null;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-8 pb-32 font-sans">
@@ -203,6 +212,21 @@ export default function EditTransactionPage() {
           <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 flex items-center gap-3 text-red-700 text-sm">
             <AlertCircle className="h-5 w-5 shrink-0" />
             <p>{error}</p>
+          </div>
+        )}
+
+        {groupLabel && (
+          <div
+            className={`mb-6 rounded-2xl border px-4 py-3 flex items-center gap-2 text-sm font-medium ${
+              isRecurringGroup
+                ? isEndedRecurring
+                  ? "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-900/30 dark:text-slate-200"
+                  : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200"
+                : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
+            }`}
+          >
+            {isRecurringGroup ? <Repeat className="h-4 w-4" /> : <Layers className="h-4 w-4" />}
+            <span>{groupLabel}</span>
           </div>
         )}
 
@@ -347,27 +371,72 @@ export default function EditTransactionPage() {
           </div>
         </div>
 
-        {/* PARCELAMENTO (Se houver) */}
+        {/* GRUPO (Se houver) */}
         {groupedItems.length > 0 && (
-          <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/30 rounded-3xl p-5 md:p-6 mb-6">
+          <div
+            className={`rounded-3xl p-5 md:p-6 mb-6 border ${
+              isRecurringGroup
+                ? isEndedRecurring
+                  ? "bg-slate-50/70 dark:bg-slate-950/20 border-slate-200 dark:border-slate-800/40"
+                  : "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/30"
+                : "bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/30"
+            }`}
+          >
             <div className="flex items-center gap-2 mb-4">
-              <Info className="h-6 w-5 text-blue-600" />
-              <h3 className="font-semibold text-blue-900 dark:text-blue-100">Visão do Parcelamento</h3>
+              <Info className={`h-6 w-5 ${isRecurringGroup ? (isEndedRecurring ? "text-slate-600 dark:text-slate-300" : "text-blue-600") : "text-amber-600"}`} />
+              <h3 className={`font-semibold ${isRecurringGroup ? (isEndedRecurring ? "text-slate-900 dark:text-slate-100" : "text-blue-900 dark:text-blue-100") : "text-amber-900 dark:text-amber-100"}`}>
+                {isRecurringGroup ? "Visão da recorrência" : "Visão do parcelamento"}
+              </h3>
             </div>
             <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
               {groupedItems.map((item) => {
                 const isCurrent = item.id === editingTx.id;
                 return (
-                  <div key={item.id} className={`flex items-center justify-between p-3 rounded-xl text-sm transition-colors ${isCurrent ? "bg-white dark:bg-zinc-900 shadow-sm border border-blue-200 ring-1 ring-blue-500" : "hover:bg-blue-100/50"}`}>
+                  <div
+                    key={item.id}
+                    className={`flex items-center justify-between p-3 rounded-xl text-sm transition-colors ${
+                      isCurrent
+                        ? isRecurringGroup
+                          ? isEndedRecurring
+                            ? "bg-white dark:bg-zinc-900 shadow-sm border border-slate-300 ring-1 ring-slate-400"
+                            : "bg-white dark:bg-zinc-900 shadow-sm border border-blue-200 ring-1 ring-blue-500"
+                          : "bg-white dark:bg-zinc-900 shadow-sm border border-amber-200 ring-1 ring-amber-500"
+                        : isRecurringGroup
+                          ? isEndedRecurring
+                            ? "hover:bg-slate-100/70 dark:hover:bg-slate-900/40"
+                            : "hover:bg-blue-100/50"
+                          : "hover:bg-amber-100/50"
+                    }`}
+                  >
                     <div className="flex items-center gap-3">
-                      <span className={`font-mono font-medium ${isCurrent ? 'text-blue-700' : 'text-zinc-500'}`}>
+                      <span
+                        className={`font-mono font-medium ${
+                          isCurrent
+                            ? isRecurringGroup
+                              ? isEndedRecurring
+                                ? "text-slate-700 dark:text-slate-200"
+                                : "text-blue-700"
+                              : "text-amber-700"
+                            : "text-zinc-500"
+                        }`}
+                      >
                         {String(item.installmentCurrent).padStart(2, '0')}/{String(item.installmentTotal).padStart(2, '0')}
                       </span>
-                      <span className={isCurrent ? 'font-semibold text-zinc-900 dark:text-zinc-100' : 'text-zinc-600'}>
+                      <span className={isCurrent ? "font-semibold text-zinc-900 dark:text-zinc-100" : "text-zinc-600"}>
                         {item.dueDate || item.date}
                       </span>
                     </div>
-                    <span className={`font-medium ${isCurrent ? 'text-blue-700' : 'text-zinc-600'}`}>
+                    <span
+                      className={`font-medium ${
+                        isCurrent
+                          ? isRecurringGroup
+                            ? isEndedRecurring
+                              ? "text-slate-700 dark:text-slate-200"
+                              : "text-blue-700"
+                            : "text-amber-700"
+                          : "text-zinc-600"
+                      }`}
+                    >
                       {formatCurrency(Number(item.amount || 0))}
                     </span>
                   </div>
@@ -386,10 +455,10 @@ export default function EditTransactionPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Button variant="outline" onClick={() => save(false)} disabled={saving} className="h-14 rounded-2xl border-zinc-200 text-zinc-700 hover:bg-zinc-50">
-                Salvar Apenas Esta
+                {isRecurringGroup ? "Salvar só esta ocorrência" : "Salvar só esta parcela"}
               </Button>
               <Button onClick={() => save(true)} disabled={saving} className="h-14 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white shadow-sm">
-                Salvar Todas as Parcelas
+                {isRecurringGroup ? "Salvar toda a recorrência" : "Salvar todas as parcelas"}
               </Button>
             </div>
           )}
@@ -402,10 +471,10 @@ export default function EditTransactionPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Button variant="outline" onClick={() => remove(false)} disabled={deleting} className="h-12 rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700">
-                  Excluir Apenas Esta
+                  {isRecurringGroup ? "Excluir só esta ocorrência" : "Excluir só esta parcela"}
                 </Button>
                 <Button variant="outline" onClick={() => remove(true)} disabled={deleting} className="h-12 rounded-xl border-red-200 bg-red-50 text-red-700 hover:bg-red-100">
-                  Excluir Todas
+                  {isRecurringGroup ? "Excluir toda a recorrência" : "Excluir todas as parcelas"}
                 </Button>
               </div>
             )}
