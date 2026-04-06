@@ -3,6 +3,7 @@ import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/im
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { buildPlanLimitMessage, getPlanCapabilities } from "@/lib/plans/capabilities";
 import { getUserPlanContext } from "@/lib/plans/server";
+import { MAX_FINANCIAL_AMOUNT } from "@/lib/money";
 import { PiggyBankGoalType } from "@/types/piggyBank";
 import { enforceCreditCardPolicy } from "@/lib/credit-card/limit";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
@@ -31,7 +32,7 @@ function sanitizeText(value: unknown, max = 80) {
 function sanitizeMoney(value: unknown) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return null;
-  return Math.min(parsed, 999999999);
+  return Math.min(parsed, MAX_FINANCIAL_AMOUNT);
 }
 
 function slugifyGoalName(value: string) {
