@@ -176,6 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       if (data.session?.user) {
+        setLoading(true);
         setUser(mapSupabaseUserToAuthUser(data.session.user));
       } else {
         setUser(null);
@@ -188,12 +189,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
+        setLoading(true);
         setUser(mapSupabaseUserToAuthUser(session.user));
       } else {
         setUser(null);
         setUserProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => {
@@ -250,6 +252,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           (profile.email || "") !== bootstrapProfile.email ||
           (Boolean(user.emailVerified) && !Boolean(profile.verifiedEmail)) ||
           JSON.stringify(profile.authProviders || []) !== JSON.stringify(mergedProviders) ||
+          Boolean(profile.needsPasswordSetup) !== Boolean(bootstrapProfile.needsPasswordSetup) ||
           ((profile.photoURL || "") !== (bootstrapProfile.photoURL || "") && Boolean(bootstrapProfile.photoURL));
 
         if (shouldSyncBootstrap) {
@@ -260,7 +263,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 photoURL: bootstrapProfile.photoURL || profile.photoURL || "",
                 verifiedEmail: profile.verifiedEmail || bootstrapProfile.verifiedEmail,
                 authProviders: mergedProviders,
-                needsPasswordSetup: profile.needsPasswordSetup ?? bootstrapProfile.needsPasswordSetup,
+                needsPasswordSetup: Boolean(bootstrapProfile.needsPasswordSetup),
               };
 
           await fetch("/api/profile/bootstrap", {
@@ -354,10 +357,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     pass: string,
     phone: string
   ) => {
-    if (!isValidRealEmail(email)) throw "Por favor, utilize um e-mail valido para cadastro.";
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!isValidRealEmail(normalizedEmail)) throw "Por favor, utilize um e-mail valido para cadastro.";
+
+    const phoneCheckResponse = await fetch("/api/auth/phone-availability", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ phone }),
+    });
+    const phoneCheckPayload = (await phoneCheckResponse.json()) as { ok?: boolean; error?: string };
+    if (!phoneCheckResponse.ok || !phoneCheckPayload.ok) {
+      if (phoneCheckPayload.error === "phone_already_in_use") {
+        throw "Este numero ja esta vinculado a outra conta.";
+      }
+      throw "Nao foi possivel validar seu numero agora.";
+    }
 
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: normalizedEmail,
       password: pass,
       options: {
         emailRedirectTo: buildEmailVerificationRedirectUrl(),
@@ -365,13 +384,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
     if (error) throw error.message || "Erro ao registrar usuario.";
-    rememberPendingVerificationEmail(email);
+    rememberPendingVerificationEmail(normalizedEmail);
 
     const token = data.session?.access_token;
     if (token) {
       const bootstrapProfile: Partial<UserProfile> = {
         uid: data.user?.id || "",
-        email,
+        email: normalizedEmail,
         displayName: name,
         completeName,
         phone,
