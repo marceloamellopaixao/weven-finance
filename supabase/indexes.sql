@@ -6,6 +6,10 @@ create index if not exists idx_profiles_role_status_plan_payment
 create index if not exists idx_profiles_status_created_at
   on public.profiles(status, created_at desc);
 
+create unique index if not exists idx_profiles_phone_unique
+  on public.profiles(phone)
+  where phone is not null and phone <> '';
+
 create index if not exists idx_user_settings_uid_key
   on public.user_settings(uid, setting_key);
 

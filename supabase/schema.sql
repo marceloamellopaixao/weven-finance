@@ -66,9 +66,9 @@ create table if not exists public.transactions (
   uid text not null references public.profiles(uid) on delete cascade,
   source_id text not null,
   description text,
-  amount numeric(14,2),
+  amount numeric(17,2),
   amount_text text,
-  amount_for_limit numeric(14,2),
+  amount_for_limit numeric(17,2),
   tx_type text,
   category text,
   tx_status text,
@@ -98,7 +98,7 @@ create table if not exists public.payment_cards (
   bin text,
   due_date integer,
   limit_enabled boolean,
-  credit_limit numeric(14,2),
+  credit_limit numeric(17,2),
   alert_threshold_pct numeric(6,2),
   block_on_limit_exceeded boolean,
   raw jsonb not null default '{}'::jsonb,
@@ -114,7 +114,7 @@ create table if not exists public.piggy_banks (
   slug text,
   name text,
   goal_type text,
-  total_saved numeric(14,2) not null default 0,
+  total_saved numeric(17,2) not null default 0,
   withdrawal_mode text,
   yield_type text,
   raw jsonb not null default '{}'::jsonb,
@@ -128,7 +128,7 @@ create table if not exists public.piggy_bank_history (
   piggy_bank_id text not null references public.piggy_banks(id) on delete cascade,
   uid text not null references public.profiles(uid) on delete cascade,
   source_id text not null,
-  amount numeric(14,2),
+  amount numeric(17,2),
   withdrawal_mode text,
   yield_type text,
   source_type text,
@@ -294,9 +294,9 @@ alter table if exists public.categories add column if not exists updated_at time
 alter table if exists public.transactions add column if not exists uid text;
 alter table if exists public.transactions add column if not exists source_id text;
 alter table if exists public.transactions add column if not exists description text;
-alter table if exists public.transactions add column if not exists amount numeric(14,2);
+alter table if exists public.transactions add column if not exists amount numeric(17,2);
 alter table if exists public.transactions add column if not exists amount_text text;
-alter table if exists public.transactions add column if not exists amount_for_limit numeric(14,2);
+alter table if exists public.transactions add column if not exists amount_for_limit numeric(17,2);
 alter table if exists public.transactions add column if not exists tx_type text;
 alter table if exists public.transactions add column if not exists category text;
 alter table if exists public.transactions add column if not exists tx_status text;
@@ -322,7 +322,7 @@ alter table if exists public.payment_cards add column if not exists brand text;
 alter table if exists public.payment_cards add column if not exists bin text;
 alter table if exists public.payment_cards add column if not exists due_date integer;
 alter table if exists public.payment_cards add column if not exists limit_enabled boolean;
-alter table if exists public.payment_cards add column if not exists credit_limit numeric(14,2);
+alter table if exists public.payment_cards add column if not exists credit_limit numeric(17,2);
 alter table if exists public.payment_cards add column if not exists alert_threshold_pct numeric(6,2);
 alter table if exists public.payment_cards add column if not exists block_on_limit_exceeded boolean;
 alter table if exists public.payment_cards add column if not exists raw jsonb default '{}'::jsonb;
@@ -334,7 +334,7 @@ alter table if exists public.piggy_banks add column if not exists source_id text
 alter table if exists public.piggy_banks add column if not exists slug text;
 alter table if exists public.piggy_banks add column if not exists name text;
 alter table if exists public.piggy_banks add column if not exists goal_type text;
-alter table if exists public.piggy_banks add column if not exists total_saved numeric(14,2) default 0;
+alter table if exists public.piggy_banks add column if not exists total_saved numeric(17,2) default 0;
 alter table if exists public.piggy_banks add column if not exists withdrawal_mode text;
 alter table if exists public.piggy_banks add column if not exists yield_type text;
 alter table if exists public.piggy_banks add column if not exists raw jsonb default '{}'::jsonb;
@@ -344,7 +344,13 @@ alter table if exists public.piggy_banks add column if not exists updated_at tim
 alter table if exists public.piggy_bank_history add column if not exists piggy_bank_id text;
 alter table if exists public.piggy_bank_history add column if not exists uid text;
 alter table if exists public.piggy_bank_history add column if not exists source_id text;
-alter table if exists public.piggy_bank_history add column if not exists amount numeric(14,2);
+alter table if exists public.piggy_bank_history add column if not exists amount numeric(17,2);
+
+alter table if exists public.transactions alter column amount type numeric(17,2);
+alter table if exists public.transactions alter column amount_for_limit type numeric(17,2);
+alter table if exists public.payment_cards alter column credit_limit type numeric(17,2);
+alter table if exists public.piggy_banks alter column total_saved type numeric(17,2);
+alter table if exists public.piggy_bank_history alter column amount type numeric(17,2);
 alter table if exists public.piggy_bank_history add column if not exists withdrawal_mode text;
 alter table if exists public.piggy_bank_history add column if not exists yield_type text;
 alter table if exists public.piggy_bank_history add column if not exists source_type text;
