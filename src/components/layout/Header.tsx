@@ -28,7 +28,7 @@ export function Header() {
   const { isImpersonating, impersonationTargetUid, stopImpersonation } = useImpersonation();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const { items: notifications, unreadCount, markOneAsRead, markAllAsRead, clearAll } = useNotifications(isNotificationsOpen);
-  const { status: onboardingStatus, completeStep } = useOnboarding();
+  const { status: onboardingStatus, completeStep, activeStep: onboardingActiveStep, isActive: isOnboardingActive } = useOnboarding();
   const isAuthenticated = !!user || !!userProfile;
   const displayName = isImpersonating
     ? (userProfile?.displayName || "Usuário")
@@ -239,7 +239,11 @@ export function Header() {
         <DropdownMenu onOpenChange={handleAccountMenuOpenChange}>
           <DropdownMenuTrigger asChild>
             <div className="relative">
-              <Avatar className="h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 ring-transparent transition-all cursor-pointer hover:ring-violet-200">
+              <Avatar className={`h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 transition-all cursor-pointer hover:ring-violet-200 ${
+                isOnboardingActive && onboardingActiveStep === "profileMenu"
+                  ? "ring-violet-400 animate-pulse"
+                  : "ring-transparent"
+              }`}>
                 <AvatarImage src={displayPhoto} />
                 <AvatarFallback className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600 font-bold">
                   {(displayName || "U").charAt(0).toUpperCase()}
@@ -252,6 +256,9 @@ export function Header() {
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium leading-none truncate">{displayName || "Minha Conta"}</p>
                 <p className="text-xs leading-none text-zinc-500 truncate">{displayEmail}</p>
+                {isOnboardingActive && onboardingActiveStep === "profileMenu" && (
+                  <p className="text-[11px] font-medium text-violet-600">Abra este menu para concluir a etapa atual.</p>
+                )}
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
