@@ -46,7 +46,6 @@ export function clearPasswordAccessContext() {
 
 export async function sendPasswordAccessEmail(email: string, intent: PasswordAccessIntent) {
   const supabase = getSupabaseClient();
-  rememberPasswordAccessContext(intent, email);
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: buildPasswordAccessRedirectUrl(),
   });
@@ -54,6 +53,8 @@ export async function sendPasswordAccessEmail(email: string, intent: PasswordAcc
   if (error) {
     throw new Error(error.message || "Erro ao enviar e-mail de acesso.");
   }
+
+  rememberPasswordAccessContext(intent, email);
 }
 
 export async function updateCurrentUserPassword(password: string) {
