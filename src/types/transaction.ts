@@ -30,6 +30,7 @@ export interface Transaction {
   createdAt: TransactionCreatedAt;
   groupId?: string;
   isRecurring?: boolean;
+  recurrenceEnded?: boolean;
   installmentCurrent?: number;
   installmentTotal?: number;
 }
