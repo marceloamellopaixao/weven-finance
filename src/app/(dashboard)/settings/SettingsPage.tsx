@@ -66,8 +66,9 @@ export default function SettingsPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
-  const [manualPreapprovalId, setManualPreapprovalId] = useState("");
   const [isConfirmingPreapproval, setIsConfirmingPreapproval] = useState(false);
+  const [isAutoReconcilingBilling, setIsAutoReconcilingBilling] = useState(false);
+  const [lastAutoBillingAttemptKey, setLastAutoBillingAttemptKey] = useState("");
   const [isCancelingSubscription, setIsCancelingSubscription] = useState(false);
   const [showCancelSubscriptionModal, setShowCancelSubscriptionModal] = useState(false);
   const [billingHistory, setBillingHistory] = useState<BillingHistoryItem[]>([]);
@@ -345,7 +346,7 @@ export default function SettingsPage() {
     try {
       const token = await user?.getIdToken();
       const session = await getCheckoutLink(plan, token);
-      window.open(session.checkoutUrl, "_blank", "noopener,noreferrer");
+      window.location.assign(session.checkoutUrl);
     } catch (error) {
       console.error(error);
       showFeedback("error", "Falha no checkout", "Não foi possível abrir o pagamento agora.");
@@ -354,16 +355,25 @@ export default function SettingsPage() {
     }
   };
 
-  const handleConfirmPreapproval = async (preapprovalId?: string, expectedPlan?: "premium" | "pro") => {
+  const handleConfirmPreapproval = async (
+    preapprovalId?: string,
+    expectedPlan?: "premium" | "pro",
+    checkoutAttemptId?: string
+  ) => {
     if (!user) return;
-    if (!preapprovalId?.trim() && !pendingPreapprovalId) return;
+    if (!preapprovalId?.trim() && !pendingPreapprovalId && !checkoutAttemptId) return;
 
     setIsConfirmingPreapproval(true);
     try {
       const token = await user?.getIdToken();
-      const result = await confirmPreapproval(preapprovalId?.trim() || pendingPreapprovalId, token, expectedPlan);
+      const result = await confirmPreapproval(
+        preapprovalId?.trim() || pendingPreapprovalId,
+        token,
+        expectedPlan,
+        checkoutAttemptId
+      );
+      await refreshProfile();
       showFeedback("success", "Assinatura confirmada", `Plano atualizado para ${result.targetPlan}.`);
-      setManualPreapprovalId("");
     } catch (error) {
       console.error(error);
       showFeedback("error", "Falha na confirmação", "Não foi possível validar a assinatura agora.");
@@ -391,6 +401,7 @@ export default function SettingsPage() {
       ? "Organize cartões, parcelas, vencimentos e metas com mais clareza."
       : "Decida melhor no dia a dia com direção prática para gastar com mais segurança.";
   const pendingPreapprovalId = userProfile?.billing?.pendingPreapprovalId;
+  const pendingCheckoutAttemptId = userProfile?.billing?.pendingCheckoutAttemptId;
   const pendingPlan = userProfile?.billing?.pendingPlan;
   const recoveryPlan: "premium" | "pro" =
     pendingPlan === "pro" || currentPlan === "pro" ? "pro" : "premium";
@@ -401,8 +412,8 @@ export default function SettingsPage() {
       effectivePaymentStatus === "not_paid");
 
   const handleRecoverPayment = async () => {
-    if (pendingPreapprovalId) {
-      await handleConfirmPreapproval(pendingPreapprovalId, recoveryPlan);
+    if (pendingPreapprovalId || pendingCheckoutAttemptId) {
+      await handleConfirmPreapproval(pendingPreapprovalId, recoveryPlan, pendingCheckoutAttemptId);
       return;
     }
     await handleStartCheckout(recoveryPlan);
@@ -462,21 +473,74 @@ export default function SettingsPage() {
     const preapprovalId = searchParams.get("preapproval_id") || searchParams.get("preapprovalId");
     const billingReturn = searchParams.get("billing_return");
     const planParam = searchParams.get("plan");
+    const attemptParam = searchParams.get("attempt");
     const expectedPlan = planParam === "premium" || planParam === "pro" ? planParam : undefined;
 
     if (!user || isConfirmingPreapproval) return;
     if (!preapprovalId && !billingReturn) return;
 
-    void handleConfirmPreapproval(preapprovalId || undefined, expectedPlan).finally(() => {
+    void handleConfirmPreapproval(preapprovalId || undefined, expectedPlan, attemptParam || undefined).finally(() => {
       const params = new URLSearchParams(searchParams.toString());
       params.delete("preapproval_id");
       params.delete("preapprovalId");
       params.delete("billing_return");
       params.delete("plan");
+      params.delete("attempt");
       params.set("tab", "billing");
       router.replace(`${pathname}?${params.toString()}`);
     });
   }, [searchParams, user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!user) return;
+    if (activeTab !== "billing") return;
+    if (isBillingExemptRole) return;
+    if (!shouldShowRecoveryCTA) return;
+    if (isConfirmingPreapproval || isAutoReconcilingBilling) return;
+
+    const autoAttemptKey = [
+      effectiveProfileUid,
+      pendingCheckoutAttemptId || "",
+      pendingPreapprovalId || "",
+      pendingPlan || "",
+      effectivePaymentStatus,
+    ].join(":");
+
+    if (!autoAttemptKey.replace(/:/g, "")) return;
+    if (autoAttemptKey === lastAutoBillingAttemptKey) return;
+
+    setLastAutoBillingAttemptKey(autoAttemptKey);
+    setIsAutoReconcilingBilling(true);
+
+    const run = async () => {
+      try {
+        const token = await user.getIdToken();
+        await confirmPreapproval(undefined, token, recoveryPlan, pendingCheckoutAttemptId);
+        await refreshProfile();
+      } catch (error) {
+        console.error("Falha na reconciliação automática da assinatura:", error);
+      } finally {
+        setIsAutoReconcilingBilling(false);
+      }
+    };
+
+    void run();
+  }, [
+    activeTab,
+    effectivePaymentStatus,
+    effectiveProfileUid,
+    isAutoReconcilingBilling,
+    isBillingExemptRole,
+    isConfirmingPreapproval,
+    lastAutoBillingAttemptKey,
+    pendingCheckoutAttemptId,
+    pendingPlan,
+    pendingPreapprovalId,
+    recoveryPlan,
+    refreshProfile,
+    shouldShowRecoveryCTA,
+    user,
+  ]);
 
   useEffect(() => {
     if (!user) return;
@@ -825,44 +889,30 @@ export default function SettingsPage() {
                       <strong>{userProfile?.billing?.lastSyncAt ? new Date(userProfile?.billing?.lastSyncAt).toLocaleString() : "Sem sincronização"}</strong>
                     </p>
                   </div>
-                  {!isBillingExemptRole && (
-                    <div className="rounded-xl border border-white/15 bg-black/10 p-3 text-xs text-white/85 space-y-2">
-                        <p className="font-semibold">Já concluiu o pagamento?</p>
-                      <p>Se o retorno automático falhar, confirme com o ID da assinatura (`preapproval_id`).</p>
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <Input
-                          value={manualPreapprovalId}
-                          onChange={(e) => setManualPreapprovalId(e.target.value)}
-                          placeholder="Ex: 2c938084..."
-                          className="h-9 bg-white/95 text-zinc-900 placeholder:text-zinc-500"
-                        />
-                        <Button
-                          onClick={() => handleConfirmPreapproval(manualPreapprovalId)}
-                          disabled={isConfirmingPreapproval || (!manualPreapprovalId.trim() && !pendingPreapprovalId)}
-                          className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white"
-                        >
-                          {isConfirmingPreapproval ? "Confirmando..." : "Atualizar Status da Assinatura"}
-                        </Button>
-                      </div>
-                      {pendingPreapprovalId && (
-                        <p className="text-[11px] text-white/80">Assinatura pendente detectada. ID interno: {pendingPreapprovalId}</p>
-                      )}
-                    </div>
-                  )}
                   {shouldShowRecoveryCTA && (
                     <div className="rounded-xl border border-amber-200/30 bg-amber-500/10 p-3 text-xs text-white/90 space-y-2">
-                      <p className="font-semibold">Pagamento em aberto detectado.</p>
-                      <p>Use a recuperação automática para regularizar sem perder o contexto da assinatura.</p>
+                      <p className="font-semibold">
+                        {isAutoReconcilingBilling ? "Verificando sua assinatura..." : "Pagamento em aberto detectado."}
+                      </p>
+                      <p>
+                        {isAutoReconcilingBilling
+                          ? "Estamos tentando confirmar automaticamente seu pagamento no Mercado Pago."
+                          : "Se a confirmação automática atrasar, você pode pedir uma nova verificação sem preencher códigos."}
+                      </p>
                       <Button
                         onClick={() => void handleRecoverPayment()}
-                        disabled={isOpeningCheckout !== null || isConfirmingPreapproval}
+                        disabled={isOpeningCheckout !== null || isConfirmingPreapproval || isAutoReconcilingBilling}
                         className="h-9 bg-amber-500 hover:bg-amber-600 text-white"
                       >
-                        {isConfirmingPreapproval
+                        {isAutoReconcilingBilling
+                          ? "Verificando automaticamente..."
+                          : isConfirmingPreapproval
                           ? "Validando pagamento..."
                           : isOpeningCheckout
                             ? "Abrindo checkout..."
-                            : "Regularizar pagamento agora"}
+                            : effectivePaymentStatus === "pending"
+                              ? "Verificar assinatura novamente"
+                              : "Regularizar pagamento agora"}
                       </Button>
                     </div>
                   )}
