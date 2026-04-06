@@ -8,6 +8,7 @@ import { getPaymentCards } from "@/services/paymentCardService";
 import { savePiggyDeposit } from "@/services/piggyBankService";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useAuth } from "@/hooks/useAuth";
+import { formatCurrencyInput, parseCurrencyInput } from "@/lib/money";
 import { PaymentCard } from "@/types/paymentCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,9 +64,7 @@ export default function NewPiggyBankPage() {
   }, [transactions]);
 
   const parsedAmount = useMemo(() => {
-    const normalized = amountInput.replace(/\./g, "").replace(",", ".");
-    const value = Number(normalized);
-    return Number.isFinite(value) ? value : 0;
+    return parseCurrencyInput(amountInput);
   }, [amountInput]);
 
   const selectedGoal = useMemo(
@@ -222,7 +221,7 @@ export default function NewPiggyBankPage() {
                     <Label>Quanto você quer guardar?</Label>
                     <Input
                       value={amountInput}
-                      onChange={(e) => setAmountInput(e.target.value)}
+                      onChange={(e) => setAmountInput(formatCurrencyInput(e.target.value))}
                       placeholder="R$ 0,00"
                       inputMode="decimal"
                     />
