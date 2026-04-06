@@ -1,16 +1,20 @@
 "use client";
 
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { ArrowLeft, Loader2, Wallet } from "lucide-react";
+
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useState } from "react";
-import { Wallet, Loader2, ArrowLeft } from "lucide-react";
-import Link from "next/link";
 import { formatPhone, normalizePhone } from "@/lib/phone";
+import { parseUpgradePlan, readPendingUpgradePlan, rememberPendingUpgradePlan } from "@/services/billing/checkoutIntent";
 
 export default function RegisterPage() {
   const { registerWithEmail } = useAuth();
+  const searchParams = useSearchParams();
 
   const [displayName, setDisplayName] = useState("");
   const [completeName, setCompleteName] = useState("");
@@ -21,23 +25,29 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Constantes de Animação (Padrão do Sistema)
+  const pendingUpgradePlan = parseUpgradePlan(searchParams.get("upgrade_plan")) || readPendingUpgradePlan();
+
   const fadeInUp = "animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both";
   const zoomIn = "animate-in fade-in zoom-in-50 duration-500 fill-mode-both";
+
+  useEffect(() => {
+    if (pendingUpgradePlan) {
+      rememberPendingUpgradePlan(pendingUpgradePlan);
+    }
+  }, [pendingUpgradePlan]);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    // Validações
     if (!displayName) return setError("Por favor, insira um apelido para o dashboard.");
-    if (!phone) return setError("Por favor, insira seu número de celular/telefone.");
+    if (!phone) return setError("Por favor, insira seu numero de celular/telefone.");
     if (!completeName) return setError("Por favor, insira seu nome completo.");
     if (!email) return setError("Por favor, insira seu e-mail.");
     if (!password) return setError("Por favor, insira sua senha.");
     if (!confirmPassword) return setError("Por favor, confirme sua senha.");
-    if (password !== confirmPassword) return setError("As senhas não coincidem.");
-    if (password.length < 6) return setError("A senha deve ter no mínimo 6 caracteres.");
+    if (password !== confirmPassword) return setError("As senhas nao coincidem.");
+    if (password.length < 6) return setError("A senha deve ter no minimo 6 caracteres.");
 
     setIsLoading(true);
     try {
@@ -51,16 +61,13 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans px-4">
-
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-[100px]" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[100px]" />
       </div>
 
       <div className="w-full max-w-[400px] relative z-10">
-
         <div className={`${zoomIn} bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl border border-white/20 dark:border-zinc-800 shadow-2xl rounded-3xl p-6 md:p-8`}>
-
           <div className="text-center mb-6 space-y-2">
             <div className={`${zoomIn} inline-flex items-center justify-center p-3 bg-linear-to-tr from-violet-600 to-indigo-600 rounded-2xl shadow-lg shadow-violet-500/20 mb-4`}>
               <Wallet className="h-6 w-6 text-white" />
@@ -69,8 +76,13 @@ export default function RegisterPage() {
               Crie sua conta
             </h1>
             <p className={`${fadeInUp} delay-200 text-sm text-zinc-500 dark:text-zinc-400`}>
-              Comece a controlar suas finanças hoje.
+              Comece a controlar suas financas hoje.
             </p>
+            {pendingUpgradePlan && (
+              <p className="text-xs font-medium text-violet-600 dark:text-violet-300">
+                Depois do cadastro, vamos continuar na contratacao do plano {pendingUpgradePlan === "premium" ? "Premium" : "Pro"}.
+              </p>
+            )}
           </div>
 
           <form onSubmit={handleRegister} className={`${fadeInUp} delay-300 space-y-4`}>
@@ -163,7 +175,7 @@ export default function RegisterPage() {
 
           <div className={`${fadeInUp} delay-500 mt-6 text-center`}>
             <Link
-              href="/login"
+              href={pendingUpgradePlan ? `/login?upgrade_plan=${pendingUpgradePlan}` : "/login"}
               className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 flex items-center justify-center gap-1 hover:cursor-pointer transition-all duration-200"
             >
               <ArrowLeft className="w-3 h-3" /> Voltar para Login
