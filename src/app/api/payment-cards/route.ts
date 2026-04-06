@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { buildPlanLimitMessage, getPlanCapabilities } from "@/lib/plans/capabilities";
 import { getUserPlanContext } from "@/lib/plans/server";
+import { MAX_FINANCIAL_AMOUNT } from "@/lib/money";
 import { PaymentCard, PaymentCardType } from "@/types/paymentCard";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import {
@@ -45,7 +46,7 @@ function sanitizeCurrency(value: unknown): number | null {
   if (value === undefined || value === null) return null;
   const num = Number(value);
   if (!Number.isFinite(num) || num < 0) return null;
-  return Math.min(num, 999999999);
+  return Math.min(num, MAX_FINANCIAL_AMOUNT);
 }
 
 function sanitizePercent(value: unknown): number | null {
