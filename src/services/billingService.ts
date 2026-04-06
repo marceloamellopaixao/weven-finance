@@ -31,7 +31,7 @@ function authHeaders(idToken: string, includeJson = false) {
 export async function getCheckoutLink(
   plan: Exclude<UserPlan, "free">,
   idToken: string
-): Promise<{ checkoutUrl: string; preapprovalId?: string | null }> {
+): Promise<{ checkoutUrl: string; preapprovalId?: string | null; checkoutAttemptId?: string | null }> {
   const response = await fetch(`/api/billing/checkout-link?plan=${plan}`, {
     method: "GET",
     headers: authHeaders(idToken),
@@ -41,6 +41,7 @@ export async function getCheckoutLink(
     ok: boolean;
     checkoutUrl?: string;
     preapprovalId?: string | null;
+    checkoutAttemptId?: string | null;
     error?: string;
   };
   if (!response.ok || !payload.ok || !payload.checkoutUrl) {
@@ -50,13 +51,15 @@ export async function getCheckoutLink(
   return {
     checkoutUrl: payload.checkoutUrl,
     preapprovalId: payload.preapprovalId ?? null,
+    checkoutAttemptId: payload.checkoutAttemptId ?? null,
   };
 }
 
 export async function confirmPreapproval(
   preapprovalId: string | undefined,
   idToken: string,
-  expectedPlan?: Exclude<UserPlan, "free">
+  expectedPlan?: Exclude<UserPlan, "free">,
+  checkoutAttemptId?: string
 ): Promise<{ targetPlan: UserPlan; targetPaymentStatus: string }> {
   const response = await fetch("/api/billing/confirm-preapproval", {
     method: "POST",
@@ -64,6 +67,7 @@ export async function confirmPreapproval(
     body: JSON.stringify({
       preapprovalId: preapprovalId || undefined,
       expectedPlan,
+      checkoutAttemptId: checkoutAttemptId || undefined,
     }),
   });
 
