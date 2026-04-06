@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { UserProfile } from "@/types/user";
 import {
@@ -12,9 +12,10 @@ import { extractAuthProviders, hasEmailPasswordProvider, shouldRequirePasswordSe
 import { getSupabaseClient } from "@/services/supabase/client";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { buildEmailVerificationRedirectUrl, rememberPendingVerificationEmail } from "@/services/auth/emailVerification";
+import { buildUpgradeCheckoutPath, readPendingUpgradePlan } from "@/services/billing/checkoutIntent";
 
 const BLOCKED_STATUSES = new Set(["inactive", "blocked"]);
-const PUBLIC_ROUTES = ["/", "/login", "/register", "/forgot-password", "/first-access", "/verify-email", "/billing/activating", "/not-found", "/blocked", "/goodbye"];
+const PUBLIC_ROUTES = ["/", "/login", "/register", "/forgot-password", "/first-access", "/verify-email", "/billing/checkout", "/billing/activating", "/not-found", "/blocked", "/goodbye"];
 
 export interface AuthUser {
   uid: string;
@@ -109,6 +110,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const supabase = useMemo(() => getSupabaseClient(), []);
+
+  const resolvePostAuthPath = useCallback(() => {
+    const pendingUpgradePlan = readPendingUpgradePlan();
+    return pendingUpgradePlan ? buildUpgradeCheckoutPath(pendingUpgradePlan) : "/dashboard";
+  }, []);
 
   const DISPOSABLE_DOMAINS = [
     "teste.com",
@@ -326,12 +332,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (pathname === "/verify-email") {
-      router.replace("/dashboard");
+      router.replace(resolvePostAuthPath());
       return;
     }
 
     if (["/login", "/register", "/goodbye", "/blocked"].includes(pathname)) {
-      router.replace("/dashboard");
+      router.replace(resolvePostAuthPath());
       return;
     }
 
@@ -340,7 +346,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         router.replace("/dashboard");
       }
     }
-  }, [loading, pathname, router, supabase.auth, user, userProfile]);
+  }, [loading, pathname, resolvePostAuthPath, router, supabase.auth, user, userProfile]);
 
   const togglePrivacyMode = () => {
     setPrivacyMode((prev) => {
@@ -422,7 +428,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithGoogle = async () => {
-    const redirectTo = `${window.location.origin}/dashboard`;
+    const pendingUpgradePlan = readPendingUpgradePlan();
+    const redirectTo = `${window.location.origin}${pendingUpgradePlan ? buildUpgradeCheckoutPath(pendingUpgradePlan) : "/dashboard"}`;
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo },
@@ -434,7 +441,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithEmail = async (email: string, pass: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
     if (error) throw error.message || "Erro ao entrar.";
-    router.replace("/dashboard");
+    router.replace(resolvePostAuthPath());
   };
 
   const logout = async () => {
