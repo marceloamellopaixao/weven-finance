@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { getActiveOnboardingStep } from "@/lib/onboarding/flow";
 import {
   OnboardingStatus,
   subscribeToOnboarding,
@@ -25,6 +26,8 @@ export function useOnboarding() {
   const { userProfile } = useAuth();
   const [status, setStatus] = useState<OnboardingStatus>(DEFAULT_STATUS);
   const [loading, setLoading] = useState(true);
+  const activeStep = useMemo(() => getActiveOnboardingStep(status), [status]);
+  const isActive = !loading && !status.dismissed && !status.completed && activeStep !== null;
 
   useEffect(() => {
     if (!userProfile?.uid) {
@@ -61,5 +64,5 @@ export function useOnboarding() {
     });
   };
 
-  return { status, loading, dismiss, completeStep };
+  return { status, loading, dismiss, completeStep, activeStep, isActive };
 }
