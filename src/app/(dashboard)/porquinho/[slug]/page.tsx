@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { adjustPiggyBankBalance, deletePiggyBank, getPiggyBankBySlug, updatePiggyBank } from "@/services/piggyBankService";
+import { formatCurrencyInput, parseCurrencyInput } from "@/lib/money";
 import { PiggyBankDetail } from "@/types/piggyBank";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -75,9 +76,7 @@ export default function PiggyBankDetailPage() {
 
   const totalEntries = useMemo(() => detail?.history.length || 0, [detail]);
   const parsedAdjustAmount = useMemo(() => {
-    const normalized = adjustAmount.replace(/\./g, "").replace(",", ".");
-    const value = Number(normalized);
-    return Number.isFinite(value) ? value : 0;
+    return parseCurrencyInput(adjustAmount);
   }, [adjustAmount]);
 
   const handleEdit = async () => {
@@ -269,7 +268,7 @@ export default function PiggyBankDetailPage() {
               </div>
               <div className="space-y-2">
                 <Label>Valor</Label>
-                <Input value={adjustAmount} onChange={(e) => setAdjustAmount(e.target.value)} placeholder="R$ 0,00" inputMode="decimal" />
+                <Input value={adjustAmount} onChange={(e) => setAdjustAmount(formatCurrencyInput(e.target.value))} placeholder="R$ 0,00" inputMode="decimal" />
                 {adjustDirection === "withdraw" && (
                   <p className="text-xs text-zinc-500">Saldo disponível para retirada: {formatCurrency(detail.totalSaved)}</p>
                 )}
