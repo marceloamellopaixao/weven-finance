@@ -319,13 +319,18 @@ export const subscribeToTransactions = (
 
 export const addTransaction = async (uid: string, tx: CreateTransactionDTO & { isRecurring?: boolean }) => {
   const cryptoUid = resolveCryptoUid(uid);
-  const groupId = crypto.randomUUID();
-  const count = tx.isInstallment ? Math.max(1, Math.floor(tx.installmentsCount)) : 1;
+  const count = tx.isInstallment
+    ? Math.max(1, Math.floor(tx.installmentsCount))
+    : tx.isRecurring
+      ? 12
+      : 1;
+  const groupId = count > 1 ? crypto.randomUUID() : null;
   const encryptedAmount = await encryptData(tx.amount, cryptoUid);
   const transactions: Record<string, unknown>[] = [];
 
   for (let i = 0; i < count; i++) {
-    const currentDueDate = addMonthsUTC(tx.dueDate, i);
+    const currentDate = tx.isRecurring ? addMonthsUTC(tx.date, i) : tx.date;
+    const currentDueDate = tx.isRecurring || tx.isInstallment ? addMonthsUTC(tx.dueDate, i) : tx.dueDate;
     const descText = tx.isInstallment ? `${tx.description} (${i + 1}/${count})` : tx.description;
     const encryptedDesc = await encryptData(descText, cryptoUid);
 
@@ -340,16 +345,17 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO & { i
       ...(tx.cardLabel ? { cardLabel: tx.cardLabel } : {}),
       ...(tx.cardType ? { cardType: tx.cardType } : {}),
       status: "pending",
-      date: tx.date,
+      date: currentDate,
       dueDate: currentDueDate,
       isEncrypted: true,
       isArchived: false,
-      isRecurring: tx.isRecurring || false, // <-- AQUI: Inserido o isRecurring no Payload da API
-      ...(tx.isInstallment && {
+      isRecurring: tx.isRecurring || false,
+      ...(groupId && {
         groupId,
         installmentCurrent: i + 1,
         installmentTotal: count,
       }),
+      ...(tx.isRecurring ? { recurrenceEnded: false } : {}),
     });
   }
 
