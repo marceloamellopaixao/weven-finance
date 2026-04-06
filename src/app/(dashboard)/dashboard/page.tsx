@@ -1370,7 +1370,7 @@ export default function DashboardPage() {
     try {
       const token = await user.getIdToken();
       const session = await getCheckoutLink(plan, token);
-      window.open(session.checkoutUrl, "_blank", "noopener,noreferrer");
+      window.location.assign(session.checkoutUrl);
     } catch (error) {
       console.error(error);
       setFeedbackModal({
@@ -1401,7 +1401,7 @@ export default function DashboardPage() {
       }
 
       const session = await getCheckoutLink(recoveryPlan, token);
-      window.open(session.checkoutUrl, "_blank", "noopener,noreferrer");
+      window.location.assign(session.checkoutUrl);
     } catch (error) {
       console.error(error);
       setFeedbackModal({
