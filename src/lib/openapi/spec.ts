@@ -26,7 +26,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       { name: "UserSettings", description: "Configurações financeiras do usuário" },
       { name: "CreditCard", description: "Controle de limite e políticas de cartão de crédito" },
       { name: "PaymentCards", description: "Cadastro de cartões sem dados sensíveis (banco, final e tipo)" },
-      { name: "PiggyBanks", description: "Gestão de cofrinhos/porquinhos e aportes com reflexo no extrato" },
+      { name: "PiggyBanks", description: "Gestão de metas no porquinho e aportes com reflexo no extrato" },
       { name: "Support", description: "Chamados de suporte e solicitações de feature" },
       { name: "System", description: "Configurações globais do sistema" },
       { name: "MercadoPago", description: "Webhook e sincronização com gateway" },
