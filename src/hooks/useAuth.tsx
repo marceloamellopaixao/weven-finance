@@ -14,7 +14,7 @@ import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { buildEmailVerificationRedirectUrl, rememberPendingVerificationEmail } from "@/services/auth/emailVerification";
 
 const BLOCKED_STATUSES = new Set(["inactive", "blocked"]);
-const PUBLIC_ROUTES = ["/", "/login", "/register", "/forgot-password", "/first-access", "/verify-email", "/not-found", "/blocked", "/goodbye"];
+const PUBLIC_ROUTES = ["/", "/login", "/register", "/forgot-password", "/first-access", "/verify-email", "/billing/activating", "/not-found", "/blocked", "/goodbye"];
 
 export interface AuthUser {
   uid: string;
