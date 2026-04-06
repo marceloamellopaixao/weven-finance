@@ -19,6 +19,7 @@ import {
 } from "@/services/auth/passwordAccess";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { extractAuthProviders } from "@/lib/auth/providers";
+import { resolvePendingUpgradePath } from "@/services/billing/checkoutIntent";
 
 type PageIntent = PasswordAccessIntent;
 
@@ -90,6 +91,8 @@ export default function FirstAccessPage() {
     intent === "change-password"
       ? "Sua nova senha já está ativa. Você pode voltar ao painel."
       : "Tudo certo. Seu acesso por e-mail e senha já está disponível.";
+
+  const nextPath = resolvePendingUpgradePath() || "/dashboard";
 
   const handleSendEmail = useCallback(async () => {
     if (!user?.email) {
@@ -218,7 +221,7 @@ export default function FirstAccessPage() {
       clearPasswordAccessContext();
       setIsComplete(true);
       window.setTimeout(() => {
-        window.location.assign("/dashboard");
+        window.location.assign(nextPath);
       }, 900);
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Não foi possível atualizar a senha.";
@@ -254,10 +257,10 @@ export default function FirstAccessPage() {
                 </p>
               </div>
               <Button
-                onClick={() => window.location.assign("/dashboard")}
+                onClick={() => window.location.assign(nextPath)}
                 className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium shadow-lg shadow-violet-500/20"
               >
-                Ir para o painel
+                {nextPath === "/dashboard" ? "Ir para o painel" : "Continuar contratacao"}
               </Button>
             </div>
           ) : showPasswordForm ? (
