@@ -13,6 +13,7 @@ import {
   clearPendingVerificationEmail,
   readPendingVerificationEmail,
 } from "@/services/auth/emailVerification";
+import { resolvePendingUpgradePath } from "@/services/billing/checkoutIntent";
 
 export default function VerifyEmailPage() {
   const { logout, user, userProfile } = useAuth();
@@ -42,7 +43,7 @@ export default function VerifyEmailPage() {
     }
     clearPendingVerificationEmail();
     router.refresh();
-    router.replace("/dashboard");
+    router.replace(resolvePendingUpgradePath() || "/dashboard");
   }, [router]);
 
   useEffect(() => {
