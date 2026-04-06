@@ -866,27 +866,29 @@ export default function SettingsPage() {
                   )}
                   <div className="rounded-xl border border-white/15 bg-black/10 p-3 text-xs text-white/85 space-y-1">
                     {isBillingExemptRole && (
-                      <p>
-                        Regra de cobrança: <strong>Isento para {userProfile?.role === "admin" ? "Admin" : "Moderador"}</strong>
-                      </p>
+                      <>
+                        <p>
+                          Regra de cobrança: <strong>Isento para {userProfile?.role === "admin" ? "Admin" : "Moderador"}</strong>
+                        </p>
+                        <p>
+                          Origem do plano:{" "}
+                          <strong>
+                            {userProfile?.billing?.source === "mercadopago_webhook"
+                              ? "Webhook Mercado Pago"
+                              : userProfile?.billing?.source === "mercadopago_confirm"
+                                ? "Confirmação Mercado Pago"
+                                : userProfile?.billing?.source === "mercadopago_cancel"
+                                  ? "Cancelamento Mercado Pago"
+                                  : userProfile?.billing?.source === "system"
+                                    ? "Sistema"
+                                    : "Administração manual"}
+                          </strong>
+                        </p>
+                      </>
                     )}
                     <p>
-                      Fonte do plano:{" "}
-                      <strong>
-                        {userProfile?.billing?.source === "mercadopago_webhook"
-                          ? "Webhook Mercado Pago"
-                          : userProfile?.billing?.source === "mercadopago_confirm"
-                            ? "Confirmação Mercado Pago"
-                            : userProfile?.billing?.source === "mercadopago_cancel"
-                              ? "Cancelamento Mercado Pago"
-                              : userProfile?.billing?.source === "system"
-                                ? "Sistema"
-                                : "Administração manual"}
-                      </strong>
-                    </p>
-                    <p>
-                      Última sincronização:{" "}
-                      <strong>{userProfile?.billing?.lastSyncAt ? new Date(userProfile?.billing?.lastSyncAt).toLocaleString() : "Sem sincronização"}</strong>
+                      Última atualização da assinatura:{" "}
+                      <strong>{userProfile?.billing?.lastSyncAt ? new Date(userProfile?.billing?.lastSyncAt).toLocaleString() : "Ainda sem atualização automática"}</strong>
                     </p>
                   </div>
                   {shouldShowRecoveryCTA && (
@@ -1142,16 +1144,16 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <div className="flex items-center gap-2"><Lock className="h-4 w-4 text-violet-500" /><h3 className="font-semibold text-sm uppercase tracking-wider text-zinc-500">Segurança de Dados</h3></div>
                   <div className="p-5 rounded-2xl bg-zinc-950 text-zinc-400 font-mono text-xs break-all relative border border-zinc-800 shadow-inner group transition-all hover:border-zinc-700">
-                    <div className="absolute top-3 right-3"><Badge variant="outline" className="text-[10px] border-zinc-700 text-emerald-500 font-bold px-2 py-0.5">PROTEÇÃO ATIVA</Badge></div>
-                    <p className="mb-2 text-zinc-600 uppercase tracking-widest text-[10px] font-bold">Identificador Seguro (Hash)</p>
+                    <div className="absolute top-3 right-3"><Badge variant="outline" className="text-[10px] border-zinc-700 text-emerald-500 font-bold px-2 py-0.5">PRIVACIDADE NO APP</Badge></div>
+                    <p className="mb-2 text-zinc-600 uppercase tracking-widest text-[10px] font-bold">Identificador interno</p>
                     {keyFingerprint}
                   </div>
-                  <p className="text-xs text-zinc-500 leading-relaxed">* Seus dados sensíveis contam com camadas de proteção e privacidade no aplicativo.</p>
+                  <p className="text-xs text-zinc-500 leading-relaxed">* Este identificador ajuda o aplicativo a reconhecer e recuperar dados exibidos como protegidos.</p>
                   <Separator className="bg-zinc-300 dark:bg-zinc-800" />
 
                   <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-900/50">
                     <h4 className="text-sm font-bold text-blue-700 dark:text-blue-300 mb-2 flex items-center gap-2">
-                      <RefreshCw className="h-4 w-4" /> Manutenção de Dados
+                      <RefreshCw className="h-4 w-4" /> Recuperação de dados protegidos
                     </h4>
                     <p className="text-xs text-blue-600/80 dark:text-blue-400 mb-4">
                       Se você trocou de dispositivo e seus dados antigos aparecem como &quot;Dados Protegidos&quot;, clique abaixo.
@@ -1162,7 +1164,7 @@ export default function SettingsPage() {
                       disabled={isMigrating}
                       className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg w-full sm:w-auto hover:cursor-pointer transition-all active:scale-95"
                     >
-                      {isMigrating ? "Migrando..." : "Corrigir/Migrar Criptografia"}
+                      {isMigrating ? "Corrigindo..." : "Corrigir dados protegidos"}
                     </Button>
                   </div>
 
