@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
+import { MAX_FINANCIAL_AMOUNT } from "@/lib/money";
 import { PiggyBankGoalType } from "@/types/piggyBank";
 import { enforceCreditCardPolicy } from "@/lib/credit-card/limit";
 import { supabaseDeleteByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
@@ -29,7 +30,7 @@ function sanitizeText(value: unknown, max = 120) {
 function sanitizeMoney(value: unknown) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return null;
-  return Math.min(parsed, 999999999);
+  return Math.min(parsed, MAX_FINANCIAL_AMOUNT);
 }
 
 function buildPiggyBankResponse(
