@@ -126,7 +126,7 @@ export default function PiggyBankDetailPage() {
     setError(null);
     try {
       await deletePiggyBank(detail.slug);
-      router.push("/porquinho");
+      router.push("/piggy-bank");
     } catch (err) {
       setError(getPiggyErrorMessage(err instanceof Error ? err.message : null));
       setIsSubmitting(false);
@@ -160,7 +160,7 @@ export default function PiggyBankDetailPage() {
                 <p className="text-lg font-semibold text-zinc-900">Porquinho indisponível</p>
                 <p className="text-sm text-red-600">{error || "Porquinho não encontrado."}</p>
               </div>
-              <Button variant="outline" className="rounded-xl" onClick={() => router.push("/porquinho")}>
+              <Button variant="outline" className="rounded-xl" onClick={() => router.push("/piggy-bank")}>
                 <ArrowLeft className="mr-1 h-4 w-4" />
                 Voltar
               </Button>
@@ -182,7 +182,7 @@ export default function PiggyBankDetailPage() {
             </h1>
             <p className="mt-1 text-sm text-zinc-500">Acompanhamento do total guardado e do histórico deste porquinho.</p>
           </div>
-          <Link href="/porquinho">
+          <Link href="/piggy-bank">
             <Button variant="outline" className="rounded-xl">
               <ArrowLeft className="mr-1 h-4 w-4" />
               Voltar
