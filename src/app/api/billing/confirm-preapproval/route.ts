@@ -29,10 +29,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const decoded = await verifyRequestAuth(request);
+    await verifyRequestAuth(request);
     const acting = await resolveActingContext(request);
     uid = acting.actingUid;
-    const body = (await request.json()) as { preapprovalId?: string; expectedPlan?: UserPlan };
+    const body = (await request.json()) as {
+      preapprovalId?: string;
+      expectedPlan?: UserPlan;
+      checkoutAttemptId?: string;
+    };
 
     const userRows = await supabaseSelect("profiles", {
       filters: { uid },
@@ -52,6 +56,13 @@ export async function POST(request: NextRequest) {
     const pendingPreapprovalId = typeof billing.pendingPreapprovalId === "string" ? billing.pendingPreapprovalId : undefined;
     const pendingPlan = parsePlan(billing.pendingPlan);
     const pendingCheckoutAt = typeof billing.pendingCheckoutAt === "string" ? billing.pendingCheckoutAt : undefined;
+    const pendingCheckoutAttemptId =
+      typeof billing.pendingCheckoutAttemptId === "string" ? billing.pendingCheckoutAttemptId : undefined;
+    const checkoutAttemptId = body.checkoutAttemptId?.trim() || undefined;
+
+    if (checkoutAttemptId && pendingCheckoutAttemptId && checkoutAttemptId !== pendingCheckoutAttemptId) {
+      return NextResponse.json({ ok: false, error: "checkout_attempt_mismatch" }, { status: 409 });
+    }
 
     const preapprovalId = body.preapprovalId?.trim() || pendingPreapprovalId;
     const expectedPlan = parsePlan(body.expectedPlan) || pendingPlan;
