@@ -38,7 +38,15 @@ export default function EditTransactionPage() {
   const params = useParams<{ id: string }>();
   const { user } = useAuth();
   const { transactions, loading: loadingTransactions } = useTransactions();
-  const { categories } = useCategories();
+  const {
+    categories,
+    defaultCategories,
+    loadingCategories,
+    addNewCategory,
+    deleteCategory,
+    renameCategory,
+    toggleDefaultCategoryVisibility,
+  } = useCategories();
 
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
@@ -86,9 +94,10 @@ export default function EditTransactionPage() {
 
   useEffect(() => {
     if (!editingTx?.category) return;
+    if (loadingCategories) return;
     if (monthCategories.some((item) => item.name === editingTx.category)) return;
     setEditingTx((prev) => (prev ? { ...prev, category: "" } : prev));
-  }, [editingTx?.category, monthCategories]);
+  }, [editingTx?.category, loadingCategories, monthCategories]);
 
   const showDueDate = useMemo(() => {
     if (!editingTx) return false;
@@ -411,6 +420,12 @@ export default function EditTransactionPage() {
         type={editingTx.type}
         selectedCategory={editingTx.category}
         onSelectCategory={(category) => setEditingTx({ ...editingTx, category })}
+        categories={categories}
+        defaultCategories={defaultCategories}
+        addNewCategory={addNewCategory}
+        deleteCategory={deleteCategory}
+        renameCategory={renameCategory}
+        toggleDefaultCategoryVisibility={toggleDefaultCategoryVisibility}
       />
     </div>
   );
