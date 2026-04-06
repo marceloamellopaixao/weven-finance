@@ -1576,7 +1576,7 @@ export default function DashboardPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => router.push("/porquinho")}
+                  onClick={() => router.push("/piggy-bank")}
                   className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstGoal ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"}`}
                 >
                   {onboardingStatus.steps.firstGoal ? "✓ " : ""}Primeira meta
