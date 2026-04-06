@@ -8,6 +8,7 @@ import { CheckCircle2, ShieldCheck, Zap, ArrowRight, Smartphone, Medal, Loader2 
 import Link from "next/link";
 import { usePlans } from "@/hooks/usePlans";
 import { useAuth } from "@/hooks/useAuth";
+import { buildUpgradeCheckoutPath, rememberPendingUpgradePlan } from "@/services/billing/checkoutIntent";
 import { getCheckoutLink } from "@/services/billingService";
 
 export default function LandingPage() {
@@ -34,15 +35,17 @@ export default function LandingPage() {
 
   const handlePlanCheckout = async (plan: "premium" | "pro") => {
     if (!user) {
-      window.location.assign("/register");
+      rememberPendingUpgradePlan(plan);
+      window.location.assign(`/register?upgrade_plan=${plan}`);
       return;
     }
 
     setIsOpeningCheckout(plan);
     try {
       const token = await user.getIdToken();
+      rememberPendingUpgradePlan(plan);
       const session = await getCheckoutLink(plan, token);
-      window.location.assign(session.checkoutUrl);
+      window.location.assign(session.checkoutUrl || buildUpgradeCheckoutPath(plan));
     } catch (error) {
       console.error("Erro ao iniciar checkout:", error);
     } finally {
@@ -242,21 +245,13 @@ export default function LandingPage() {
                   </ul>
                 </CardContent>
                 <CardFooter className="p-8 pt-0">
-                  {hasSession ? (
-                    <Button
-                      className="w-full rounded-2xl bg-violet-600 text-white hover:bg-violet-700 font-bold h-12 shadow-lg shadow-violet-200 transition-all hover:scale-105 active:scale-95 hover:cursor-pointer duration-200"
-                      disabled={isOpeningCheckout !== null}
-                      onClick={() => void handlePlanCheckout("premium")}
-                    >
-                      {isOpeningCheckout === "premium" ? "Abrindo checkout..." : "Ir para o Premium"}
-                    </Button>
-                  ) : (
-                    <Link href="/register" className="w-full">
-                      <Button className="w-full rounded-2xl bg-violet-600 text-white hover:bg-violet-700 font-bold h-12 shadow-lg shadow-violet-200 transition-all hover:scale-105 active:scale-95 hover:cursor-pointer duration-200">
-                        Ir para o Premium
-                      </Button>
-                    </Link>
-                  )}
+                  <Button
+                    className="w-full rounded-2xl bg-violet-600 text-white hover:bg-violet-700 font-bold h-12 shadow-lg shadow-violet-200 transition-all hover:scale-105 active:scale-95 hover:cursor-pointer duration-200"
+                    disabled={isOpeningCheckout !== null}
+                    onClick={() => void handlePlanCheckout("premium")}
+                  >
+                    {isOpeningCheckout === "premium" ? "Abrindo checkout..." : "Ir para o Premium"}
+                  </Button>
                 </CardFooter>
               </Card>
             )}
@@ -285,22 +280,14 @@ export default function LandingPage() {
                   </ul>
                 </CardContent>
                 <CardFooter className="p-8 pt-0">
-                  {hasSession ? (
-                    <Button
-                      className="w-full rounded-2xl h-12 border border-zinc-200 bg-white text-zinc-900 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all hover:scale-105 active:scale-95 shadow-sm hover:cursor-pointer duration-200"
-                      variant="outline"
-                      disabled={isOpeningCheckout !== null}
-                      onClick={() => void handlePlanCheckout("pro")}
-                    >
-                      {isOpeningCheckout === "pro" ? "Abrindo checkout..." : "Ir para o Pro"}
-                    </Button>
-                  ) : (
-                    <Link href="/register" className="w-full">
-                      <Button className="w-full rounded-2xl h-12 border border-zinc-200 bg-white text-zinc-900 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all hover:scale-105 active:scale-95 shadow-sm hover:cursor-pointer duration-200" variant="outline">
-                        Ir para o Pro
-                      </Button>
-                    </Link>
-                  )}
+                  <Button
+                    className="w-full rounded-2xl h-12 border border-zinc-200 bg-white text-zinc-900 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all hover:scale-105 active:scale-95 shadow-sm hover:cursor-pointer duration-200"
+                    variant="outline"
+                    disabled={isOpeningCheckout !== null}
+                    onClick={() => void handlePlanCheckout("pro")}
+                  >
+                    {isOpeningCheckout === "pro" ? "Abrindo checkout..." : "Ir para o Pro"}
+                  </Button>
                 </CardFooter>
               </Card>
             )}
