@@ -42,7 +42,13 @@ export default function NewTransactionPage() {
   const router = useRouter();
   const { user, userProfile } = useAuth();
   const { plans } = usePlans();
-  const { status: onboardingStatus, loading: onboardingLoading } = useOnboarding();
+  const {
+    status: onboardingStatus,
+    loading: onboardingLoading,
+    activeStep: onboardingActiveStep,
+    isActive: isOnboardingActive,
+    completeStep,
+  } = useOnboarding();
   const { transactions } = useTransactions();
   const {
     categories,
@@ -203,6 +209,10 @@ export default function NewTransactionPage() {
     [effectivePlan, plans]
   );
   const canUseInstallments = isBillingExemptRole || effectivePlanCapabilities.hasInstallments;
+  const isTransactionOnboardingActive =
+    isOnboardingActive &&
+    onboardingActiveStep === "firstTransaction" &&
+    !onboardingStatus.steps.firstTransaction;
 
   const linkedCardTransactions = (card: PaymentCard) =>
     transactions.filter((tx) => {
@@ -235,6 +245,19 @@ export default function NewTransactionPage() {
   const handleToggleRecurring = (checked: boolean) => {
     setIsRecurring(checked);
     if (checked) setIsInstallment(false);
+  };
+
+  const handleOpenCategoryManager = () => {
+    if (isTransactionOnboardingActive) {
+      setError("Conclua sua primeira transação antes de abrir outros modais.");
+      return;
+    }
+    setIsCategoryManagerOpen(true);
+  };
+
+  const handleCategoryManagerOpenChange = (open: boolean) => {
+    if (open && isTransactionOnboardingActive) return;
+    setIsCategoryManagerOpen(open);
   };
 
   const onSubmit = async () => {
@@ -287,6 +310,11 @@ export default function NewTransactionPage() {
         installmentsCount: count,
         isRecurring, 
       });
+      if (isTransactionOnboardingActive) {
+        try {
+          await completeStep("firstTransaction");
+        } catch {}
+      }
       if (draftStorageKey) {
         window.localStorage.removeItem(draftStorageKey);
       }
@@ -316,9 +344,13 @@ export default function NewTransactionPage() {
 
         {/* ONBOARDING MESSAGE */}
         {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.steps.firstTransaction && (
-          <div className="mb-6 rounded-2xl border border-violet-200 bg-violet-50 p-4 flex items-center gap-3 text-violet-800 text-sm shadow-sm">
+          <div className={`mb-6 rounded-2xl border p-4 flex items-center gap-3 text-sm shadow-sm ${
+            isTransactionOnboardingActive
+              ? "border-violet-300 bg-violet-50 text-violet-900 ring-2 ring-violet-200"
+              : "border-violet-200 bg-violet-50 text-violet-800"
+          }`}>
             <Info className="h-5 w-5 shrink-0 text-violet-600" />
-            <p><strong>Primeiros Passos:</strong> Salve sua primeira transação para completar o onboarding.</p>
+            <p><strong>Etapa atual:</strong> salve sua primeira transação para concluir o início guiado.</p>
           </div>
         )}
 
@@ -395,7 +427,12 @@ export default function NewTransactionPage() {
                   <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium">
                     <Tag className="h-4 w-4 text-zinc-400" /> Categoria
                   </Label>
-                  <button type="button" onClick={() => setIsCategoryManagerOpen(true)} className="text-xs font-semibold text-violet-600 hover:text-violet-700 flex items-center gap-1 hover:cursor-pointer">
+                  <button
+                    type="button"
+                    onClick={handleOpenCategoryManager}
+                    disabled={isTransactionOnboardingActive}
+                    className="text-xs font-semibold text-violet-600 hover:text-violet-700 flex items-center gap-1 hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                  >
                     <Settings2 className="h-3 w-3" /> Gerenciar
                   </button>
                 </div>
@@ -575,7 +612,13 @@ export default function NewTransactionPage() {
           <Button variant="outline" onClick={() => router.back()} className="h-14 sm:flex-1 rounded-2xl border-zinc-200 text-zinc-700 bg-white hover:bg-zinc-50 text-base shadow-sm hover:cursor-pointer">
             Cancelar
           </Button>
-          <Button onClick={onSubmit} disabled={saving} className="h-14 sm:flex-2 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white shadow-sm text-base hover:cursor-pointer">
+          <Button
+            onClick={onSubmit}
+            disabled={saving}
+            className={`h-14 sm:flex-2 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white shadow-sm text-base hover:cursor-pointer ${
+              isTransactionOnboardingActive ? "ring-2 ring-violet-300 ring-offset-2 ring-offset-zinc-50 dark:ring-offset-zinc-950" : ""
+            }`}
+          >
             {saving ? (
               <span className="flex items-center gap-2">
                 <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> Salvando...
@@ -589,8 +632,8 @@ export default function NewTransactionPage() {
       </div>
 
       <CategoryManagerDialog
-        open={isCategoryManagerOpen}
-        onOpenChange={setIsCategoryManagerOpen}
+        open={isTransactionOnboardingActive ? false : isCategoryManagerOpen}
+        onOpenChange={handleCategoryManagerOpenChange}
         type={type}
         selectedCategory={category}
         onSelectCategory={setCategory}
