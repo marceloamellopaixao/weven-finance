@@ -59,7 +59,12 @@ const defaultSettings: CreditCardSettings = { enabled: false, cardName: "Cartão
 
 export default function CreditCardPage() {
   const { user, userProfile, loading: authLoading } = useAuth();
-  const { status: onboardingStatus, loading: onboardingLoading } = useOnboarding();
+  const {
+    status: onboardingStatus,
+    loading: onboardingLoading,
+    activeStep: onboardingActiveStep,
+    isActive: isOnboardingActive,
+  } = useOnboarding();
   const { transactions, loading: txLoading } = useTransactions();
   const searchParams = useSearchParams();
 
@@ -128,6 +133,10 @@ export default function CreditCardPage() {
 
   const danger = Boolean(activeCardCreditSummary?.isExceeded);
   const warning = !danger && Boolean(activeCardCreditSummary && activeCardCreditSummary.usagePct >= settings.alertThresholdPct);
+  const isCardOnboardingActive =
+    isOnboardingActive &&
+    onboardingActiveStep === "firstCard" &&
+    !onboardingStatus.steps.firstCard;
 
   useEffect(() => {
     if (!user) {
@@ -479,8 +488,12 @@ export default function CreditCardPage() {
         )}
 
         {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.steps.firstCard && (
-          <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
-            Onboarding: adicione seu primeiro cartão nesta tela para concluir essa etapa automaticamente.
+          <div className={`rounded-2xl border px-4 py-3 text-sm ${
+            isCardOnboardingActive
+              ? "border-violet-300 bg-violet-50 text-violet-900 ring-2 ring-violet-200"
+              : "border-violet-200 bg-violet-50 text-violet-800"
+          }`}>
+            Etapa atual: adicione seu primeiro cartão nesta tela para concluir essa etapa automaticamente.
           </div>
         )}
 
@@ -497,7 +510,10 @@ export default function CreditCardPage() {
                   <p className="text-sm text-zinc-500 max-w-sm mt-2 mb-6 px-2">
                     Adicione seu primeiro cartão para acompanhar faturas e limites em um só lugar.
                   </p>
-                  <Button onClick={() => setShowCardForm(true)} className="rounded-xl px-8 w-full sm:w-auto max-w-xs">
+                  <Button
+                    onClick={() => setShowCardForm(true)}
+                    className={`rounded-xl px-8 w-full sm:w-auto max-w-xs ${isCardOnboardingActive ? "ring-2 ring-violet-300 ring-offset-2" : ""}`}
+                  >
                     <Plus className="mr-2 h-4 w-4" /> Adicionar Cartão
                   </Button>
                 </CardContent>
