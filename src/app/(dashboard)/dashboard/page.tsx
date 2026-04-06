@@ -979,8 +979,15 @@ export default function DashboardPage() {
 
   const handleConfirmCancelSubscription = async () => {
     if (!user || !txToCancelSubscription || !txToCancelSubscription.groupId || !txToCancelSubscription.dueDate) return;
+    const description = txToCancelSubscription.description;
     await cancelFutureInstallments(user.uid, txToCancelSubscription.groupId, txToCancelSubscription.dueDate);
     setTxToCancelSubscription(null);
+    setFeedbackModal({
+      isOpen: true,
+      type: "success",
+      title: "Recorrência encerrada",
+      message: `As próximas cobranças de "${description}" foram removidas.`,
+    });
   };
 
   const handleConfirmEdit = async (updateGroup: boolean) => {
@@ -2091,15 +2098,21 @@ export default function DashboardPage() {
                           )
                         )}
                         {tx.groupId && (
-                          <span className="flex items-center text-[10px] bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
+                          <span
+                            className={`flex items-center text-[10px] px-2 py-0.5 rounded-full border ${
+                              tx.isRecurring
+                                ? tx.recurrenceEnded
+                                  ? "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/20 dark:text-slate-300"
+                                  : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-900/20 dark:text-blue-300"
+                                : "border-zinc-200 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700"
+                            }`}
+                          >
                             {tx.isRecurring ? <Repeat className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
-                            {tx.isRecurring ? "Mensal" : "Parcela"} • {(tx.installmentCurrent || 0)}/{(tx.installmentTotal || 0)}
-                          </span>
-                        )}
-                        {tx.isRecurring && (
-                          <span className="flex items-center text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-900">
-                            <Repeat className="mr-1 h-3 w-3" />
-                            {tx.recurrenceEnded ? "Assinatura encerrada" : "Assinatura"}
+                            {tx.isRecurring
+                              ? tx.recurrenceEnded
+                                ? `Recorrência encerrada ${(tx.installmentCurrent || 0)}/${(tx.installmentTotal || 0)}`
+                                : `Recorrência ${(tx.installmentCurrent || 0)}/${(tx.installmentTotal || 0)}`
+                              : `Parcela ${(tx.installmentCurrent || 0)}/${(tx.installmentTotal || 0)}`}
                           </span>
                         )}
                       </div>
@@ -2185,19 +2198,38 @@ export default function DashboardPage() {
                         <span>Editar {editingTx.type === 'expense' ? 'Despesa' : 'Receita'}</span>
                       </DialogTitle>
                       {editingTx.groupId && (
-                        <span className="flex items-center text-[10px] bg-amber-50 text-amber-700 px-2 py-1 rounded-full border border-amber-200 font-medium">
-                          <Layers className="h-3 w-3 mr-1" /> Parcelado
+                        <span className={`flex items-center text-[10px] px-2 py-1 rounded-full border font-medium ${
+                          editingTx.isRecurring
+                            ? editingTx.recurrenceEnded
+                              ? "bg-slate-50 text-slate-700 border-slate-200"
+                              : "bg-blue-50 text-blue-700 border-blue-200"
+                            : "bg-amber-50 text-amber-700 border-amber-200"
+                        }`}>
+                          {editingTx.isRecurring ? <Repeat className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
+                          {editingTx.isRecurring ? (editingTx.recurrenceEnded ? "Encerrada" : "Recorrente") : "Parcelado"}
                         </span>
                       )}
                     </div>
                     <DialogDescription className="mt-1 ml-1">
-                      {editingTx.groupId ? "Este item faz parte de um parcelamento/recorrência." : "detalhes da transação única."}
+                      {editingTx.groupId
+                        ? editingTx.isRecurring
+                          ? "Este item faz parte de uma recorrência mensal."
+                          : "Este item faz parte de um parcelamento."
+                        : "detalhes da transação única."}
                     </DialogDescription>
                   </DialogHeader>
 
                   {editingTx.groupId && editingGroupTransactions.length > 0 && (
-                    <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
-                      <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-2">Parcelas deste grupo</p>
+                    <div className={`mb-5 rounded-xl border p-3 ${
+                      editingTx.isRecurring
+                        ? "border-blue-200 bg-blue-50/70"
+                        : "border-amber-200 bg-amber-50/70"
+                    }`}>
+                      <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${
+                        editingTx.isRecurring ? "text-blue-700" : "text-amber-700"
+                      }`}>
+                        {editingTx.isRecurring ? "Ocorrências desta recorrência" : "Parcelas deste grupo"}
+                      </p>
                       <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
                         {editingGroupTransactions.map((parcel) => (
                           <div
@@ -2205,19 +2237,23 @@ export default function DashboardPage() {
                             className={`text-xs rounded-lg border px-2 py-1.5 flex items-center justify-between ${
                               parcel.id === editingTx.id
                                 ? "border-violet-300 bg-violet-50 text-violet-700"
-                                : "border-amber-200 bg-white text-zinc-600"
+                                : editingTx.isRecurring
+                                  ? "border-blue-200 bg-white text-zinc-600"
+                                  : "border-amber-200 bg-white text-zinc-600"
                             }`}
                           >
                             <span className="font-medium">
-                              Parcela {parcel.installmentCurrent || 1}/{parcel.installmentTotal || editingGroupTransactions.length}
+                              {editingTx.isRecurring ? "Ocorrência" : "Parcela"} {parcel.installmentCurrent || 1}/{parcel.installmentTotal || editingGroupTransactions.length}
                             </span>
                             <span>{formatDateDisplay(parcel.dueDate, { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
                             <span className="font-semibold">{formatCurrency(parcel.amount)}</span>
                           </div>
                         ))}
                       </div>
-                      <p className="text-[11px] text-amber-700 mt-2">
-                        Você pode salvar só esta parcela ou aplicar a edição para todas.
+                      <p className={`text-[11px] mt-2 ${editingTx.isRecurring ? "text-blue-700" : "text-amber-700"}`}>
+                        {editingTx.isRecurring
+                          ? "Você pode salvar só esta ocorrência ou aplicar a edição para toda a recorrência."
+                          : "Você pode salvar só esta parcela ou aplicar a edição para todas."}
                       </p>
                     </div>
                   )}
@@ -2480,7 +2516,7 @@ export default function DashboardPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Modal de Cancelar Assinatura */}
+        {/* Modal de Encerrar Recorrência */}
         <Dialog open={!!txToCancelSubscription} onOpenChange={(open) => !open && setTxToCancelSubscription(null)}>
           <DialogContent className="sm:max-w-[425px] rounded-2xl p-6">
             <DialogHeader>
@@ -2488,14 +2524,14 @@ export default function DashboardPage() {
                 <div className="p-2 bg-amber-100 rounded-full">
                   <XCircle className="h-5 w-5" />
                 </div>
-                Encerrar Assinatura/Recorrência
+                Encerrar recorrência
               </DialogTitle>
               <DialogDescription className="pt-3 text-base">
-                Você vai parar de pagar <strong>{txToCancelSubscription?.description}</strong>.
+                Você vai encerrar a recorrência de <strong>{txToCancelSubscription?.description}</strong>.
                 <br /><br />
-                A parcela de <strong>{formatDateDisplay(txToCancelSubscription?.dueDate || "")}</strong> será a última mantida.
+                A ocorrência de <strong>{formatDateDisplay(txToCancelSubscription?.dueDate || "")}</strong> será a última mantida.
                 <br />
-                Todas as cobranças futuras serão excluídas.
+                As cobranças futuras serão removidas e este lançamento ficará marcado como encerrado.
               </DialogDescription>
             </DialogHeader>
 
