@@ -1,5 +1,6 @@
 import { supabaseSelect } from "@/services/supabase/admin";
-import { DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
+import { normalizeFeatureAccessConfig } from "@/lib/plans/feature-access";
+import { DEFAULT_FEATURE_ACCESS_CONFIG, FeatureAccessConfig, DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
 import { UserPlan, UserRole } from "@/types/user";
 
 export function resolveUserPlan(value: unknown): UserPlan {
@@ -19,10 +20,11 @@ export function isBillingExemptRole(role: UserRole) {
 export async function getUserPlanContext(uid: string): Promise<{
   plan: UserPlan;
   plans: PlansConfig;
+  featureAccess: FeatureAccessConfig;
   role: UserRole;
   isBillingExempt: boolean;
 }> {
-  const [profileRows, plansRows] = await Promise.all([
+  const [profileRows, plansRows, featureAccessRows] = await Promise.all([
     supabaseSelect("profiles", {
       select: "plan,role,raw",
       filters: { uid },
@@ -33,6 +35,11 @@ export async function getUserPlanContext(uid: string): Promise<{
       filters: { key: "plans" },
       limit: 1,
     }),
+    supabaseSelect("system_configs", {
+      select: "data",
+      filters: { key: "feature_access" },
+      limit: 1,
+    }),
   ]);
 
   const raw = (profileRows[0]?.raw as Record<string, unknown> | null) ?? {};
@@ -41,10 +48,14 @@ export async function getUserPlanContext(uid: string): Promise<{
   const plan = resolveUserPlan(rawPlan);
   const role = resolveUserRole(rawRole);
   const plans = (plansRows[0]?.data as PlansConfig | undefined) ?? DEFAULT_PLANS_CONFIG;
+  const featureAccess = featureAccessRows.length > 0
+    ? normalizeFeatureAccessConfig(featureAccessRows[0]?.data)
+    : DEFAULT_FEATURE_ACCESS_CONFIG;
 
   return {
     plan,
     plans,
+    featureAccess,
     role,
     isBillingExempt: isBillingExemptRole(role),
   };
