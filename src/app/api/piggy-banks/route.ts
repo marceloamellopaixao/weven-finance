@@ -6,6 +6,10 @@ import { getUserPlanContext } from "@/lib/plans/server";
 import { MAX_FINANCIAL_AMOUNT } from "@/lib/money";
 import { PiggyBankGoalType } from "@/types/piggyBank";
 import { enforceCreditCardPolicy } from "@/lib/credit-card/limit";
+import { filterActiveJsonRows } from "@/lib/account-archive/server";
+import { encryptDataForUser } from "@/lib/crypto-server";
+import { readSecureCardPayload, writeSecureCardPayload } from "@/lib/secure-store/payment-cards";
+import { readSecurePiggyPayload, writeSecurePiggyHistoryPayload, writeSecurePiggyPayload } from "@/lib/secure-store/piggy-banks";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 export const runtime = "nodejs";
@@ -65,8 +69,8 @@ export async function GET(request: NextRequest) {
       order: "updated_at.desc.nullslast",
     });
 
-    const piggyBanks = rows.map((row) => {
-      const raw = (row.raw as Record<string, unknown> | null) ?? {};
+    const piggyBanks = filterActiveJsonRows(rows).map((row) => {
+      const raw = readSecurePiggyPayload(row.raw);
       return {
         id: String(row.source_id || ""),
         slug: String(row.slug || raw.slug || row.source_id || ""),
@@ -138,11 +142,12 @@ export async function POST(request: NextRequest) {
     const [planContext, allPiggyRows] = await Promise.all([
       getUserPlanContext(uid),
       supabaseSelect("piggy_banks", {
-        select: "source_id",
+        select: "source_id,raw",
         filters: { uid },
       }),
     ]);
-    const capabilities = getPlanCapabilities(planContext.plan, planContext.plans);
+    const capabilities = getPlanCapabilities(planContext.plan, planContext.plans, planContext.featureAccess);
+    const activePiggyRows = filterActiveJsonRows(allPiggyRows);
 
     let cardLabel: string | undefined;
     if (goalType === "card_limit" && cardId) {
@@ -155,7 +160,7 @@ export async function POST(request: NextRequest) {
       }
 
       const cardRow = cardRows[0];
-      const cardRaw = (cardRow.raw as Record<string, unknown> | null) ?? {};
+      const cardRaw = readSecureCardPayload(cardRow.raw);
       const bankName = String(cardRow.bank_name || cardRaw.bankName || "Cartao");
       const last4 = String(cardRow.last4 || cardRaw.last4 || "");
       const currentLimit = Number(cardRow.credit_limit || cardRaw.creditLimit || 0);
@@ -178,7 +183,7 @@ export async function POST(request: NextRequest) {
             card_type: cardRow.card_type || cardRaw.type || "credit_card",
             credit_limit: nextLimit,
             limit_enabled: true,
-            raw: cardRaw,
+            raw: writeSecureCardPayload(cardRaw),
             updated_at: nowIso,
           },
         ],
@@ -186,16 +191,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const piggyRows = await supabaseSelect("piggy_banks", {
+    const piggyRows = filterActiveJsonRows(await supabaseSelect("piggy_banks", {
       filters: { uid, source_id: slug },
       limit: 1,
-    });
+    }));
 
     if (
       !planContext.isBillingExempt &&
       piggyRows.length === 0 &&
       capabilities.maxGoals !== null &&
-      allPiggyRows.length >= capabilities.maxGoals
+      activePiggyRows.length >= capabilities.maxGoals
     ) {
       return NextResponse.json(
         {
@@ -211,7 +216,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const piggyRaw = ((piggyRows[0]?.raw as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
+    const piggyRaw = readSecurePiggyPayload(piggyRows[0]?.raw);
     const currentTotal = Number(piggyRows[0]?.total_saved || piggyRaw.totalSaved || 0);
     const nextTotal = currentTotal + amount;
 
@@ -245,7 +250,7 @@ export async function POST(request: NextRequest) {
           total_saved: nextTotal,
           withdrawal_mode: withdrawalMode || null,
           yield_type: yieldType || null,
-          raw: mergedPiggyRaw,
+      raw: writeSecurePiggyPayload(mergedPiggyRaw),
           created_at: piggyRows[0]?.created_at || nowIso,
           updated_at: nowIso,
         },
@@ -280,17 +285,19 @@ export async function POST(request: NextRequest) {
         card_id: cardId || null,
         card_label: cardLabel || null,
         applied_to_card_limit: goalType === "card_limit",
-        raw: historyRaw,
+        raw: writeSecurePiggyHistoryPayload(historyRaw),
         created_at: nowIso,
       },
     ]);
 
     const txId = crypto.randomUUID();
+    const encryptedDescription = encryptDataForUser(`Aporte no Cofrinho: ${goalName}`, uid);
+    const encryptedAmount = encryptDataForUser(amount, uid);
     const txRaw = {
       userId: uid,
       piggyBankSlug: slug,
-      description: `Aporte no Cofrinho: ${goalName}`,
-      amount,
+      description: encryptedDescription,
+      amount: encryptedAmount,
       amountForLimit: amount,
       type: "expense",
       category: `Cofrinho > ${goalName}`,
@@ -298,7 +305,7 @@ export async function POST(request: NextRequest) {
       paymentMethod: sourceType === "cash" ? "cash" : "transfer",
       date: today,
       dueDate: today,
-      isEncrypted: false,
+      isEncrypted: true,
       isArchived: false,
       ...(cardId ? { cardId } : {}),
       ...(cardLabel ? { cardLabel } : {}),
@@ -311,9 +318,9 @@ export async function POST(request: NextRequest) {
         id: `${uid}__${txId}`,
         uid,
         source_id: txId,
-        description: txRaw.description,
+        description: encryptedDescription,
         amount,
-        amount_text: String(amount),
+        amount_text: encryptedAmount,
         amount_for_limit: amount,
         tx_type: "expense",
         category: txRaw.category,
