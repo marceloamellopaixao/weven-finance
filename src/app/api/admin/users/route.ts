@@ -5,7 +5,10 @@ import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { permanentlyDeleteUserData, setArchivedStateForUserData } from "@/lib/account-archive/server";
+import { computePermanentDeleteAt, isDeletionWindowExpired, resolvePermanentDeleteAt } from "@/lib/account-deletion/policy";
 import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
+import { deleteSupabaseAuthUser, isUuid, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
 
 type UserRole = "admin" | "moderator" | "support" | "client";
 
@@ -21,30 +24,6 @@ async function getAuthContext(request: NextRequest) {
 
 function isManager(role: UserRole) {
   return role === "admin" || role === "moderator";
-}
-
-async function setArchiveForAllTransactions(uid: string, value: boolean) {
-  const rows = await supabaseSelect("transactions", {
-    select: "id,uid,source_id,raw",
-    filters: { uid },
-  });
-  if (rows.length === 0) return;
-
-  await supabaseUpsertRows(
-    "transactions",
-    rows.map((row) => {
-      const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
-      raw.isArchived = value;
-      return {
-        id: row.id,
-        uid,
-        source_id: row.source_id,
-        raw,
-        updated_at: new Date().toISOString(),
-      };
-    }),
-    { onConflict: "id" }
-  );
 }
 
 async function deleteAllTransactions(uid: string) {
@@ -63,6 +42,7 @@ async function deleteAllTransactions(uid: string) {
 
 function mapProfileRowToUser(row: Record<string, unknown>) {
   const raw = (row.raw as Record<string, unknown> | null) ?? {};
+  const deletedAt = row.deleted_at ?? raw.deletedAt ?? null;
   return {
     uid: String(row.uid || ""),
     email: row.email ?? raw.email ?? "",
@@ -77,7 +57,8 @@ function mapProfileRowToUser(row: Record<string, unknown>) {
     verifiedEmail: row.verified_email ?? raw.verifiedEmail ?? false,
     blockReason: row.block_reason ?? raw.blockReason ?? "",
     createdAt: row.created_at ?? raw.createdAt ?? "",
-    deletedAt: row.deleted_at ?? raw.deletedAt ?? null,
+    deletedAt,
+    permanentDeleteAt: resolvePermanentDeleteAt(typeof deletedAt === "string" ? deletedAt : null, raw) ?? undefined,
   };
 }
 
@@ -289,7 +270,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as {
-      action?: "normalize" | "resetFinancialData" | "softDelete" | "restore" | "recountTransactionCount";
+      action?: "normalize" | "resetFinancialData" | "softDelete" | "restore" | "permanentDelete" | "recountTransactionCount";
       uid?: string;
       restoreData?: boolean;
     };
@@ -367,7 +348,11 @@ export async function POST(request: NextRequest) {
       if (auth.role !== "admin") {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
-      await setArchiveForAllTransactions(body.uid, true);
+      const deletedAt = new Date().toISOString();
+      const permanentDeleteAt = computePermanentDeleteAt(deletedAt);
+      const profileRows = await supabaseSelect("profiles", { filters: { uid: body.uid }, limit: 1 });
+      const currentRaw = ((profileRows[0]?.raw as Record<string, unknown> | undefined) ?? {});
+      await setArchivedStateForUserData(body.uid, true);
       await supabaseUpsertRows(
         "profiles",
         [
@@ -377,7 +362,21 @@ export async function POST(request: NextRequest) {
             role: "client",
             payment_status: "canceled",
             block_reason: "Usuário solicitou exclusão",
-            deleted_at: new Date().toISOString(),
+            deleted_at: deletedAt,
+            raw: {
+              ...currentRaw,
+              status: "deleted",
+              role: "client",
+              paymentStatus: "canceled",
+              blockReason: "Usuário solicitou exclusão",
+              deletedAt,
+              permanentDeleteAt,
+              isArchived: true,
+              authUserId:
+                typeof currentRaw.authUserId === "string" && isUuid(currentRaw.authUserId)
+                  ? currentRaw.authUserId
+                  : null,
+            },
             updated_at: new Date().toISOString(),
           },
         ],
@@ -398,8 +397,20 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.action === "restore") {
+      const profileRows = await supabaseSelect("profiles", { filters: { uid: body.uid }, limit: 1 });
+      const currentRaw = ((profileRows[0]?.raw as Record<string, unknown> | undefined) ?? {});
+      const deletedAt =
+        typeof profileRows[0]?.deleted_at === "string"
+          ? profileRows[0].deleted_at
+          : typeof currentRaw.deletedAt === "string"
+            ? currentRaw.deletedAt
+            : null;
+      if (isDeletionWindowExpired(deletedAt, currentRaw)) {
+        return NextResponse.json({ ok: false, error: "restore_window_expired" }, { status: 410 });
+      }
+
       if (body.restoreData !== false) {
-        await setArchiveForAllTransactions(body.uid, false);
+        await setArchivedStateForUserData(body.uid, false);
       }
       await supabaseUpsertRows(
         "profiles",
@@ -410,6 +421,15 @@ export async function POST(request: NextRequest) {
             payment_status: "pending",
             block_reason: "",
             deleted_at: null,
+            raw: {
+              ...currentRaw,
+              status: "active",
+              paymentStatus: "pending",
+              blockReason: "",
+              deletedAt: null,
+              permanentDeleteAt: null,
+              isArchived: false,
+            },
             updated_at: new Date().toISOString(),
           },
         ],
@@ -425,6 +445,50 @@ export async function POST(request: NextRequest) {
         ip: meta.ip,
         userAgent: meta.userAgent,
         details: { restoreData: body.restoreData !== false },
+      });
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
+      return NextResponse.json({ ok: true }, { status: 200 });
+    }
+
+    if (body.action === "permanentDelete") {
+      if (auth.role !== "admin") {
+        return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+      }
+
+      const profileRows = await supabaseSelect("profiles", {
+        select: "uid,email,raw",
+        filters: { uid: body.uid },
+        limit: 1,
+      });
+      if (profileRows.length === 0) {
+        return NextResponse.json({ ok: false, error: "user_not_found" }, { status: 404 });
+      }
+
+      const profileRow = profileRows[0];
+      const profileRaw = (profileRow.raw as Record<string, unknown> | null) ?? {};
+      const email = String(profileRow.email || profileRaw.email || "").trim().toLowerCase();
+      const rawAuthUserId = typeof profileRaw.authUserId === "string" && isUuid(profileRaw.authUserId) ? profileRaw.authUserId : null;
+      const authUserId = await resolveSupabaseAuthUserId({
+        rawUid: rawAuthUserId,
+        uid: body.uid,
+        email,
+      });
+
+      await permanentlyDeleteUserData(body.uid, { email });
+
+      if (authUserId) {
+        await deleteSupabaseAuthUser(authUserId);
+      }
+
+      await writeAdminAuditLog({
+        actorUid: auth.uid,
+        action: "admin.users.permanent_delete",
+        requestId: meta.requestId,
+        route: meta.route,
+        method: meta.method,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+        details: { authUserDeleted: Boolean(authUserId) },
       });
       await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
       return NextResponse.json({ ok: true }, { status: 200 });
