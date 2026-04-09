@@ -5,31 +5,11 @@ import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { setArchivedStateForUserData } from "@/lib/account-archive/server";
+import { computePermanentDeleteAt } from "@/lib/account-deletion/policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-async function archiveUserTransactions(uid: string) {
-  const rows = await supabaseSelect("transactions", {
-    select: "id,uid,source_id,raw",
-    filters: { uid },
-  });
-  if (rows.length === 0) return;
-
-  const upserts = rows.map((row) => {
-    const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
-    raw.isArchived = true;
-    return {
-      id: row.id,
-      uid,
-      source_id: row.source_id,
-      raw,
-      updated_at: new Date().toISOString(),
-    };
-  });
-
-  await supabaseUpsertRows("transactions", upserts, { onConflict: "id" });
-}
 
 export async function POST(request: NextRequest) {
   const meta = getRequestMeta(request);
@@ -44,8 +24,10 @@ export async function POST(request: NextRequest) {
 
     const decoded = await verifyRequestAuth(request);
     uid = decoded.uid;
+    const deletedAt = new Date().toISOString();
+    const permanentDeleteAt = computePermanentDeleteAt(deletedAt);
 
-    await archiveUserTransactions(uid);
+    await setArchivedStateForUserData(uid, true);
 
     const profileRows = await supabaseSelect("profiles", {
       filters: { uid },
@@ -72,7 +54,7 @@ export async function POST(request: NextRequest) {
           plan: "free",
           payment_status: "canceled",
           block_reason: "Conta excluida pelo usuario",
-          deleted_at: new Date().toISOString(),
+          deleted_at: deletedAt,
           billing,
           raw: {
             ...profileRaw,
@@ -81,7 +63,10 @@ export async function POST(request: NextRequest) {
             plan: "free",
             paymentStatus: "canceled",
             blockReason: "Conta excluida pelo usuario",
-            deletedAt: new Date().toISOString(),
+            deletedAt,
+            permanentDeleteAt,
+            isArchived: true,
+            authUserId: decoded.rawUid,
             billing,
           },
           updated_at: new Date().toISOString(),
