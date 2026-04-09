@@ -12,6 +12,7 @@ import {
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import {
+  ALL_PLATFORM_TOUR_ROUTES,
   DEFAULT_NAVIGATION_PREFERENCES,
   DEFAULT_PLATFORM_TOUR_STATE,
   NavigationPreferences,
@@ -43,7 +44,7 @@ type PlatformExperienceContextValue = {
   shouldAddDockSpacing: boolean;
   isPlatformTourActive: boolean;
   platformTourState: PlatformTourState;
-  startPlatformTour: (route?: PlatformTourRouteKey) => void;
+  startPlatformTour: (route?: PlatformTourRouteKey, routeOrder?: PlatformTourRouteKey[]) => void;
   setPlatformTourRoute: (route: PlatformTourRouteKey) => void;
   finishPlatformTour: () => void;
   cancelPlatformTour: () => void;
@@ -71,6 +72,15 @@ function persistNavigationPreferences(value: NavigationPreferences) {
   } catch {}
 }
 
+function normalizePlatformTourOrder(routeOrder?: PlatformTourRouteKey[]) {
+  const source = routeOrder && routeOrder.length > 0 ? routeOrder : [...ALL_PLATFORM_TOUR_ROUTES];
+  return Array.from(
+    new Set(
+      source.filter((route): route is PlatformTourRouteKey => ALL_PLATFORM_TOUR_ROUTES.includes(route))
+    )
+  );
+}
+
 function readStoredPlatformTourState() {
   if (typeof window === "undefined") return DEFAULT_PLATFORM_TOUR_STATE;
   try {
@@ -80,13 +90,10 @@ function readStoredPlatformTourState() {
     return {
       active: Boolean(parsed.active),
       route:
-        parsed.route === "dashboard" ||
-        parsed.route === "settings" ||
-        parsed.route === "transactions-new" ||
-        parsed.route === "cards" ||
-        parsed.route === "piggy-bank"
-          ? parsed.route
+        typeof parsed.route === "string" && ALL_PLATFORM_TOUR_ROUTES.includes(parsed.route as PlatformTourRouteKey)
+          ? (parsed.route as PlatformTourRouteKey)
           : null,
+      routeOrder: normalizePlatformTourOrder(Array.isArray(parsed.routeOrder) ? parsed.routeOrder : undefined),
       startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : null,
     };
   } catch {
@@ -193,10 +200,14 @@ export function PlatformExperienceProvider({ children }: { children: ReactNode }
     [navigationPreferences]
   );
 
-  const startPlatformTour = useCallback((route: PlatformTourRouteKey = "dashboard") => {
+  const startPlatformTour = useCallback((route: PlatformTourRouteKey = "dashboard", routeOrder?: PlatformTourRouteKey[]) => {
+    const normalizedRouteOrder = normalizePlatformTourOrder(routeOrder);
+    const nextRoute = normalizedRouteOrder.includes(route) ? route : normalizedRouteOrder[0] || route;
+
     setPlatformTourState({
       active: true,
-      route,
+      route: nextRoute,
+      routeOrder: normalizedRouteOrder,
       startedAt: new Date().toISOString(),
     });
   }, []);
@@ -205,6 +216,7 @@ export function PlatformExperienceProvider({ children }: { children: ReactNode }
     setPlatformTourState((prev) => ({
       active: true,
       route,
+      routeOrder: prev.routeOrder.length > 0 ? prev.routeOrder : normalizePlatformTourOrder([route]),
       startedAt: prev.startedAt || new Date().toISOString(),
     }));
   }, []);
