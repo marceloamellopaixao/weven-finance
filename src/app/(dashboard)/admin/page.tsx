@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePlans } from "@/hooks/usePlans";
+import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import {
   fetchAdminUsersPage,
   updateUserStatus,
@@ -14,10 +15,11 @@ import {
   updateUserPaymentStatus,
   normalizeDatabaseUsers,
   restoreUserAccount,
+  permanentlyDeleteUser,
   getStaffUsers,
   downloadAdminCsv,
 } from "@/services/userService";
-import { updatePlansConfig } from "@/services/systemService";
+import { updateFeatureAccessConfig, updatePlansConfig } from "@/services/systemService";
 import {
   UserProfile,
   UserStatus,
@@ -25,7 +27,15 @@ import {
   UserRole,
   UserPaymentStatus,
 } from "@/types/user";
-import { PlansConfig, PlanDetails } from "@/types/system";
+import {
+  FeatureAccessConfig,
+  ManagedFeatureGrant,
+  ManagedFeatureKey,
+  ManagedFeatureScope,
+  PlansConfig,
+  PlanDetails,
+} from "@/types/system";
+import { computePermanentDeleteAt } from "@/lib/account-deletion/policy";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
@@ -171,6 +181,19 @@ type AdminHealth = {
   apiAvgLatency1h: number;
 };
 
+const FEATURE_LABELS: Record<ManagedFeatureKey, string> = {
+  installments: "Parcelamentos e lançamentos fixos",
+  monthlyForecast: "Previsão de fechamento do mês",
+  smartDailyLimit: "Limite diário inteligente",
+};
+
+const FEATURE_SCOPE_LABELS: Record<ManagedFeatureScope, string> = {
+  all: "Todos os planos",
+  free: "Free",
+  premium: "Premium",
+  pro: "Pro",
+};
+
 function formatDateSafe(value: unknown) {
   if (value instanceof Date) return value.toLocaleDateString();
   if (typeof value === "string") {
@@ -197,6 +220,7 @@ const ADMIN_AUDIT_FILTERS_STORAGE_KEY = "wevenfinance:admin:audit-filters:v1";
 export default function AdminPage() {
   const { user, userProfile, loading } = useAuth();
   const { plans } = usePlans();
+  const { featureAccess } = useFeatureAccess();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -263,6 +287,7 @@ export default function AdminPage() {
   // --- Modais de Ação ---
   const [userToReset, setUserToReset] = useState<UserProfile | null>(null);
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
+  const [userToPermanentDelete, setUserToPermanentDelete] = useState<UserProfile | null>(null);
   const [deletedUserData, setDeletedUserData] = useState<DeletionSuccessData>(null);
   const [userToReactivate, setUserToReactivate] = useState<UserProfile | null>(null);
   const [userToBlock, setUserToBlock] = useState<UserProfile | null>(null);
@@ -287,6 +312,7 @@ export default function AdminPage() {
 
   // Plans
   const [editedPlans, setEditedPlans] = useState<PlansConfig | null>(null);
+  const [editedFeatureAccess, setEditedFeatureAccess] = useState<FeatureAccessConfig | null>(null);
   const [isSavingPlans, setIsSavingPlans] = useState(false);
 
   // --- Permissões ---
@@ -433,6 +459,10 @@ export default function AdminPage() {
   useEffect(() => {
     if (plans) setEditedPlans(plans);
   }, [plans]);
+
+  useEffect(() => {
+    if (featureAccess) setEditedFeatureAccess(featureAccess);
+  }, [featureAccess]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1158,6 +1188,11 @@ export default function AdminPage() {
 
   const confirmRestoreUser = async () => {
     if (!userToRestore) return;
+    if (isRestoreExpired(userToRestore.user)) {
+      showFeedback('error', 'Erro', 'A janela de restauracao desta conta ja expirou.');
+      setUserToRestore(null);
+      return;
+    }
     try {
       await restoreUserAccount(userToRestore.user.uid, userToRestore.withData);
       showFeedback('success', 'Conta Restaurada', `O usuário ${userToRestore.user.displayName} foi movido para a lista ativa.`);
@@ -1274,6 +1309,19 @@ export default function AdminPage() {
     }
   };
 
+  const confirmPermanentDeleteUser = async () => {
+    if (!userToPermanentDelete) return;
+    try {
+      await permanentlyDeleteUser(userToPermanentDelete.uid);
+      showFeedback('success', 'Exclusão Permanente Concluída', `A conta de ${userToPermanentDelete.displayName} foi removida definitivamente, incluindo o login.`);
+    } catch (error) {
+      console.error("Erro ao excluir permanentemente o usuário:", error);
+      showFeedback('error', 'Erro', 'Falha ao excluir permanentemente o usuário.');
+    } finally {
+      setUserToPermanentDelete(null);
+    }
+  };
+
   const handlePlanEdit = (
     planKey: keyof PlansConfig,
     field: keyof PlanDetails,
@@ -1301,15 +1349,56 @@ export default function AdminPage() {
     });
   };
 
+  const handleFeatureGrantEdit = (
+    index: number,
+    field: keyof ManagedFeatureGrant,
+    value: string | boolean | null
+  ) => {
+    if (!editedFeatureAccess) return;
+    setEditedFeatureAccess({
+      grants: editedFeatureAccess.grants.map((grant, grantIndex) =>
+        grantIndex === index ? { ...grant, [field]: value } : grant
+      ),
+    });
+  };
+
+  const handleAddFeatureGrant = () => {
+    if (!editedFeatureAccess) return;
+    setEditedFeatureAccess({
+      grants: [
+        ...editedFeatureAccess.grants,
+        {
+          id: crypto.randomUUID(),
+          feature: "installments",
+          scope: "free",
+          label: "",
+          active: true,
+          startsAt: null,
+          endsAt: null,
+        },
+      ],
+    });
+  };
+
+  const handleRemoveFeatureGrant = (id: string) => {
+    if (!editedFeatureAccess) return;
+    setEditedFeatureAccess({
+      grants: editedFeatureAccess.grants.filter((grant) => grant.id !== id),
+    });
+  };
+
   const savePlans = async () => {
-    if (!editedPlans) return;
+    if (!editedPlans || !editedFeatureAccess) return;
     setIsSavingPlans(true);
     try {
-      await updatePlansConfig(editedPlans);
-      showFeedback('success', 'Planos Atualizados', 'As configurações foram salvas com sucesso.');
+      await Promise.all([
+        updatePlansConfig(editedPlans),
+        updateFeatureAccessConfig(editedFeatureAccess),
+      ]);
+      showFeedback('success', 'Configurações Atualizadas', 'Planos e liberações promocionais foram salvos com sucesso.');
     } catch (error) {
       console.error(error);
-      showFeedback('error', 'Erro ao Salvar', 'Não foi possível atualizar os planos.');
+      showFeedback('error', 'Erro ao Salvar', 'Não foi possível atualizar os planos e liberações.');
     } finally {
       setIsSavingPlans(false);
     }
@@ -1391,6 +1480,23 @@ export default function AdminPage() {
     return users.filter(u => u.status === 'deleted');
   }, [users]);
 
+  const getRestoreDeadlineLabel = useCallback((user: UserProfile) => {
+    const value = user.permanentDeleteAt || computePermanentDeleteAt(user.deletedAt || null);
+    if (!value) return "Prazo não informado";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "Prazo não informado";
+    return parsed.toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  }, []);
+
+  const isRestoreExpired = useCallback((user: UserProfile) => {
+    const value = user.permanentDeleteAt || computePermanentDeleteAt(user.deletedAt || null);
+    return Boolean(value && new Date(value).getTime() <= Date.now());
+  }, []);
+
   const totalPages = Math.ceil(usersTotal / usersPerPage);
   const paginatedUsers = filteredUsers;
   const supportTotalPages = Math.ceil(ticketsTotal / supportPerPage);
@@ -1410,7 +1516,8 @@ export default function AdminPage() {
   if (
     loading ||
     (userProfile?.role !== "admin" && userProfile?.role !== "moderator" && userProfile?.role !== "support") ||
-    !editedPlans
+    !editedPlans ||
+    (canManageSensitive && !editedFeatureAccess)
   )
     return null;
 
@@ -1486,31 +1593,33 @@ export default function AdminPage() {
               )}
             </button>
 
-            <button type="button" aria-pressed={activeTab === "audit"} onClick={() => setActiveTabAndPersist("audit")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "audit" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
-              <ShieldCheck className="h-4 w-4" /> Auditoria
-            </button>
-
             {canRestore && (
               <button type="button" aria-pressed={activeTab === "restore"} onClick={() => setActiveTabAndPersist("restore")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "restore" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <History className="h-4 w-4" /> Restaurar Dados
               </button>
             )}
 
-            {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
-              <button type="button" aria-pressed={activeTab === "metrics"} onClick={() => setActiveTabAndPersist("metrics")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "metrics" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
-                <Calculator className="h-4 w-4" /> Métricas
-                {criticalMetricsAlerts.length > 0 && (
-                  <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-bold">
-                    {criticalMetricsAlerts.length > 99 ? "99+" : criticalMetricsAlerts.length}
-                  </span>
-                )}
-              </button>
-            )}
 
             {canManageSensitive && (
               <button type="button" aria-pressed={activeTab === "plans"} onClick={() => setActiveTabAndPersist("plans")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "plans" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <CreditCard className="h-4 w-4" /> Gerenciar Planos
               </button>
+            )}
+
+            {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
+              <>
+                <button type="button" aria-pressed={activeTab === "audit"} onClick={() => setActiveTabAndPersist("audit")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "audit" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+                  <ShieldCheck className="h-4 w-4" /> Auditoria
+                </button>
+                <button type="button" aria-pressed={activeTab === "metrics"} onClick={() => setActiveTabAndPersist("metrics")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "metrics" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+                  <Calculator className="h-4 w-4" /> Métricas
+                  {criticalMetricsAlerts.length > 0 && (
+                    <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-bold">
+                      {criticalMetricsAlerts.length > 99 ? "99+" : criticalMetricsAlerts.length}
+                    </span>
+                  )}
+                </button>
+              </>
             )}
           </div>
 
@@ -1643,6 +1752,11 @@ export default function AdminPage() {
                               ) : (
                                 <Badge variant="outline" className="bg-violet-50 text-violet-700 border-violet-200 gap-1">
                                   <MessageSquare className="h-3 w-3" /> Suporte
+                                </Badge>
+                              )}
+                              {ticket.supportKind === "account_restore" && (
+                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
+                                  <ArchiveRestore className="h-3 w-3" /> Retorno de conta
                                 </Badge>
                               )}
                               <Badge className={tone.badge}>{formatTicketStatus(ticket.status)}</Badge>
@@ -1810,6 +1924,11 @@ export default function AdminPage() {
                                   ) : (
                                     <Badge variant="outline" className="bg-violet-50 text-violet-700 border-violet-200 gap-1">
                                       <MessageSquare className="h-3 w-3" /> Suporte
+                                    </Badge>
+                                  )}
+                                  {ticket.supportKind === "account_restore" && (
+                                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
+                                      <ArchiveRestore className="h-3 w-3" /> Retorno de conta
                                     </Badge>
                                   )}
                                 </TableCell>
@@ -2873,6 +2992,7 @@ export default function AdminPage() {
                             <div className="min-w-0">
                               <p className="font-semibold text-zinc-900 truncate">{u.displayName}</p>
                               <p className="text-xs text-zinc-500 truncate">{u.email}</p>
+                              <p className="text-[11px] text-orange-700/80">Restauravel ate {getRestoreDeadlineLabel(u)}</p>
                             </div>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -2883,18 +3003,29 @@ export default function AdminPage() {
                               <DropdownMenuContent align="end" className="rounded-xl border-orange-100 dark:border-orange-900/30">
                                 <DropdownMenuLabel className="text-orange-700 dark:text-orange-400">Ações de Restauração</DropdownMenuLabel>
                                 <DropdownMenuSeparator className="bg-orange-100 dark:bg-orange-900/30" />
-                                <DropdownMenuItem onClick={() => handleRestoreUser(u, false)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
+                                <DropdownMenuItem disabled={isRestoreExpired(u)} onClick={() => handleRestoreUser(u, false)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
                                   <UserIcon className="mr-2 h-4 w-4" /> Restaurar Somente a Conta
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleRestoreUser(u, true)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
+                                <DropdownMenuItem disabled={isRestoreExpired(u)} onClick={() => handleRestoreUser(u, true)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
                                   <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar Conta e Dados
                                 </DropdownMenuItem>
+                                {canManageSensitive && (
+                                  <DropdownMenuItem
+                                    onClick={() => setUserToPermanentDelete(u)}
+                                    className="cursor-pointer rounded-lg text-xs font-medium text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" /> Excluir Permanentemente
+                                  </DropdownMenuItem>
+                                )}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
                           <div className="flex items-center justify-between">
                             <Badge variant="outline" className="border-orange-200 text-orange-700 bg-orange-50">
                               {u.transactionCount} Transações
+                            </Badge>
+                            <Badge variant="outline" className="border-zinc-200 text-zinc-600 bg-white">
+                              {isRestoreExpired(u) ? "Prazo expirado" : `Ate ${getRestoreDeadlineLabel(u)}`}
                             </Badge>
                             <span className="uppercase text-xs font-bold text-zinc-500">{u.plan}</span>
                           </div>
@@ -2909,7 +3040,7 @@ export default function AdminPage() {
                         <TableRow className="border-orange-100 dark:border-orange-900/30 hover:bg-transparent">
                           <TableHead className="pl-6 font-semibold">Usuário</TableHead>
                           <TableHead className="font-semibold">Email</TableHead>
-                          <TableHead className="font-semibold">Dados Arquivados</TableHead>
+                          <TableHead className="font-semibold">Prazo de Restauração</TableHead>
                           <TableHead className="font-semibold">Plano Anterior</TableHead>
                           <TableHead className="text-right pr-6 font-semibold">Ação</TableHead>
                         </TableRow>
@@ -2925,10 +3056,17 @@ export default function AdminPage() {
                           deletedUsers.map((u) => (
                             <TableRow key={u.uid} className="bg-orange-50/10 border-orange-100/50 dark:border-orange-900/20 hover:bg-orange-50/30 dark:hover:bg-orange-900/20 transition-colors">
                               <TableCell className="pl-6 font-medium text-zinc-800 dark:text-zinc-200">{u.displayName}</TableCell>
-                              <TableCell className="text-zinc-500">{u.email}</TableCell>
+                              <TableCell className="text-zinc-500">
+                                <div className="space-y-1">
+                                  <p>{u.email}</p>
+                                  <p className="text-[11px] text-zinc-500/80">
+                                    Registros arquivados: {Number.isNaN(u.transactionCount) ? "..." : (u.transactionCount ?? "...")}
+                                  </p>
+                                </div>
+                              </TableCell>
                               <TableCell>
                                 <Badge variant="outline" className="border-orange-200 text-orange-700 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-400">
-                                  {u.transactionCount} Transações
+                                  {isRestoreExpired(u) ? "Prazo expirado" : `Disponível até ${getRestoreDeadlineLabel(u)}`}
                                 </Badge>
                               </TableCell>
                               <TableCell className="uppercase text-xs font-bold text-zinc-400">{u.plan}</TableCell>
@@ -2942,12 +3080,20 @@ export default function AdminPage() {
                                   <DropdownMenuContent align="end" className="rounded-xl border-orange-100 dark:border-orange-900/30">
                                     <DropdownMenuLabel className="text-orange-700 dark:text-orange-400">Ações de Restauração</DropdownMenuLabel>
                                     <DropdownMenuSeparator className="bg-orange-100 dark:bg-orange-900/30" />
-                                    <DropdownMenuItem onClick={() => handleRestoreUser(u, false)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
+                                    <DropdownMenuItem disabled={isRestoreExpired(u)} onClick={() => handleRestoreUser(u, false)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
                                       <UserIcon className="mr-2 h-4 w-4" /> Restaurar Somente a Conta
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleRestoreUser(u, true)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
+                                    <DropdownMenuItem disabled={isRestoreExpired(u)} onClick={() => handleRestoreUser(u, true)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
                                       <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar Conta e Dados
                                     </DropdownMenuItem>
+                                    {canManageSensitive && (
+                                      <DropdownMenuItem
+                                        onClick={() => setUserToPermanentDelete(u)}
+                                        className="cursor-pointer rounded-lg text-xs font-medium text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20"
+                                      >
+                                        <Trash2 className="mr-2 h-4 w-4" /> Excluir Permanentemente
+                                      </DropdownMenuItem>
+                                    )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </TableCell>
@@ -3109,6 +3255,136 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
+
+              {editedFeatureAccess && (
+                <Card className="border-none shadow-xl bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
+                  <CardHeader className="border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60">
+                    <CardTitle className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                      Liberações Promocionais de Funcionalidades
+                    </CardTitle>
+                    <CardDescription>
+                      Use esta área para liberar recursos por plano ou para todos os usuários, de forma permanente ou por tempo limitado.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-4">
+                    {editedFeatureAccess.grants.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-zinc-300 dark:border-zinc-700 p-6 text-sm text-zinc-500 text-center">
+                        Nenhuma liberação promocional configurada. Adicione uma regra para liberar recursos temporariamente sem mexer no plano base.
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {editedFeatureAccess.grants.map((grant, index) => (
+                          <div key={grant.id} className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-4">
+                            <div className="flex items-center justify-between gap-4">
+                              <div>
+                                <p className="font-semibold text-zinc-900 dark:text-zinc-100">
+                                  {FEATURE_LABELS[grant.feature]} para {FEATURE_SCOPE_LABELS[grant.scope]}
+                                </p>
+                                <p className="text-xs text-zinc-500">
+                                  Se não houver datas, a liberação fica permanente até você desligar.
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  checked={grant.active}
+                                  onCheckedChange={(checked) => handleFeatureGrantEdit(index, "active", checked)}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="rounded-xl text-red-600 border-red-200 hover:bg-red-50"
+                                  onClick={() => handleRemoveFeatureGrant(grant.id)}
+                                >
+                                  Remover
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                              <div className="space-y-2">
+                                <Label className="text-xs font-bold uppercase text-zinc-400">Funcionalidade</Label>
+                                <Select
+                                  value={grant.feature}
+                                  onValueChange={(value) => handleFeatureGrantEdit(index, "feature", value as ManagedFeatureKey)}
+                                >
+                                  <SelectTrigger className="rounded-xl h-10">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="installments">{FEATURE_LABELS.installments}</SelectItem>
+                                    <SelectItem value="monthlyForecast">{FEATURE_LABELS.monthlyForecast}</SelectItem>
+                                    <SelectItem value="smartDailyLimit">{FEATURE_LABELS.smartDailyLimit}</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label className="text-xs font-bold uppercase text-zinc-400">Escopo</Label>
+                                <Select
+                                  value={grant.scope}
+                                  onValueChange={(value) => handleFeatureGrantEdit(index, "scope", value as ManagedFeatureScope)}
+                                >
+                                  <SelectTrigger className="rounded-xl h-10">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="all">Todos os planos</SelectItem>
+                                    <SelectItem value="free">Free</SelectItem>
+                                    <SelectItem value="premium">Premium</SelectItem>
+                                    <SelectItem value="pro">Pro</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label className="text-xs font-bold uppercase text-zinc-400">Início</Label>
+                                <Input
+                                  type="datetime-local"
+                                  className="rounded-xl h-10"
+                                  value={grant.startsAt ? grant.startsAt.slice(0, 16) : ""}
+                                  onChange={(e) => handleFeatureGrantEdit(index, "startsAt", e.target.value ? new Date(e.target.value).toISOString() : null)}
+                                />
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label className="text-xs font-bold uppercase text-zinc-400">Fim</Label>
+                                <Input
+                                  type="datetime-local"
+                                  className="rounded-xl h-10"
+                                  value={grant.endsAt ? grant.endsAt.slice(0, 16) : ""}
+                                  onChange={(e) => handleFeatureGrantEdit(index, "endsAt", e.target.value ? new Date(e.target.value).toISOString() : null)}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase text-zinc-400">Rótulo interno</Label>
+                              <Input
+                                className="rounded-xl h-10"
+                                value={grant.label || ""}
+                                onChange={(e) => handleFeatureGrantEdit(index, "label", e.target.value)}
+                                placeholder="Ex: Promo de aniversário · 90 dias"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={handleAddFeatureGrant}
+                      >
+                        Nova liberação
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
         </div>
@@ -3190,12 +3466,12 @@ export default function AdminPage() {
       <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
         <DialogContent className="w-[calc(100vw-1rem)] max-w-[460px] rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Excluir Usuário?</DialogTitle>
-            <DialogDescription>Confirme para remover permanentemente.</DialogDescription>
+            <DialogTitle>Excluir Conta?</DialogTitle>
+            <DialogDescription>Confirme para encerrar a conta e arquivar todos os dados do cliente.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button onClick={() => setUserToDelete(null)} variant="ghost" className="rounded-xl hover:cursor-pointer">Cancelar</Button>
-            <Button onClick={confirmDeleteUser} variant="destructive" className="rounded-xl hover:cursor-pointer">Confirmar</Button>
+            <Button onClick={confirmDeleteUser} variant="destructive" className="rounded-xl hover:cursor-pointer">Arquivar Conta</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3209,7 +3485,7 @@ export default function AdminPage() {
             </div>
             <DialogTitle className="text-center text-xl">Usuário Excluído</DialogTitle>
             <DialogDescription className="text-center">
-              A conta foi marcada como <strong>deletada</strong> e o acesso revogado.
+              A conta foi encerrada, arquivada e removida da lista ativa.
             </DialogDescription>
           </DialogHeader>
           <div className="bg-zinc-50 dark:bg-zinc-800/50 p-4 rounded-2xl space-y-2 border border-zinc-100 dark:border-zinc-800">
@@ -3218,6 +3494,21 @@ export default function AdminPage() {
           </div>
           <DialogFooter>
             <Button onClick={() => setDeletedUserData(null)} className="w-full rounded-xl hover:cursor-pointer">Entendido</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!userToPermanentDelete} onOpenChange={(open) => !open && setUserToPermanentDelete(null)}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[460px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Excluir Permanentemente?</DialogTitle>
+            <DialogDescription>
+              Esta ação apaga de forma definitiva a conta, os dados relacionados e o login no Supabase Authentication.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setUserToPermanentDelete(null)} variant="ghost" className="rounded-xl hover:cursor-pointer">Cancelar</Button>
+            <Button onClick={confirmPermanentDeleteUser} variant="destructive" className="rounded-xl hover:cursor-pointer">Excluir Permanentemente</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3313,6 +3604,14 @@ export default function AdminPage() {
                     {getTicketPriorityLabel(viewTicket.priority)}
                   </Badge>
                 </div>
+                {viewTicket.supportKind === "account_restore" && (
+                  <div>
+                    <span className="font-semibold block">Solicitação:</span>
+                    <Badge variant="outline" className="mt-1 bg-emerald-50 text-emerald-700 border-emerald-200">
+                      {viewTicket.wantsData === false ? "Retorno sem dados" : "Retorno com dados"}
+                    </Badge>
+                  </div>
+                )}
               </div>
               <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
                 <span className="font-semibold block text-sm mb-2">Mensagem:</span>
