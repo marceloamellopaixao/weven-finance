@@ -33,7 +33,7 @@ function resolveIntent(value: string | null): PageIntent {
 export default function FirstAccessPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, userProfile, loading } = useAuth();
+  const { user, userProfile, loading, refreshProfile } = useAuth();
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -217,6 +217,8 @@ export default function FirstAccessPage() {
           },
         }),
       });
+
+      await refreshProfile();
 
       clearPasswordAccessContext();
       setIsComplete(true);
