@@ -4,6 +4,7 @@ import { verifyRequestAuth } from "@/lib/auth/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { normalizePhone } from "@/lib/phone";
 import { assertPhoneAvailable } from "@/lib/profile/server";
+import { readSecureProfilePayload, writeSecureProfilePayload } from "@/lib/secure-store/profile";
 
 async function getAuthContext(request: NextRequest) {
   const decoded = await verifyRequestAuth(request);
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
         authProviders: profile.authProviders || [],
         needsPasswordSetup: profile.needsPasswordSetup ?? false,
       };
-      const rawProfile = { ...newProfile, authUserId: auth.rawUid };
+      const rawProfile = writeSecureProfilePayload({ ...newProfile, authUserId: auth.rawUid });
 
       await supabaseUpsertRows(
         "profiles",
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
     }
 
     const existing = existingRows[0];
-    const raw = ((existing.raw as Record<string, unknown> | undefined) || {});
+    const raw = readSecureProfilePayload(existing.raw);
     const patch: Record<string, unknown> = { uid: auth.uid };
     let shouldUpdate = false;
 
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (shouldUpdate) {
-      patch.raw = raw;
+      patch.raw = writeSecureProfilePayload(raw);
       await supabaseUpsertRows("profiles", [patch], { onConflict: "uid" });
     }
 
