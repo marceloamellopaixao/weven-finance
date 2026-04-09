@@ -7,6 +7,7 @@ import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { permanentlyDeleteUserData, setArchivedStateForUserData } from "@/lib/account-archive/server";
 import { computePermanentDeleteAt, isDeletionWindowExpired, resolvePermanentDeleteAt } from "@/lib/account-deletion/policy";
+import { readSecureProfilePayload, writeSecureProfilePayload } from "@/lib/secure-store/profile";
 import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
 import { deleteSupabaseAuthUser, isUuid, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
 
@@ -41,7 +42,7 @@ async function deleteAllTransactions(uid: string) {
 }
 
 function mapProfileRowToUser(row: Record<string, unknown>) {
-  const raw = (row.raw as Record<string, unknown> | null) ?? {};
+  const raw = readSecureProfilePayload(row.raw);
   const deletedAt = row.deleted_at ?? raw.deletedAt ?? null;
   return {
     uid: String(row.uid || ""),
@@ -205,7 +206,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "user_not_found" }, { status: 404 });
     }
     const row = rows[0];
-    const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+    const raw = readSecureProfilePayload(row.raw);
     const mergedRaw = { ...raw, ...body.updates };
 
     await supabaseUpsertRows(
@@ -218,7 +219,7 @@ export async function PATCH(request: NextRequest) {
           ...(body.updates.status !== undefined ? { status: body.updates.status } : {}),
           ...(body.updates.paymentStatus !== undefined ? { payment_status: body.updates.paymentStatus } : {}),
           ...(body.updates.blockReason !== undefined ? { block_reason: body.updates.blockReason } : {}),
-          raw: mergedRaw,
+          raw: writeSecureProfilePayload(mergedRaw),
           updated_at: new Date().toISOString(),
         },
       ],
@@ -284,7 +285,7 @@ export async function POST(request: NextRequest) {
       const upserts: Array<Record<string, unknown>> = [];
 
       snapshot.forEach((row) => {
-        const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+        const raw = readSecureProfilePayload(row.raw);
         let needsUpdate = false;
 
         if (row.phone === undefined && raw.phone === undefined) { raw.phone = ""; needsUpdate = true; }
@@ -298,7 +299,7 @@ export async function POST(request: NextRequest) {
         if (row.status === undefined && raw.status === undefined) { raw.status = "active"; needsUpdate = true; }
 
         if (needsUpdate) {
-          upserts.push({ uid: row.uid, raw, updated_at: new Date().toISOString() });
+          upserts.push({ uid: row.uid, raw: writeSecureProfilePayload(raw), updated_at: new Date().toISOString() });
           updateCount += 1;
         }
       });
@@ -465,7 +466,7 @@ export async function POST(request: NextRequest) {
       }
 
       const profileRow = profileRows[0];
-      const profileRaw = (profileRow.raw as Record<string, unknown> | null) ?? {};
+      const profileRaw = readSecureProfilePayload(profileRow.raw);
       const email = String(profileRow.email || profileRaw.email || "").trim().toLowerCase();
       const rawAuthUserId = typeof profileRaw.authUserId === "string" && isUuid(profileRaw.authUserId) ? profileRaw.authUserId : null;
       const authUserId = await resolveSupabaseAuthUserId({
