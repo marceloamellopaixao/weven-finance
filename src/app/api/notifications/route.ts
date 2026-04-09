@@ -5,6 +5,7 @@ import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { isArchivedJsonRecord } from "@/lib/account-archive/server";
 import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
 
 type NotificationItem = {
@@ -84,7 +85,7 @@ export async function GET(request: NextRequest) {
       unreadCount = 0;
     }
 
-    const items = rows.map(toNotification);
+    const items = rows.filter((row) => !isArchivedJsonRecord(row, "meta")).map(toNotification);
 
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json({ ok: true, items, unreadCount, total, page, limit }, { status: 200 });
@@ -132,9 +133,10 @@ export async function PATCH(request: NextRequest) {
       rows = [];
     }
 
+    const visibleRows = rows.filter((row) => !isArchivedJsonRecord(row, "meta"));
     const targetRows = body.markAllRead
-      ? rows.filter((row) => !Boolean(row.is_read))
-      : rows.filter((row) => String(row.id || "") === String(body.id || "").trim());
+      ? visibleRows.filter((row) => !Boolean(row.is_read))
+      : visibleRows.filter((row) => String(row.id || "") === String(body.id || "").trim());
 
     if (targetRows.length > 0) {
       const now = new Date().toISOString();
