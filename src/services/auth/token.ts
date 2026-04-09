@@ -1,5 +1,6 @@
 "use client";
 
+import { resolveUserUidFromMetadata } from "@/lib/auth/user-uid";
 import { getSupabaseClient, isSupabaseAuthEnabled } from "@/services/supabase/client";
 
 export async function getAccessTokenOrThrow() {
@@ -19,8 +20,5 @@ export async function getCurrentUidOrThrow() {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) throw new Error("missing_auth_user");
-  const meta = data.user.user_metadata || {};
-  return typeof meta.firebaseUid === "string" && meta.firebaseUid.trim()
-    ? meta.firebaseUid
-    : data.user.id;
+  return resolveUserUidFromMetadata(data.user.user_metadata || {}, data.user.id);
 }

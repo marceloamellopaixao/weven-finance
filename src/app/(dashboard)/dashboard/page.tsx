@@ -170,15 +170,21 @@ export default function DashboardPage() {
     renameCategory,
     toggleDefaultCategoryVisibility,
   } = useCategories();
-  const { startTour } = useDashboardTour();
   const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
   const {
     status: onboardingStatus,
     loading: onboardingLoading,
     dismiss: dismissOnboarding,
+    completeTour,
     activeStep: onboardingActiveStep,
     isActive: isOnboardingActive,
   } = useOnboarding();
+  const shouldForceTour = searchParams.get("tour") === "1";
+  const { startTour } = useDashboardTour({
+    disabled: isOnboardingActive,
+    hasSeen: onboardingStatus.tourCompleted,
+    onComplete: completeTour,
+  });
 
   // --- 1. STATES ---
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -264,10 +270,18 @@ export default function DashboardPage() {
 
   // --- 2. INICIAR TOUR ---
   useEffect(() => {
-    if (!loading && user && !isOnboardingActive) {
-      startTour();
+    if (loading || !user || isOnboardingActive) return;
+    if (!shouldForceTour && onboardingStatus.tourCompleted) return;
+
+    startTour(shouldForceTour);
+
+    if (shouldForceTour) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("tour");
+      const nextHref = params.toString() ? `${pathname}?${params.toString()}` : pathname;
+      router.replace(nextHref);
     }
-  }, [isOnboardingActive, loading, startTour, user]);
+  }, [isOnboardingActive, loading, onboardingStatus.tourCompleted, pathname, router, searchParams, shouldForceTour, startTour, user]);
 
   // --- 3. CHECK-IN DI?RIO (Pop-up Inteligente) ---
   useEffect(() => {

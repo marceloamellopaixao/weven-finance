@@ -14,6 +14,7 @@ const DEFAULT_STATUS: OnboardingStatus = {
   completed: false,
   progress: 0,
   total: 4,
+  tourCompleted: false,
   steps: {
     firstTransaction: false,
     firstCard: false,
@@ -64,5 +65,16 @@ export function useOnboarding() {
     });
   };
 
-  return { status, loading, dismiss, completeStep, activeStep, isActive };
+  const completeTour = async () => {
+    if (status.tourCompleted) return;
+    await updateOnboardingStatus({ tourCompleted: true });
+    setStatus((prev) => ({ ...prev, tourCompleted: true }));
+  };
+
+  const resetTour = async () => {
+    await updateOnboardingStatus({ tourCompleted: false });
+    setStatus((prev) => ({ ...prev, tourCompleted: false }));
+  };
+
+  return { status, loading, dismiss, completeStep, completeTour, resetTour, activeStep, isActive };
 }

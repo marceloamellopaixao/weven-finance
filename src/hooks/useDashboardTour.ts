@@ -1,11 +1,24 @@
 import { useCallback, useEffect, useRef } from "react";
 import { driver } from "driver.js";
 
-export function useDashboardTour() {
+type UseDashboardTourOptions = {
+  disabled?: boolean;
+  hasSeen?: boolean;
+  onComplete?: () => void | Promise<void>;
+};
+
+export function useDashboardTour(options: UseDashboardTourOptions = {}) {
+  const { disabled = false, hasSeen = false, onComplete } = options;
   const driverObj = useRef<ReturnType<typeof driver> | null>(null);
+  const onCompleteRef = useRef<typeof onComplete>(onComplete);
+  const hasDrivenRef = useRef(false);
+  const isQueuedRef = useRef(false);
 
   useEffect(() => {
-    // 1. Injeção do CSS Base
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
     const linkId = "driver-js-css";
     if (!document.getElementById(linkId)) {
       const link = document.createElement("link");
@@ -15,7 +28,6 @@ export function useDashboardTour() {
       document.head.appendChild(link);
     }
 
-    // 2. Injeção de CSS Customizado (Tema WevenFinance)
     const styleId = "driver-js-theme-weven";
     if (!document.getElementById(styleId)) {
       const style = document.createElement("style");
@@ -30,24 +42,21 @@ export function useDashboardTour() {
           padding: 16px;
           font-family: var(--font-sans), system-ui, sans-serif;
         }
-        
-        /* Título */
+
         .driver-popover.driverjs-theme .driver-popover-title {
           font-size: 18px;
           font-weight: 700;
-          color: #7c3aed; /* Violet 600 */
+          color: #7c3aed;
           margin-bottom: 8px;
         }
 
-        /* Descrição */
         .driver-popover.driverjs-theme .driver-popover-description {
           font-size: 14px;
           line-height: 1.5;
-          color: #52525b; /* Zinc 600 */
+          color: #52525b;
           margin-bottom: 16px;
         }
 
-        /* Botões */
         .driver-popover.driverjs-theme button {
           border-radius: 8px;
           padding: 8px 16px;
@@ -58,33 +67,31 @@ export function useDashboardTour() {
           cursor: pointer;
         }
 
-        /* Botão Próximo/Concluir */
         .driver-popover.driverjs-theme .driver-popover-next-btn {
-          background-color: #7c3aed !important; /* Violet 600 */
+          background-color: #7c3aed !important;
           color: #ffffff !important;
           text-shadow: none;
         }
+
         .driver-popover.driverjs-theme .driver-popover-next-btn:hover {
-          background-color: #6d28d9 !important; /* Violet 700 */
+          background-color: #6d28d9 !important;
         }
 
-        /* Botão Anterior */
         .driver-popover.driverjs-theme .driver-popover-prev-btn {
-          background-color: #f4f4f5 !important; /* Zinc 100 */
+          background-color: #f4f4f5 !important;
           color: #52525b !important;
         }
 
-        /* Botão Fechar */
         .driver-popover.driverjs-theme .driver-popover-close-btn {
           color: #a1a1aa;
         }
-        
-        /* Dark Mode Support (se o body tiver class dark) */
+
         .dark .driver-popover.driverjs-theme {
           background-color: #18181b;
           border-color: #27272a;
           color: #f4f4f5;
         }
+
         .dark .driver-popover.driverjs-theme .driver-popover-description {
           color: #a1a1aa;
         }
@@ -92,12 +99,11 @@ export function useDashboardTour() {
       document.head.appendChild(style);
     }
 
-    // Configuração do Driver
     driverObj.current = driver({
       showProgress: true,
       animate: true,
       allowClose: true,
-      popoverClass: 'driverjs-theme', // Classe para aplicar o tema acima
+      popoverClass: "driverjs-theme",
       doneBtnText: "Concluir",
       nextBtnText: "Próximo",
       prevBtnText: "Anterior",
@@ -106,8 +112,8 @@ export function useDashboardTour() {
         {
           element: "#tour-welcome-header",
           popover: {
-            title: "Bem-vindo ao WevenFinance! 🚀",
-            description: "Este é o seu painel de controle. Aqui você terá uma visão geral completa da sua saúde financeira.",
+            title: "Bem-vindo ao WevenFinance",
+            description: "Este é o seu painel de controle. Aqui você acompanha sua visão financeira de forma clara e prática.",
             side: "bottom",
             align: "start",
           },
@@ -115,75 +121,94 @@ export function useDashboardTour() {
         {
           element: "#tour-new-transaction",
           popover: {
-            title: "Adicione Lançamentos",
-            description: "Clique aqui para registrar novos gastos ou receitas. Você pode criar parcelamentos e recorrências facilmente.",
+            title: "Adicione lançamentos",
+            description: "Use este botão para registrar gastos e receitas, com parcelamentos e recorrências quando precisar.",
             side: "bottom",
           },
         },
         {
           element: "#tour-month-select",
           popover: {
-            title: "Navegação Temporal",
-            description: "Alterne entre os meses para ver históricos passados ou planejar o futuro financeiro.",
+            title: "Navegação por mês",
+            description: "Alterne entre os meses para revisar o passado e planejar os próximos passos.",
             side: "bottom",
           },
         },
         {
           element: "#tour-balance-card",
           popover: {
-            title: "Seu Saldo Real",
-            description: "Aqui mostramos quanto você tem hoje, considerando apenas o que já foi pago ou recebido.",
+            title: "Saldo atual",
+            description: "Mostra quanto você realmente tem hoje, considerando apenas o que já foi pago ou recebido.",
             side: "bottom",
           },
         },
         {
           element: "#tour-movement-card",
           popover: {
-            title: "Fluxo do Mês",
-            description: "Um resumo rápido de tudo que entra e sai neste mês (incluindo pendentes).",
+            title: "Movimentação do mês",
+            description: "Veja rapidamente tudo que entra e sai neste mês, inclusive valores ainda pendentes.",
             side: "bottom",
           },
         },
         {
           element: "#tour-forecast-card",
           popover: {
-            title: "Previsão Inteligente",
-            description: "O sistema calcula como seu mês deve terminar se todas as contas pendentes forem pagas.",
+            title: "Previsão de fechamento",
+            description: "O sistema estima como o mês deve terminar se os lançamentos pendentes forem concluídos.",
             side: "bottom",
           },
         },
         {
           element: "#tour-transactions-table",
           popover: {
-            title: "Extrato Detalhado",
-            description: "Gerencie cada transação aqui. Use os filtros acima para encontrar itens específicos ou clique nos '...' para editar/excluir.",
+            title: "Extrato detalhado",
+            description: "Aqui você filtra, revisa e gerencia cada lançamento do mês.",
             side: "top",
           },
         },
         {
           element: "#tour-privacy-toggle",
           popover: {
-            title: "Modo Privacidade",
-            description: "Está em público? Clique no olho para borrar os valores e proteger seus dados.",
+            title: "Modo privacidade",
+            description: "Ative para ocultar valores quando estiver em público.",
             side: "left",
           },
         },
       ],
       onDestroyed: () => {
-        localStorage.setItem("weven_onboarding_completed", "true");
+        const shouldMarkAsSeen = hasDrivenRef.current;
+        hasDrivenRef.current = false;
+        isQueuedRef.current = false;
+        if (shouldMarkAsSeen) {
+          void onCompleteRef.current?.();
+        }
       },
     });
+
+    return () => {
+      hasDrivenRef.current = false;
+      isQueuedRef.current = false;
+      driverObj.current?.destroy();
+      driverObj.current = null;
+    };
   }, []);
 
   const startTour = useCallback((force = false) => {
-    const hasSeen = localStorage.getItem("weven_onboarding_completed");
-    
-    setTimeout(() => {
-      if (force || !hasSeen) {
-        driverObj.current?.drive();
+    if (isQueuedRef.current) return;
+    isQueuedRef.current = true;
+    window.setTimeout(() => {
+      if (disabled) {
+        isQueuedRef.current = false;
+        return;
       }
+      if (force || !hasSeen) {
+        hasDrivenRef.current = true;
+        driverObj.current?.drive();
+        return;
+      }
+      isQueuedRef.current = false;
     }, 1000);
-  }, []);
+  }, [disabled, hasSeen]);
 
   return { startTour };
 }

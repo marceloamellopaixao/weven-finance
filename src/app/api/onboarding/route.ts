@@ -9,6 +9,7 @@ import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 type OnboardingData = {
   dismissed?: boolean;
+  tourCompleted?: boolean;
   steps?: {
     firstTransaction?: boolean;
     firstCard?: boolean;
@@ -22,6 +23,7 @@ function normalizeData(value: unknown): OnboardingData {
   const steps = (data.steps as Record<string, unknown> | undefined) ?? {};
   return {
     dismissed: Boolean(data.dismissed),
+    tourCompleted: Boolean(data.tourCompleted),
     steps: {
       firstTransaction: Boolean(steps.firstTransaction),
       firstCard: Boolean(steps.firstCard),
@@ -76,6 +78,7 @@ export async function GET(request: NextRequest) {
         completed,
         progress,
         total: 4,
+        tourCompleted: Boolean(stored.tourCompleted),
         steps: {
           firstTransaction: hasFirstTransaction,
           firstCard: hasFirstCard,
@@ -127,6 +130,7 @@ export async function PUT(request: NextRequest) {
     const current = normalizeData(rows[0]?.data);
     const next: OnboardingData = {
       dismissed: typeof body.dismissed === "boolean" ? body.dismissed : current.dismissed,
+      tourCompleted: typeof body.tourCompleted === "boolean" ? body.tourCompleted : current.tourCompleted,
       steps: {
         firstTransaction: Boolean(body.steps?.firstTransaction || current.steps?.firstTransaction),
         firstCard: Boolean(body.steps?.firstCard || current.steps?.firstCard),

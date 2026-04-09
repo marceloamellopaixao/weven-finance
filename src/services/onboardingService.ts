@@ -9,6 +9,7 @@ export type OnboardingStatus = {
   completed: boolean;
   progress: number;
   total: number;
+  tourCompleted: boolean;
   steps: {
     firstTransaction: boolean;
     firstCard: boolean;
@@ -19,6 +20,7 @@ export type OnboardingStatus = {
 
 type OnboardingUpdatePayload = {
   dismissed?: boolean;
+  tourCompleted?: boolean;
   steps?: Partial<OnboardingStatus["steps"]>;
 };
 

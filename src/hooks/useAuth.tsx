@@ -9,6 +9,7 @@ import {
   subscribeToImpersonationChange,
 } from "@/lib/impersonation/client";
 import { extractAuthProviders, hasEmailPasswordProvider, shouldRequirePasswordSetup } from "@/lib/auth/providers";
+import { resolveUserUidFromMetadata } from "@/lib/auth/user-uid";
 import { getSupabaseClient } from "@/services/supabase/client";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { buildEmailVerificationRedirectUrl, rememberPendingVerificationEmail } from "@/services/auth/emailVerification";
@@ -68,10 +69,7 @@ function mapSupabaseUserToAuthUser(input: {
     (typeof meta.displayName === "string" && meta.displayName.trim()) ||
     (typeof meta.full_name === "string" && meta.full_name.trim()) ||
     (typeof input.email === "string" ? input.email.split("@")[0] : "Usuário");
-  const uid =
-    typeof meta.firebaseUid === "string" && meta.firebaseUid.trim()
-      ? meta.firebaseUid
-      : input.id;
+  const uid = resolveUserUidFromMetadata(meta, input.id);
 
   const build = (): AuthUser => ({
     uid,

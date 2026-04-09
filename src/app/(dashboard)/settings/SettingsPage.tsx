@@ -39,6 +39,7 @@ import { useImpersonation } from "@/hooks/useImpersonation";
 import { sendPasswordAccessEmail } from "@/services/auth/passwordAccess";
 import { formatPhone, normalizePhone } from "@/lib/phone";
 import { ACCOUNT_DELETION_GRACE_DAYS } from "@/lib/account-deletion/policy";
+import { useOnboarding } from "@/hooks/useOnboarding";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -50,6 +51,7 @@ type FeedbackData = {
 
 export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode, refreshProfile } = useAuth();
+  const { resetTour } = useOnboarding();
   const { isImpersonating } = useImpersonation();
   const { plans } = usePlans();
   const router = useRouter();
@@ -254,9 +256,14 @@ export default function SettingsPage() {
     }
   };
 
-  const handleReplayTour = () => {
-    localStorage.removeItem("weven_onboarding_completed");
-    router.push("/dashboard");
+  const handleReplayTour = async () => {
+    try {
+      await resetTour();
+      router.push("/dashboard?tour=1");
+    } catch (error) {
+      console.error("Erro ao reiniciar tour:", error);
+      showFeedback("error", "Falha ao abrir tour", "Não foi possível reiniciar o tutorial agora.");
+    }
   };
 
   const handleCopySwaggerToken = async () => {

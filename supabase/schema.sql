@@ -249,7 +249,7 @@ create table if not exists public.api_request_metrics (
 
 create table if not exists public.migration_runs (
   id uuid primary key default gen_random_uuid(),
-  source text not null default 'firebase',
+  source text not null default 'system',
   target text not null default 'supabase',
   payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc', now())

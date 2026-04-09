@@ -346,6 +346,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
                   type: "object",
                   properties: {
                     dismissed: { type: "boolean", nullable: true },
+                    tourCompleted: { type: "boolean", nullable: true },
                     steps: {
                       type: "object",
                       properties: {

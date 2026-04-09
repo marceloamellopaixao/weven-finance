@@ -8,6 +8,7 @@ import {
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { getImpersonationActionStatus } from "@/services/impersonationService";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { resolveUserUidFromMetadata } from "@/lib/auth/user-uid";
 import { getSupabaseClient } from "@/services/supabase/client";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
 import { normalizePhone } from "@/lib/phone";
@@ -376,10 +377,7 @@ export const softDeleteUser = async (uid: string): Promise<void> => {
   const supabase = getSupabaseClient();
   const { data } = await supabase.auth.getUser();
   const meta = (data.user?.user_metadata as Record<string, unknown> | undefined) || {};
-  const mappedUid =
-    typeof meta.firebaseUid === "string" && meta.firebaseUid.trim()
-      ? meta.firebaseUid
-      : data.user?.id;
+  const mappedUid = data.user?.id ? resolveUserUidFromMetadata(meta, data.user.id) : undefined;
   if (mappedUid === uid) {
     await supabase.auth.signOut();
   }

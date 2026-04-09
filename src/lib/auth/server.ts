@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { resolveUserUidFromMetadata } from "@/lib/auth/user-uid";
 
 export type ServerAuthUser = {
   uid: string;
@@ -41,10 +42,7 @@ async function verifySupabaseToken(token: string): Promise<ServerAuthUser> {
   };
 
   const metadata = user.user_metadata || {};
-  const mappedUid =
-    typeof metadata.firebaseUid === "string" && metadata.firebaseUid.trim()
-      ? metadata.firebaseUid
-      : user.id;
+  const mappedUid = resolveUserUidFromMetadata(metadata, user.id);
 
   return {
     uid: mappedUid,
