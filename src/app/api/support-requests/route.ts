@@ -6,6 +6,7 @@ import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { pushNotification, pushNotifications } from "@/lib/notifications/server";
+import { decryptServerPayload, encryptServerPayload } from "@/lib/secure-store/server";
 import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
 
 type SupportType = "support" | "feature";
@@ -136,19 +137,28 @@ export async function GET(request: NextRequest) {
       conditions,
       or,
     });
-    const rows = paged.data;
+    const rows =
+      auth.role === "admin" || auth.role === "moderator" || auth.role === "support"
+        ? paged.data
+        : paged.data.filter((row) => {
+            const raw = (row.raw as Record<string, unknown> | null) ?? {};
+            return !Boolean(raw.isArchived);
+          });
 
     const tickets = rows
       .map((row) => {
         const raw = (row.raw as Record<string, unknown> | null) ?? {};
+        const secure = decryptServerPayload<{ email?: string; name?: string; message?: string }>(raw.secureSupport) ?? {};
         return {
           id: String(row.id || ""),
           uid: String(row.uid || raw.uid || ""),
-          email: String(row.email || raw.email || ""),
-          name: String(row.name || raw.name || ""),
+          email: String(row.email || secure.email || raw.email || ""),
+          name: String(row.name || secure.name || raw.name || ""),
           protocol: String(raw.protocol || row.title || ""),
-          message: String(row.message || raw.message || ""),
+          message: String(row.message || secure.message || raw.message || ""),
           type: String(row.ticket_type || raw.type || "support"),
+          supportKind: typeof raw.supportKind === "string" ? raw.supportKind : undefined,
+          wantsData: typeof raw.wantsData === "boolean" ? raw.wantsData : undefined,
           status: String(row.ticket_status || raw.status || "pending"),
           priority: String(raw.priority || "medium"),
           assignedTo: row.assigned_to ?? raw.assignedTo ?? null,
@@ -228,10 +238,7 @@ export async function POST(request: NextRequest) {
     const slaDueAt = computeSlaDueAt(nowIso, type, priority);
     const raw: Record<string, unknown> = {
       uid: auth.uid,
-      email: auth.email,
-      name: auth.name,
       protocol,
-      message,
       type,
       status: body.status || "pending",
       priority,
@@ -242,6 +249,11 @@ export async function POST(request: NextRequest) {
       createdAt: nowIso,
       updatedAt: nowIso,
       platform: body.platform || "web",
+      secureSupport: encryptServerPayload({
+        email: auth.email,
+        name: auth.name,
+        message,
+      }),
       ...(type === "feature" ? { votes: 0 } : {}),
     };
 
