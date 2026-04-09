@@ -242,7 +242,7 @@ export default function DashboardPage() {
     if (!cardId) return;
     try {
       window.localStorage.setItem("wevenfinance:cards:selectedCardId", cardId);
-    } catch {}
+    } catch { }
     router.push(`/cards?cardId=${encodeURIComponent(cardId)}`);
   };
 
@@ -909,9 +909,9 @@ export default function DashboardPage() {
     if (!user || !txToDelete || !txToDelete.id) return;
     const deletedIds = deleteGroup && txToDelete.groupId
       ? transactions
-          .filter((tx) => tx.groupId === txToDelete.groupId)
-          .map((tx) => String(tx.id || ""))
-          .filter(Boolean)
+        .filter((tx) => tx.groupId === txToDelete.groupId)
+        .map((tx) => String(tx.id || ""))
+        .filter(Boolean)
       : [String(txToDelete.id)];
     setOptimisticallyDeletedIds((prev) => Array.from(new Set([...prev, ...deletedIds])));
     await deleteTransaction(user.uid, txToDelete.id, deleteGroup);
@@ -1210,13 +1210,12 @@ export default function DashboardPage() {
           )}
           {selectedPaymentCard && selectedCardIndicator && (
             <div
-              className={`rounded-xl border px-3 py-2 text-xs ${
-                selectedCardIndicator.kind === "debit"
+              className={`rounded-xl border px-3 py-2 text-xs ${selectedCardIndicator.kind === "debit"
                   ? "border-blue-200 bg-blue-50 text-blue-700"
                   : selectedCardIndicator.value < 0
                     ? "border-red-200 bg-red-50 text-red-700"
                     : "border-emerald-200 bg-emerald-50 text-emerald-700"
-              }`}
+                }`}
             >
               <p className="font-semibold">{selectedCardIndicator.label}: {formatCurrency(selectedCardIndicator.value)}</p>
               {selectedCardIndicator.kind === "credit" && (
@@ -1535,11 +1534,10 @@ export default function DashboardPage() {
         type="button"
         size="sm"
         variant={isPending ? "default" : "outline"}
-        className={`h-8 rounded-lg px-2 text-[11px] font-semibold ${
-          isPending
+        className={`h-8 rounded-lg px-2 text-[11px] font-semibold ${isPending
             ? "bg-emerald-600 text-white hover:bg-emerald-700"
             : "border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-        }`}
+          }`}
         onClick={() => handleCheckinAction(tx, isPending)}
       >
         {label}
@@ -1620,39 +1618,36 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => handleGoToOnboardingStep("firstTransaction")}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
-                    onboardingStatus.steps.firstTransaction
+                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstTransaction
                       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                       : onboardingActiveStep === "firstTransaction"
                         ? "border-violet-300 bg-violet-50 text-violet-700 ring-2 ring-violet-200"
                         : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
-                  }`}
+                    }`}
                 >
                   {onboardingStatus.steps.firstTransaction ? "✓ " : onboardingActiveStep === "firstTransaction" ? "• " : ""}Primeira transação
                 </button>
                 <button
                   type="button"
                   onClick={() => handleGoToOnboardingStep("firstCard")}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
-                    onboardingStatus.steps.firstCard
+                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstCard
                       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                       : onboardingActiveStep === "firstCard"
                         ? "border-violet-300 bg-violet-50 text-violet-700 ring-2 ring-violet-200"
                         : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
-                  }`}
+                    }`}
                 >
                   {onboardingStatus.steps.firstCard ? "✓ " : onboardingActiveStep === "firstCard" ? "• " : ""}Primeiro cartão
                 </button>
                 <button
                   type="button"
                   onClick={() => handleGoToOnboardingStep("firstGoal")}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
-                    onboardingStatus.steps.firstGoal
+                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstGoal
                       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                       : onboardingActiveStep === "firstGoal"
                         ? "border-violet-300 bg-violet-50 text-violet-700 ring-2 ring-violet-200"
                         : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
-                  }`}
+                    }`}
                 >
                   {onboardingStatus.steps.firstGoal ? "✓ " : onboardingActiveStep === "firstGoal" ? "• " : ""}Primeira meta
                 </button>
@@ -1661,13 +1656,12 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => handleGoToOnboardingStep("profileMenu")}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
-                    onboardingStatus.steps.profileMenu
+                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.profileMenu
                       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                       : onboardingActiveStep === "profileMenu"
                         ? "border-violet-300 bg-violet-50 text-violet-700 ring-2 ring-violet-200"
                         : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
-                  }`}
+                    }`}
                 >
                   {onboardingStatus.steps.profileMenu ? "✓ " : onboardingActiveStep === "profileMenu" ? "• " : ""}Abrir menu da conta (foto no topo)
                 </button>
@@ -1682,46 +1676,44 @@ export default function DashboardPage() {
         )}
 
         {showAutomaticInsights && (
-        <Card className={`${fadeInUp} delay-120 border-none shadow-lg bg-white dark:bg-zinc-900 rounded-2xl`}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Insights Automáticos</CardTitle>
-            <CardDescription className="text-zinc-500">Resumo inteligente do mês selecionado.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-              <p className="text-xs text-zinc-500">Maior gasto do mês</p>
-              {monthlyInsights.biggestExpense ? (
-                <p className="text-sm font-semibold text-zinc-900 mt-1">
-                  {monthlyInsights.biggestExpense.description} • {formatCurrencyDisplay(monthlyInsights.biggestExpense.amount)}
-                </p>
-              ) : (
-                <p className="text-sm font-semibold text-zinc-600 mt-1">Sem despesas no período.</p>
-              )}
-            </div>
-            <div
-              className={`rounded-xl border px-3 py-2 ${
-                monthlyInsights.topRisk ? "border-amber-300 bg-amber-50" : "border-emerald-200 bg-emerald-50"
-              }`}
-            >
-              <p className="text-xs text-zinc-500">Risco de estourar limite</p>
-              {monthlyInsights.topRisk ? (
-                <p className="text-sm font-semibold text-amber-700 mt-1">
-                  {monthlyInsights.topRisk.card.bankName} •••• {monthlyInsights.topRisk.card.last4} em {monthlyInsights.topRisk.usagePct.toFixed(1)}%
-                </p>
-              ) : (
-                <p className="text-sm font-semibold text-emerald-700 mt-1">Nenhum cartão em risco no momento.</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+          <Card className={`${fadeInUp} delay-120 border-none shadow-lg bg-white dark:bg-zinc-900 rounded-2xl`}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Insights Automáticos</CardTitle>
+              <CardDescription className="text-zinc-500">Resumo inteligente do mês selecionado.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
+                <p className="text-xs text-zinc-500">Maior gasto do mês</p>
+                {monthlyInsights.biggestExpense ? (
+                  <p className="text-sm font-semibold text-zinc-900 mt-1">
+                    {monthlyInsights.biggestExpense.description} • {formatCurrencyDisplay(monthlyInsights.biggestExpense.amount)}
+                  </p>
+                ) : (
+                  <p className="text-sm font-semibold text-zinc-600 mt-1">Sem despesas no período.</p>
+                )}
+              </div>
+              <div
+                className={`rounded-xl border px-3 py-2 ${monthlyInsights.topRisk ? "border-amber-300 bg-amber-50" : "border-emerald-200 bg-emerald-50"
+                  }`}
+              >
+                <p className="text-xs text-zinc-500">Risco de estourar limite</p>
+                {monthlyInsights.topRisk ? (
+                  <p className="text-sm font-semibold text-amber-700 mt-1">
+                    {monthlyInsights.topRisk.card.bankName} •••• {monthlyInsights.topRisk.card.last4} em {monthlyInsights.topRisk.usagePct.toFixed(1)}%
+                  </p>
+                ) : (
+                  <p className="text-sm font-semibold text-emerald-700 mt-1">Nenhum cartão em risco no momento.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {upgradePrompt && (
-          <Card className={`${fadeInUp} delay-130 border-none shadow-lg rounded-2xl ${
-            upgradePrompt.kind === "billing"
+          <Card className={`${fadeInUp} delay-130 border-none shadow-lg rounded-2xl ${upgradePrompt.kind === "billing"
               ? "bg-linear-to-r from-amber-600 to-orange-600 text-white"
               : "bg-linear-to-r from-violet-600 to-indigo-600 text-white"
-          }`}>
+            }`}>
             <CardContent className="p-4 md:p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div className="space-y-1">
                 <p className="text-sm font-bold">{upgradePrompt.title}</p>
@@ -1742,15 +1734,14 @@ export default function DashboardPage() {
                 ) : (
                   <>
                     <Button
-                      className="h-9 bg-white text-violet-700 hover:bg-zinc-100"
+                      className="h-9 bg-white text-violet-700 hover:bg-zinc-300"
                       onClick={() => handleStartCheckout(upgradePrompt.targetPlan)}
                       disabled={isOpeningCheckout === upgradePrompt.targetPlan}
                     >
                       {isOpeningCheckout === upgradePrompt.targetPlan ? "Abrindo..." : upgradePrompt.ctaPrimary}
                     </Button>
                     <Button
-                      variant="outline"
-                      className="h-9 border-white/50 text-white hover:bg-white/10"
+                      className="h-9 bg-white text-violet-700 hover:bg-zinc-300"
                       onClick={() => router.push("/settings?tab=billing")}
                     >
                       Ver planos
@@ -2043,89 +2034,88 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                {pagedTransactions.map((tx) => {
-                  const overdue = isOverdue(tx);
-                  const txId = String(tx.id || "");
-                  return (
-                    <div key={tx.id} className={`rounded-2xl border p-3 space-y-2.5 ${overdue ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-900/10" : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/40"}`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3 min-w-0">
-                          <Checkbox
-                            checked={selectedTransactionIds.includes(txId)}
-                            onCheckedChange={(checked) => {
-                              if (!txId) return;
-                              setSelectedTransactionIds((prev) => {
-                                if (checked) return Array.from(new Set([...prev, txId]));
-                                return prev.filter((id) => id !== txId);
-                              });
-                            }}
-                            className="mt-0.5 cursor-pointer"
-                          />
-                          <div className="min-w-0">
-                          <p className={`text-sm font-semibold truncate ${tx.status === "paid" ? "line-through text-zinc-400" : "text-zinc-800 dark:text-zinc-100"}`}>
-                            {tx.description}
-                          </p>
-                          <p className={`text-xs mt-1 flex items-center gap-1 ${overdue ? "text-red-500" : "text-zinc-500 dark:text-zinc-400"}`}>
-                            <CalendarDays className="h-3.5 w-3.5" />
-                            {formatDateDisplay(tx.dueDate)}
-                            {overdue && <AlertCircle className="h-3.5 w-3.5 text-red-500" />}
-                          </p>
+                  {pagedTransactions.map((tx) => {
+                    const overdue = isOverdue(tx);
+                    const txId = String(tx.id || "");
+                    return (
+                      <div key={tx.id} className={`rounded-2xl border p-3 space-y-2.5 ${overdue ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-900/10" : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/40"}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <Checkbox
+                              checked={selectedTransactionIds.includes(txId)}
+                              onCheckedChange={(checked) => {
+                                if (!txId) return;
+                                setSelectedTransactionIds((prev) => {
+                                  if (checked) return Array.from(new Set([...prev, txId]));
+                                  return prev.filter((id) => id !== txId);
+                                });
+                              }}
+                              className="mt-0.5 cursor-pointer"
+                            />
+                            <div className="min-w-0">
+                              <p className={`text-sm font-semibold truncate ${tx.status === "paid" ? "line-through text-zinc-400" : "text-zinc-800 dark:text-zinc-100"}`}>
+                                {tx.description}
+                              </p>
+                              <p className={`text-xs mt-1 flex items-center gap-1 ${overdue ? "text-red-500" : "text-zinc-500 dark:text-zinc-400"}`}>
+                                <CalendarDays className="h-3.5 w-3.5" />
+                                {formatDateDisplay(tx.dueDate)}
+                                {overdue && <AlertCircle className="h-3.5 w-3.5 text-red-500" />}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {renderTransactionStatusButton(tx)}
+                            {renderTransactionActions(tx)}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {renderTransactionStatusButton(tx)}
-                          {renderTransactionActions(tx)}
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getCategoryStyle(tx.category)}`}>
+                            {formatCategoryLabel(tx.category)}
+                          </span>
+                          {tx.cardLabel && (
+                            tx.cardId ? (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCardFromTransaction(tx.cardId as string)}
+                                className="text-[10px] px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700 font-medium transition-colors hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/35"
+                              >
+                                Cartão: {tx.cardLabel}
+                              </button>
+                            ) : (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700 font-medium dark:border-violet-900 dark:bg-violet-900/20 dark:text-violet-300">
+                                Cartão: {tx.cardLabel}
+                              </span>
+                            )
+                          )}
+                          {tx.groupId && (
+                            <span
+                              className={`flex items-center text-[10px] px-2 py-0.5 rounded-full border ${tx.isRecurring
+                                  ? tx.recurrenceEnded
+                                    ? "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/20 dark:text-slate-300"
+                                    : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-900/20 dark:text-blue-300"
+                                  : "border-zinc-200 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700"
+                                }`}
+                            >
+                              {tx.isRecurring ? <Repeat className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
+                              {tx.isRecurring
+                                ? tx.recurrenceEnded
+                                  ? `Recorrência encerrada ${(tx.installmentCurrent || 0)}/${(tx.installmentTotal || 0)}`
+                                  : `Recorrência ${(tx.installmentCurrent || 0)}/${(tx.installmentTotal || 0)}`
+                                : `Parcela ${(tx.installmentCurrent || 0)}/${(tx.installmentTotal || 0)}`}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-end">
+                          <span className={`font-bold text-base tracking-tight ${tx.status === 'paid' ? 'text-zinc-400' : (tx.type === 'income' ? 'text-emerald-600' : 'text-zinc-800 dark:text-zinc-200')}`}>
+                            {tx.type === 'expense' ? '- ' : '+ '}
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
+                          </span>
                         </div>
                       </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getCategoryStyle(tx.category)}`}>
-                          {formatCategoryLabel(tx.category)}
-                        </span>
-                        {tx.cardLabel && (
-                          tx.cardId ? (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenCardFromTransaction(tx.cardId as string)}
-                              className="text-[10px] px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700 font-medium transition-colors hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/35"
-                            >
-                              Cartão: {tx.cardLabel}
-                            </button>
-                          ) : (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700 font-medium dark:border-violet-900 dark:bg-violet-900/20 dark:text-violet-300">
-                              Cartão: {tx.cardLabel}
-                            </span>
-                          )
-                        )}
-                        {tx.groupId && (
-                          <span
-                            className={`flex items-center text-[10px] px-2 py-0.5 rounded-full border ${
-                              tx.isRecurring
-                                ? tx.recurrenceEnded
-                                  ? "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/20 dark:text-slate-300"
-                                  : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-900/20 dark:text-blue-300"
-                                : "border-zinc-200 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700"
-                            }`}
-                          >
-                            {tx.isRecurring ? <Repeat className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
-                            {tx.isRecurring
-                              ? tx.recurrenceEnded
-                                ? `Recorrência encerrada ${(tx.installmentCurrent || 0)}/${(tx.installmentTotal || 0)}`
-                                : `Recorrência ${(tx.installmentCurrent || 0)}/${(tx.installmentTotal || 0)}`
-                              : `Parcela ${(tx.installmentCurrent || 0)}/${(tx.installmentTotal || 0)}`}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-end">
-                        <span className={`font-bold text-base tracking-tight ${tx.status === 'paid' ? 'text-zinc-400' : (tx.type === 'income' ? 'text-emerald-600' : 'text-zinc-800 dark:text-zinc-200')}`}>
-                          {tx.type === 'expense' ? '- ' : '+ '}
-                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -2174,7 +2164,7 @@ export default function DashboardPage() {
               </DialogHeader>
 
               <div className="mt-4">
-              {TransactionFormContent}
+                {TransactionFormContent}
               </div>
             </div>
           </DialogContent>
@@ -2198,13 +2188,12 @@ export default function DashboardPage() {
                         <span>Editar {editingTx.type === 'expense' ? 'Despesa' : 'Receita'}</span>
                       </DialogTitle>
                       {editingTx.groupId && (
-                        <span className={`flex items-center text-[10px] px-2 py-1 rounded-full border font-medium ${
-                          editingTx.isRecurring
+                        <span className={`flex items-center text-[10px] px-2 py-1 rounded-full border font-medium ${editingTx.isRecurring
                             ? editingTx.recurrenceEnded
                               ? "bg-slate-50 text-slate-700 border-slate-200"
                               : "bg-blue-50 text-blue-700 border-blue-200"
                             : "bg-amber-50 text-amber-700 border-amber-200"
-                        }`}>
+                          }`}>
                           {editingTx.isRecurring ? <Repeat className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
                           {editingTx.isRecurring ? (editingTx.recurrenceEnded ? "Encerrada" : "Recorrente") : "Parcelado"}
                         </span>
@@ -2220,27 +2209,24 @@ export default function DashboardPage() {
                   </DialogHeader>
 
                   {editingTx.groupId && editingGroupTransactions.length > 0 && (
-                    <div className={`mb-5 rounded-xl border p-3 ${
-                      editingTx.isRecurring
+                    <div className={`mb-5 rounded-xl border p-3 ${editingTx.isRecurring
                         ? "border-blue-200 bg-blue-50/70"
                         : "border-amber-200 bg-amber-50/70"
-                    }`}>
-                      <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${
-                        editingTx.isRecurring ? "text-blue-700" : "text-amber-700"
                       }`}>
+                      <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${editingTx.isRecurring ? "text-blue-700" : "text-amber-700"
+                        }`}>
                         {editingTx.isRecurring ? "Ocorrências desta recorrência" : "Parcelas deste grupo"}
                       </p>
                       <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
                         {editingGroupTransactions.map((parcel) => (
                           <div
                             key={parcel.id}
-                            className={`text-xs rounded-lg border px-2 py-1.5 flex items-center justify-between ${
-                              parcel.id === editingTx.id
+                            className={`text-xs rounded-lg border px-2 py-1.5 flex items-center justify-between ${parcel.id === editingTx.id
                                 ? "border-violet-300 bg-violet-50 text-violet-700"
                                 : editingTx.isRecurring
                                   ? "border-blue-200 bg-white text-zinc-600"
                                   : "border-amber-200 bg-white text-zinc-600"
-                            }`}
+                              }`}
                           >
                             <span className="font-medium">
                               {editingTx.isRecurring ? "Ocorrência" : "Parcela"} {parcel.installmentCurrent || 1}/{parcel.installmentTotal || editingGroupTransactions.length}
@@ -2333,13 +2319,13 @@ export default function DashboardPage() {
                             return;
                           }
                           const fallbackCard = paymentCards.find((card) => card.type === nextMethod || card.type === "credit_and_debit") || paymentCards[0];
-                            setEditingTx({
-                              ...editingTx,
-                              paymentMethod: fallbackCard.type === "credit_card" || fallbackCard.type === "debit_card" ? fallbackCard.type : nextMethod,
-                              cardId: fallbackCard.id,
-                              cardLabel: fallbackCard ? `${fallbackCard.bankName} ⬢⬢⬢⬢ ${fallbackCard.last4}` : undefined,
-                              cardType: normalizeCardTypeForTransaction(fallbackCard.type, nextMethod),
-                            });
+                          setEditingTx({
+                            ...editingTx,
+                            paymentMethod: fallbackCard.type === "credit_card" || fallbackCard.type === "debit_card" ? fallbackCard.type : nextMethod,
+                            cardId: fallbackCard.id,
+                            cardLabel: fallbackCard ? `${fallbackCard.bankName} ⬢⬢⬢⬢ ${fallbackCard.last4}` : undefined,
+                            cardType: normalizeCardTypeForTransaction(fallbackCard.type, nextMethod),
+                          });
                         }}
                       >
                         <SelectTrigger className="h-11 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue /></SelectTrigger>
@@ -2714,13 +2700,12 @@ export default function DashboardPage() {
                           <Button
                             type="button"
                             size="sm"
-                            className={`h-8 px-2 shrink-0 w-full sm:w-auto text-white ${
-                               cat.name === "Outros"
+                            className={`h-8 px-2 shrink-0 w-full sm:w-auto text-white ${cat.name === "Outros"
                                 ? "bg-zinc-500 hover:bg-zinc-600"
                                 : hidden
                                   ? "bg-emerald-600 hover:bg-emerald-700"
                                   : "bg-amber-500 hover:bg-amber-600"
-                            }`}
+                              }`}
                             disabled={cat.name === "Outros"}
                             onClick={() => toggleDefaultCategoryVisibility(cat.name, !hidden)}
                           >
