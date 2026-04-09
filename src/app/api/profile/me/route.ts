@@ -8,6 +8,7 @@ import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { normalizePhone } from "@/lib/phone";
 import { assertPhoneAvailable } from "@/lib/profile/server";
+import { resolvePermanentDeleteAt } from "@/lib/account-deletion/policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,6 +60,10 @@ export async function GET(request: NextRequest) {
           authProviders,
           needsPasswordSetup: raw.needsPasswordSetup ?? false,
           deletedAt: row.deleted_at ?? raw.deletedAt ?? undefined,
+          permanentDeleteAt: resolvePermanentDeleteAt(
+            typeof row.deleted_at === "string" ? row.deleted_at : typeof raw.deletedAt === "string" ? raw.deletedAt : null,
+            raw
+          ) ?? undefined,
           createdAt: row.created_at ?? raw.createdAt ?? new Date().toISOString(),
         },
       },
