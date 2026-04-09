@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import crypto from "node:crypto";
 import { UserRole } from "@/types/user";
 import { verifyRequestAuth } from "@/lib/auth/server";
+import { readSecureProfilePayload } from "@/lib/secure-store/profile";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 export type ImpersonationRequestStatus = "pending" | "approved" | "rejected" | "revoked" | "expired";
@@ -90,7 +91,7 @@ async function getUserProfileSummary(uid: string) {
   const rows = await supabaseSelect("profiles", { filters: { uid }, limit: 1 });
   if (rows.length === 0) throw new Error("user_not_found");
   const row = rows[0];
-  const raw = (row.raw as Record<string, unknown> | null) ?? {};
+  const raw = readSecureProfilePayload(row.raw);
   return {
     uid,
     displayName: String(row.display_name || raw.displayName || "Usuário"),
@@ -115,7 +116,7 @@ export async function getAuthContextFromRequest(request: NextRequest): Promise<A
     };
   }
   const row = rows[0];
-  const raw = (row.raw as Record<string, unknown> | null) ?? {};
+  const raw = readSecureProfilePayload(row.raw);
   return {
     uid: String(row.uid || decoded.uid),
     rawUid: decoded.rawUid,

@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
+import { canMatchWebhookByEmail } from "@/lib/billing/match";
 import { UserPaymentStatus, UserPlan, UserRole, UserStatus } from "@/types/user";
 import { pushNotification } from "@/lib/notifications/server";
 
@@ -420,11 +421,16 @@ async function findUserByWebhook(details: GatewayDetails): Promise<UserMatch | n
   if (details.payerEmail) {
     const userQuery = await supabaseSelect("profiles", {
       filters: { email: details.payerEmail.toLowerCase() },
-      limit: 1,
+      limit: 10,
     });
 
-    if (userQuery.length > 0) {
-      const doc = userQuery[0] as ProfileRow;
+    const emailCandidates = (userQuery as ProfileRow[]).filter((doc) => {
+      const data = profileToUserData(doc);
+      return canMatchWebhookByEmail(details, data.billing);
+    });
+
+    if (emailCandidates.length === 1) {
+      const doc = emailCandidates[0];
       return {
         uid: doc.uid,
         userData: profileToUserData(doc),
@@ -436,7 +442,7 @@ async function findUserByWebhook(details: GatewayDetails): Promise<UserMatch | n
   const pendingPlan = details.plan === "pro" || details.plan === "premium" ? details.plan : null;
   if (pendingPlan && allowPendingCheckoutHeuristic()) {
     const now = Date.now();
-    const windowMs = 6 * 60 * 60 * 1000; // 6 hours
+    const windowMs = 6 * 60 * 60 * 1000;
     const pendingUsers = await supabaseSelect("profiles", {
       limit: 200,
     });
