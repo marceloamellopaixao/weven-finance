@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnboarding } from "@/hooks/useOnboarding";
+import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { useTransactions } from "@/hooks/useTransactions";
 import { syncCreditCardAmountForLimit } from "@/services/transactionService";
 import { useSearchParams } from "next/navigation";
@@ -64,6 +65,7 @@ export default function CreditCardPage() {
     loading: onboardingLoading,
     activeStep: onboardingActiveStep,
     isActive: isOnboardingActive,
+    completeTour,
   } = useOnboarding();
   const { transactions, loading: txLoading } = useTransactions();
   const searchParams = useSearchParams();
@@ -137,6 +139,12 @@ export default function CreditCardPage() {
     isOnboardingActive &&
     onboardingActiveStep === "firstCard" &&
     !onboardingStatus.steps.firstCard;
+
+  usePlatformTour({
+    route: "cards",
+    disabled: onboardingLoading || isOnboardingActive,
+    onComplete: completeTour,
+  });
 
   useEffect(() => {
     if (!user) {
@@ -454,7 +462,7 @@ export default function CreditCardPage() {
       <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
         
         {/* HEADER */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div id="tour-cards-header" className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
               <CreditCard className="h-6 w-6 md:h-8 md:w-8 text-violet-600" />
@@ -511,6 +519,7 @@ export default function CreditCardPage() {
                     Adicione seu primeiro cartão para acompanhar faturas e limites em um só lugar.
                   </p>
                   <Button
+                    id="tour-cards-add-button"
                     onClick={() => setShowCardForm(true)}
                     className={`rounded-xl px-8 w-full sm:w-auto max-w-xs ${isCardOnboardingActive ? "ring-2 ring-violet-300 ring-offset-2" : ""}`}
                   >
@@ -521,7 +530,7 @@ export default function CreditCardPage() {
             ) : (
               <div className="flex flex-col items-center">
                 {activeCard && (
-                  <div className="w-full max-w-[400px] group relative">
+                  <div id="tour-cards-carousel" className="w-full max-w-[400px] group relative">
                     {paymentCards.length > 1 && (
                       <>
                         <button
@@ -565,6 +574,7 @@ export default function CreditCardPage() {
                         <Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir
                       </Button>
                       <Button
+                        id="tour-cards-add-button"
                         type="button"
                         variant="default"
                         size="sm"
@@ -684,7 +694,7 @@ export default function CreditCardPage() {
 
         {/* SECTION 2: PAINEL DE LIMITES */}
         {!showCardForm && paymentCards.length > 0 && (
-          <Card className="rounded-3xl border-none shadow-md bg-white dark:bg-zinc-950 overflow-hidden">
+          <Card id="tour-cards-limit-panel" className="rounded-3xl border-none shadow-md bg-white dark:bg-zinc-950 overflow-hidden">
             <div className="p-6 md:p-8">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-bold flex items-center gap-2">
