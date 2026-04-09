@@ -1,5 +1,6 @@
-import { DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
+import { DEFAULT_FEATURE_ACCESS_CONFIG, FeatureAccessConfig, DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
 import { UserPlan } from "@/types/user";
+import { hasManagedFeatureAccess } from "@/lib/plans/feature-access";
 
 export type PlanCapabilities = {
   plan: UserPlan;
@@ -51,7 +52,11 @@ export function getNextUpgradePlan(plan: UserPlan): Exclude<UserPlan, "free"> | 
   return null;
 }
 
-export function getPlanCapabilities(plan: UserPlan, plans: PlansConfig = DEFAULT_PLANS_CONFIG): PlanCapabilities {
+export function getPlanCapabilities(
+  plan: UserPlan,
+  plans: PlansConfig = DEFAULT_PLANS_CONFIG,
+  featureAccess: FeatureAccessConfig = DEFAULT_FEATURE_ACCESS_CONFIG
+): PlanCapabilities {
   const freeLimitRaw = Number(plans.free.limit ?? DEFAULT_PLANS_CONFIG.free.limit ?? 20);
   const freeLimit = Number.isFinite(freeLimitRaw) && freeLimitRaw > 0 ? freeLimitRaw : 20;
   const base = STATIC_CAPABILITIES[plan] ?? STATIC_CAPABILITIES.free;
@@ -59,6 +64,9 @@ export function getPlanCapabilities(plan: UserPlan, plans: PlansConfig = DEFAULT
   return {
     plan,
     ...base,
+    hasInstallments: base.hasInstallments || hasManagedFeatureAccess("installments", plan, featureAccess),
+    hasMonthlyForecast: base.hasMonthlyForecast || hasManagedFeatureAccess("monthlyForecast", plan, featureAccess),
+    hasSmartDailyLimit: base.hasSmartDailyLimit || hasManagedFeatureAccess("smartDailyLimit", plan, featureAccess),
     maxTransactionsPerMonth: plan === "free" ? freeLimit : null,
   };
 }
