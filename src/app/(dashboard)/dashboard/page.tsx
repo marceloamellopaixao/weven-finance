@@ -31,9 +31,9 @@ import {
   Tag, Settings, Repeat
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Transaction, PaymentMethod, TransactionType } from "@/types/transaction";
+import { InstallmentValueMode, PaymentMethod, Transaction, TransactionType } from "@/types/transaction";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
-import { useDashboardTour } from "@/hooks/useDashboardTour";
+import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { confirmPreapproval, getCheckoutLink } from "@/services/billingService";
 import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
@@ -42,6 +42,7 @@ import { useOnboarding } from "@/hooks/useOnboarding";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getPlanCapabilities } from "@/lib/plans/capabilities";
 import { getOnboardingStepHref } from "@/lib/onboarding/flow";
+import { buildInstallmentPlan } from "@/lib/transactions/installments";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -171,6 +172,8 @@ export default function DashboardPage() {
     toggleDefaultCategoryVisibility,
   } = useCategories();
   const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
+  const effectivePlan = userProfile?.plan || "free";
+  const effectivePlanCapabilities = getPlanCapabilities(effectivePlan, plans, featureAccess);
   const {
     status: onboardingStatus,
     loading: onboardingLoading,
@@ -180,9 +183,14 @@ export default function DashboardPage() {
     isActive: isOnboardingActive,
   } = useOnboarding();
   const shouldForceTour = searchParams.get("tour") === "1";
-  const { startTour } = useDashboardTour({
-    disabled: isOnboardingActive,
+  usePlatformTour({
+    route: "dashboard",
+    disabled: onboardingLoading || isOnboardingActive,
     hasSeen: onboardingStatus.tourCompleted,
+    forceStart: shouldForceTour,
+    stepVisibility: {
+      monthlyForecast: isBillingExemptRole || effectivePlanCapabilities.hasMonthlyForecast,
+    },
     onComplete: completeTour,
   });
 
@@ -212,6 +220,7 @@ export default function DashboardPage() {
   const [isInstallment, setIsInstallment] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
   const [installmentsCount, setInstallmentsCount] = useState("2");
+  const [installmentValueMode, setInstallmentValueMode] = useState<InstallmentValueMode>("divide_total");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Modais
@@ -268,20 +277,15 @@ export default function DashboardPage() {
     return formatCurrency(value);
   };
 
-  // --- 2. INICIAR TOUR ---
+  // --- 2. LIMPAR FLAG DE TOUR NA URL ---
   useEffect(() => {
-    if (loading || !user || isOnboardingActive) return;
-    if (!shouldForceTour && onboardingStatus.tourCompleted) return;
-
-    startTour(shouldForceTour);
-
     if (shouldForceTour) {
       const params = new URLSearchParams(searchParams.toString());
       params.delete("tour");
       const nextHref = params.toString() ? `${pathname}?${params.toString()}` : pathname;
       router.replace(nextHref);
     }
-  }, [isOnboardingActive, loading, onboardingStatus.tourCompleted, pathname, router, searchParams, shouldForceTour, startTour, user]);
+  }, [pathname, router, searchParams, shouldForceTour]);
 
   // --- 3. CHECK-IN DI?RIO (Pop-up Inteligente) ---
   useEffect(() => {
@@ -719,9 +723,6 @@ export default function DashboardPage() {
 
   const canGoBack = availableMonths.findIndex(m => m.value === selectedMonth) > 0;
   const canGoForward = availableMonths.findIndex(m => m.value === selectedMonth) < availableMonths.length - 1;
-  const effectivePlan = userProfile?.plan || "free";
-  const effectivePlanCapabilities = getPlanCapabilities(effectivePlan, plans, featureAccess);
-
   const handleAdd = async () => {
     const transactionLimit = effectivePlanCapabilities.maxTransactionsPerMonth;
 
@@ -750,16 +751,12 @@ export default function DashboardPage() {
     }
     setIsSubmitting(true);
     try {
-      let finalAmount = Number(amount);
       const count = isInstallment ? Math.max(1, Number(installmentsCount || 1)) : 1;
-
-      if (isInstallment && count > 1) {
-        finalAmount = finalAmount / count;
-        finalAmount = Math.round(finalAmount * 100) / 100;
-      }
-      const totalAmountToReserve = isInstallment && count > 1
-        ? Math.round(finalAmount * count * 100) / 100
-        : finalAmount;
+      const typedAmount = Number(amount);
+      const installmentPlan = isInstallment
+        ? buildInstallmentPlan(typedAmount, count, installmentValueMode)
+        : null;
+      const totalAmountToReserve = installmentPlan ? installmentPlan.totalAmount : typedAmount;
 
       if (isCardPayment && selectedPaymentCard) {
         const validation = validateCardLimitBeforeSave({
@@ -800,7 +797,7 @@ export default function DashboardPage() {
 
       await addTransaction(user!.uid, {
         description: desc, // Descrição
-        amount: finalAmount, // Valor (ajustado para parcelas se necessário)
+        amount: typedAmount,
         type: type, // Tipo (Despesa ou Renda)
         category: category, // Categoria
         paymentMethod: paymentMethod, // Método de Pagamento
@@ -811,6 +808,7 @@ export default function DashboardPage() {
         dueDate: transactionDueDate, // Data de Vencimento (para despesas) ou Data de Crédito (para rendas)
         isInstallment, // Flag de Parcela
         installmentsCount: count, // Número de Parcelas (se aplicável)
+        installmentValueMode,
         isRecurring,
       });
 
@@ -820,6 +818,7 @@ export default function DashboardPage() {
       setIsInstallment(false);
       setIsRecurring(false);
       setInstallmentsCount("2");
+      setInstallmentValueMode("divide_total");
       if (isCardPayment) setSelectedPaymentCardId("");
       if (type === 'income') setCategory("Salário");
       setIsFormOpen(false); // Fecha o modal após adicionar
@@ -1130,17 +1129,21 @@ export default function DashboardPage() {
           <Input className="mt-1.5 h-12 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl" placeholder={type === 'expense' ? "Ex: Netflix" : "Ex: Salário"} value={desc} onChange={e => setDesc(e.target.value)} />
         </div>
         <div>
-          <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Valor Total</Label>
+          <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">
+            {isInstallment && installmentValueMode === "repeat_value" ? "Valor por parcela" : "Valor total"}
+          </Label>
           <div className="relative mt-1.5">
             <span className="absolute left-3.5 top-3 text-zinc-400 font-semibold">R$</span>
             <Input type="number" className="pl-10 h-12 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl font-semibold text-lg" placeholder="0,00" value={amount} onChange={e => setAmount(e.target.value)} />
           </div>
           <p className="text-[10px] text-zinc-400 mt-1.5 text-right font-medium">
             {isInstallment
-              ? "O sistema dividirá este total pelas parcelas."
+              ? installmentValueMode === "divide_total"
+                ? "O sistema vai dividir este total pelas parcelas."
+                : "O valor digitado sera repetido em cada parcela."
               : isRecurring
-                ? "Este valor será repetido nos próximos 12 meses."
-                : "Valor único"}
+                ? "Este valor sera repetido nos proximos 12 meses."
+                : "Valor unico"}
           </p>
         </div>
       </div>
@@ -1299,9 +1302,26 @@ export default function DashboardPage() {
         {isInstallment && (
           <div className="animate-in slide-in-from-top-2 pt-1">
             <Label className="text-xs font-medium text-zinc-500">
-              Número de Parcelas
+              Numero de parcelas
             </Label>
             <Input type="number" className="h-10 mt-1.5 bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" min="2" max="60" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
+            <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label htmlFor="dashboard-installment-split-mode" className="text-sm font-semibold text-violet-900">
+                    Dividir o valor total
+                  </Label>
+                  <p className="mt-1 text-xs text-violet-700">
+                    Ative para informar o total da compra. Desative se o valor digitado ja for o de cada parcela.
+                  </p>
+                </div>
+                <Switch
+                  id="dashboard-installment-split-mode"
+                  checked={installmentValueMode === "divide_total"}
+                  onCheckedChange={(checked) => setInstallmentValueMode(checked ? "divide_total" : "repeat_value")}
+                />
+              </div>
+            </div>
           </div>
         )}
       </div>
