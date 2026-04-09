@@ -3,6 +3,8 @@ import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/im
 import { buildPlanLimitMessage, getPlanCapabilities } from "@/lib/plans/capabilities";
 import { getUserPlanContext } from "@/lib/plans/server";
 import { MAX_FINANCIAL_AMOUNT } from "@/lib/money";
+import { filterActiveJsonRows } from "@/lib/account-archive/server";
+import { readSecureCardPayload, writeSecureCardPayload } from "@/lib/secure-store/payment-cards";
 import { PaymentCard, PaymentCardType } from "@/types/paymentCard";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import {
@@ -72,14 +74,14 @@ function toCardRow(uid: string, sourceId: string, data: Record<string, unknown>)
     alert_threshold_pct: sanitizePercent(data.alertThresholdPct),
     block_on_limit_exceeded:
       data.blockOnLimitExceeded == null ? null : Boolean(data.blockOnLimitExceeded),
-    raw: data,
+    raw: writeSecureCardPayload(data),
     created_at: typeof data.createdAt === "string" ? data.createdAt : new Date().toISOString(),
     updated_at: typeof data.updatedAt === "string" ? data.updatedAt : new Date().toISOString(),
   };
 }
 
 function toClientCard(row: Record<string, unknown>): PaymentCard {
-  const raw = (row.raw as Record<string, unknown> | null) ?? null;
+  const raw = readSecureCardPayload(row.raw);
   return {
     id: String(row.source_id || ""),
     bankName: String(row.bank_name || raw?.bankName || ""),
@@ -108,12 +110,13 @@ function toClientCard(row: Record<string, unknown>): PaymentCard {
 }
 
 async function getCards(uid: string) {
-  return supabaseSelect("payment_cards", {
+  const rows = await supabaseSelect("payment_cards", {
     select:
       "source_id,bank_name,last4,card_type,brand,bin,due_date,limit_enabled,credit_limit,alert_threshold_pct,block_on_limit_exceeded,created_at,updated_at,raw",
     filters: { uid },
     order: "updated_at.desc.nullslast",
   });
+  return filterActiveJsonRows(rows);
 }
 
 export async function GET(request: NextRequest) {
@@ -154,7 +157,7 @@ export async function POST(request: NextRequest) {
       getCards(acting.actingUid),
       getUserPlanContext(acting.actingUid),
     ]);
-    const capabilities = getPlanCapabilities(planContext.plan, planContext.plans);
+    const capabilities = getPlanCapabilities(planContext.plan, planContext.plans, planContext.featureAccess);
 
     if (!planContext.isBillingExempt && capabilities.maxCards !== null && existingCards.length >= capabilities.maxCards) {
       return NextResponse.json(
@@ -247,7 +250,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "card_not_found" }, { status: 404 });
     }
 
-    const raw = ((existing.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+    const raw = readSecureCardPayload(existing.raw);
     const merged: Record<string, unknown> = {
       ...raw,
       updatedAt: new Date().toISOString(),
