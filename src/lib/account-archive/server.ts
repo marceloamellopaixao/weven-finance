@@ -1,4 +1,5 @@
 import { isDeletionWindowExpired } from "@/lib/account-deletion/policy";
+import { readSecureProfilePayload } from "@/lib/secure-store/profile";
 import { supabaseDeleteByFilters, supabasePatchByFilters, supabaseSelect } from "@/services/supabase/admin";
 import { deleteSupabaseAuthUser, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
 
@@ -247,7 +248,7 @@ export async function runDeletedAccountGraceCleanup(now = new Date()) {
 
   for (const profile of profiles) {
     const uid = String(profile.uid || "").trim();
-    const raw = (profile.raw as Record<string, unknown> | null) ?? {};
+    const raw = readSecureProfilePayload(profile.raw);
     const deletedAt =
       typeof profile.deleted_at === "string" ? profile.deleted_at : typeof raw.deletedAt === "string" ? raw.deletedAt : null;
 
