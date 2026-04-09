@@ -45,4 +45,5 @@ export interface UserProfile {
   authProviders?: string[];
   needsPasswordSetup?: boolean;
   deletedAt?: string; // ISO Date
+  permanentDeleteAt?: string; // ISO Date
 }
