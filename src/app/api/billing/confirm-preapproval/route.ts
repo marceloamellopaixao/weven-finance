@@ -3,7 +3,7 @@ import { confirmLatestPreapprovalForUser, confirmPreapprovalForUser } from "@/li
 import { UserPlan } from "@/types/user";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { resolveActingContext } from "@/lib/impersonation/server";
-import { supabaseSelect } from "@/services/supabase/admin";
+import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { pushNotification } from "@/lib/notifications/server";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
@@ -12,6 +12,21 @@ import { writeApiMetric } from "@/lib/observability/metrics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+async function getCheckoutAttemptContext(checkoutAttemptId: string) {
+  const rows = await supabaseSelect("billing_events", {
+    filters: { id: `checkout_attempt_${checkoutAttemptId}` },
+    limit: 1,
+  });
+
+  if (rows.length === 0) return null;
+  const raw = ((rows[0].raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  return {
+    uid: typeof raw.uid === "string" ? raw.uid : null,
+    plan: parsePlan(raw.plan),
+    createdAt: typeof raw.createdAt === "string" ? raw.createdAt : null,
+  };
+}
 
 function parsePlan(value: unknown): UserPlan | undefined {
   if (value === "free" || value === "pro" || value === "premium") return value;
@@ -58,14 +73,27 @@ export async function POST(request: NextRequest) {
     const pendingCheckoutAt = typeof billing.pendingCheckoutAt === "string" ? billing.pendingCheckoutAt : undefined;
     const pendingCheckoutAttemptId =
       typeof billing.pendingCheckoutAttemptId === "string" ? billing.pendingCheckoutAttemptId : undefined;
-    const checkoutAttemptId = body.checkoutAttemptId?.trim() || undefined;
+    const checkoutAttemptId = body.checkoutAttemptId?.trim() || pendingCheckoutAttemptId;
 
     if (checkoutAttemptId && pendingCheckoutAttemptId && checkoutAttemptId !== pendingCheckoutAttemptId) {
       return NextResponse.json({ ok: false, error: "checkout_attempt_mismatch" }, { status: 409 });
     }
 
+    const checkoutAttempt = checkoutAttemptId
+      ? await getCheckoutAttemptContext(checkoutAttemptId)
+      : null;
+
+    if (checkoutAttemptId && !checkoutAttempt) {
+      return NextResponse.json({ ok: false, error: "checkout_attempt_not_found" }, { status: 404 });
+    }
+
+    if (checkoutAttempt?.uid && checkoutAttempt.uid !== uid) {
+      return NextResponse.json({ ok: false, error: "checkout_attempt_forbidden" }, { status: 403 });
+    }
+
     const preapprovalId = body.preapprovalId?.trim() || pendingPreapprovalId;
-    const expectedPlan = parsePlan(body.expectedPlan) || pendingPlan;
+    const expectedPlan = parsePlan(body.expectedPlan) || checkoutAttempt?.plan || pendingPlan;
+    const checkoutStartedAt = checkoutAttempt?.createdAt || pendingCheckoutAt;
     let result;
     if (preapprovalId) {
       try {
@@ -90,7 +118,7 @@ export async function POST(request: NextRequest) {
           uid,
           userEmail,
           expectedPlan: expectedPlan === "pro" || expectedPlan === "premium" ? expectedPlan : undefined,
-          checkoutStartedAt: pendingCheckoutAt,
+          checkoutStartedAt,
         });
       }
     } else {
@@ -98,8 +126,35 @@ export async function POST(request: NextRequest) {
         uid,
         userEmail,
         expectedPlan: expectedPlan === "pro" || expectedPlan === "premium" ? expectedPlan : undefined,
-        checkoutStartedAt: pendingCheckoutAt,
+        checkoutStartedAt,
       });
+    }
+
+    if (checkoutAttemptId) {
+      await supabaseUpsertRows(
+        "billing_events",
+        [
+          {
+            id: `checkout_attempt_${checkoutAttemptId}`,
+            uid,
+            event_type: "checkout_attempt",
+            action: "confirmed",
+            provider: "system",
+            raw: {
+              uid,
+              plan: expectedPlan ?? null,
+              checkoutAttemptId,
+              createdAt: checkoutStartedAt ?? null,
+              confirmedAt: new Date().toISOString(),
+              targetPlan: result.targetPlan,
+              targetPaymentStatus: result.targetPaymentStatus,
+              preapprovalId: preapprovalId ?? null,
+            },
+            created_at: new Date().toISOString(),
+          },
+        ],
+        { onConflict: "id" }
+      );
     }
 
     await pushNotification({
