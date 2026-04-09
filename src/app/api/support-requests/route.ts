@@ -7,6 +7,7 @@ import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { pushNotification, pushNotifications } from "@/lib/notifications/server";
 import { decryptServerPayload, encryptServerPayload } from "@/lib/secure-store/server";
+import { readSecureProfilePayload } from "@/lib/secure-store/profile";
 import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
 
 type SupportType = "support" | "feature";
@@ -66,7 +67,7 @@ async function getAuthContext(request: NextRequest) {
   });
   if (actingRows.length === 0) throw new Error("user_not_found");
   const row = actingRows[0];
-  const raw = (row.raw as Record<string, unknown> | null) ?? {};
+  const raw = readSecureProfilePayload(row.raw);
   const requesterRoleRaw = ((requesterRows[0]?.raw as Record<string, unknown> | null) ?? {});
   const requesterRole = String(requesterRows[0]?.role || requesterRoleRaw.role || "client");
   const effectiveRole = acting.isImpersonating ? "client" : requesterRole;
