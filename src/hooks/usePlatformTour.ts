@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { usePlatformExperience } from "@/hooks/usePlatformExperience";
 import { PlatformTourRouteKey } from "@/types/navigation";
 import { ensurePlatformTourTheme } from "@/lib/platform-tour/driver-theme";
-import { getPlatformTourConfig } from "@/lib/platform-tour/config";
+import { getPlatformTourConfig, PLATFORM_TOUR_ROUTE_HREFS } from "@/lib/platform-tour/config";
 
 type UsePlatformTourOptions = {
   route: PlatformTourRouteKey;
@@ -31,6 +31,15 @@ export function usePlatformTour(options: UsePlatformTourOptions) {
   } = usePlatformExperience();
 
   const config = useMemo(() => getPlatformTourConfig(setForceAccountMenuOpen)[route], [route, setForceAccountMenuOpen]);
+  const nextRouteFromSelection = useMemo(() => {
+    const selectedOrder = platformTourState.routeOrder || [];
+    const currentIndex = selectedOrder.indexOf(route);
+    if (currentIndex >= 0 && currentIndex < selectedOrder.length - 1) {
+      return selectedOrder[currentIndex + 1];
+    }
+    return null;
+  }, [platformTourState.routeOrder, route]);
+  const nextHrefFromSelection = nextRouteFromSelection ? PLATFORM_TOUR_ROUTE_HREFS[nextRouteFromSelection] : null;
   const stepVisibilityKey = useMemo(() => JSON.stringify(stepVisibility || {}), [stepVisibility]);
   const resolvedStepVisibility = useMemo(
     () => JSON.parse(stepVisibilityKey) as Partial<Record<string, boolean>>,
@@ -83,20 +92,25 @@ export function usePlatformTour(options: UsePlatformTourOptions) {
       const isLast = index === visibleSteps.length - 1;
       if (!isLast) return step;
 
+      const hasNextRoute = Boolean(nextRouteFromSelection || config.nextRoute);
+
       return {
         ...step,
         popover: {
           ...step.popover,
-          nextBtnText: config.nextRoute ? "Continuar" : "Concluir",
+          nextBtnText: hasNextRoute ? "Continuar" : "Concluir",
           onNextClick: async () => {
             completedRouteRef.current = true;
             setForceAccountMenuOpen(false);
             driverRef.current?.destroy();
             driverRef.current = null;
 
-            if (config.nextRoute && config.nextHref) {
-              setPlatformTourRoute(config.nextRoute);
-              router.push(config.nextHref);
+            const resolvedNextRoute = nextRouteFromSelection || config.nextRoute;
+            const resolvedNextHref = nextHrefFromSelection || config.nextHref;
+
+            if (resolvedNextRoute && resolvedNextHref) {
+              setPlatformTourRoute(resolvedNextRoute);
+              router.push(resolvedNextHref);
               return;
             }
 
@@ -147,6 +161,8 @@ export function usePlatformTour(options: UsePlatformTourOptions) {
     config.nextRoute,
     disabled,
     finishPlatformTour,
+    nextHrefFromSelection,
+    nextRouteFromSelection,
     isPlatformTourActive,
     platformTourState.route,
     route,
