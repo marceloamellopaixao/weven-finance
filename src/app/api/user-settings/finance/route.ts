@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
+import { isArchivedJsonRecord } from "@/lib/account-archive/server";
+import { readSecureSettingData, writeSecureSettingData } from "@/lib/secure-store/user-settings";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 export const runtime = "nodejs";
@@ -14,7 +16,8 @@ export async function GET(request: NextRequest) {
       limit: 1,
     });
 
-    const data = (rows[0]?.data as { currentBalance?: unknown } | undefined) ?? {};
+    const activeRow = rows.find((row) => !isArchivedJsonRecord(row, "data"));
+    const data = readSecureSettingData<{ currentBalance?: unknown }>(activeRow?.data);
     const currentBalance = typeof data.currentBalance === "number" ? data.currentBalance : 0;
     return NextResponse.json({ ok: true, currentBalance }, { status: 200 });
   } catch (error) {
@@ -43,20 +46,24 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
 
-    const existing = await supabaseSelect("user_settings", {
+    const existingRows = await supabaseSelect("user_settings", {
       select: "id,data",
       filters: { uid, setting_key: "finance" },
       limit: 1,
     });
+    const existing = existingRows.find((row) => !isArchivedJsonRecord(row, "data"));
 
     await supabaseUpsertRows(
       "user_settings",
       [
         {
-          id: String(existing[0]?.id || `${uid}__finance`),
+          id: String(existing?.id || `${uid}__finance`),
           uid,
           setting_key: "finance",
-          data: { ...(existing[0]?.data as Record<string, unknown> | undefined), currentBalance: body.currentBalance },
+          data: writeSecureSettingData(
+            { currentBalance: body.currentBalance },
+            { isArchived: false }
+          ),
           updated_at: new Date().toISOString(),
         },
       ],
