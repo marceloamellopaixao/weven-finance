@@ -4,6 +4,7 @@ import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { runDeletedAccountGraceCleanup } from "@/lib/account-archive/server";
 import { supabaseRpc, supabaseSelect } from "@/services/supabase/admin";
 
 type StaffRole = "admin" | "moderator" | "support" | "client";
@@ -58,7 +59,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
-    const result = await supabaseRpc("run_data_retention_tasks");
+    const [result, deletedAccounts] = await Promise.all([
+      supabaseRpc("run_data_retention_tasks"),
+      runDeletedAccountGraceCleanup(),
+    ]);
     await writeApiMetric({
       route: meta.route,
       method: meta.method,
@@ -67,7 +71,7 @@ export async function POST(request: NextRequest) {
       requestId: meta.requestId,
       uid,
     });
-    return NextResponse.json({ ok: true, result }, { status: 200 });
+    return NextResponse.json({ ok: true, result, deletedAccounts }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
