@@ -4,6 +4,7 @@ import { getImpersonationHeader, getImpersonationTargetUid } from "@/lib/imperso
 import { getImpersonationActionStatus } from "@/services/impersonationService";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
+import { buildInstallmentPlan } from "@/lib/transactions/installments";
 
 const TRANSACTIONS_CHANGED_EVENT = "wevenfinance:transactions:changed";
 const USER_SETTINGS_CHANGED_EVENT = "wevenfinance:user-settings:changed";
@@ -319,13 +320,15 @@ export const subscribeToTransactions = (
 
 export const addTransaction = async (uid: string, tx: CreateTransactionDTO & { isRecurring?: boolean }) => {
   const cryptoUid = resolveCryptoUid(uid);
-  const count = tx.isInstallment
-    ? Math.max(1, Math.floor(tx.installmentsCount))
+  const installmentPlan = tx.isInstallment
+    ? buildInstallmentPlan(tx.amount, tx.installmentsCount, tx.installmentValueMode || "divide_total")
+    : null;
+  const count = installmentPlan
+    ? installmentPlan.count
     : tx.isRecurring
       ? 12
       : 1;
   const groupId = count > 1 ? crypto.randomUUID() : null;
-  const encryptedAmount = await encryptData(tx.amount, cryptoUid);
   const transactions: Record<string, unknown>[] = [];
 
   for (let i = 0; i < count; i++) {
@@ -333,11 +336,15 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO & { i
     const currentDueDate = tx.isRecurring || tx.isInstallment ? addMonthsUTC(tx.dueDate, i) : tx.dueDate;
     const descText = tx.isInstallment ? `${tx.description} (${i + 1}/${count})` : tx.description;
     const encryptedDesc = await encryptData(descText, cryptoUid);
+    const currentAmount = installmentPlan
+      ? installmentPlan.installmentAmounts[i] ?? installmentPlan.installmentAmounts[0] ?? 0
+      : tx.amount;
+    const encryptedAmount = await encryptData(currentAmount, cryptoUid);
 
     transactions.push({
       description: encryptedDesc,
       amount: encryptedAmount,
-      amountForLimit: Number(tx.amount),
+      amountForLimit: Number(currentAmount),
       type: tx.type,
       category: tx.category,
       paymentMethod: tx.paymentMethod,
