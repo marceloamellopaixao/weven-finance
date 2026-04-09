@@ -11,6 +11,14 @@ type PlatformTourRouteConfig = {
   steps: PlatformTourStep[];
 };
 
+export const PLATFORM_TOUR_ROUTE_HREFS: Record<PlatformTourRouteKey, string> = {
+  dashboard: "/dashboard?tour=1",
+  settings: "/settings?tab=account&tour=1",
+  "transactions-new": "/transactions/new?tour=1",
+  cards: "/cards?tour=1",
+  "piggy-bank": "/piggy-bank?tour=1",
+};
+
 function clickSelectorAndAdvance(selector: string) {
   return (
     _element: Element | undefined,
