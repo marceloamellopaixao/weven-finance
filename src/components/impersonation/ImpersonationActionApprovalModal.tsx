@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { usePlatformExperience } from "@/hooks/usePlatformExperience";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,6 +22,7 @@ const POLLING_INTERVAL_MS = 20000;
 
 export function ImpersonationActionApprovalModal() {
   const { user, userProfile } = useAuth();
+  const { isPlatformTourActive } = usePlatformExperience();
   const [pending, setPending] = useState<ImpersonationActionRequest[]>([]);
   const [isResponding, setIsResponding] = useState(false);
 
@@ -28,7 +30,7 @@ export function ImpersonationActionApprovalModal() {
   const canPollRequests = Boolean(user?.uid && userProfile?.uid);
 
   useEffect(() => {
-    if (!canPollRequests) return;
+    if (!canPollRequests || isPlatformTourActive) return;
 
     let cancelled = false;
     const run = async () => {
@@ -47,7 +49,9 @@ export function ImpersonationActionApprovalModal() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [canPollRequests]);
+  }, [canPollRequests, isPlatformTourActive]);
+
+  if (isPlatformTourActive) return null;
 
   const handleRespond = async (approved: boolean) => {
     if (!currentRequest) return;
