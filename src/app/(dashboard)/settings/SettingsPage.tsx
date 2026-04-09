@@ -38,6 +38,7 @@ import { BillingHistoryItem, cancelSubscription, confirmPreapproval, getBillingH
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { sendPasswordAccessEmail } from "@/services/auth/passwordAccess";
 import { formatPhone, normalizePhone } from "@/lib/phone";
+import { ACCOUNT_DELETION_GRACE_DAYS } from "@/lib/account-deletion/policy";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -199,7 +200,7 @@ export default function SettingsPage() {
     try {
       const token = await user?.getIdToken();
       await requestOwnAccountDeletion(token);
-      await logout();
+      await refreshProfile();
       router.push("/goodbye");
     } catch (error) {
       let errorMessage = "Ocorreu um erro ao tentar excluir sua conta.";
@@ -1173,7 +1174,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <h3 className="text-red-600 font-bold text-sm flex items-center gap-2 mb-3"><AlertTriangle className="h-4 w-4" /> Zona de Perigo</h3>
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-950/10 rounded-2xl">
-                    <p className="text-xs text-red-600/80 dark:text-red-400">A exclusão da conta é <strong>irreversível</strong>. Seu acesso será removido e os dados serão arquivados.</p>
+                    <p className="text-xs text-red-600/80 dark:text-red-400">A exclusão da conta é <strong>irreversível</strong>. Seu acesso será removido e a conta deixará de existir para você.</p>
                     <Button variant="outline" onClick={() => setShowDeleteModal(true)} className="text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 dark:hover:bg-red-900/40 dark:border-red-900 whitespace-nowrap rounded-xl hover:cursor-pointer transition-all active:scale-95">Excluir Minha Conta</Button>
                   </div>
                 </div>
@@ -1463,7 +1464,10 @@ export default function SettingsPage() {
                 Esta ação não pode ser desfeita.
               </DialogDescription>
               <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
-                Sua conta será desativada imediatamente e os dados financeiros ficarão arquivados.
+                Sua conta será encerrada imediatamente e este acesso não poderá mais ser utilizado.
+              </DialogDescription>
+              <DialogDescription className="pt-3 text-sm text-zinc-600 dark:text-zinc-400">
+                Seus dados ficam indisponiveis por ate {ACCOUNT_DELETION_GRACE_DAYS} dias para corrigir exclusoes acidentais. Apos esse prazo, a exclusao permanente acontece automaticamente.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 mt-4">
