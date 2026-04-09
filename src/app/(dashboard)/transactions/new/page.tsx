@@ -19,12 +19,15 @@ import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useCategories } from "@/hooks/useCategories";
 import { useOnboarding } from "@/hooks/useOnboarding";
+import { usePlatformExperience } from "@/hooks/usePlatformExperience";
+import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { formatCurrencyInput, parseCurrencyInput } from "@/lib/money";
 import { getPlanCapabilities } from "@/lib/plans/capabilities";
+import { buildInstallmentPlan } from "@/lib/transactions/installments";
 import { addTransaction } from "@/services/transactionService";
 import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
-import { PaymentMethod, TransactionType } from "@/types/transaction";
+import { InstallmentValueMode, PaymentMethod, TransactionType } from "@/types/transaction";
 import { formatCategoryLabel, orderCategoryNames } from "@/lib/category-utils";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; hasDueDate: boolean }[] = [
@@ -42,6 +45,7 @@ const formatCurrency = (value: number) =>
 export default function NewTransactionPage() {
   const router = useRouter();
   const { user, userProfile } = useAuth();
+  const { isPlatformTourActive } = usePlatformExperience();
   const { plans } = usePlans();
   const { featureAccess } = useFeatureAccess();
   const {
@@ -50,6 +54,7 @@ export default function NewTransactionPage() {
     activeStep: onboardingActiveStep,
     isActive: isOnboardingActive,
     completeStep,
+    completeTour,
   } = useOnboarding();
   const { transactions } = useTransactions();
   const {
@@ -73,6 +78,7 @@ export default function NewTransactionPage() {
   // Controles de Tipo de Cobrança (Com suas correções mantidas)
   const [isInstallment, setIsInstallment] = useState(false);
   const [installmentsCount, setInstallmentsCount] = useState("2");
+  const [installmentValueMode, setInstallmentValueMode] = useState<InstallmentValueMode>("divide_total");
   const [isRecurring, setIsRecurring] = useState(false);
 
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
@@ -120,6 +126,7 @@ export default function NewTransactionPage() {
           dueDate: string;
           isInstallment: boolean;
           installmentsCount: string;
+          installmentValueMode: InstallmentValueMode;
           isRecurring: boolean;
           selectedCardId: string;
         }>;
@@ -133,6 +140,9 @@ export default function NewTransactionPage() {
         if (typeof draft.dueDate === "string") setDueDate(draft.dueDate);
         if (typeof draft.isInstallment === "boolean") setIsInstallment(draft.isInstallment);
         if (typeof draft.installmentsCount === "string") setInstallmentsCount(draft.installmentsCount);
+        if (draft.installmentValueMode === "divide_total" || draft.installmentValueMode === "repeat_value") {
+          setInstallmentValueMode(draft.installmentValueMode);
+        }
         if (typeof draft.isRecurring === "boolean") setIsRecurring(draft.isRecurring);
         if (typeof draft.selectedCardId === "string") setSelectedCardId(draft.selectedCardId);
       }
@@ -158,6 +168,7 @@ export default function NewTransactionPage() {
         dueDate,
         isInstallment,
         installmentsCount,
+        installmentValueMode,
         isRecurring,
         selectedCardId,
       })
@@ -171,6 +182,7 @@ export default function NewTransactionPage() {
     draftStorageKey,
     dueDate,
     installmentsCount,
+    installmentValueMode,
     isInstallment,
     isRecurring,
     paymentMethod,
@@ -216,6 +228,15 @@ export default function NewTransactionPage() {
     onboardingActiveStep === "firstTransaction" &&
     !onboardingStatus.steps.firstTransaction;
 
+  usePlatformTour({
+    route: "transactions-new",
+    disabled: onboardingLoading || isOnboardingActive,
+    stepVisibility: {
+      installments: canUseInstallments,
+    },
+    onComplete: completeTour,
+  });
+
   const linkedCardTransactions = (card: PaymentCard) =>
     transactions.filter((tx) => {
       if (tx.type !== "expense") return false;
@@ -250,15 +271,19 @@ export default function NewTransactionPage() {
   };
 
   const handleOpenCategoryManager = () => {
-    if (isTransactionOnboardingActive) {
-      setError("Conclua sua primeira transação antes de abrir outros modais.");
+    if (isTransactionOnboardingActive || isPlatformTourActive) {
+      setError(
+        isPlatformTourActive
+          ? "Conclua o tour guiado antes de abrir outros modais."
+          : "Conclua sua primeira transação antes de abrir outros modais."
+      );
       return;
     }
     setIsCategoryManagerOpen(true);
   };
 
   const handleCategoryManagerOpenChange = (open: boolean) => {
-    if (open && isTransactionOnboardingActive) return;
+    if (open && (isTransactionOnboardingActive || isPlatformTourActive)) return;
     setIsCategoryManagerOpen(open);
   };
 
@@ -278,7 +303,10 @@ export default function NewTransactionPage() {
 
     const value = parsedAmount;
     const count = isInstallment ? Math.max(1, Number(installmentsCount || 1)) : 1;
-    const totalAmountToReserve = Math.round(value * count * 100) / 100;
+    const installmentPlan = isInstallment
+      ? buildInstallmentPlan(value, count, installmentValueMode)
+      : null;
+    const totalAmountToReserve = installmentPlan ? installmentPlan.totalAmount : value;
 
     if (isInstallment && !canUseInstallments) {
       setError("Parcelamentos estão disponíveis apenas nos planos Premium e Pro.");
@@ -310,7 +338,8 @@ export default function NewTransactionPage() {
         dueDate: showDueDateInput ? dueDate : date,
         isInstallment,
         installmentsCount: count,
-        isRecurring, 
+        installmentValueMode,
+        isRecurring,
       });
       if (isTransactionOnboardingActive) {
         try {
@@ -335,7 +364,7 @@ export default function NewTransactionPage() {
       <div className="mx-auto max-w-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
         
         {/* HEADER NOVO DESIGN */}
-        <div className="flex items-center gap-3 mb-6">
+        <div id="tour-transactions-header" className="flex items-center gap-3 mb-6">
           <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-zinc-200/50 bg-white dark:bg-zinc-900 shadow-sm border" onClick={() => router.back()}>
             <ArrowLeft className="h-5 w-5 text-zinc-600 dark:text-zinc-300" />
           </Button>
@@ -372,7 +401,7 @@ export default function NewTransactionPage() {
             
             {/* TOGGLE TIPO DE TRANSAÇÃO ELEGANTE */}
             <div className="flex justify-center mb-8">
-              <div className="bg-white/60 dark:bg-zinc-950/40 p-1.5 rounded-2xl flex backdrop-blur-md shadow-sm border border-black/5 dark:border-white/5 w-full max-w-full">
+              <div id="tour-transactions-type" className="bg-white/60 dark:bg-zinc-950/40 p-1.5 rounded-2xl flex backdrop-blur-md shadow-sm border border-black/5 dark:border-white/5 w-full max-w-full">
                   <button
                     type="button"
                     onClick={() => setType("expense")}
@@ -391,8 +420,10 @@ export default function NewTransactionPage() {
             </div>
 
             {/* INPUT DE VALOR SEM BORDAS */}
-            <Label className="text-zinc-500 font-medium text-sm flex justify-start mb-2">Valor do lançamento</Label>
-            <div className="flex items-center justify-center gap-2">
+            <Label className="text-zinc-500 font-medium text-sm flex justify-start mb-2">
+              {isInstallment && installmentValueMode === "repeat_value" ? "Valor de cada parcela" : "Valor do lancamento"}
+            </Label>
+            <div id="tour-transactions-amount" className="flex items-center justify-center gap-2">
               <span className={`text-3xl font-bold transition-colors ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>R$</span>
               <Input 
                 type="text"
@@ -403,6 +434,15 @@ export default function NewTransactionPage() {
                 className={`w-full max-w-full h-auto p-0 border-none shadow-none text-4xl md:text-5xl font-bold bg-transparent focus-visible:ring-0 text-start ${isIncome ? 'text-emerald-500 placeholder:text-emerald-500' : 'text-red-500 placeholder:text-red-500'}`}
               />
             </div>
+            <p className="mt-3 text-sm text-zinc-500">
+              {isInstallment
+                ? installmentValueMode === "divide_total"
+                  ? "Voce informa o valor total e o sistema divide automaticamente entre as parcelas."
+                  : "Voce informa o valor de cada parcela e o sistema repete esse valor nas proximas parcelas."
+                : isRecurring
+                  ? "Esse valor sera repetido nos proximos 12 meses."
+                  : "Esse valor sera salvo exatamente como voce digitou."}
+            </p>
           </div>
 
           {/* FORMULÁRIO GERAL */}
@@ -424,7 +464,7 @@ export default function NewTransactionPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
               {/* CATEGORIA */}
-              <div className="space-y-2">
+              <div id="tour-transactions-category" className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium">
                     <Tag className="h-4 w-4 text-zinc-400" /> Categoria
@@ -530,7 +570,7 @@ export default function NewTransactionPage() {
               <Label className="text-zinc-500 font-semibold text-xs tracking-wider uppercase">Opções Avançadas</Label>
               
               {/* ASSINATURA / FIXA (Disponível para Receita e Despesa) */}
-              <div className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${isRecurring ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900' : 'bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 hover:border-blue-200'}`} onClick={() => handleToggleRecurring(!isRecurring)}>
+              <div id="tour-transactions-recurring" className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${isRecurring ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900' : 'bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 hover:border-blue-200'}`} onClick={() => handleToggleRecurring(!isRecurring)}>
                 <div className="flex items-center justify-between">
                   <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium cursor-pointer">
                     <Repeat className={`h-4 w-4 ${isRecurring ? 'text-blue-600' : 'text-zinc-400'}`} /> 
@@ -548,6 +588,7 @@ export default function NewTransactionPage() {
               {/* PARCELAMENTO (Apenas para Despesas) */}
               {!isIncome && (
                 <div
+                  id="tour-transactions-installment"
                   className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${
                     !canUseInstallments
                       ? 'bg-zinc-50/80 dark:bg-zinc-950/40 border-dashed border-zinc-300 dark:border-zinc-700'
@@ -600,6 +641,23 @@ export default function NewTransactionPage() {
                         placeholder="Número de parcelas"
                         className="h-11 rounded-xl bg-white dark:bg-zinc-900 border-violet-200 dark:border-violet-800 focus-visible:ring-violet-500 font-medium"
                       />
+                      <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <Label htmlFor="installment-split-mode" className="text-sm font-semibold text-violet-900">
+                              Dividir o valor total
+                            </Label>
+                            <p className="mt-1 text-xs text-violet-700">
+                              Ative para informar o valor total da compra. Desative se o valor digitado já for o de cada parcela.
+                            </p>
+                          </div>
+                          <Switch
+                            id="installment-split-mode"
+                            checked={installmentValueMode === "divide_total"}
+                            onCheckedChange={(checked) => setInstallmentValueMode(checked ? "divide_total" : "repeat_value")}
+                          />
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -615,6 +673,7 @@ export default function NewTransactionPage() {
             Cancelar
           </Button>
           <Button
+            id="tour-transactions-submit"
             onClick={onSubmit}
             disabled={saving}
             className={`h-14 sm:flex-2 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white shadow-sm text-base hover:cursor-pointer ${
@@ -634,7 +693,7 @@ export default function NewTransactionPage() {
       </div>
 
       <CategoryManagerDialog
-        open={isTransactionOnboardingActive ? false : isCategoryManagerOpen}
+        open={isTransactionOnboardingActive || isPlatformTourActive ? false : isCategoryManagerOpen}
         onOpenChange={handleCategoryManagerOpenChange}
         type={type}
         selectedCategory={category}
