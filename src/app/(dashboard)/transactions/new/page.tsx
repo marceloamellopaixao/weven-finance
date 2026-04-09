@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { usePlans } from "@/hooks/usePlans";
+import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useCategories } from "@/hooks/useCategories";
 import { useOnboarding } from "@/hooks/useOnboarding";
@@ -42,6 +43,7 @@ export default function NewTransactionPage() {
   const router = useRouter();
   const { user, userProfile } = useAuth();
   const { plans } = usePlans();
+  const { featureAccess } = useFeatureAccess();
   const {
     status: onboardingStatus,
     loading: onboardingLoading,
@@ -205,8 +207,8 @@ export default function NewTransactionPage() {
   const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
   const effectivePlan = userProfile?.plan || "free";
   const effectivePlanCapabilities = useMemo(
-    () => getPlanCapabilities(effectivePlan, plans),
-    [effectivePlan, plans]
+    () => getPlanCapabilities(effectivePlan, plans, featureAccess),
+    [effectivePlan, plans, featureAccess]
   );
   const canUseInstallments = isBillingExemptRole || effectivePlanCapabilities.hasInstallments;
   const isTransactionOnboardingActive =
