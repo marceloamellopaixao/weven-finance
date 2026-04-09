@@ -13,6 +13,8 @@ export interface SupportTicket {
   protocol?: string;
   message: string;
   type: "support" | "feature";
+  supportKind?: string;
+  wantsData?: boolean;
   status: SupportRequestStatus | FeatureRequestStatus;
   priority?: "low" | "medium" | "high" | "urgent";
   createdAt: Date;
