@@ -4,6 +4,15 @@ import { resolveApiErrorStatus } from "@/lib/api/error";
 import { MAX_FINANCIAL_AMOUNT } from "@/lib/money";
 import { PiggyBankGoalType } from "@/types/piggyBank";
 import { enforceCreditCardPolicy } from "@/lib/credit-card/limit";
+import { filterActiveJsonRows } from "@/lib/account-archive/server";
+import { encryptDataForUser } from "@/lib/crypto-server";
+import { readSecureCardPayload, writeSecureCardPayload } from "@/lib/secure-store/payment-cards";
+import {
+  readSecurePiggyHistoryPayload,
+  readSecurePiggyPayload,
+  writeSecurePiggyHistoryPayload,
+  writeSecurePiggyPayload,
+} from "@/lib/secure-store/piggy-banks";
 import { supabaseDeleteByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 export const runtime = "nodejs";
@@ -38,10 +47,10 @@ function buildPiggyBankResponse(
   historyRows: Record<string, unknown>[],
   safeSlug: string
 ) {
-  const piggyRaw = (piggy.raw as Record<string, unknown> | null) ?? {};
+  const piggyRaw = readSecurePiggyPayload(piggy.raw);
   const history = historyRows
     .map((row) => {
-      const entry = (row.raw as Record<string, unknown> | null) ?? {};
+      const entry = readSecurePiggyHistoryPayload(row.raw);
       return {
         id: String(row.source_id || row.id || ""),
         piggyBankId: safeSlug,
@@ -117,15 +126,16 @@ async function loadPiggyBank(uid: string, safeSlug: string) {
     filters: { uid, source_id: safeSlug },
     limit: 1,
   });
-  if (piggyRows.length === 0) {
+  const activePiggyRows = filterActiveJsonRows(piggyRows);
+  if (activePiggyRows.length === 0) {
     return null;
   }
 
-  const piggy = piggyRows[0];
-  const historyRows = await supabaseSelect("piggy_bank_history", {
+  const piggy = activePiggyRows[0];
+  const historyRows = filterActiveJsonRows(await supabaseSelect("piggy_bank_history", {
     filters: { uid, piggy_bank_id: String(piggy.id) },
     order: "created_at.desc.nullslast",
-  });
+  }));
 
   return {
     piggy,
@@ -148,7 +158,7 @@ async function applyCardLimitAdjustment(
   if (cardRows.length === 0) return;
 
   const cardRow = cardRows[0];
-  const cardRaw = (cardRow.raw as Record<string, unknown> | null) ?? {};
+  const cardRaw = readSecureCardPayload(cardRow.raw);
   const currentLimit = Number(cardRow.credit_limit || cardRaw.creditLimit || 0);
   const nextLimit = Math.max(0, currentLimit + amountDelta);
   const bankName = String(cardRow.bank_name || cardRaw.bankName || "Cartao");
@@ -170,7 +180,7 @@ async function applyCardLimitAdjustment(
         card_type: cardRow.card_type || cardRaw.type || "credit_card",
         credit_limit: nextLimit,
         limit_enabled: nextLimit > 0,
-        raw: cardRaw,
+        raw: writeSecureCardPayload(cardRaw),
         updated_at: nowIso,
       },
     ],
@@ -235,7 +245,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
 
     const nowIso = new Date().toISOString();
     const today = nowIso.slice(0, 10);
-    const piggyRaw = (loaded.piggy.raw as Record<string, unknown> | null) ?? {};
+    const piggyRaw = readSecurePiggyPayload(loaded.piggy.raw);
     const currentName = String(loaded.piggy.name || piggyRaw.name || loaded.detail.name || "Cofrinho");
 
     if (body.action === "edit") {
@@ -263,7 +273,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
             total_saved: loaded.detail.totalSaved,
             withdrawal_mode: withdrawalMode || null,
             yield_type: yieldType || null,
-            raw: mergedRaw,
+            raw: writeSecurePiggyPayload(mergedRaw),
             created_at: loaded.piggy.created_at || nowIso,
             updated_at: nowIso,
           },
@@ -325,7 +335,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
             total_saved: nextTotal,
             withdrawal_mode: loaded.detail.withdrawalMode || null,
             yield_type: loaded.detail.yieldType || null,
-            raw: mergedRaw,
+            raw: writeSecurePiggyPayload(mergedRaw),
             created_at: loaded.piggy.created_at || nowIso,
             updated_at: nowIso,
           },
@@ -361,18 +371,20 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
           card_id: linkedCardId || null,
           card_label: linkedCardLabel || null,
           applied_to_card_limit: shouldAdjustCard,
-          raw: historyRaw,
+          raw: writeSecurePiggyHistoryPayload(historyRaw),
           created_at: nowIso,
         },
       ]);
 
       const txId = crypto.randomUUID();
       const txDescription = direction === "withdraw" ? `Resgate do Cofrinho: ${currentName}` : `Aporte no Cofrinho: ${currentName}`;
+      const encryptedDescription = encryptDataForUser(txDescription, acting.actingUid);
+      const encryptedAmount = encryptDataForUser(amount, acting.actingUid);
       const txRaw = {
         userId: acting.actingUid,
         piggyBankSlug: safeSlug,
-        description: txDescription,
-        amount,
+        description: encryptedDescription,
+        amount: encryptedAmount,
         amountForLimit: amount,
         type: direction === "withdraw" ? "income" : "expense",
         category: `Cofrinho > ${currentName}`,
@@ -380,7 +392,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
         paymentMethod: sourceType === "cash" ? "cash" : "transfer",
         date: today,
         dueDate: today,
-        isEncrypted: false,
+        isEncrypted: true,
         isArchived: false,
         ...(linkedCardId ? { cardId: linkedCardId } : {}),
         ...(linkedCardLabel ? { cardLabel: linkedCardLabel } : {}),
@@ -393,9 +405,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
           id: `${acting.actingUid}__${txId}`,
           uid: acting.actingUid,
           source_id: txId,
-          description: txDescription,
+          description: encryptedDescription,
           amount,
-          amount_text: String(amount),
+          amount_text: encryptedAmount,
           amount_for_limit: shouldAdjustCard ? amount : null,
           tx_type: direction === "withdraw" ? "income" : "expense",
           category: txRaw.category,
