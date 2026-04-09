@@ -107,6 +107,28 @@ export async function GET(request: NextRequest) {
       { onConflict: "uid" }
     );
 
+    await supabaseUpsertRows(
+      "billing_events",
+      [
+        {
+          id: `checkout_attempt_${checkoutAttemptId}`,
+          uid,
+          event_type: "checkout_attempt",
+          action: "create",
+          provider: "system",
+          raw: {
+            uid,
+            plan,
+            checkoutAttemptId,
+            createdAt: new Date().toISOString(),
+            returnUrl: returnUrl ?? null,
+          },
+          created_at: new Date().toISOString(),
+        },
+      ],
+      { onConflict: "id" }
+    );
+
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json(
       { ok: true, checkoutUrl, preapprovalId: null, checkoutAttemptId },
