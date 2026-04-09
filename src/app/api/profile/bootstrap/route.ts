@@ -7,7 +7,7 @@ import { assertPhoneAvailable } from "@/lib/profile/server";
 
 async function getAuthContext(request: NextRequest) {
   const decoded = await verifyRequestAuth(request);
-  return { uid: decoded.uid, email: decoded.email || "" };
+  return { uid: decoded.uid, rawUid: decoded.rawUid, email: decoded.email || "" };
 }
 
 export const runtime = "nodejs";
@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
         authProviders: profile.authProviders || [],
         needsPasswordSetup: profile.needsPasswordSetup ?? false,
       };
+      const rawProfile = { ...newProfile, authUserId: auth.rawUid };
 
       await supabaseUpsertRows(
         "profiles",
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
             transaction_count: newProfile.transactionCount ?? 0,
             verified_email: Boolean(newProfile.verifiedEmail),
             created_at: newProfile.createdAt ?? new Date().toISOString(),
-            raw: newProfile,
+            raw: rawProfile,
           },
         ],
         { onConflict: "uid" }
@@ -78,6 +79,11 @@ export async function POST(request: NextRequest) {
     const raw = ((existing.raw as Record<string, unknown> | undefined) || {});
     const patch: Record<string, unknown> = { uid: auth.uid };
     let shouldUpdate = false;
+
+    if (raw.authUserId !== auth.rawUid) {
+      raw.authUserId = auth.rawUid;
+      shouldUpdate = true;
+    }
 
     if (profile.deletedAt === null) {
       raw.deletedAt = null;
