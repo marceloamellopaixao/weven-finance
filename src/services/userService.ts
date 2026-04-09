@@ -394,6 +394,15 @@ export const restoreUserAccount = async (uid: string, restoreData: boolean = tru
   if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao restaurar usuário");
 };
 
+export const permanentlyDeleteUser = async (uid: string): Promise<void> => {
+  const response = await apiFetch("/api/admin/users", {
+    method: "POST",
+    body: JSON.stringify({ action: "permanentDelete", uid }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao excluir usuario permanentemente");
+};
+
 export const requestOwnAccountDeletion = async (idToken: string): Promise<void> => {
   const response = await fetch("/api/account/delete", {
     method: "POST",
