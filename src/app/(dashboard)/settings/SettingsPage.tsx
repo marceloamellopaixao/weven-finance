@@ -40,6 +40,8 @@ import { sendPasswordAccessEmail } from "@/services/auth/passwordAccess";
 import { formatPhone, normalizePhone } from "@/lib/phone";
 import { ACCOUNT_DELETION_GRACE_DAYS } from "@/lib/account-deletion/policy";
 import { useOnboarding } from "@/hooks/useOnboarding";
+import { usePlatformTour } from "@/hooks/usePlatformTour";
+import { usePlatformExperience } from "@/hooks/usePlatformExperience";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -51,7 +53,8 @@ type FeedbackData = {
 
 export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode, refreshProfile } = useAuth();
-  const { resetTour } = useOnboarding();
+  const { resetTour, completeTour, isActive: isOnboardingActive, loading: onboardingLoading } = useOnboarding();
+  const { startPlatformTour } = usePlatformExperience();
   const { isImpersonating } = useImpersonation();
   const { plans } = usePlans();
   const router = useRouter();
@@ -110,6 +113,12 @@ export default function SettingsPage() {
   // Constantes de Animação (Padrão do Sistema)
   const fadeInUp = "animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both";
   const zoomIn = "animate-in fade-in zoom-in-50 duration-500 fill-mode-both";
+
+  usePlatformTour({
+    route: "settings",
+    disabled: onboardingLoading || isOnboardingActive,
+    onComplete: completeTour,
+  });
 
   useEffect(() => {
     if (userProfile) {
@@ -259,6 +268,7 @@ export default function SettingsPage() {
   const handleReplayTour = async () => {
     try {
       await resetTour();
+      startPlatformTour("dashboard");
       router.push("/dashboard?tour=1");
     } catch (error) {
       console.error("Erro ao reiniciar tour:", error);
@@ -606,7 +616,7 @@ export default function SettingsPage() {
       <div className="relative z-10 max-w-5xl mx-auto space-y-8">
 
         {/* Header */}
-        <div className={`${fadeInUp} flex flex-col md:flex-row justify-between items-start md:items-center gap-4`}>
+        <div id="tour-settings-header" className={`${fadeInUp} flex flex-col md:flex-row justify-between items-start md:items-center gap-4`}>
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Configurações</h1>
             <p className="text-zinc-500 dark:text-zinc-400">Gerencie sua conta, privacidade e assinatura.</p>
@@ -622,24 +632,24 @@ export default function SettingsPage() {
 
         {/* Navegação de Abas Personalizada */}
         <div className={`${fadeInUp} delay-150 space-y-6`}>
-          <div className="grid w-full grid-cols-1 gap-1 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-2 min-w-full md:grid-cols-4">
-            <button type="button" aria-pressed={activeTab === "account"} onClick={() => handleTabChange("account")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "account" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+          <div id="tour-settings-tabs" className="grid w-full grid-cols-1 gap-1 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-2 min-w-full md:grid-cols-4">
+            <button id="tour-settings-account-tab" type="button" aria-pressed={activeTab === "account"} onClick={() => handleTabChange("account")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "account" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <User className="h-4 w-4" /> Geral
             </button>
-            <button type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "billing" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button id="tour-settings-billing-tab" type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "billing" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <CreditCard className="h-4 w-4" /> Planos
             </button>
-            <button type="button" aria-pressed={activeTab === "security"} onClick={() => handleTabChange("security")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "security" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button id="tour-settings-security-tab" type="button" aria-pressed={activeTab === "security"} onClick={() => handleTabChange("security")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "security" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <ShieldCheck className="h-4 w-4" /> Privacidade
             </button>
-            <button type="button" aria-pressed={activeTab === "help"} onClick={() => handleTabChange("help")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "help" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button id="tour-settings-help-tab" type="button" aria-pressed={activeTab === "help"} onClick={() => handleTabChange("help")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "help" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
               <HelpCircle className="h-4 w-4" /> Ajuda
             </button>
           </div>
 
           {/* ABA GERAL */}
           {activeTab === "account" && (
-            <Card className={`${zoomIn} delay-200 border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl`}>
+            <Card id="tour-settings-panel" className={`${zoomIn} delay-200 border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl`}>
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-2 text-xl">
                   <div className="p-2 bg-violet-100 dark:bg-violet-900/30 rounded-full"><User className="h-5 w-5 text-violet-600 dark:text-violet-400" /></div> Perfil do Usuário
@@ -749,7 +759,7 @@ export default function SettingsPage() {
 
           {/* ABA PLANOS */}
           {activeTab === "billing" && (
-            <div className={`${fadeInUp} delay-200 space-y-6`}>
+            <div id="tour-settings-panel" className={`${fadeInUp} delay-200 space-y-6`}>
               <Card
                 className={`border-none shadow-xl rounded-3xl relative overflow-hidden text-white flex flex-col justify-center min-h-2.5 ${
                   effectivePlan === "free"
@@ -1127,7 +1137,7 @@ export default function SettingsPage() {
 
           {/* ABA SEGURANÇA */}
           {activeTab === "security" && (
-            <Card className={`${zoomIn} delay-200 border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl`}>
+            <Card id="tour-settings-panel" className={`${zoomIn} delay-200 border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl`}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-full">
@@ -1191,7 +1201,7 @@ export default function SettingsPage() {
 
           {/* AJUDA & TUTORIAL */}
           {activeTab === "help" && (
-            <div className={`${fadeInUp} delay-200 space-y-6`}>
+            <div id="tour-settings-panel" className={`${fadeInUp} delay-200 space-y-6`}>
               {/* Card de Tutorial */}
               <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden hover:shadow-2xl transition-shadow">
                 <CardHeader className="bg-linear-to-r from-violet-500/10 to-indigo-500/10 p-4">
@@ -1205,14 +1215,41 @@ export default function SettingsPage() {
                 <CardContent className="-mt-4">
                   <div className="bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div className="space-y-1">
-                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tour do Dashboard</h4>
-                      <p className="text-sm text-zinc-500">Navegação, cadastro de contas e gráficos.</p>
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tour da plataforma</h4>
+                      <p className="text-sm text-zinc-500">Dashboard, navegação, lançamentos, cartões, metas e configurações.</p>
                     </div>
                     <Button
                       onClick={handleReplayTour}
                       className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700 text-white rounded-xl shadow-lg shadow-violet-500/20 hover:scale-105 transition-all"
                     >
                       Iniciar Tour Agora
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
+                <CardHeader className="bg-linear-to-r from-fuchsia-500/10 to-violet-500/10 p-4">
+                  <CardTitle className="flex items-center gap-2 text-fuchsia-700 dark:text-fuchsia-300">
+                    <Sparkles className="h-6 w-6" /> Explorar o App
+                  </CardTitle>
+                  <CardDescription className="text-zinc-600 dark:text-zinc-400">
+                    Veja o que cada area faz e personalize a barra rapida com os atalhos que fazem mais sentido para voce.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="-mt-4">
+                  <div className="bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tela de funcionalidades e atalhos</h4>
+                      <p className="text-sm text-zinc-500">Acesse a visao geral das paginas e ajuste a barra rapida do seu jeito.</p>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => router.push("/apps")}
+                      variant="outline"
+                      className="w-full sm:w-auto rounded-xl border-fuchsia-200 text-fuchsia-700 hover:bg-fuchsia-50"
+                    >
+                      Abrir Explorar App
                     </Button>
                   </div>
                 </CardContent>
