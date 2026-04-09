@@ -29,7 +29,7 @@ export default function BillingCheckoutPage() {
   const searchParams = useSearchParams();
   const { user, userProfile, loading } = useAuth();
   const [state, setState] = useState<CheckoutState>("preparing");
-  const [message, setMessage] = useState("Preparando sua contratacao.");
+  const [message, setMessage] = useState("Preparando sua contratação.");
   const startedRef = useRef("");
 
   const planFromQuery = useMemo(() => parseUpgradePlan(searchParams.get("plan")), [searchParams]);
@@ -71,7 +71,7 @@ export default function BillingCheckoutPage() {
 
     const run = async () => {
       setState("redirecting");
-      setMessage(`Redirecionando para a contratacao do plano ${plan === "premium" ? "Premium" : "Pro"}.`);
+      setMessage(`Redirecionando para a contratação do plano ${plan === "premium" ? "Premium" : "Pro"}.`);
 
       try {
         const token = await user.getIdToken();
@@ -83,7 +83,7 @@ export default function BillingCheckoutPage() {
         if (cancelled) return;
         console.error("Falha ao iniciar checkout:", error);
         setState("error");
-        setMessage("Nao foi possivel abrir o checkout agora. Tente novamente em alguns instantes.");
+        setMessage("Não foi possível abrir o checkout agora. Tente novamente em alguns instantes.");
       }
     };
 
@@ -97,7 +97,7 @@ export default function BillingCheckoutPage() {
   const resolvedState: CheckoutState = !loading && !plan ? "error" : state;
   const resolvedMessage =
     !loading && !plan
-      ? "Nao foi possivel identificar qual plano voce quer contratar."
+      ? "Não foi possível identificar qual plano você quer contratar."
       : message;
 
   return (
@@ -118,7 +118,7 @@ export default function BillingCheckoutPage() {
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
-            {resolvedState === "error" ? "Nao foi possivel continuar" : "Continuando sua contratacao"}
+            {resolvedState === "error" ? "Não foi possível continuar" : "Continuando sua contratação"}
           </h1>
 
           <p className="mt-3 text-sm text-zinc-500 leading-relaxed">{resolvedMessage}</p>
