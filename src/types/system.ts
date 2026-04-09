@@ -15,6 +15,23 @@ export interface PlansConfig {
   pro: PlanDetails;
 }
 
+export type ManagedFeatureKey = "installments" | "monthlyForecast" | "smartDailyLimit";
+export type ManagedFeatureScope = "all" | "free" | "premium" | "pro";
+
+export interface ManagedFeatureGrant {
+  id: string;
+  feature: ManagedFeatureKey;
+  scope: ManagedFeatureScope;
+  label?: string;
+  active: boolean;
+  startsAt?: string | null;
+  endsAt?: string | null;
+}
+
+export interface FeatureAccessConfig {
+  grants: ManagedFeatureGrant[];
+}
+
 export const DEFAULT_PLANS_CONFIG: PlansConfig = {
   free: {
     name: "Free",
@@ -58,4 +75,8 @@ export const DEFAULT_PLANS_CONFIG: PlansConfig = {
     highlight: false,
     active: true,
   },
+};
+
+export const DEFAULT_FEATURE_ACCESS_CONFIG: FeatureAccessConfig = {
+  grants: [],
 };
