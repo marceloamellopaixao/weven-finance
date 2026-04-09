@@ -8,6 +8,7 @@ import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { normalizePhone } from "@/lib/phone";
 import { assertPhoneAvailable } from "@/lib/profile/server";
+import { readSecureProfilePayload, writeSecureProfilePayload } from "@/lib/secure-store/profile";
 import { resolvePermanentDeleteAt } from "@/lib/account-deletion/policy";
 
 export const runtime = "nodejs";
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: true, profile: null }, { status: 200 });
     }
     const row = rows[0];
-    const raw = (row.raw as Record<string, unknown> | null) ?? {};
+    const raw = readSecureProfilePayload(row.raw);
     const authProviders = Array.isArray(raw.authProviders)
       ? raw.authProviders.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
       : [];
@@ -114,7 +115,7 @@ export async function PUT(request: NextRequest) {
     };
     const normalizedPhone = await assertPhoneAvailable(body.phone ?? "", uid);
     const existing = await supabaseSelect("profiles", { filters: { uid }, limit: 1 });
-    const raw = ((existing[0]?.raw as Record<string, unknown> | undefined) || {});
+    const raw = readSecureProfilePayload(existing[0]?.raw);
     raw.displayName = body.displayName ?? "";
     raw.completeName = body.completeName ?? "";
     raw.phone = normalizedPhone;
@@ -127,7 +128,7 @@ export async function PUT(request: NextRequest) {
           display_name: body.displayName ?? "",
           complete_name: body.completeName ?? "",
           phone: normalizedPhone,
-          raw,
+          raw: writeSecureProfilePayload(raw),
         },
       ],
       { onConflict: "uid" }
