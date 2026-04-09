@@ -1,17 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  ChevronDown,
   Laptop,
   MonitorSmartphone,
+  RotateCcw,
   Save,
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { NAVIGATION_APP_ITEMS, normalizeNavigationPreferences } from "@/lib/navigation/apps";
 import { usePlatformExperience } from "@/hooks/usePlatformExperience";
@@ -45,8 +52,8 @@ const BEHAVIOR_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
-  { value: "fixed", label: "Fixa", description: "A barra fica sempre visivel na tela." },
-  { value: "auto-hide", label: "Oculta", description: "Ela some e reaparece quando voce precisar." },
+  { value: "fixed", label: "Sempre visivel", description: "A barra continua na tela o tempo todo." },
+  { value: "auto-hide", label: "Ocultar sozinha", description: "Ela some e reaparece quando voce precisar." },
 ];
 
 const THEME_OPTIONS: Array<{
@@ -81,7 +88,7 @@ const SURFACE_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
-  { value: "glass", label: "Glass", description: "Fundo translucido com brilho suave." },
+  { value: "glass", label: "Translucida", description: "Fundo translucido com brilho suave." },
   { value: "solid", label: "Solida", description: "Fundo mais fechado e contraste mais forte." },
 ];
 
@@ -102,7 +109,7 @@ type DockSettingsPanelProps = {
 };
 
 type ChoiceCardGroupProps<T extends string> = {
-  title: string;
+  title?: string;
   options: Array<{ value: T; label: string; description: string }>;
   value: T;
   onChange: (value: T) => void;
@@ -118,7 +125,9 @@ function ChoiceCardGroup<T extends string>({
 }: ChoiceCardGroupProps<T>) {
   return (
     <div className="space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">{title}</p>
+      {title ? (
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">{title}</p>
+      ) : null}
       <div className={cn("grid gap-3", columns)}>
         {options.map((option) => (
           <button
@@ -138,6 +147,69 @@ function ChoiceCardGroup<T extends string>({
         ))}
       </div>
     </div>
+  );
+}
+
+type PreferenceSectionProps = {
+  title: string;
+  description: string;
+  summary: string[];
+  defaultOpen?: boolean;
+  children: ReactNode;
+};
+
+function PreferenceSection({
+  title,
+  description,
+  summary,
+  defaultOpen = false,
+  children,
+}: PreferenceSectionProps) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <div className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full items-start justify-between gap-4 text-left"
+          >
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  {title}
+                </p>
+                {summary.map((item) => (
+                  <Badge
+                    key={`${title}-${item}`}
+                    variant="outline"
+                    className="rounded-full border-violet-200 bg-violet-50 px-2.5 py-0.5 text-[11px] text-violet-700 dark:border-violet-500/30 dark:bg-violet-950/20 dark:text-violet-300"
+                  >
+                    {item}
+                  </Badge>
+                ))}
+              </div>
+              <p className="text-xs leading-5 text-zinc-500">{description}</p>
+            </div>
+            <div
+              className={cn(
+                "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50 text-zinc-500 transition-all dark:border-zinc-800 dark:bg-zinc-900",
+                open && "rotate-180 border-violet-200 bg-violet-50 text-violet-600 dark:border-violet-500/30 dark:bg-violet-950/20 dark:text-violet-300"
+              )}
+            >
+              <ChevronDown className="h-4 w-4" />
+            </div>
+          </button>
+        </CollapsibleTrigger>
+
+        <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
+          <div className="mt-5 space-y-5 border-t border-zinc-100 pt-5 dark:border-zinc-800">
+            {children}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   );
 }
 
@@ -211,7 +283,7 @@ function PreviewSurface({
         )}
       >
         <div className="relative h-full w-full p-5">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(168,85,247,0.25),_transparent_52%)]" />
+          <div className="absolute inset-0 bg-radial-gradient(circle_at_top,_rgba(168,85,247,0.25),_transparent_52%)" />
           {device === "mobile" ? (
             <div className="relative mx-auto h-[440px] w-[280px] rounded-[34px] border border-violet-200/10 bg-white/5 p-5">
               <div className="rounded-3xl border border-violet-200/10 bg-white/5 px-4 py-4">
@@ -277,6 +349,14 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
       .filter((item): item is (typeof NAVIGATION_APP_ITEMS)[number] => Boolean(item));
   }, [draft.shortcuts]);
 
+  const positionLabel = POSITION_OPTIONS.find((option) => option.value === draft.position)?.label || "Centro";
+  const behaviorLabel = BEHAVIOR_OPTIONS.find((option) => option.value === draft.behavior)?.label || "Sempre visivel";
+  const themeLabel = THEME_OPTIONS.find((option) => option.value === draft.theme)?.label || "Escuro";
+  const accentLabel = ACCENT_OPTIONS.find((option) => option.value === draft.accent)?.label || "Roxo Weven";
+  const labelsLabel = LABEL_OPTIONS.find((option) => option.value === draft.labels)?.label || "Com nomes";
+  const densityLabel = DENSITY_OPTIONS.find((option) => option.value === draft.density)?.label || "Confortavel";
+  const surfaceLabel = SURFACE_OPTIONS.find((option) => option.value === draft.surface)?.label || "Translucida";
+
   const updateDraft = (updater: (current: NavigationPreferences) => NavigationPreferences) => {
     setDraft((prev) => normalizeNavigationPreferences(updater(prev)));
   };
@@ -335,118 +415,159 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-          <div className="space-y-6 rounded-4xl border border-zinc-200 bg-zinc-50/40 p-5 dark:border-zinc-800 dark:bg-zinc-900/40">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Barra no celular</p>
-                    <p className="mt-1 text-xs leading-5 text-zinc-500">Barra inferior estilo app para abrir o que voce mais usa.</p>
+        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(360px,0.88fr)]">
+          <div className="space-y-3">
+            <PreferenceSection
+              title="Disponibilidade"
+              description="Ative a barra no celular, no desktop ou nos dois contextos."
+              summary={[
+                draft.mobileEnabled ? "Celular ligado" : "Celular desligado",
+                draft.desktopEnabled ? "Desktop ligado" : "Desktop desligado",
+              ]}
+              defaultOpen
+            >
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">No celular</p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-500">Barra inferior parecida com app para abrir o que voce usa mais rapido.</p>
+                    </div>
+                    <Switch
+                      checked={draft.mobileEnabled}
+                      onCheckedChange={(checked) => updateDraft((current) => ({ ...current, mobileEnabled: checked }))}
+                      disabled={navigationLoading || isSaving}
+                    />
                   </div>
-                  <Switch
-                    checked={draft.mobileEnabled}
-                    onCheckedChange={(checked) => updateDraft((current) => ({ ...current, mobileEnabled: checked }))}
-                    disabled={navigationLoading || isSaving}
-                  />
+                  <div className="mt-4 flex items-center gap-2 text-xs text-zinc-500">
+                    <MonitorSmartphone className="h-4 w-4" />
+                    No celular ela fica centralizada e pronta para uso com o polegar.
+                  </div>
                 </div>
-                <div className="mt-4 flex items-center gap-2 text-xs text-zinc-500">
-                  <MonitorSmartphone className="h-4 w-4" />
-                  No celular ela continua centralizada e pronta para toque rapido.
+
+                <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">No computador</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">Ative se quiser navegar com uma barra parecida com app tambem no desktop.</p>
+                    </div>
+                    <Switch
+                      checked={draft.desktopEnabled}
+                      onCheckedChange={(checked) => updateDraft((current) => ({ ...current, desktopEnabled: checked }))}
+                      disabled={navigationLoading || isSaving}
+                    />
+                  </div>
+                  <div className="mt-4 flex items-center gap-2 text-xs text-zinc-500">
+                    <Laptop className="h-4 w-4" />
+                    Em esquerda ou direita ela vira uma barra lateral de verdade.
+                  </div>
                 </div>
               </div>
+            </PreferenceSection>
 
-              <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Barra no desktop</p>
-                    <p className="mt-1 text-xs leading-5 text-zinc-500">Ative para usar o WevenFinance com navegacao estilo app no computador.</p>
-                  </div>
-                  <Switch
-                    checked={draft.desktopEnabled}
-                    onCheckedChange={(checked) => updateDraft((current) => ({ ...current, desktopEnabled: checked }))}
-                    disabled={navigationLoading || isSaving}
-                  />
-                </div>
-                <div className="mt-4 flex items-center gap-2 text-xs text-zinc-500">
-                  <Laptop className="h-4 w-4" />
-                  Em esquerda ou direita ela vira uma barra lateral de verdade.
-                </div>
-              </div>
-            </div>
-
-            <ChoiceCardGroup
+            <PreferenceSection
               title="Posicao"
-              options={POSITION_OPTIONS}
-              value={draft.position}
-              onChange={(value) =>
-                updateDraft((current) => ({
-                  ...current,
-                  position: value,
-                  desktopEnabled: value === "center" ? current.desktopEnabled : true,
-                }))
-              }
-            />
-
-            <ChoiceCardGroup
-              title="Comportamento"
-              options={BEHAVIOR_OPTIONS}
-              value={draft.behavior}
-              onChange={(value) => updateDraft((current) => ({ ...current, behavior: value }))}
-              columns="md:grid-cols-2"
-            />
-
-            <ChoiceCardGroup
-              title="Estilo"
-              options={THEME_OPTIONS}
-              value={draft.theme}
-              onChange={(value) => updateDraft((current) => ({ ...current, theme: value }))}
-              columns="md:grid-cols-2"
-            />
-
-            <ChoiceCardGroup
-              title="Cor"
-              options={ACCENT_OPTIONS}
-              value={draft.accent}
-              onChange={(value) => updateDraft((current) => ({ ...current, accent: value }))}
-              columns="md:grid-cols-2 xl:grid-cols-3"
-            />
-
-            <div className="grid gap-6 lg:grid-cols-2">
+              description="Escolha se a barra fica embaixo ou se vira uma barra lateral no computador."
+              summary={[positionLabel]}
+            >
               <ChoiceCardGroup
-                title="Tamanho"
+                options={POSITION_OPTIONS}
+                value={draft.position}
+                onChange={(value) =>
+                  updateDraft((current) => ({
+                    ...current,
+                    position: value,
+                    desktopEnabled: value === "center" ? current.desktopEnabled : true,
+                  }))
+                }
+              />
+            </PreferenceSection>
+
+            <PreferenceSection
+              title="Comportamento"
+              description="Defina se a barra fica sempre visivel ou se pode se esconder sozinha."
+              summary={[behaviorLabel]}
+            >
+              <ChoiceCardGroup
+                options={BEHAVIOR_OPTIONS}
+                value={draft.behavior}
+                onChange={(value) => updateDraft((current) => ({ ...current, behavior: value }))}
+                columns="md:grid-cols-2"
+              />
+            </PreferenceSection>
+
+            <PreferenceSection
+              title="Estilo"
+              description="Escolha o clima visual da barra para combinar com o jeito que voce gosta de usar."
+              summary={[themeLabel]}
+            >
+              <ChoiceCardGroup
+                options={THEME_OPTIONS}
+                value={draft.theme}
+                onChange={(value) => updateDraft((current) => ({ ...current, theme: value }))}
+                columns="md:grid-cols-2"
+              />
+            </PreferenceSection>
+
+            <PreferenceSection
+              title="Cor"
+              description="Escolha a cor principal da barra usando tons derivados do visual do WevenFinance."
+              summary={[accentLabel]}
+            >
+              <ChoiceCardGroup
+                options={ACCENT_OPTIONS}
+                value={draft.accent}
+                onChange={(value) => updateDraft((current) => ({ ...current, accent: value }))}
+                columns="md:grid-cols-2"
+              />
+            </PreferenceSection>
+
+            <PreferenceSection
+              title="Tamanho"
+              description="Deixe a barra mais compacta ou mais confortavel para tocar e ler."
+              summary={[densityLabel]}
+            >
+              <ChoiceCardGroup
                 options={DENSITY_OPTIONS}
                 value={draft.density}
                 onChange={(value) => updateDraft((current) => ({ ...current, density: value }))}
-                columns="grid-cols-1"
+                columns="md:grid-cols-2"
               />
+            </PreferenceSection>
 
+            <PreferenceSection
+              title="Nomes dos atalhos"
+              description="Escolha se a barra mostra os nomes ou se fica mais limpa so com os icones."
+              summary={[labelsLabel]}
+            >
               <ChoiceCardGroup
-                title="Rotulos"
                 options={LABEL_OPTIONS}
                 value={draft.labels}
                 onChange={(value) => updateDraft((current) => ({ ...current, labels: value }))}
-                columns="grid-cols-1"
+                columns="md:grid-cols-2"
               />
-            </div>
+            </PreferenceSection>
 
-            <ChoiceCardGroup
-              title="Superficie"
-              options={SURFACE_OPTIONS}
-              value={draft.surface}
-              onChange={(value) => updateDraft((current) => ({ ...current, surface: value }))}
-              columns="md:grid-cols-2"
-            />
+            <PreferenceSection
+              title="Acabamento"
+              description="Defina se a barra fica mais translucida ou com fundo mais fechado."
+              summary={[surfaceLabel]}
+            >
+              <ChoiceCardGroup
+                options={SURFACE_OPTIONS}
+                value={draft.surface}
+                onChange={(value) => updateDraft((current) => ({ ...current, surface: value }))}
+                columns="md:grid-cols-2"
+              />
+            </PreferenceSection>
           </div>
 
-          <div className="rounded-4xl border border-zinc-200 bg-zinc-50/40 p-5 dark:border-zinc-800 dark:bg-zinc-900/40">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Atalhos visiveis</p>
-                <p className="mt-1 text-xs text-zinc-500">
-                  Escolha ate {MAX_DOCK_SHORTCUTS} atalhos para deixar na barra rapida.
-                </p>
-              </div>
+          <div className="space-y-4">
+            <PreferenceSection
+              title="Atalhos visiveis"
+              description={`Escolha ate ${MAX_DOCK_SHORTCUTS} atalhos para deixar sempre por perto.`}
+              summary={[`${visibleShortcuts.length}/${MAX_DOCK_SHORTCUTS} ativos`]}
+            >
               <div className="flex flex-wrap gap-2">
                 {visibleShortcuts.map((item) => (
                   <Badge key={item.id} variant="secondary" className="rounded-full bg-violet-100 px-3 py-1 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
@@ -454,116 +575,123 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                   </Badge>
                 ))}
               </div>
-            </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
-              {NAVIGATION_APP_ITEMS.map((item) => {
-                const Icon = item.icon;
-                const enabled = draft.shortcuts.includes(item.id);
-                const index = draft.shortcuts.indexOf(item.id);
+              <div className="grid gap-3 md:grid-cols-2">
+                {NAVIGATION_APP_ITEMS.map((item) => {
+                  const Icon = item.icon;
+                  const enabled = draft.shortcuts.includes(item.id);
+                  const index = draft.shortcuts.indexOf(item.id);
 
-                return (
-                  <div
-                    key={item.id}
-                    className={cn(
-                      "rounded-3xl border p-4 transition-all",
-                      enabled
-                        ? "border-violet-300 bg-violet-50/70 shadow-sm dark:border-violet-500/40 dark:bg-violet-950/25"
-                        : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className={cn("inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-linear-to-br", item.accentClass)}>
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <Switch
-                        checked={enabled}
-                        onCheckedChange={() => toggleShortcut(item.id)}
-                        disabled={navigationLoading || isSaving || (!enabled && draft.shortcuts.length >= MAX_DOCK_SHORTCUTS)}
-                      />
-                    </div>
-
-                    <div className="mt-4">
-                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{item.label}</p>
-                      <p className="mt-1 text-xs leading-5 text-zinc-500">{item.description}</p>
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between">
-                      {enabled ? (
-                        <Badge variant="outline" className="rounded-full border-violet-300 bg-white text-violet-700 dark:border-violet-500/40 dark:bg-transparent dark:text-violet-300">
-                          Atalho {index + 1}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-zinc-400">Nao aparece na barra rapida</span>
+                  return (
+                    <div
+                      key={item.id}
+                      className={cn(
+                        "rounded-3xl border p-4 transition-all",
+                        enabled
+                          ? "border-violet-300 bg-violet-50/70 shadow-sm dark:border-violet-500/40 dark:bg-violet-950/25"
+                          : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
                       )}
-
-                      {enabled && (
-                        <div className="flex items-center gap-1">
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-8 w-8 rounded-xl"
-                            onClick={() => moveShortcut(item.id, "up")}
-                            disabled={index <= 0}
-                          >
-                            <ArrowUp className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-8 w-8 rounded-xl"
-                            onClick={() => moveShortcut(item.id, "down")}
-                            disabled={index < 0 || index >= draft.shortcuts.length - 1}
-                          >
-                            <ArrowDown className="h-4 w-4" />
-                          </Button>
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className={cn("inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-linear-to-br", item.accentClass)}>
+                          <Icon className="h-5 w-5" />
                         </div>
-                      )}
+                        <Switch
+                          checked={enabled}
+                          onCheckedChange={() => toggleShortcut(item.id)}
+                          disabled={navigationLoading || isSaving || (!enabled && draft.shortcuts.length >= MAX_DOCK_SHORTCUTS)}
+                        />
+                      </div>
+
+                      <div className="mt-4">
+                        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{item.label}</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{item.description}</p>
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-between">
+                        {enabled ? (
+                          <Badge variant="outline" className="rounded-full border-violet-300 bg-white text-violet-700 dark:border-violet-500/40 dark:bg-transparent dark:text-violet-300">
+                            Atalho {index + 1}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-zinc-400">Nao aparece na barra rapida</span>
+                        )}
+
+                        {enabled && (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 rounded-xl"
+                              onClick={() => moveShortcut(item.id, "up")}
+                              disabled={index <= 0}
+                            >
+                              <ArrowUp className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 rounded-xl"
+                              onClick={() => moveShortcut(item.id, "down")}
+                              disabled={index < 0 || index >= draft.shortcuts.length - 1}
+                            >
+                              <ArrowDown className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+            </PreferenceSection>
+
+            <div className="xl:sticky xl:top-24">
+              <PreviewSurface preferences={draft} />
             </div>
           </div>
         </div>
       </div>
 
-      <PreviewSurface preferences={draft} />
+      <div className="sticky bottom-4 z-20">
+        <div className="rounded-4xl border border-zinc-200/90 bg-white/96 p-4 shadow-2xl shadow-zinc-200/60 backdrop-blur-xl dark:border-zinc-800/90 dark:bg-zinc-950/96 dark:shadow-black/35">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Aplicar alteracoes</p>
+                <p className="text-xs leading-5 text-zinc-500">
+                  Salve quando quiser usar essas escolhas na barra rapida do app.
+                </p>
+              </div>
+            </div>
 
-      <div className="flex flex-col gap-3 rounded-4xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
-            <Sparkles className="h-5 w-5" />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-2xl"
+                onClick={() => setDraft(DEFAULT_NAVIGATION_PREFERENCES)}
+                disabled={isSaving}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Restaurar padrao
+              </Button>
+              <Button
+                type="button"
+                className="rounded-2xl bg-violet-600 text-white hover:bg-violet-700"
+                onClick={() => void handleSave()}
+                disabled={navigationLoading || isSaving || !hasChanges}
+              >
+                <Save className="h-4 w-4" />
+                {isSaving ? "Salvando..." : "Salvar preferencias"}
+              </Button>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Pronto para aplicar</p>
-            <p className="mt-1 text-xs text-zinc-500">
-              A barra rapida so muda no app depois que voce salvar essas preferencias.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-xl"
-            onClick={() => setDraft(DEFAULT_NAVIGATION_PREFERENCES)}
-            disabled={isSaving}
-          >
-            Restaurar padrao
-          </Button>
-          <Button
-            type="button"
-            className="rounded-xl bg-violet-600 text-white hover:bg-violet-700"
-            onClick={() => void handleSave()}
-            disabled={navigationLoading || isSaving || !hasChanges}
-          >
-            <Save className="mr-2 h-4 w-4" />
-            {isSaving ? "Salvando..." : "Salvar preferencias"}
-          </Button>
         </div>
       </div>
     </div>
