@@ -41,7 +41,6 @@ import { formatPhone, normalizePhone } from "@/lib/phone";
 import { ACCOUNT_DELETION_GRACE_DAYS } from "@/lib/account-deletion/policy";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
-import { usePlatformExperience } from "@/hooks/usePlatformExperience";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -53,8 +52,7 @@ type FeedbackData = {
 
 export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode, refreshProfile } = useAuth();
-  const { resetTour, completeTour, isActive: isOnboardingActive, loading: onboardingLoading } = useOnboarding();
-  const { startPlatformTour } = usePlatformExperience();
+  const { completeTour, isActive: isOnboardingActive, loading: onboardingLoading } = useOnboarding();
   const { isImpersonating } = useImpersonation();
   const { plans } = usePlans();
   const router = useRouter();
@@ -265,15 +263,8 @@ export default function SettingsPage() {
     }
   };
 
-  const handleReplayTour = async () => {
-    try {
-      await resetTour();
-      startPlatformTour("dashboard");
-      router.push("/dashboard?tour=1");
-    } catch (error) {
-      console.error("Erro ao reiniciar tour:", error);
-      showFeedback("error", "Falha ao abrir tour", "Não foi possível reiniciar o tutorial agora.");
-    }
+  const handleReplayTour = () => {
+    router.push("/apps#tour-guided");
   };
 
   const handleCopySwaggerToken = async () => {
@@ -1209,20 +1200,20 @@ export default function SettingsPage() {
                     <PlayCircle className="h-6 w-6" /> Tutorial Interativo
                   </CardTitle>
                   <CardDescription className="text-zinc-600 dark:text-zinc-400">
-                    Reveja o guia passo a passo para aprender a usar todas as funcionalidades do painel.
+                    Escolha as partes do guia que voce quer rever e monte um tour sob medida.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="-mt-4">
                   <div className="bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div className="space-y-1">
                       <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tour da plataforma</h4>
-                      <p className="text-sm text-zinc-500">Dashboard, navegação, lançamentos, cartões, metas e configurações.</p>
+                      <p className="text-sm text-zinc-500">Escolha entre ver tudo ou apenas dashboard, configuracoes, lancamentos, cartoes e metas.</p>
                     </div>
                     <Button
                       onClick={handleReplayTour}
                       className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700 text-white rounded-xl shadow-lg shadow-violet-500/20 hover:scale-105 transition-all"
                     >
-                      Iniciar Tour Agora
+                      Escolher Tour
                     </Button>
                   </div>
                 </CardContent>
