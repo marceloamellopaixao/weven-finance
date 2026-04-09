@@ -12,14 +12,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home, UserCog, CreditCard, PiggyBank } from "lucide-react";
+import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home, UserCog, CreditCard, PiggyBank, Grid2X2 } from "lucide-react";
 import Link from "next/link";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useOnboarding } from "@/hooks/useOnboarding";
+import { usePlatformExperience } from "@/hooks/usePlatformExperience";
 import { Bell } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function Header() {
   const { user, userProfile, logout } = useAuth();
@@ -27,8 +28,10 @@ export function Header() {
   const pathname = usePathname();
   const { isImpersonating, impersonationTargetUid, stopImpersonation } = useImpersonation();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const { items: notifications, unreadCount, markOneAsRead, markAllAsRead, clearAll } = useNotifications(isNotificationsOpen);
   const { status: onboardingStatus, completeStep, activeStep: onboardingActiveStep, isActive: isOnboardingActive } = useOnboarding();
+  const { forceAccountMenuOpen, isPlatformTourActive } = usePlatformExperience();
   const isAuthenticated = !!user || !!userProfile;
   const displayName = isImpersonating
     ? (userProfile?.displayName || "Usuário")
@@ -92,9 +95,14 @@ export function Header() {
   };
 
   const handleAccountMenuOpenChange = (open: boolean) => {
+    setIsAccountMenuOpen(open);
     if (!open || onboardingStatus.steps.profileMenu) return;
     void completeStep("profileMenu");
   };
+
+  useEffect(() => {
+    setIsAccountMenuOpen(forceAccountMenuOpen);
+  }, [forceAccountMenuOpen]);
 
   // Se não tiver usuário logado, mostra o header da landing page.
   if (!isAuthenticated) {
@@ -165,9 +173,14 @@ export function Header() {
           </>
         )}
 
-        <DropdownMenu onOpenChange={setIsNotificationsOpen}>
+        <DropdownMenu
+          onOpenChange={(open) => {
+            if (isPlatformTourActive) return;
+            setIsNotificationsOpen(open);
+          }}
+        >
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon" className="relative h-9 w-9 rounded-full border-zinc-200 dark:border-zinc-800">
+            <Button variant="outline" size="icon" className="relative h-9 w-9 rounded-full border-zinc-200 dark:border-zinc-800" disabled={isPlatformTourActive}>
               <Bell className="h-4 w-4" />
               {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] px-1 flex items-center justify-center">
@@ -236,9 +249,9 @@ export function Header() {
         </div>
 
         {/* Dropdown Menu do Usuário */}
-        <DropdownMenu onOpenChange={handleAccountMenuOpenChange}>
+        <DropdownMenu open={isAccountMenuOpen} onOpenChange={handleAccountMenuOpenChange}>
           <DropdownMenuTrigger asChild>
-            <div className="relative">
+            <div id="tour-account-avatar" className="relative">
               <Avatar className={`h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 transition-all cursor-pointer hover:ring-violet-200 ${
                 isOnboardingActive && onboardingActiveStep === "profileMenu"
                   ? "ring-violet-400 animate-pulse"
@@ -251,7 +264,7 @@ export function Header() {
               </Avatar>
             </div>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 rounded-xl shadow-xl border-zinc-200 dark:border-zinc-800 p-2">
+          <DropdownMenuContent id="tour-account-menu-panel" align="end" className="w-56 rounded-xl shadow-xl border-zinc-200 dark:border-zinc-800 p-2">
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium leading-none truncate">{displayName || "Minha Conta"}</p>
@@ -295,6 +308,13 @@ export function Header() {
               <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Configurações</span>
+              </DropdownMenuItem>
+            </Link>
+
+            <Link href="/apps" className="cursor-pointer">
+              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
+                <Grid2X2 className="mr-2 h-4 w-4" />
+                <span>Apps e barra rapida</span>
               </DropdownMenuItem>
             </Link>
 
