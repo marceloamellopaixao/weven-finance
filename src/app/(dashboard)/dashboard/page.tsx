@@ -1528,7 +1528,7 @@ export default function DashboardPage() {
     const isIncome = tx.type === "income";
     const label = isPending
       ? (isIncome ? "Receber" : "Pagar")
-      : (isIncome ? "Nao recebido" : "Nao pago");
+      : (isIncome ? "Não recebido" : "Não pago");
 
     return (
       <Button
