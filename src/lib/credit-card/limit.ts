@@ -1,5 +1,7 @@
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { CreditCardSettings, CreditCardSummary } from "@/types/creditCard";
+import { readSecureSettingData, writeSecureSettingData } from "@/lib/secure-store/user-settings";
+import { readSecureCardPayload } from "@/lib/secure-store/payment-cards";
 
 export const defaultCreditCardSettings: CreditCardSettings = {
   enabled: false,
@@ -40,7 +42,7 @@ async function getFinanceSettingRow(uid: string) {
 export async function getCreditCardSettings(uid: string): Promise<CreditCardSettings> {
   const row = await getFinanceSettingRow(uid);
   if (!row) return defaultCreditCardSettings;
-  const data = (row.data as Partial<CreditCardSettings> | undefined) ?? undefined;
+  const data = readSecureSettingData<Partial<CreditCardSettings>>(row.data);
   return sanitizeSettings(data);
 }
 
@@ -60,7 +62,7 @@ export async function saveCreditCardSettings(uid: string, patch: Partial<CreditC
         id: String(row?.id || `${uid}__creditCard`),
         uid,
         setting_key: "creditCard",
-        data: next,
+        data: writeSecureSettingData(next),
         updated_at: new Date().toISOString(),
       },
     ],
@@ -91,7 +93,7 @@ function isCreditCapable(type: PaymentCardPolicyDoc["type"]) {
 }
 
 function toPaymentCardPolicyDoc(row: Record<string, unknown>): PaymentCardPolicyDoc {
-  const raw = (row.raw as Record<string, unknown> | null) ?? {};
+  const raw = readSecureCardPayload(row.raw);
   const type =
     row.card_type === "debit_card" || row.card_type === "credit_and_debit"
       ? row.card_type
