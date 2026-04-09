@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
+import { isArchivedJsonRecord } from "@/lib/account-archive/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 export const runtime = "nodejs";
@@ -40,7 +41,8 @@ export async function POST(request: NextRequest) {
       limit: 1,
     });
 
-    const existingData = (rows[0]?.data as { hiddenDefaultCategories?: unknown } | undefined) ?? {};
+    const activeRow = rows.find((row) => !isArchivedJsonRecord(row, "data"));
+    const existingData = (activeRow?.data as { hiddenDefaultCategories?: unknown } | undefined) ?? {};
     const currentHidden = Array.isArray(existingData.hiddenDefaultCategories)
       ? existingData.hiddenDefaultCategories.filter((item): item is string => typeof item === "string")
       : [];
@@ -49,7 +51,7 @@ export async function POST(request: NextRequest) {
       ? Array.from(new Set([...currentHidden, categoryName]))
       : currentHidden.filter((name) => name !== categoryName);
 
-    const id = String(rows[0]?.id || `${uid}__categories`);
+    const id = String(activeRow?.id || rows[0]?.id || `${uid}__categories`);
     await supabaseUpsertRows(
       "user_settings",
       [
@@ -57,7 +59,7 @@ export async function POST(request: NextRequest) {
           id,
           uid,
           setting_key: "categories",
-          data: { hiddenDefaultCategories: next },
+          data: { hiddenDefaultCategories: next, isArchived: false },
           updated_at: new Date().toISOString(),
         },
       ],
