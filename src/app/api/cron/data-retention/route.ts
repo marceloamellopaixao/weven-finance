@@ -5,6 +5,7 @@ import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { sendExternalAlert } from "@/lib/observability/alerts";
+import { runDeletedAccountGraceCleanup } from "@/lib/account-archive/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +26,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
     }
 
-    const result = await supabaseRpc("run_data_retention_tasks");
+    const [result, deletedAccounts] = await Promise.all([
+      supabaseRpc("run_data_retention_tasks"),
+      runDeletedAccountGraceCleanup(),
+    ]);
     await writeApiMetric({
       route: meta.route,
       method: meta.method,
@@ -33,7 +37,7 @@ export async function GET(request: NextRequest) {
       durationMs: Date.now() - startedAt,
       requestId: meta.requestId,
     });
-    return NextResponse.json({ ok: true, result }, { status: 200 });
+    return NextResponse.json({ ok: true, result, deletedAccounts }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     await sendExternalAlert({
