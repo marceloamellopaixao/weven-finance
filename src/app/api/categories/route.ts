@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
+import { filterActiveJsonRows, isArchivedJsonRecord } from "@/lib/account-archive/server";
 import {
   supabaseDeleteByFilters,
   supabaseSelect,
@@ -63,18 +64,20 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function getUserCategories(uid: string) {
-  return supabaseSelect("categories", {
+  const rows = await supabaseSelect("categories", {
     select: "source_id,name,parent_name,category_type,color,raw",
     filters: { uid },
   });
+  return filterActiveJsonRows(rows);
 }
 
 async function getUserTransactions(uid: string) {
-  return supabaseSelect("transactions", {
+  const rows = await supabaseSelect("transactions", {
     select:
       "source_id,description,amount,amount_text,amount_for_limit,tx_type,category,tx_status,payment_method,card_id,card_label,card_type,tx_date,due_date,group_id,installment_current,installment_total,created_at,raw",
     filters: { uid },
   });
+  return filterActiveJsonRows(rows);
 }
 
 export async function GET(request: NextRequest) {
@@ -105,7 +108,8 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const settingsData = (settingsRows[0]?.data as { hiddenDefaultCategories?: unknown } | undefined) ?? {};
+    const activeSettingsRow = settingsRows.find((row) => !isArchivedJsonRecord(row, "data"));
+    const settingsData = (activeSettingsRow?.data as { hiddenDefaultCategories?: unknown } | undefined) ?? {};
     const hiddenDefaultCategories = Array.isArray(settingsData.hiddenDefaultCategories)
       ? settingsData.hiddenDefaultCategories.filter((item): item is string => typeof item === "string")
       : [];
