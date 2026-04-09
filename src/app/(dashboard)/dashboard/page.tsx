@@ -190,6 +190,7 @@ export default function DashboardPage() {
     forceStart: shouldForceTour,
     stepVisibility: {
       monthlyForecast: isBillingExemptRole || effectivePlanCapabilities.hasMonthlyForecast,
+      smartDailyLimit: isBillingExemptRole || effectivePlanCapabilities.hasSmartDailyLimit,
     },
     onComplete: completeTour,
   });
@@ -1790,7 +1791,7 @@ export default function DashboardPage() {
         )}
 
         {effectivePlanCapabilities.hasSmartDailyLimit && (
-          <Card className={`${fadeInUp} delay-140 border-none shadow-lg rounded-2xl bg-linear-to-r from-zinc-900 to-zinc-800 text-white overflow-hidden`}>
+          <Card id="tour-smart-daily-limit" className={`${fadeInUp} delay-140 border-none shadow-lg rounded-2xl bg-linear-to-r from-zinc-900 to-zinc-800 text-white overflow-hidden`}>
             <CardContent className="p-5 md:p-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-violet-200">
