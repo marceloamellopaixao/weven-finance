@@ -26,7 +26,7 @@ const GoogleIcon = () => (
 );
 
 export default function LoginPage() {
-  const { signInWithGoogle, loginWithEmail, user } = useAuth();
+  const { signInWithGoogle, loginWithEmail, user, userProfile } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -48,10 +48,10 @@ export default function LoginPage() {
   }, [pendingUpgradePlan]);
 
   useEffect(() => {
-    if (user) {
+    if (user && userProfile && userProfile.status !== "deleted") {
       router.replace(pendingUpgradePlan ? buildUpgradeCheckoutPath(pendingUpgradePlan) : "/dashboard");
     }
-  }, [pendingUpgradePlan, router, user]);
+  }, [pendingUpgradePlan, router, user, userProfile]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
