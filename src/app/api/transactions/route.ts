@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
       }
 
       const planContext = await getUserPlanContext(uid);
-      const capabilities = getPlanCapabilities(planContext.plan, planContext.plans);
+      const capabilities = getPlanCapabilities(planContext.plan, planContext.plans, planContext.featureAccess);
 
       const hasInstallmentTransactions = txs.some((tx) => {
         const installmentTotal = Number(tx.installmentTotal ?? 0);
