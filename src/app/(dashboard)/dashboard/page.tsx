@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTransactions } from "@/hooks/useTransactions";
 import { usePlans } from "@/hooks/usePlans";
+import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import { CATEGORY_PATH_SEPARATOR, useCategories } from "@/hooks/useCategories";
 import {
   addTransaction,
@@ -160,6 +161,7 @@ export default function DashboardPage() {
   const { user, userProfile, privacyMode, togglePrivacyMode } = useAuth();
   const { transactions, loading } = useTransactions();
   const { plans } = usePlans();
+  const { featureAccess } = useFeatureAccess();
   const {
     categories,
     defaultCategories,
@@ -704,7 +706,7 @@ export default function DashboardPage() {
   const canGoBack = availableMonths.findIndex(m => m.value === selectedMonth) > 0;
   const canGoForward = availableMonths.findIndex(m => m.value === selectedMonth) < availableMonths.length - 1;
   const effectivePlan = userProfile?.plan || "free";
-  const effectivePlanCapabilities = getPlanCapabilities(effectivePlan, plans);
+  const effectivePlanCapabilities = getPlanCapabilities(effectivePlan, plans, featureAccess);
 
   const handleAdd = async () => {
     const transactionLimit = effectivePlanCapabilities.maxTransactionsPerMonth;
