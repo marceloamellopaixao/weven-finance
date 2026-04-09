@@ -6,6 +6,7 @@ import { getRequestMeta } from "@/lib/api/request-meta";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { readSecureProfilePayload } from "@/lib/secure-store/profile";
 import { deleteSupabaseAuthUser, isUuid, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
 import { supabaseSelect } from "@/services/supabase/admin";
 
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
     }
 
     const profile = profileRows[0];
-    const raw = (profile.raw as Record<string, unknown> | null) ?? {};
+    const raw = readSecureProfilePayload(profile.raw);
     const status = String(profile.status || raw.status || "active");
     if (status !== "deleted") {
       return NextResponse.json({ ok: false, error: "account_not_deleted" }, { status: 409 });
