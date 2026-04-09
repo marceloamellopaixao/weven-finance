@@ -45,6 +45,14 @@ const PLAN_BY_PREAPPROVAL_ID: Record<string, UserPlan> = {
   [process.env.MERCADOPAGO_PLAN_PREMIUM_ID ?? ""]: "premium",
 };
 
+function allowPendingCheckoutHeuristic() {
+  return process.env.MERCADOPAGO_ALLOW_PENDING_CHECKOUT_MATCH === "true";
+}
+
+function allowFallbackPlanSearchHeuristic() {
+  return process.env.MERCADOPAGO_ALLOW_FALLBACK_PLAN_SEARCH === "true";
+}
+
 async function getProfileRow(uid: string): Promise<ProfileRow | null> {
   const rows = await supabaseSelect("profiles", {
     filters: { uid },
@@ -426,7 +434,7 @@ async function findUserByWebhook(details: GatewayDetails): Promise<UserMatch | n
   }
 
   const pendingPlan = details.plan === "pro" || details.plan === "premium" ? details.plan : null;
-  if (pendingPlan) {
+  if (pendingPlan && allowPendingCheckoutHeuristic()) {
     const now = Date.now();
     const windowMs = 6 * 60 * 60 * 1000; // 6 hours
     const pendingUsers = await supabaseSelect("profiles", {
@@ -552,15 +560,23 @@ export async function syncFromWebhook(input: WebhookInput) {
   };
 
   if (!userMatch) {
+    const unmatchedReason =
+      details.externalReference || details.payerEmail
+        ? "user_not_found"
+        : details.plan
+          ? "awaiting_user_confirmation"
+          : "user_not_found";
+
     await writeBillingEvent(eventDocId, {
       ...baseEvent,
       status: "ignored_no_user_match",
+      reason: unmatchedReason,
     });
 
     return {
       ok: true,
       matched: false,
-      reason: "user_not_found",
+      reason: unmatchedReason,
     };
   }
 
@@ -844,7 +860,7 @@ export async function confirmLatestPreapprovalForUser(params: {
 
   const selectedId = typeof selected?.id === "string" ? selected.id : null;
   let resolvedPreapprovalId = selectedId;
-  if (!resolvedPreapprovalId && expectedPlanId && params.checkoutStartedAt) {
+  if (!resolvedPreapprovalId && expectedPlanId && params.checkoutStartedAt && allowFallbackPlanSearchHeuristic()) {
     const planSearchPayload = await mpRequest(
       `/preapproval/search?preapproval_plan_id=${encodeURIComponent(expectedPlanId)}&limit=30&offset=0`
     );
