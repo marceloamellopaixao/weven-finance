@@ -2,6 +2,7 @@ export function isAuthErrorMessage(message: string) {
   const normalized = message.toLowerCase();
   return (
     message === "missing_auth_token" ||
+    message === "invalid_auth_token" ||
     normalized.includes("id token") ||
     normalized.includes("verifyidtoken") ||
     normalized.includes("auth/id-token") ||
@@ -11,6 +12,7 @@ export function isAuthErrorMessage(message: string) {
 }
 
 export function resolveApiErrorStatus(message: string) {
+  if (message === "auth_service_unavailable") return 503;
   if (message.startsWith("impersonation_")) return 403;
   if (isAuthErrorMessage(message)) return 401;
   return 500;
