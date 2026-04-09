@@ -4,6 +4,7 @@ import { useEffect, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnboarding } from "@/hooks/useOnboarding";
+import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { getPiggyBanks } from "@/services/piggyBankService";
 import { PiggyBank, PiggyBankGoalType } from "@/types/piggyBank";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ export default function PiggyBankPage() {
     loading: onboardingLoading,
     activeStep: onboardingActiveStep,
     isActive: isOnboardingActive,
+    completeTour,
   } = useOnboarding();
   const [piggies, setPiggies] = useState<PiggyBank[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +46,12 @@ export default function PiggyBankPage() {
     isOnboardingActive &&
     onboardingActiveStep === "firstGoal" &&
     !onboardingStatus.steps.firstGoal;
+
+  usePlatformTour({
+    route: "piggy-bank",
+    disabled: onboardingLoading || isOnboardingActive,
+    onComplete: completeTour,
+  });
 
   useEffect(() => {
     if (!user) return;
@@ -78,7 +86,7 @@ export default function PiggyBankPage() {
   return (
     <div className="min-h-screen bg-zinc-50/40 p-3 sm:p-6 md:p-8">
       <div className="mx-auto max-w-5xl space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div id="tour-piggy-header" className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold text-zinc-900 md:text-3xl">
               <PiggyBankIcon className="h-7 w-7 text-violet-600" />
@@ -90,7 +98,7 @@ export default function PiggyBankPage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/piggy-bank/new">
-              <Button className={`rounded-xl bg-violet-600 hover:bg-violet-700 ${isGoalOnboardingActive ? "ring-2 ring-violet-300 ring-offset-2" : ""}`}>
+              <Button id="tour-piggy-create" className={`rounded-xl bg-violet-600 hover:bg-violet-700 ${isGoalOnboardingActive ? "ring-2 ring-violet-300 ring-offset-2" : ""}`}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Criar um Cofrinho
               </Button>
@@ -116,7 +124,7 @@ export default function PiggyBankPage() {
         )}
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Card className="rounded-3xl md:col-span-2">
+          <Card id="tour-piggy-list" className="rounded-3xl md:col-span-2">
             <CardHeader>
               <CardTitle>Seus Porquinhos</CardTitle>
               <CardDescription>Acesse os porquinhos já criados para ver total e histórico.</CardDescription>
@@ -145,7 +153,7 @@ export default function PiggyBankPage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-3xl">
+          <Card id="tour-piggy-shortcuts" className="rounded-3xl">
             <CardHeader>
               <CardTitle>Atalhos</CardTitle>
               <CardDescription>Comece mais rápido com uma meta sugerida.</CardDescription>
