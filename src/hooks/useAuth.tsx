@@ -252,13 +252,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const mergedProviders = Array.from(
           new Set([...(profile?.authProviders || []), ...(bootstrapProfile.authProviders || [])])
         ).sort((a, b) => a.localeCompare(b));
+        const effectiveNeedsPasswordSetup = profile
+          ? Boolean(profile.needsPasswordSetup) && shouldRequirePasswordSetup(mergedProviders)
+          : shouldRequirePasswordSetup(mergedProviders);
 
         const shouldSyncBootstrap =
           !profile ||
           (profile.email || "") !== bootstrapProfile.email ||
           (Boolean(user.emailVerified) && !Boolean(profile.verifiedEmail)) ||
           JSON.stringify(profile.authProviders || []) !== JSON.stringify(mergedProviders) ||
-          Boolean(profile.needsPasswordSetup) !== Boolean(bootstrapProfile.needsPasswordSetup) ||
+          Boolean(profile?.needsPasswordSetup) !== effectiveNeedsPasswordSetup ||
           ((profile.photoURL || "") !== (bootstrapProfile.photoURL || "") && Boolean(bootstrapProfile.photoURL));
 
         if (shouldSyncBootstrap) {
@@ -269,7 +272,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 photoURL: bootstrapProfile.photoURL || profile.photoURL || "",
                 verifiedEmail: profile.verifiedEmail || bootstrapProfile.verifiedEmail,
                 authProviders: mergedProviders,
-                needsPasswordSetup: Boolean(bootstrapProfile.needsPasswordSetup),
+                needsPasswordSetup: effectiveNeedsPasswordSetup,
               };
 
           await fetch("/api/profile/bootstrap", {
@@ -312,7 +315,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (userProfile.status === "deleted") {
       if (pathname !== "/goodbye") router.replace("/goodbye");
-      void supabase.auth.signOut();
       return;
     }
 
@@ -441,7 +443,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithEmail = async (email: string, pass: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
     if (error) throw error.message || "Erro ao entrar.";
-    router.replace(resolvePostAuthPath());
   };
 
   const logout = async () => {
