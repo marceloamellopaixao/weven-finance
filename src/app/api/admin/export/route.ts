@@ -150,8 +150,6 @@ export async function GET(request: NextRequest) {
         const message = String(row.message || "");
         const name = String(row.name || "");
         const email = String(row.email || "");
-        const rowAssigned = String(row.assigned_to_name || "");
-
         const matchesQ = !q || `${protocol} ${message} ${name} ${email}`.toLowerCase().includes(q);
         const matchesType = !type || type === "all" || rowType === type;
         const matchesStatus = !status || status === "all" || rowStatus === status;
