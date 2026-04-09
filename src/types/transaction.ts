@@ -1,6 +1,7 @@
 export type TransactionType = "income" | "expense";
 export type TransactionStatus = "paid" | "pending";
 export type PaymentMethod = "credit_card" | "debit_card" | "pix" | "cash" | "boleto" | "transfer";
+export type InstallmentValueMode = "divide_total" | "repeat_value";
 
 export type TransactionCreatedAt =
   | Date
@@ -38,6 +39,7 @@ export interface Transaction {
 export type CreateTransactionDTO = Omit<Transaction, "id" | "createdAt" | "userId" | "status"> & {
   isInstallment: boolean;
   installmentsCount: number;
+  installmentValueMode?: InstallmentValueMode;
 };
 
 export interface UserSettings {
