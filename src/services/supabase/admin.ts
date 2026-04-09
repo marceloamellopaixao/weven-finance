@@ -201,6 +201,38 @@ export async function supabaseUpsertRows(
   }
 }
 
+export async function supabasePatchByFilters(
+  table: string,
+  filters: Record<string, QueryValue>,
+  patch: Record<string, unknown>
+) {
+  const baseUrl = getSupabaseBaseUrl();
+  const serviceKey = getSupabaseServerKey();
+  const params = new URLSearchParams();
+
+  for (const [field, value] of Object.entries(filters)) {
+    if (value === undefined) continue;
+    params.set(field, toFilterValue(value));
+  }
+
+  const response = await fetch(`${baseUrl}/rest/v1/${table}?${params.toString()}`, {
+    method: "PATCH",
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(patch),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`supabase_patch_failed_${table}_${response.status}:${body}`);
+  }
+}
+
 export async function supabaseDeleteByFilters(
   table: string,
   filters: Record<string, QueryValue>
