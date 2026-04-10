@@ -222,7 +222,7 @@ export function CategoryManagerDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {/* Removemos o p-0 e max-h para controlar o scroll internamente de forma mais limpa */}
       <DialogContent className="rounded-3xl w-[calc(100vw-1rem)] max-w-2xl p-0 overflow-hidden bg-white dark:bg-zinc-950 border-none shadow-2xl">
-        <DialogHeader className="px-6 py-5 border-b bg-zinc-50/50 dark:bg-zinc-900/20">
+        <DialogHeader className="app-panel-subtle border-b px-6 py-5">
           <DialogTitle className="flex items-center gap-2 text-xl">
             <FolderTree className="h-5 w-5 text-violet-600" />
             Gerenciar Categorias
@@ -241,7 +241,7 @@ export function CategoryManagerDialog({
               <Plus className="h-4 w-4 text-violet-600" />
               Criar Nova Categoria
             </h3>
-            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 p-4 space-y-4">
+            <div className="app-panel-subtle space-y-4 rounded-2xl border p-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-zinc-500">Nível da categoria</Label>
@@ -329,7 +329,7 @@ export function CategoryManagerDialog({
                   const isEditing = editingCategoryName === cat.name;
 
                   return (
-                    <div key={cat.name} className={`group p-3 transition-colors ${isEditing ? 'bg-zinc-50 dark:bg-zinc-900/50' : 'hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30'}`}>
+                    <div key={cat.name} className={`group p-3 transition-colors ${isEditing ? 'app-panel-subtle' : 'hover:bg-accent/70'}`}>
                       {isEditing ? (
                         // MODO EDIÇÃO INLINE
                         <div className="flex flex-col sm:flex-row gap-2 animate-in fade-in zoom-in-95 duration-200">
