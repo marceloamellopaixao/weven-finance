@@ -62,10 +62,10 @@ const APPEARANCE_THEME_OPTIONS: Array<{
   description: string;
   icon: typeof Monitor;
 }> = [
-  { value: "system", label: "Seguir dispositivo", description: "Acompanha o tema do seu celular ou computador.", icon: Monitor },
-  { value: "light", label: "Claro", description: "Mais leve para ambientes claros e leitura prolongada.", icon: Sun },
-  { value: "dark", label: "Escuro", description: "Mais contraste visual e menos brilho no uso noturno.", icon: Moon },
-];
+    { value: "system", label: "Automático (sistema)", description: "Acompanha o tema do seu celular ou computador.", icon: Monitor },
+    { value: "light", label: "Claro", description: "Mais leve para ambientes claros e leitura prolongada.", icon: Sun },
+    { value: "dark", label: "Escuro", description: "Mais contraste visual e menos brilho no uso noturno.", icon: Moon },
+  ];
 
 const APPEARANCE_ACCENT_OPTIONS: Array<{
   value: AppearanceAccent;
@@ -73,12 +73,12 @@ const APPEARANCE_ACCENT_OPTIONS: Array<{
   description: string;
   swatchClass: string;
 }> = [
-  { value: "violet", label: "Roxo Weven", description: "A cor principal da identidade do app.", swatchClass: "from-violet-500 to-fuchsia-500" },
-  { value: "indigo", label: "Indigo", description: "Mais frio e discreto.", swatchClass: "from-indigo-500 to-blue-500" },
-  { value: "fuchsia", label: "Fuchsia", description: "Mais vibrante e premium.", swatchClass: "from-fuchsia-500 to-pink-500" },
-  { value: "emerald", label: "Emerald", description: "Mais limpo e fresco.", swatchClass: "from-emerald-500 to-teal-500" },
-  { value: "amber", label: "Amber", description: "Mais quente e chamativo.", swatchClass: "from-amber-500 to-orange-500" },
-];
+    { value: "violet", label: "Violet", description: "A cor principal da identidade do app.", swatchClass: "from-violet-500 to-fuchsia-500" },
+    { value: "indigo", label: "Indigo", description: "Mais frio e discreto.", swatchClass: "from-indigo-500 to-blue-500" },
+    { value: "fuchsia", label: "Fuchsia", description: "Mais vibrante e premium.", swatchClass: "from-fuchsia-500 to-pink-500" },
+    { value: "emerald", label: "Emerald", description: "Mais limpo e fresco.", swatchClass: "from-emerald-500 to-teal-500" },
+    { value: "amber", label: "Amber", description: "Mais quente e chamativo.", swatchClass: "from-amber-500 to-orange-500" },
+  ];
 
 export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode, refreshProfile } = useAuth();
@@ -288,8 +288,8 @@ export default function SettingsPage() {
     try {
       await updateAppearance((current) => ({ ...current, ...patch }));
     } catch (error) {
-      console.error("Erro ao salvar aparencia:", error);
-      showFeedback("error", "Falha ao aplicar aparencia", "Nao foi possivel salvar seu tema agora.");
+      console.error("Erro ao salvar aparência:", error);
+      showFeedback("error", "Falha ao aplicar aparência", "Não foi possível salvar seu tema agora.");
     } finally {
       setIsSavingAppearance(false);
     }
@@ -348,18 +348,18 @@ export default function SettingsPage() {
       setSupportMessage("");
       showFeedback(
         'success',
-        'Solicitacao Enviada',
-        `Nossa equipe de suporte entrara em contato em breve.${result.protocol ? ` Protocolo: ${result.protocol}.` : ''}`
+        'Solicitação Enviada',
+        `Nossa equipe de suporte entrará em contato em breve.${result.protocol ? ` Protocolo: ${result.protocol}.` : ''}`
       );
     } catch (error) {
-      console.error("Erro ao enviar solicitacao de suporte:", error);
+      console.error("Erro ao enviar solicitação de suporte:", error);
       showFeedback('error', 'Erro', 'Não foi possível enviar a solicitação. Tente novamente mais tarde.');
     } finally {
       setIsSendingSupport(false);
     }
   }; const handleSendFeature = async () => {
     if (!featureMessage.trim()) {
-      showFeedback('error', 'Campo Obrigatorio', 'Por favor, descreva sua ideia.');
+      showFeedback('error', 'Campo Obrigatório', 'Por favor, descreva sua ideia.');
       return;
     }
     if (!user) return;
@@ -377,7 +377,7 @@ export default function SettingsPage() {
       showFeedback(
         'success',
         'Ideia Recebida!',
-        `Obrigado por contribuir! Sua sugestao foi enviada para nosso time de produto.${result.protocol ? ` Protocolo: ${result.protocol}.` : ''}`
+        `Obrigado por contribuir! Sua sugestão foi enviada para nosso time de produto.${result.protocol ? ` Protocolo: ${result.protocol}.` : ''}`
       );
     } catch (error) {
       console.error(error);
@@ -389,7 +389,7 @@ export default function SettingsPage() {
 
   const handleStartCheckout = async (plan: "premium" | "pro") => {
     if (!user) {
-      showFeedback("error", "Sessao expirada", "Faca login novamente para continuar.");
+      showFeedback("error", "Sessão expirada", "Faça login novamente para continuar.");
       return;
     }
     if (isBillingExemptRole) {
@@ -722,15 +722,15 @@ export default function SettingsPage() {
                     <Label className="text-zinc-500">Nome Completo</Label>
                     <Input value={completeName} onChange={(e) => setCompleteName(e.target.value)} className="h-11 rounded-xl" />
                   </div>
-                    <div className="space-y-2">
-                      <Label className="text-zinc-500">Celular</Label>
-                      <Input
-                        value={formatPhone(phone)}
-                        onChange={(e) => setPhone(normalizePhone(e.target.value))}
-                        maxLength={15}
-                        className="h-11 rounded-xl"
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label className="text-zinc-500">Celular</Label>
+                    <Input
+                      value={formatPhone(phone)}
+                      onChange={(e) => setPhone(normalizePhone(e.target.value))}
+                      maxLength={15}
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
                   <div className="space-y-2">
                     <Label className="text-zinc-500">E-mail de Acesso</Label>
                     <Input defaultValue={effectiveProfileEmail || ""} disabled className="h-11 rounded-xl opacity-70 cursor-not-allowed" />
@@ -743,7 +743,7 @@ export default function SettingsPage() {
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 text-primary">
                         <Palette className="h-4 w-4" />
-                        <p className="text-sm font-semibold">Aparencia do app</p>
+                        <p className="text-sm font-semibold">Aparência do app</p>
                       </div>
                       <p className="text-sm text-zinc-500">
                         Escolha o tema geral e a cor principal para os campos, focos e destaques do app.
@@ -752,7 +752,7 @@ export default function SettingsPage() {
                     {isSavingAppearance || appearanceLoading ? (
                       <div className="inline-flex items-center gap-2 text-xs text-zinc-500">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Salvando preferencia...
+                        Salvando preferência...
                       </div>
                     ) : null}
                   </div>
@@ -771,11 +771,10 @@ export default function SettingsPage() {
                               type="button"
                               onClick={() => void handleAppearanceChange({ themeMode: option.value })}
                               disabled={appearanceLoading || isSavingAppearance}
-                              className={`rounded-2xl border p-4 text-left transition-all ${
-                                selected
-                                  ? "border-primary/35 bg-primary/10 ring-2 ring-primary/15"
-                                  : "app-panel-subtle hover:border-primary/25 hover:bg-primary/5"
-                              }`}
+                              className={`rounded-2xl border p-4 text-left transition-all ${selected
+                                ? "border-primary/35 bg-primary/10 ring-2 ring-primary/15"
+                                : "app-panel-subtle hover:border-primary/25 hover:bg-primary/5"
+                                }`}
                             >
                               <div className="flex items-center gap-2">
                                 <div className={`inline-flex h-9 w-9 items-center justify-center rounded-2xl ${selected ? "bg-primary text-primary-foreground" : "app-panel-subtle text-zinc-600 dark:text-zinc-300"}`}>
@@ -802,11 +801,10 @@ export default function SettingsPage() {
                               type="button"
                               onClick={() => void handleAppearanceChange({ accent: option.value })}
                               disabled={appearanceLoading || isSavingAppearance}
-                              className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition-all ${
-                                selected
-                                  ? "border-primary/35 bg-primary/10 ring-2 ring-primary/15"
-                                  : "app-panel-subtle hover:border-primary/25 hover:bg-primary/5"
-                              }`}
+                              className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition-all ${selected
+                                ? "border-primary/35 bg-primary/10 ring-2 ring-primary/15"
+                                : "app-panel-subtle hover:border-primary/25 hover:bg-primary/5"
+                                }`}
                             >
                               <div className={`h-10 w-10 rounded-2xl bg-linear-to-br ${option.swatchClass}`} />
                               <div className="min-w-0">
@@ -875,13 +873,12 @@ export default function SettingsPage() {
           {activeTab === "billing" && (
             <div id="tour-settings-panel" className={`${fadeInUp} delay-200 space-y-6`}>
               <Card
-                className={`border-none shadow-xl rounded-3xl relative overflow-hidden text-white flex flex-col justify-center min-h-2.5 ${
-                  effectivePlan === "free"
-                    ? "bg-linear-to-br from-amber-700 to-amber-900 shadow-amber-700/30"
-                    : effectivePlan === "premium"
-                      ? "bg-linear-to-br from-slate-600 to-slate-800 shadow-slate-500/30"
-                      : "bg-linear-to-br from-yellow-500 to-amber-600 shadow-yellow-500/30"
-                }`}
+                className={`border-none shadow-xl rounded-3xl relative overflow-hidden text-white flex flex-col justify-center min-h-2.5 ${effectivePlan === "free"
+                  ? "bg-linear-to-br from-amber-700 to-amber-900 shadow-amber-700/30"
+                  : effectivePlan === "premium"
+                    ? "bg-linear-to-br from-slate-600 to-slate-800 shadow-slate-500/30"
+                    : "bg-linear-to-br from-yellow-500 to-amber-600 shadow-yellow-500/30"
+                  }`}
               >
                 <div className="absolute top-0 right-0 p-40 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
                 <CardHeader className="relative z-10 flex-1 flex items-center">
@@ -974,7 +971,7 @@ export default function SettingsPage() {
 
                       {/* Renovação */}
                       <Badge className="bg-white/10 backdrop-blur-md text-white border-none flex gap-2 items-center px-3 py-1.5 text-xs">
-                        {(isBillingExemptRole || effectivePaymentStatus === 'paid' ) ? (
+                        {(isBillingExemptRole || effectivePaymentStatus === 'paid') ? (
                           <>
                             <RefreshCw className="h-4 w-4 text-white/70" /> Renovação Automática
                           </>
@@ -1041,12 +1038,12 @@ export default function SettingsPage() {
                         {isAutoReconcilingBilling
                           ? "Verificando automaticamente..."
                           : isConfirmingPreapproval
-                          ? "Validando pagamento..."
-                          : isOpeningCheckout
-                            ? "Abrindo checkout..."
-                            : effectivePaymentStatus === "pending"
-                              ? "Verificar assinatura novamente"
-                              : "Regularizar pagamento agora"}
+                            ? "Validando pagamento..."
+                            : isOpeningCheckout
+                              ? "Abrindo checkout..."
+                              : effectivePaymentStatus === "pending"
+                                ? "Verificar assinatura novamente"
+                                : "Regularizar pagamento agora"}
                       </Button>
                     </div>
                   )}
@@ -1160,31 +1157,72 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="grid gap-6 md:grid-cols-2">
-                  {effectivePlan !== 'premium' && (
-                    <Card className="app-panel-soft relative overflow-hidden h-full flex flex-col border-2 border-slate-300/40 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300">
-                      <div className="absolute top-0 left-0 w-full h-1 bg-slate-400" />
+                    {effectivePlan !== 'premium' && (
+                      <Card className="app-panel-soft relative overflow-hidden h-full flex flex-col border-2 border-slate-300/40 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-slate-400" />
+                        <CardHeader className="flex-1">
+                          <CardTitle className="flex justify-between items-center">
+                            <span className="flex items-center gap-2">
+                              <Medal className="h-5 w-5 text-slate-500" /> Premium · Organizar
+                            </span>
+                            <span className="text-xl font-bold text-zinc-900 dark:text-white">
+                              R$ {plans.premium.price.toFixed(2).toString().replace(".", ",")}
+                            </span>
+                          </CardTitle>
+                          <CardDescription>
+                            {plans.premium.description}
+                          </CardDescription>
+                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                            Ideal para quem quer parar de se perder em cartões, parcelas e vencimentos.
+                          </p>
+                          <nav>
+                            {plans.premium.features &&
+                              (
+                                <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
+                                  {plans.premium.features.map((feature, index) => (
+                                    <li key={index} className="flex items-center gap-2">
+                                      <CheckCircle2 className="h-4 w-4 text-slate-500" /> {feature}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                          </nav>
+                        </CardHeader>
+                        <CardFooter className="mt-auto">
+                          <Button
+                            onClick={() => handleStartCheckout("premium")}
+                            disabled={isOpeningCheckout === "premium"}
+                            className="w-full h-11 rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-lg shadow-slate-500/20 hover:cursor-pointer transition-all active:scale-[0.98]"
+                          >
+                            {isOpeningCheckout === "premium" ? "Abrindo checkout..." : "Ir para o Premium"}
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    )}
+                    <Card className="app-panel-soft relative overflow-hidden h-full flex flex-col border-2 border-yellow-300/40 dark:border-yellow-700/30 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300">
+                      <div className="absolute top-0 left-0 w-full h-1 bg-yellow-400" />
                       <CardHeader className="flex-1">
                         <CardTitle className="flex justify-between items-center">
                           <span className="flex items-center gap-2">
-                            <Medal className="h-5 w-5 text-slate-500" /> Premium · Organizar
+                            <Medal className="h-5 w-5 text-yellow-500" /> Pro · Decidir
                           </span>
                           <span className="text-xl font-bold text-zinc-900 dark:text-white">
-                            R$ {plans.premium.price.toFixed(2).toString().replace(".", ",")}
+                            R$ {plans.pro.price.toFixed(2).toString().replace(".", ",")}
                           </span>
                         </CardTitle>
                         <CardDescription>
-                          {plans.premium.description}
+                          {plans.pro.description}
                         </CardDescription>
-                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                          Ideal para quem quer parar de se perder em cartões, parcelas e vencimentos.
+                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-yellow-600">
+                          Ideal para quem quer direção prática no dia a dia, não só histórico do mês.
                         </p>
                         <nav>
-                          {plans.premium.features &&
+                          {plans.pro.features &&
                             (
                               <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
-                                {plans.premium.features.map((feature, index) => (
+                                {plans.pro.features.map((feature, index) => (
                                   <li key={index} className="flex items-center gap-2">
-                                    <CheckCircle2 className="h-4 w-4 text-slate-500" /> {feature}
+                                    <CheckCircle2 className="h-4 w-4 text-yellow-500" /> {feature}
                                   </li>
                                 ))}
                               </ul>
@@ -1193,57 +1231,16 @@ export default function SettingsPage() {
                       </CardHeader>
                       <CardFooter className="mt-auto">
                         <Button
-                          onClick={() => handleStartCheckout("premium")}
-                          disabled={isOpeningCheckout === "premium"}
-                          className="w-full h-11 rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-lg shadow-slate-500/20 hover:cursor-pointer transition-all active:scale-[0.98]"
+                          onClick={() => handleStartCheckout("pro")}
+                          disabled={isOpeningCheckout === "pro"}
+                          variant="outline"
+                          className="w-full h-11 rounded-xl border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 hover:cursor-pointer transition-all active:scale-[0.98]"
                         >
-                          {isOpeningCheckout === "premium" ? "Abrindo checkout..." : "Ir para o Premium"}
+                          {isOpeningCheckout === "pro" ? "Abrindo checkout..." : "Ir para o Pro"}
                         </Button>
                       </CardFooter>
                     </Card>
-                  )}
-                  <Card className="app-panel-soft relative overflow-hidden h-full flex flex-col border-2 border-yellow-300/40 dark:border-yellow-700/30 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-yellow-400" />
-                    <CardHeader className="flex-1">
-                      <CardTitle className="flex justify-between items-center">
-                        <span className="flex items-center gap-2">
-                          <Medal className="h-5 w-5 text-yellow-500" /> Pro · Decidir
-                        </span>
-                        <span className="text-xl font-bold text-zinc-900 dark:text-white">
-                          R$ {plans.pro.price.toFixed(2).toString().replace(".", ",")}
-                        </span>
-                      </CardTitle>
-                      <CardDescription>
-                        {plans.pro.description}
-                      </CardDescription>
-                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-yellow-600">
-                        Ideal para quem quer direção prática no dia a dia, não só histórico do mês.
-                      </p>
-                      <nav>
-                        {plans.pro.features &&
-                          (
-                            <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
-                              {plans.pro.features.map((feature, index) => (
-                                <li key={index} className="flex items-center gap-2">
-                                  <CheckCircle2 className="h-4 w-4 text-yellow-500" /> {feature}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                      </nav>
-                    </CardHeader>
-                    <CardFooter className="mt-auto">
-                      <Button
-                        onClick={() => handleStartCheckout("pro")}
-                        disabled={isOpeningCheckout === "pro"}
-                        variant="outline"
-                        className="w-full h-11 rounded-xl border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 hover:cursor-pointer transition-all active:scale-[0.98]"
-                      >
-                        {isOpeningCheckout === "pro" ? "Abrindo checkout..." : "Ir para o Pro"}
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -1323,14 +1320,14 @@ export default function SettingsPage() {
                     <PlayCircle className="h-6 w-6" /> Tutorial Interativo
                   </CardTitle>
                   <CardDescription className="text-zinc-600 dark:text-zinc-400">
-                    Escolha as partes do guia que voce quer rever e monte um tour sob medida.
+                    Escolha as partes do guia que você quer rever e monte um tour sob medida.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="-mt-4">
                   <div className="app-panel-subtle flex flex-col items-center justify-between gap-4 rounded-2xl border border-color:var(--app-panel-border) p-6 shadow-sm sm:flex-row">
                     <div className="space-y-1">
                       <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tour da plataforma</h4>
-                      <p className="text-sm text-zinc-500">Escolha entre ver tudo ou apenas dashboard, configuracoes, lancamentos, cartoes e metas.</p>
+                      <p className="text-sm text-zinc-500">Escolha entre ver tudo ou apenas dashboard, configurações, lançamentos, cartões e metas.</p>
                     </div>
                     <Button
                       onClick={handleReplayTour}
@@ -1348,14 +1345,14 @@ export default function SettingsPage() {
                     <Sparkles className="h-6 w-6" /> Explorar o App
                   </CardTitle>
                   <CardDescription className="text-zinc-600 dark:text-zinc-400">
-                    Veja o que cada area faz e personalize a barra rapida com os atalhos que fazem mais sentido para voce.
+                    Veja o que cada área faz e personalize a barra rápida com os atalhos que fazem mais sentido para você.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="-mt-4">
                   <div className="app-panel-subtle flex flex-col items-center justify-between gap-4 rounded-2xl border border-color:var(--app-panel-border) p-6 shadow-sm sm:flex-row">
                     <div className="space-y-1">
                       <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tela de funcionalidades e atalhos</h4>
-                      <p className="text-sm text-zinc-500">Acesse a visao geral das paginas e ajuste a barra rapida do seu jeito.</p>
+                      <p className="text-sm text-zinc-500">Acesse a visão geral das páginas e ajuste a barra rápida do seu jeito.</p>
                     </div>
                     <Button
                       type="button"
@@ -1616,16 +1613,16 @@ export default function SettingsPage() {
           <DialogContent className="w-[calc(100vw-1rem)] max-w-[425px] rounded-3xl p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="text-red-600 flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" /> Tem certeza absoluta
+                <AlertTriangle className="h-5 w-5" /> Tem certeza absoluta?
               </DialogTitle>
               <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
-                Esta ação não pode ser desfeita.
+                Esta ação não pode ser desfeita!
               </DialogDescription>
               <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
                 Sua conta será encerrada imediatamente e este acesso não poderá mais ser utilizado.
               </DialogDescription>
               <DialogDescription className="pt-3 text-sm text-zinc-600 dark:text-zinc-400">
-                Seus dados ficam indisponiveis por ate {ACCOUNT_DELETION_GRACE_DAYS} dias para corrigir exclusoes acidentais. Apos esse prazo, a exclusao permanente acontece automaticamente.
+                Seus dados ficam indisponíveis por até {ACCOUNT_DELETION_GRACE_DAYS} dias para corrigir exclusões acidentais. Após esse prazo, a exclusão permanente acontece automaticamente.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 mt-4">
@@ -1638,7 +1635,7 @@ export default function SettingsPage() {
                 onClick={handleDeleteAccount}
                 disabled={isDeleting}
                 className="rounded-xl h-10 w-full sm:w-auto bg-red-600 hover:bg-red-700 hover:cursor-pointer transition-all duration-200">
-                {isDeleting ? "Excluindo..." : "Sim, excluir conta"}
+                {isDeleting ? "Excluindo..." : "Sim, excluir conta!"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1657,7 +1654,12 @@ export default function SettingsPage() {
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })} className="w-full rounded-xl hover:cursor-pointer transition-all duration-200">Entendido</Button>
+              <Button
+                onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })}
+                className="w-full rounded-xl hover:cursor-pointer transition-all duration-200"
+              >
+                Entendido
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
