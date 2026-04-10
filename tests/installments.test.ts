@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { buildInstallmentPlan } from "@/lib/transactions/installments";
 
 test("buildInstallmentPlan divides total amount across installments", () => {
-  const plan = buildInstallmentPlan(100, 3, "divide_total");
+  const plan = buildInstallmentPlan(100, 3, "split_total");
 
   assert.equal(plan.count, 3);
   assert.equal(plan.totalAmount, 100);

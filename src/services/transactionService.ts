@@ -321,7 +321,7 @@ export const subscribeToTransactions = (
 export const addTransaction = async (uid: string, tx: CreateTransactionDTO & { isRecurring?: boolean }) => {
   const cryptoUid = resolveCryptoUid(uid);
   const installmentPlan = tx.isInstallment
-    ? buildInstallmentPlan(tx.amount, tx.installmentsCount, tx.installmentValueMode || "divide_total")
+    ? buildInstallmentPlan(tx.amount, tx.installmentsCount, tx.installmentValueMode || "split_total")
     : null;
   const count = installmentPlan
     ? installmentPlan.count

@@ -78,7 +78,7 @@ export default function NewTransactionPage() {
   // Controles de Tipo de Cobrança (Com suas correções mantidas)
   const [isInstallment, setIsInstallment] = useState(false);
   const [installmentsCount, setInstallmentsCount] = useState("2");
-  const [installmentValueMode, setInstallmentValueMode] = useState<InstallmentValueMode>("divide_total");
+  const [installmentValueMode, setInstallmentValueMode] = useState<InstallmentValueMode>("split_total");
   const [isRecurring, setIsRecurring] = useState(false);
 
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
@@ -140,7 +140,7 @@ export default function NewTransactionPage() {
         if (typeof draft.dueDate === "string") setDueDate(draft.dueDate);
         if (typeof draft.isInstallment === "boolean") setIsInstallment(draft.isInstallment);
         if (typeof draft.installmentsCount === "string") setInstallmentsCount(draft.installmentsCount);
-        if (draft.installmentValueMode === "divide_total" || draft.installmentValueMode === "repeat_value") {
+        if (draft.installmentValueMode === "split_total" || draft.installmentValueMode === "repeat_value") {
           setInstallmentValueMode(draft.installmentValueMode);
         }
         if (typeof draft.isRecurring === "boolean") setIsRecurring(draft.isRecurring);
@@ -436,7 +436,7 @@ export default function NewTransactionPage() {
             </div>
             <p className="mt-3 text-sm text-zinc-500">
               {isInstallment
-                ? installmentValueMode === "divide_total"
+                ? installmentValueMode === "split_total"
                   ? "Voce informa o valor total e o sistema divide automaticamente entre as parcelas."
                   : "Voce informa o valor de cada parcela e o sistema repete esse valor nas proximas parcelas."
                 : isRecurring
@@ -653,8 +653,8 @@ export default function NewTransactionPage() {
                           </div>
                           <Switch
                             id="installment-split-mode"
-                            checked={installmentValueMode === "divide_total"}
-                            onCheckedChange={(checked) => setInstallmentValueMode(checked ? "divide_total" : "repeat_value")}
+                            checked={installmentValueMode === "split_total"}
+                            onCheckedChange={(checked) => setInstallmentValueMode(checked ? "split_total" : "repeat_value")}
                           />
                         </div>
                       </div>

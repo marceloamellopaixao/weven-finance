@@ -12,7 +12,7 @@ export type InstallmentPlan = {
 export function buildInstallmentPlan(
   amount: number,
   count: number,
-  mode: InstallmentValueMode = "divide_total"
+  mode: InstallmentValueMode = "split_total"
 ): InstallmentPlan {
   const safeCount = Math.max(1, Math.floor(Number(count || 1)));
   const safeAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;

@@ -221,7 +221,7 @@ export default function DashboardPage() {
   const [isInstallment, setIsInstallment] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
   const [installmentsCount, setInstallmentsCount] = useState("2");
-  const [installmentValueMode, setInstallmentValueMode] = useState<InstallmentValueMode>("divide_total");
+  const [installmentValueMode, setInstallmentValueMode] = useState<InstallmentValueMode>("split_total");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Modais
@@ -819,7 +819,7 @@ export default function DashboardPage() {
       setIsInstallment(false);
       setIsRecurring(false);
       setInstallmentsCount("2");
-      setInstallmentValueMode("divide_total");
+      setInstallmentValueMode("split_total");
       if (isCardPayment) setSelectedPaymentCardId("");
       if (type === 'income') setCategory("Salário");
       setIsFormOpen(false); // Fecha o modal após adicionar
@@ -1139,7 +1139,7 @@ export default function DashboardPage() {
           </div>
           <p className="text-[10px] text-zinc-400 mt-1.5 text-right font-medium">
             {isInstallment
-              ? installmentValueMode === "divide_total"
+              ? installmentValueMode === "split_total"
                 ? "O sistema vai dividir este total pelas parcelas."
                 : "O valor digitado sera repetido em cada parcela."
               : isRecurring
@@ -1318,8 +1318,8 @@ export default function DashboardPage() {
                 </div>
                 <Switch
                   id="dashboard-installment-split-mode"
-                  checked={installmentValueMode === "divide_total"}
-                  onCheckedChange={(checked) => setInstallmentValueMode(checked ? "divide_total" : "repeat_value")}
+                  checked={installmentValueMode === "split_total"}
+                  onCheckedChange={(checked) => setInstallmentValueMode(checked ? "split_total" : "repeat_value")}
                 />
               </div>
             </div>
