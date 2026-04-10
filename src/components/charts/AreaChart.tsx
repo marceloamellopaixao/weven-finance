@@ -67,7 +67,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 const AreaChartComponent = ({ data }: { data: ChartData[] }) => {
   if (!data || data.length === 0) {
     return (
-      <div className="h-[300px] w-full flex flex-col items-center justify-center text-zinc-400 bg-zinc-50/50 dark:bg-zinc-900/50 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 animate-in fade-in">
+      <div className="app-panel-subtle flex h-[300px] w-full flex-col items-center justify-center rounded-2xl border border-dashed text-zinc-400 animate-in fade-in">
         <p className="text-sm font-medium">Nenhum dado financeiro para exibir.</p>
       </div>
     );
