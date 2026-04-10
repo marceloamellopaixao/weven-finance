@@ -25,10 +25,48 @@ const formatDateTime = (value?: string) => {
 };
 
 const getPiggyErrorMessage = (message?: string | null) => {
-  if (!message) return "Não foi possível carregar o porquinho.";
-  if (message === "piggy_bank_not_found") return "Esse porquinho não existe mais ou foi removido.";
+  if (!message) return "Nao foi possivel carregar a meta.";
+  if (message === "piggy_bank_not_found") return "Essa meta nao existe mais ou foi removida.";
   return message;
 };
+
+function PiggyDetailSkeleton() {
+  return (
+    <div className="min-h-[70vh] bg-transparent p-3 sm:p-6 md:p-8">
+      <div className="mx-auto max-w-5xl animate-pulse space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-3">
+            <div className="h-8 w-56 rounded-2xl bg-primary/12" />
+            <div className="h-4 w-72 rounded-xl bg-muted" />
+          </div>
+          <div className="h-10 w-32 rounded-xl bg-muted" />
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
+          <div className="rounded-3xl border border-border/70 bg-card p-6 shadow-sm">
+            <div className="h-6 w-40 rounded-xl bg-muted" />
+            <div className="mt-5 h-10 w-44 rounded-xl bg-muted" />
+            <div className="mt-5 space-y-3">
+              <div className="h-16 rounded-2xl bg-muted" />
+              <div className="h-16 rounded-2xl bg-muted" />
+            </div>
+          </div>
+          <div className="rounded-3xl border border-border/70 bg-card p-6 shadow-sm">
+            <div className="h-6 w-28 rounded-xl bg-muted" />
+            <div className="mt-5 space-y-3">
+              {[0, 1, 2].map((item) => (
+                <div key={item} className="rounded-2xl border border-border/70 bg-background/80 p-4">
+                  <div className="h-4 w-24 rounded-xl bg-muted" />
+                  <div className="mt-3 h-3 w-44 rounded-xl bg-muted" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function PiggyBankDetailPage() {
   const params = useParams<{ slug: string }>();
@@ -75,9 +113,7 @@ export default function PiggyBankDetailPage() {
   }, [slug]);
 
   const totalEntries = useMemo(() => detail?.history.length || 0, [detail]);
-  const parsedAdjustAmount = useMemo(() => {
-    return parseCurrencyInput(adjustAmount);
-  }, [adjustAmount]);
+  const parsedAdjustAmount = useMemo(() => parseCurrencyInput(adjustAmount), [adjustAmount]);
 
   const handleEdit = async () => {
     if (!detail) return;
@@ -134,33 +170,21 @@ export default function PiggyBankDetailPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-[70vh] bg-zinc-50/40 p-3 sm:p-6 md:p-8">
-        <div className="mx-auto flex min-h-[55vh] max-w-5xl items-center justify-center">
-          <Card className="w-full max-w-md rounded-3xl border-zinc-200">
-            <CardContent className="flex min-h-56 flex-col items-center justify-center gap-3 p-8 text-center">
-              <PiggyBankIcon className="h-10 w-10 text-violet-600" />
-              <p className="text-base font-semibold text-zinc-900">Carregando porquinho</p>
-              <p className="text-sm text-zinc-500">Buscando os dados e o histórico deste objetivo.</p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
+    return <PiggyDetailSkeleton />;
   }
 
   if (error || !detail) {
     return (
-      <div className="min-h-[70vh] bg-zinc-50/40 p-3 sm:p-6 md:p-8">
+      <div className="min-h-[70vh] bg-transparent p-3 sm:p-6 md:p-8">
         <div className="mx-auto flex min-h-[55vh] max-w-5xl items-center justify-center">
-          <Card className="w-full max-w-md rounded-3xl border-red-200 bg-white">
+          <Card className="w-full max-w-md rounded-3xl border border-red-200 bg-card shadow-sm">
             <CardContent className="flex min-h-56 flex-col items-center justify-center gap-4 p-8 text-center">
               <PiggyBankIcon className="h-10 w-10 text-red-500" />
               <div className="space-y-2">
-                <p className="text-lg font-semibold text-zinc-900">Porquinho indisponível</p>
-                <p className="text-sm text-red-600">{error || "Porquinho não encontrado."}</p>
+                <p className="text-lg font-semibold text-foreground">Meta indisponivel</p>
+                <p className="text-sm text-red-600">{error || "Meta nao encontrada."}</p>
               </div>
-              <Button variant="outline" className="rounded-xl" onClick={() => router.push("/piggy-bank")}>
+              <Button variant="outline" className="rounded-xl border-border/70 bg-card" onClick={() => router.push("/piggy-bank")}>
                 <ArrowLeft className="mr-1 h-4 w-4" />
                 Voltar
               </Button>
@@ -172,18 +196,18 @@ export default function PiggyBankDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50/40 p-3 sm:p-6 md:p-8">
+    <div className="min-h-screen bg-transparent p-3 sm:p-6 md:p-8">
       <div className="mx-auto max-w-5xl space-y-6">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold text-zinc-900 md:text-3xl">
-              <PiggyBankIcon className="h-7 w-7 text-violet-600" />
+            <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground md:text-3xl">
+              <PiggyBankIcon className="h-7 w-7 text-primary" />
               {detail.name}
             </h1>
-            <p className="mt-1 text-sm text-zinc-500">Acompanhamento do total guardado e do histórico deste porquinho.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Acompanhamento do total guardado e do historico desta meta.</p>
           </div>
           <Link href="/piggy-bank">
-            <Button variant="outline" className="rounded-xl">
+            <Button variant="outline" className="rounded-xl border-border/70 bg-card">
               <ArrowLeft className="mr-1 h-4 w-4" />
               Voltar
             </Button>
@@ -191,69 +215,84 @@ export default function PiggyBankDetailPage() {
         </div>
 
         {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
         )}
 
-        <div className="flex flex-wrap gap-3">
-          <Button variant="outline" className="rounded-xl" onClick={() => setIsAdjustOpen(true)}>
-            <WalletCards className="mr-2 h-4 w-4" />
-            Adicionar ou Retirar Valor
-          </Button>
-          <Button variant="outline" className="rounded-xl" onClick={() => setIsEditOpen(true)}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Editar Porquinho
-          </Button>
-          <Button variant="destructive" className="rounded-xl" onClick={() => setIsDeleteOpen(true)}>
-            <Trash2 className="mr-2 h-4 w-4" />
-            Excluir
-          </Button>
+        <div className="grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
+          <Card className="rounded-3xl border border-border/70 bg-card shadow-sm">
+            <CardHeader>
+              <CardTitle>Total guardado</CardTitle>
+              <CardDescription>Resumo atual desta meta.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div>
+                <p className="text-3xl font-bold text-emerald-600">{formatCurrency(detail.totalSaved)}</p>
+              </div>
+
+              <div className="grid gap-3">
+                <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Retirada</p>
+                  <p className="mt-2 font-semibold text-foreground">{detail.withdrawalMode || "Nao informado"}</p>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Rendimento</p>
+                  <p className="mt-2 font-semibold text-foreground">{detail.yieldType || "Nao informado"}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-border/70 pt-4">
+                <Button variant="outline" className="rounded-xl border-border/70 bg-card" onClick={() => setIsAdjustOpen(true)}>
+                  <WalletCards className="mr-2 h-4 w-4" />
+                  Adicionar ou retirar valor
+                </Button>
+                <Button variant="outline" className="rounded-xl border-border/70 bg-card" onClick={() => setIsEditOpen(true)}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Editar meta
+                </Button>
+                <Button variant="destructive" className="rounded-xl" onClick={() => setIsDeleteOpen(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Excluir
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-3xl border border-border/70 bg-card shadow-sm">
+            <CardHeader>
+              <CardTitle>Historico</CardTitle>
+              <CardDescription>{totalEntries} movimentacao(oes) registrada(s).</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {detail.history.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border/70 bg-background/70 p-5 text-sm text-muted-foreground">
+                  Ainda nao ha movimentacoes nesta meta.
+                </div>
+              ) : (
+                detail.history.map((entry) => (
+                  <div key={entry.id} className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="font-semibold text-foreground">{formatCurrency(entry.amount)}</p>
+                      <p className="text-xs text-muted-foreground">{formatDateTime(entry.createdAt)}</p>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      <span>Origem: {entry.sourceType === "cash" ? "Dinheiro vivo" : "Saldo em banco"}</span>
+                      {entry.withdrawalMode && <span>Retirada: {entry.withdrawalMode}</span>}
+                      {entry.yieldType && <span>Rendimento: {entry.yieldType}</span>}
+                      {entry.appliedToCardLimit && <span>Aplicado no limite do cartao</span>}
+                      {entry.cardLabel && <span>Cartao: {entry.cardLabel}</span>}
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
         </div>
 
-        <Card className="rounded-3xl">
-          <CardHeader>
-            <CardTitle>Total Guardado</CardTitle>
-            <CardDescription>Resumo atual do porquinho selecionado.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-3xl font-bold text-emerald-600">{formatCurrency(detail.totalSaved)}</p>
-            {detail.withdrawalMode && <p className="text-sm text-zinc-600">Modalidade de retirada: {detail.withdrawalMode}</p>}
-            {detail.yieldType && <p className="text-sm text-zinc-600">Tipo de rendimento: {detail.yieldType}</p>}
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-3xl">
-          <CardHeader>
-            <CardTitle>Histórico</CardTitle>
-            <CardDescription>{totalEntries} movimentação(ões) registrada(s).</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {detail.history.length === 0 ? (
-              <p className="text-sm text-zinc-500">Ainda não há movimentações neste porquinho.</p>
-            ) : (
-              detail.history.map((entry) => (
-                <div key={entry.id} className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-zinc-900">{formatCurrency(entry.amount)}</p>
-                    <p className="text-xs text-zinc-500">{formatDateTime(entry.createdAt)}</p>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-zinc-600">
-                    <span>Origem: {entry.sourceType === "cash" ? "Dinheiro Vivo" : "Saldo em Banco"}</span>
-                    {entry.withdrawalMode && <span>Retirada: {entry.withdrawalMode}</span>}
-                    {entry.yieldType && <span>Rendimento: {entry.yieldType}</span>}
-                    {entry.appliedToCardLimit && <span>Aplicado no limite do cartão</span>}
-                    {entry.cardLabel && <span>Cartão: {entry.cardLabel}</span>}
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
         <Dialog open={isAdjustOpen} onOpenChange={setIsAdjustOpen}>
-          <DialogContent className="rounded-2xl">
+          <DialogContent className="rounded-2xl border border-border/70 bg-card">
             <DialogHeader>
-              <DialogTitle>Ajustar saldo do porquinho</DialogTitle>
-              <DialogDescription>Você pode adicionar mais valor ou retirar parte do saldo guardado.</DialogDescription>
+              <DialogTitle>Ajustar saldo da meta</DialogTitle>
+              <DialogDescription>Adicione mais valor ou retire parte do total guardado.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -270,16 +309,16 @@ export default function PiggyBankDetailPage() {
                 <Label>Valor</Label>
                 <Input value={adjustAmount} onChange={(e) => setAdjustAmount(formatCurrencyInput(e.target.value))} placeholder="R$ 0,00" inputMode="decimal" />
                 {adjustDirection === "withdraw" && (
-                  <p className="text-xs text-zinc-500">Saldo disponível para retirada: {formatCurrency(detail.totalSaved)}</p>
+                  <p className="text-xs text-muted-foreground">Saldo disponivel para retirada: {formatCurrency(detail.totalSaved)}</p>
                 )}
               </div>
               <div className="space-y-2">
-                <Label>Origem/Destino</Label>
+                <Label>Origem ou destino</Label>
                 <Select value={adjustSourceType} onValueChange={(value) => setAdjustSourceType(value as "bank" | "cash")}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="bank">Saldo em Banco</SelectItem>
-                    <SelectItem value="cash">Dinheiro Vivo</SelectItem>
+                    <SelectItem value="bank">Saldo em banco</SelectItem>
+                    <SelectItem value="cash">Dinheiro vivo</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -294,10 +333,10 @@ export default function PiggyBankDetailPage() {
         </Dialog>
 
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent className="rounded-2xl">
+          <DialogContent className="rounded-2xl border border-border/70 bg-card">
             <DialogHeader>
-              <DialogTitle>Editar porquinho</DialogTitle>
-              <DialogDescription>Atualize o nome e as informações complementares deste porquinho.</DialogDescription>
+              <DialogTitle>Editar meta</DialogTitle>
+              <DialogDescription>Atualize o nome e as informacoes complementares desta reserva.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -316,24 +355,24 @@ export default function PiggyBankDetailPage() {
             <DialogFooter>
               <Button variant="ghost" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
               <Button onClick={handleEdit} disabled={isSubmitting || !editName.trim()}>
-                {isSubmitting ? "Salvando..." : "Salvar alterações"}
+                {isSubmitting ? "Salvando..." : "Salvar alteracoes"}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
         <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-          <DialogContent className="rounded-2xl">
+          <DialogContent className="rounded-2xl border border-border/70 bg-card">
             <DialogHeader>
-              <DialogTitle>Excluir porquinho</DialogTitle>
+              <DialogTitle>Excluir meta</DialogTitle>
               <DialogDescription>
-                Essa ação remove o porquinho, o histórico dele e desfaz vínculos aplicados, como aumento de limite em cartão.
+                Essa acao remove a meta, o historico dela e desfaz vinculos aplicados, como aumento de limite em cartao.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setIsDeleteOpen(false)}>Cancelar</Button>
               <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>
-                {isSubmitting ? "Excluindo..." : "Excluir porquinho"}
+                {isSubmitting ? "Excluindo..." : "Excluir meta"}
               </Button>
             </DialogFooter>
           </DialogContent>
