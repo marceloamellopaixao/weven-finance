@@ -691,7 +691,7 @@ export default function CreditCardPage() {
                   <p className="text-[13px] font-semibold tracking-wider">DIA {input.dueDate}</p>
                 </>
               ) : (
-                <p className={`text-[11px] font-semibold ${theme.muted}`}>VÁLIDO ATÉ 12/40</p>
+                <p className={`text-[11px] font-semibold ${theme.muted}`}>Vencimento Dia 10</p>
               )}
             </div>
           </div>
