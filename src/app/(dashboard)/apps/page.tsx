@@ -301,7 +301,7 @@ export default function AppsPage() {
                     >
                       <div
                         aria-hidden="true"
-                        className={`mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors ${
+                        className={`mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-lg border transition-colors ${
                           isSelected
                             ? "border-primary bg-primary text-primary-foreground"
                             : "border-primary/35 bg-background/70 text-transparent"
