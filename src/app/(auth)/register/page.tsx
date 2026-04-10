@@ -41,13 +41,14 @@ export default function RegisterPage() {
     setError("");
 
     if (!displayName) return setError("Por favor, insira um apelido para o dashboard.");
-    if (!phone) return setError("Por favor, insira seu numero de celular/telefone.");
+    if (!phone) return setError("Por favor, insira seu número de celular/telefone.");
+    if (phone.replace(/\D/g, "").length < 10) return setError("Por favor, insira um número de celular/telefone válido.");
     if (!completeName) return setError("Por favor, insira seu nome completo.");
     if (!email) return setError("Por favor, insira seu e-mail.");
     if (!password) return setError("Por favor, insira sua senha.");
     if (!confirmPassword) return setError("Por favor, confirme sua senha.");
-    if (password !== confirmPassword) return setError("As senhas nao coincidem.");
-    if (password.length < 6) return setError("A senha deve ter no minimo 6 caracteres.");
+    if (password !== confirmPassword) return setError("As senhas não coincidem.");
+    if (password.length < 6) return setError("A senha deve ter no mínimo 6 caracteres.");
 
     setIsLoading(true);
     try {
@@ -80,7 +81,7 @@ export default function RegisterPage() {
             </p>
             {pendingUpgradePlan && (
               <p className="text-xs font-medium text-primary">
-                Depois do cadastro, vamos continuar na contratacao do plano {pendingUpgradePlan === "premium" ? "Premium" : "Pro"}.
+                Depois do cadastro, vamos continuar na contratação do plano {pendingUpgradePlan === "premium" ? "Premium" : "Pro"}.
               </p>
             )}
           </div>
