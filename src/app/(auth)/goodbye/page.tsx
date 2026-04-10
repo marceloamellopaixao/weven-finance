@@ -240,7 +240,7 @@ export default function GoodbyePage() {
           ) : null}
         </CardContent>
 
-        <CardFooter className="flex flex-col gap-3 border-t border-zinc-100 bg-zinc-50/70 p-6 dark:border-zinc-800 dark:bg-zinc-950/50 sm:flex-row sm:justify-between">
+        <CardFooter className="app-panel-subtle flex flex-col gap-3 border-t border-border/70 p-6 sm:flex-row sm:justify-between">
           <Link href="/" className="w-full sm:w-auto">
             <Button variant="outline" className="w-full rounded-xl">
               <Home className="mr-2 h-4 w-4" />
