@@ -191,26 +191,26 @@ export default function LandingPage() {
               <Card className="app-panel-subtle shadow-sm hover:border-primary/20 hover:shadow-md transition-all rounded-4xl scale-90 hover:scale-95 z-0 duration-300">
                 <CardHeader className="p-8 pb-0">
                   <div className="flex items-center justify-between gap-3">
-                    <CardTitle className="text-xl font-bold text-zinc-900 flex items-center gap-2">
-                      {plans.free.name} <Medal className="h-5 w-5 text-zinc-400" />
+                    <CardTitle className="text-xl font-bold  flex items-center gap-2">
+                      {plans.free.name} <Medal className="h-5 w-5" />
                     </CardTitle>
-                    <Badge variant="outline" className="border-zinc-200 text-zinc-600">Registrar</Badge>
+                    <Badge variant="outline" className="border-zinc-200">Registrar</Badge>
                   </div>
-                  <CardDescription className="text-zinc-500">{plans.free.description}</CardDescription>
+                  <CardDescription>{plans.free.description}</CardDescription>
                   <div className="pt-6 pb-2">
-                    <span className="text-4xl font-bold text-zinc-900">R$ {plans.free.price}</span>
+                    <span className="text-4xl font-bold ">R$ {plans.free.price}</span>
                   </div>
                 </CardHeader>
                 <CardContent className="p-8 pt-6 space-y-4">
-                  <ul className="space-y-3 text-sm text-zinc-600">
+                  <ul className="space-y-3 text-sm">
                     {plans.free.features.map((feature, i) => (
-                      <li key={i} className="flex gap-3"><CheckCircle2 className="h-5 w-5 text-zinc-400" /> {feature}</li>
+                      <li key={i} className="flex gap-3"><CheckCircle2 className="h-5 w-5" /> {feature}</li>
                     ))}
                   </ul>
                 </CardContent>
                 <CardFooter className="p-8 pt-0">
                   <Link href={primaryHref} className="w-full">
-                    <Button className="w-full rounded-2xl h-12 bg-white hover:bg-zinc-50 text-zinc-900 border border-zinc-200 shadow-sm font-medium transition-all hover:scale-105 active:scale-95 hover:cursor-pointer duration-200">
+                    <Button className="w-full rounded-2xl h-12 bg-white hover:bg-zinc-50  border border-zinc-200 shadow-sm font-medium transition-all hover:scale-105 active:scale-95 hover:cursor-pointer duration-200">
                       {hasSession ? "Abrir painel" : "Começar no Free"}
                     </Button>
                   </Link>
