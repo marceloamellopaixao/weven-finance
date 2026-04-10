@@ -77,6 +77,18 @@
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
+  --app-shell-spot-a: rgb(124 58 237 / 0.1);
+  --app-shell-spot-b: rgb(168 85 247 / 0.08);
+  --app-menu-bg: color-mix(in oklab, var(--popover) 94%, var(--primary) 6%);
+  --app-menu-border: color-mix(in oklab, var(--border) 72%, var(--primary) 28%);
+  --app-menu-hover: color-mix(in oklab, var(--accent) 78%, var(--primary) 22%);
+  --app-menu-shadow: color-mix(in oklab, var(--primary) 18%, transparent);
+  --app-field-bg: color-mix(in oklab, var(--background) 92%, var(--primary) 8%);
+  --app-field-bg-hover: color-mix(in oklab, var(--background) 88%, var(--primary) 12%);
+  --app-field-border: color-mix(in oklab, var(--border) 74%, var(--primary) 26%);
+  --app-panel-subtle: color-mix(in oklab, var(--card) 95%, var(--primary) 5%);
+  --app-panel-soft: color-mix(in oklab, var(--card) 90%, var(--primary) 10%);
+  --app-panel-border: color-mix(in oklab, var(--border) 74%, var(--primary) 26%);
 }
 
 .dark {
@@ -111,6 +123,138 @@
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
+  --app-shell-spot-a: rgb(124 58 237 / 0.18);
+  --app-shell-spot-b: rgb(168 85 247 / 0.12);
+  --app-menu-bg: color-mix(in oklab, var(--popover) 90%, var(--primary) 10%);
+  --app-menu-border: color-mix(in oklab, var(--border) 68%, var(--primary) 32%);
+  --app-menu-hover: color-mix(in oklab, var(--accent) 70%, var(--primary) 30%);
+  --app-menu-shadow: color-mix(in oklab, var(--primary) 24%, transparent);
+  --app-field-bg: color-mix(in oklab, var(--background) 84%, var(--primary) 16%);
+  --app-field-bg-hover: color-mix(in oklab, var(--background) 79%, var(--primary) 21%);
+  --app-field-border: color-mix(in oklab, var(--border) 62%, var(--primary) 38%);
+  --app-panel-subtle: color-mix(in oklab, var(--card) 92%, var(--primary) 8%);
+  --app-panel-soft: color-mix(in oklab, var(--card) 88%, var(--primary) 12%);
+  --app-panel-border: color-mix(in oklab, var(--border) 66%, var(--primary) 34%);
+}
+
+:root[data-app-accent="violet"] {
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --ring: #8b5cf6;
+  --accent: #f5f3ff;
+  --accent-foreground: #5b21b6;
+  --sidebar-primary: #7c3aed;
+  --sidebar-ring: #8b5cf6;
+  --app-shell-spot-a: rgb(124 58 237 / 0.1);
+  --app-shell-spot-b: rgb(168 85 247 / 0.08);
+}
+
+:root[data-app-accent="indigo"] {
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --ring: #6366f1;
+  --accent: #eef2ff;
+  --accent-foreground: #3730a3;
+  --sidebar-primary: #4f46e5;
+  --sidebar-ring: #6366f1;
+  --app-shell-spot-a: rgb(79 70 229 / 0.11);
+  --app-shell-spot-b: rgb(99 102 241 / 0.08);
+}
+
+:root[data-app-accent="fuchsia"] {
+  --primary: #c026d3;
+  --primary-foreground: #ffffff;
+  --ring: #d946ef;
+  --accent: #fdf4ff;
+  --accent-foreground: #a21caf;
+  --sidebar-primary: #c026d3;
+  --sidebar-ring: #d946ef;
+  --app-shell-spot-a: rgb(217 70 239 / 0.1);
+  --app-shell-spot-b: rgb(192 38 211 / 0.08);
+}
+
+:root[data-app-accent="emerald"] {
+  --primary: #059669;
+  --primary-foreground: #ffffff;
+  --ring: #10b981;
+  --accent: #ecfdf5;
+  --accent-foreground: #047857;
+  --sidebar-primary: #059669;
+  --sidebar-ring: #10b981;
+  --app-shell-spot-a: rgb(16 185 129 / 0.1);
+  --app-shell-spot-b: rgb(5 150 105 / 0.07);
+}
+
+:root[data-app-accent="amber"] {
+  --primary: #d97706;
+  --primary-foreground: #ffffff;
+  --ring: #f59e0b;
+  --accent: #fffbeb;
+  --accent-foreground: #b45309;
+  --sidebar-primary: #d97706;
+  --sidebar-ring: #f59e0b;
+  --app-shell-spot-a: rgb(245 158 11 / 0.11);
+  --app-shell-spot-b: rgb(217 119 6 / 0.08);
+}
+
+:root.dark[data-app-accent="violet"] {
+  --primary: #a78bfa;
+  --primary-foreground: #140f22;
+  --ring: #a78bfa;
+  --accent: #221533;
+  --accent-foreground: #ede9fe;
+  --sidebar-primary: #a78bfa;
+  --sidebar-ring: #a78bfa;
+  --app-shell-spot-a: rgb(124 58 237 / 0.16);
+  --app-shell-spot-b: rgb(168 85 247 / 0.11);
+}
+
+:root.dark[data-app-accent="indigo"] {
+  --primary: #818cf8;
+  --primary-foreground: #0f172a;
+  --ring: #818cf8;
+  --accent: #17204a;
+  --accent-foreground: #e0e7ff;
+  --sidebar-primary: #818cf8;
+  --sidebar-ring: #818cf8;
+  --app-shell-spot-a: rgb(99 102 241 / 0.16);
+  --app-shell-spot-b: rgb(79 70 229 / 0.11);
+}
+
+:root.dark[data-app-accent="fuchsia"] {
+  --primary: #f0abfc;
+  --primary-foreground: #3b073f;
+  --ring: #f0abfc;
+  --accent: #34113d;
+  --accent-foreground: #fae8ff;
+  --sidebar-primary: #f0abfc;
+  --sidebar-ring: #f0abfc;
+  --app-shell-spot-a: rgb(217 70 239 / 0.16);
+  --app-shell-spot-b: rgb(192 38 211 / 0.11);
+}
+
+:root.dark[data-app-accent="emerald"] {
+  --primary: #6ee7b7;
+  --primary-foreground: #052e2b;
+  --ring: #6ee7b7;
+  --accent: #0f2d2a;
+  --accent-foreground: #d1fae5;
+  --sidebar-primary: #6ee7b7;
+  --sidebar-ring: #6ee7b7;
+  --app-shell-spot-a: rgb(16 185 129 / 0.15);
+  --app-shell-spot-b: rgb(5 150 105 / 0.1);
+}
+
+:root.dark[data-app-accent="amber"] {
+  --primary: #fbbf24;
+  --primary-foreground: #1f1402;
+  --ring: #fbbf24;
+  --accent: #362510;
+  --accent-foreground: #fef3c7;
+  --sidebar-primary: #fbbf24;
+  --sidebar-ring: #fbbf24;
+  --app-shell-spot-a: rgb(245 158 11 / 0.15);
+  --app-shell-spot-b: rgb(217 119 6 / 0.1);
 }
 
 @layer base {
@@ -125,5 +269,33 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  .app-shell {
+    background-color: var(--background);
+    background-image:
+      radial-gradient(circle at top right, var(--app-shell-spot-a), transparent 34%),
+      radial-gradient(circle at bottom left, var(--app-shell-spot-b), transparent 38%);
+  }
+}
+
+@layer utilities {
+  .app-panel-subtle {
+    background-color: var(--app-panel-subtle);
+    border-color: var(--app-panel-border);
+  }
+
+  .app-panel-soft {
+    background-color: var(--app-panel-soft);
+    border-color: var(--app-panel-border);
+  }
+
+  .app-field-surface {
+    background-color: var(--app-field-bg);
+    border-color: var(--app-field-border);
+  }
+
+  .app-field-surface:hover {
+    background-color: var(--app-field-bg-hover);
   }
 }
