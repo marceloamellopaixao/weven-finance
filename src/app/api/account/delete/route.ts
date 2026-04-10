@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
           role: "client",
           plan: "free",
           payment_status: "canceled",
-          block_reason: "Conta excluida pelo usuario",
+          block_reason: "Conta excluída pelo usuário",
           deleted_at: deletedAt,
           billing,
           raw: {
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
             role: "client",
             plan: "free",
             paymentStatus: "canceled",
-            blockReason: "Conta excluida pelo usuario",
+            blockReason: "Conta excluída pelo usuário",
             deletedAt,
             permanentDeleteAt,
             isArchived: true,
