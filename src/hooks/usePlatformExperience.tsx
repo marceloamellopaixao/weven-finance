@@ -19,14 +19,25 @@ import {
   PlatformTourRouteKey,
   PlatformTourState,
 } from "@/types/navigation";
+import {
+  AppearancePreferences,
+  DEFAULT_APPEARANCE_PREFERENCES,
+} from "@/types/appearance";
 import { normalizeNavigationPreferences } from "@/lib/navigation/apps";
+import { normalizeAppearancePreferences, resolveAppearanceThemeMode } from "@/lib/appearance/preferences";
 import {
   getNavigationPreferences,
   subscribeToNavigationSettings,
   updateNavigationPreferences,
 } from "@/services/navigationSettingsService";
+import {
+  getAppearancePreferences,
+  subscribeToAppearanceSettings,
+  updateAppearancePreferences,
+} from "@/services/appearanceSettingsService";
 
 const NAVIGATION_PREFERENCES_CACHE_KEY = "wevenfinance:navigation-preferences";
+const APPEARANCE_PREFERENCES_CACHE_KEY = "wevenfinance:appearance-preferences";
 const PLATFORM_TOUR_STORAGE_KEY = "wevenfinance:platform-tour";
 
 type PlatformExperienceContextValue = {
@@ -38,6 +49,14 @@ type PlatformExperienceContextValue = {
       | ((current: NavigationPreferences) => NavigationPreferences)
   ) => Promise<NavigationPreferences>;
   refreshNavigationPreferences: () => Promise<void>;
+  appearancePreferences: AppearancePreferences;
+  appearanceLoading: boolean;
+  updateAppearance: (
+    updater:
+      | AppearancePreferences
+      | ((current: AppearancePreferences) => AppearancePreferences)
+  ) => Promise<AppearancePreferences>;
+  refreshAppearancePreferences: () => Promise<void>;
   isNavigationDockAvailable: boolean;
   shouldRenderMobileDock: boolean;
   shouldRenderDesktopDock: boolean;
@@ -101,6 +120,24 @@ function readStoredPlatformTourState() {
   }
 }
 
+function readCachedAppearancePreferences() {
+  if (typeof window === "undefined") return DEFAULT_APPEARANCE_PREFERENCES;
+  try {
+    const raw = window.localStorage.getItem(APPEARANCE_PREFERENCES_CACHE_KEY);
+    if (!raw) return DEFAULT_APPEARANCE_PREFERENCES;
+    return normalizeAppearancePreferences(JSON.parse(raw) as Partial<AppearancePreferences>);
+  } catch {
+    return DEFAULT_APPEARANCE_PREFERENCES;
+  }
+}
+
+function persistAppearancePreferences(value: AppearancePreferences) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(APPEARANCE_PREFERENCES_CACHE_KEY, JSON.stringify(value));
+  } catch {}
+}
+
 function persistPlatformTourState(value: PlatformTourState) {
   if (typeof window === "undefined") return;
   try {
@@ -115,6 +152,10 @@ export function PlatformExperienceProvider({ children }: { children: ReactNode }
     readCachedNavigationPreferences
   );
   const [navigationLoading, setNavigationLoading] = useState(true);
+  const [appearancePreferences, setAppearancePreferences] = useState<AppearancePreferences>(
+    readCachedAppearancePreferences
+  );
+  const [appearanceLoading, setAppearanceLoading] = useState(true);
   const [platformTourState, setPlatformTourState] = useState<PlatformTourState>(
     readStoredPlatformTourState
   );
@@ -156,9 +197,32 @@ export function PlatformExperienceProvider({ children }: { children: ReactNode }
     }
   }, [isAuthenticated]);
 
+  const refreshAppearancePreferences = useCallback(async () => {
+    if (!isAuthenticated) {
+      const cached = readCachedAppearancePreferences();
+      setAppearancePreferences(cached);
+      persistAppearancePreferences(cached);
+      setAppearanceLoading(false);
+      return;
+    }
+
+    setAppearanceLoading(true);
+    try {
+      const next = await getAppearancePreferences();
+      setAppearancePreferences(next);
+      persistAppearancePreferences(next);
+    } finally {
+      setAppearanceLoading(false);
+    }
+  }, [isAuthenticated]);
+
   useEffect(() => {
     void refreshNavigationPreferences();
   }, [refreshNavigationPreferences]);
+
+  useEffect(() => {
+    void refreshAppearancePreferences();
+  }, [refreshAppearancePreferences]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -169,8 +233,36 @@ export function PlatformExperienceProvider({ children }: { children: ReactNode }
   }, [isAuthenticated, refreshNavigationPreferences]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+    const unsubscribe = subscribeToAppearanceSettings(() => {
+      void refreshAppearancePreferences();
+    });
+    return () => unsubscribe();
+  }, [isAuthenticated, refreshAppearancePreferences]);
+
+  useEffect(() => {
     persistPlatformTourState(platformTourState);
   }, [platformTourState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const root = document.documentElement;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const applyAppearance = () => {
+      const resolvedTheme = resolveAppearanceThemeMode(appearancePreferences, media.matches);
+      root.classList.toggle("dark", resolvedTheme === "dark");
+      root.dataset.appTheme = appearancePreferences.themeMode;
+      root.dataset.appResolvedTheme = resolvedTheme;
+      root.dataset.appAccent = appearancePreferences.accent;
+      root.style.colorScheme = resolvedTheme;
+    };
+
+    applyAppearance();
+    media.addEventListener("change", applyAppearance);
+    return () => media.removeEventListener("change", applyAppearance);
+  }, [appearancePreferences]);
 
   useEffect(() => {
     if (!isPlatformTourActive) {
@@ -198,6 +290,31 @@ export function PlatformExperienceProvider({ children }: { children: ReactNode }
       return saved;
     },
     [navigationPreferences]
+  );
+
+  const updateAppearance = useCallback(
+    async (
+      updater:
+        | AppearancePreferences
+        | ((current: AppearancePreferences) => AppearancePreferences)
+    ) => {
+      const next = normalizeAppearancePreferences(
+        typeof updater === "function" ? updater(appearancePreferences) : updater
+      );
+      setAppearancePreferences(next);
+      persistAppearancePreferences(next);
+      try {
+        const saved = await updateAppearancePreferences(next);
+        setAppearancePreferences(saved);
+        persistAppearancePreferences(saved);
+        return saved;
+      } catch (error) {
+        setAppearancePreferences(appearancePreferences);
+        persistAppearancePreferences(appearancePreferences);
+        throw error;
+      }
+    },
+    [appearancePreferences]
   );
 
   const startPlatformTour = useCallback((route: PlatformTourRouteKey = "dashboard", routeOrder?: PlatformTourRouteKey[]) => {
@@ -232,6 +349,10 @@ export function PlatformExperienceProvider({ children }: { children: ReactNode }
       navigationLoading,
       updatePreferences,
       refreshNavigationPreferences,
+      appearancePreferences,
+      appearanceLoading,
+      updateAppearance,
+      refreshAppearancePreferences,
       isNavigationDockAvailable,
       shouldRenderMobileDock,
       shouldRenderDesktopDock,
@@ -252,13 +373,17 @@ export function PlatformExperienceProvider({ children }: { children: ReactNode }
       isPlatformTourActive,
       navigationLoading,
       navigationPreferences,
+      appearanceLoading,
+      appearancePreferences,
       platformTourState,
       refreshNavigationPreferences,
+      refreshAppearancePreferences,
       setPlatformTourRoute,
       shouldAddDockSpacing,
       shouldRenderDesktopDock,
       shouldRenderMobileDock,
       startPlatformTour,
+      updateAppearance,
       updatePreferences,
     ]
   );
