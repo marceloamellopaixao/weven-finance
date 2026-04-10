@@ -244,7 +244,7 @@ export default function FirstAccessPage() {
         <div className={`${zoomIn} bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl border border-white/20 dark:border-zinc-800 shadow-2xl rounded-3xl p-6 md:p-8`}>
           {loading ? (
             <div className="py-10 flex flex-col items-center justify-center gap-4 text-zinc-500">
-              <Loader2 className="h-8 w-8 animate-spin text-violet-600" />
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="text-sm">Preparando seu acesso...</p>
             </div>
           ) : isComplete ? (
@@ -260,7 +260,7 @@ export default function FirstAccessPage() {
               </div>
               <Button
                 onClick={() => window.location.assign(nextPath)}
-                className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium shadow-lg shadow-violet-500/20"
+                className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium shadow-lg shadow-black/10"
               >
                 {nextPath === "/dashboard" ? "Ir para o painel" : "Continuar contratacao"}
               </Button>
@@ -295,7 +295,7 @@ export default function FirstAccessPage() {
                     id="password"
                     type="password"
                     placeholder="Mínimo de 6 caracteres"
-                    className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
+                    className="bg-white/50 dark:bg-zinc-800/50"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
@@ -307,7 +307,7 @@ export default function FirstAccessPage() {
                     id="confirm-password"
                     type="password"
                     placeholder="Repita a nova senha"
-                    className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
+                    className="bg-white/50 dark:bg-zinc-800/50"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                   />
@@ -322,7 +322,7 @@ export default function FirstAccessPage() {
                 <Button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium shadow-lg shadow-violet-500/20 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
+                  className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium shadow-lg shadow-black/10 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
                 >
                   {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Salvar nova senha"}
                 </Button>
@@ -355,7 +355,7 @@ export default function FirstAccessPage() {
               </div>
 
               <div className={`${fadeInUp} delay-300 space-y-4`}>
-                <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-4 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300">
+                <div className="app-panel-subtle rounded-2xl border p-4 text-sm text-zinc-600 dark:text-zinc-300">
                   {emailSent ? (
                     <>
                       Enviamos um link seguro para <strong>{user?.email || "seu e-mail"}</strong>. Abra a mensagem para definir sua nova senha aqui no WevenFinance.
@@ -375,7 +375,7 @@ export default function FirstAccessPage() {
                   <Button
                     onClick={handleSendEmail}
                     disabled={isSendingEmail}
-                    className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium shadow-lg shadow-violet-500/20 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
+                  className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium shadow-lg shadow-black/10 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
                   >
                     {isSendingEmail ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Enviar link novamente"}
                   </Button>
