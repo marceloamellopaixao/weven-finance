@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { type KeyboardEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Compass, PlayCircle, Sparkles } from "lucide-react";
+import { Check, CheckCircle2, Compass, PlayCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { NAVIGATION_APP_ITEMS } from "@/lib/navigation/apps";
 import { DockSettingsPanel } from "@/components/navigation/DockSettingsPanel";
 import { usePlatformExperience } from "@/hooks/usePlatformExperience";
@@ -95,13 +94,23 @@ export default function AppsPage() {
     router.push(PLATFORM_TOUR_ROUTE_HREFS[firstRoute]);
   };
 
+  const handleTourCardKeyDown = (
+    event: KeyboardEvent<HTMLDivElement>,
+    route: PlatformTourRouteKey
+  ) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleToggleRoute(route);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-zinc-50/40 p-3 sm:p-6 md:p-8">
+    <div className="min-h-screen p-3 sm:p-6 md:p-8">
       <div className="mx-auto max-w-6xl space-y-6">
         <section className="overflow-hidden rounded-4xl border border-zinc-200 bg-white shadow-xl shadow-zinc-200/50 dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-black/20">
           <div className="grid gap-6 px-6 py-8 md:grid-cols-[1.3fr_0.7fr] md:px-8 md:py-10">
             <div className="space-y-4">
-              <Badge className="rounded-full bg-violet-100 px-3 py-1 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+              <Badge className="rounded-full bg-accent px-3 py-1 text-primary">
                 Navegacao rapida do app
               </Badge>
               <div className="space-y-3">
@@ -121,7 +130,7 @@ export default function AppsPage() {
                     void handleStartTour([...ALL_PLATFORM_TOUR_ROUTES])
                   }
                   disabled={isOnboardingActive}
-                  className="rounded-2xl bg-violet-600 text-white hover:bg-violet-700"
+                  className="rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   <PlayCircle className="mr-2 h-4 w-4" />
                   {isOnboardingActive
@@ -136,9 +145,9 @@ export default function AppsPage() {
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-zinc-200 bg-linear-to-br from-violet-50 to-white p-5 dark:border-zinc-800 dark:from-violet-950/30 dark:to-zinc-950">
+            <div className="rounded-[28px] border border-zinc-200 bg-linear-to-br from-accent to-white p-5 dark:border-zinc-800 dark:from-accent/30 dark:to-zinc-950">
               <div className="flex items-center gap-3">
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-600 text-white shadow-lg shadow-violet-500/25">
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
                   <Compass className="h-5 w-5" />
                 </div>
                 <div>
@@ -151,7 +160,7 @@ export default function AppsPage() {
                   </p>
                 </div>
               </div>
-              <div className="mt-5 rounded-2xl border border-violet-200 bg-white/90 p-4 text-sm text-zinc-600 shadow-sm dark:border-violet-500/20 dark:bg-zinc-950/80 dark:text-zinc-300">
+              <div className="mt-5 rounded-2xl border border-primary/20 bg-white/90 p-4 text-sm text-zinc-600 shadow-sm dark:bg-zinc-950/80 dark:text-zinc-300">
                 Use esta tela para revisar as areas do app, escolher quais
                 capitulos do tour voce quer ver e ajustar seus atalhos sem sair
                 do contexto.
@@ -167,7 +176,7 @@ export default function AppsPage() {
           <Card className="rounded-[30px] border-none bg-white shadow-xl shadow-zinc-200/50 dark:bg-zinc-950 dark:shadow-black/20">
             <CardContent className="space-y-6 p-6 sm:p-7">
               <div className="space-y-2">
-                <Badge className="rounded-full bg-violet-100 px-3 py-1 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                <Badge className="rounded-full bg-accent px-3 py-1 text-primary">
                   Tour guiado
                 </Badge>
                 <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
@@ -180,11 +189,11 @@ export default function AppsPage() {
                 </p>
               </div>
 
-              <div className="rounded-[26px] border border-violet-200/70 bg-linear-to-br from-violet-600 to-fuchsia-600 p-px shadow-lg shadow-violet-500/20">
+              <div className="rounded-[26px] border border-primary/20 bg-linear-to-br from-primary to-primary/70 p-px shadow-lg shadow-primary/15">
                 <div className="rounded-[25px] bg-white/95 p-5 dark:bg-zinc-950/95">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-[0.22em] text-violet-500">
+                      <p className="text-xs font-medium uppercase tracking-[0.22em] text-primary">
                         Guia selecionado
                       </p>
                       <p className="mt-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
@@ -198,7 +207,7 @@ export default function AppsPage() {
                         type="button"
                         variant="outline"
                         onClick={handleSelectAllRoutes}
-                        className="rounded-xl border-violet-200 text-violet-700 hover:bg-violet-50"
+                        className="rounded-xl border-primary/20 text-primary hover:bg-accent"
                       >
                         Selecionar tudo
                       </Button>
@@ -219,7 +228,7 @@ export default function AppsPage() {
                         <Badge
                           key={route}
                           variant="outline"
-                          className="rounded-full border-violet-200 bg-violet-50/80 px-3 py-1 text-violet-700 dark:border-violet-500/20 dark:bg-violet-950/30 dark:text-violet-300"
+                          className="rounded-full border-primary/20 bg-accent px-3 py-1 text-primary"
                         >
                           {index + 1}. {PLATFORM_TOUR_COPY[route].title}
                         </Badge>
@@ -238,7 +247,7 @@ export default function AppsPage() {
                         void handleStartTour(orderedSelectedRoutes)
                       }
                       disabled={isOnboardingActive || selectedCount === 0}
-                      className="rounded-2xl bg-violet-600 text-white hover:bg-violet-700"
+                      className="rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90"
                     >
                       <PlayCircle className="mr-2 h-4 w-4" />
                       {selectedCount === ALL_PLATFORM_TOUR_ROUTES.length
@@ -277,25 +286,32 @@ export default function AppsPage() {
                   const orderIndex = orderedSelectedRoutes.indexOf(route);
 
                   return (
-                    <button
+                    <div
                       key={route}
-                      type="button"
                       onClick={() => handleToggleRoute(route)}
+                      onKeyDown={(event) => handleTourCardKeyDown(event, route)}
+                      role="button"
+                      tabIndex={0}
                       aria-pressed={isSelected}
                       className={`group flex w-full items-start gap-4 rounded-3xl border p-4 text-left transition-all ${
                         isSelected
-                          ? "border-violet-300 bg-violet-50/80 shadow-sm shadow-violet-200/40 dark:border-violet-500/40 dark:bg-violet-950/30"
-                          : "border-zinc-200 bg-white hover:border-violet-200 hover:bg-violet-50/40 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-violet-500/30"
+                          ? "border-primary/35 bg-accent shadow-sm shadow-primary/10 dark:border-primary/40 dark:bg-accent/25"
+                          : "border-zinc-200 bg-white hover:border-primary/20 hover:bg-accent/60 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-primary/30"
                       }`}
                     >
-                      <Checkbox
-                        checked={isSelected}
-                        aria-label={`Selecionar etapa ${copy.title}`}
-                        className="pointer-events-none mt-1 border-violet-300 data-[state=checked]:border-violet-600 data-[state=checked]:bg-violet-600"
-                      />
+                      <div
+                        aria-hidden="true"
+                        className={`mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors ${
+                          isSelected
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-primary/35 bg-background/70 text-transparent"
+                        }`}
+                      >
+                        <Check className="h-3 w-3" />
+                      </div>
                       <div
                         className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-linear-to-br ${
-                          item?.accentClass || "from-violet-500/15 to-indigo-500/10 text-violet-700"
+                          item?.accentClass || "from-primary/15 to-primary/5 text-primary"
                         }`}
                       >
                         <Icon className="h-5 w-5" />
@@ -306,7 +322,7 @@ export default function AppsPage() {
                             {copy.eyebrow}
                           </p>
                           {isSelected ? (
-                            <Badge className="rounded-full bg-violet-600 text-white">
+                            <Badge className="rounded-full bg-primary text-primary-foreground">
                               {orderIndex + 1}
                             </Badge>
                           ) : null}
@@ -319,9 +335,9 @@ export default function AppsPage() {
                         </p>
                       </div>
                       {isSelected ? (
-                        <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-violet-600" />
+                        <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-primary" />
                       ) : null}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -331,7 +347,7 @@ export default function AppsPage() {
 
         <section className="space-y-4">
           <div className="flex items-center gap-3">
-            <Sparkles className="h-5 w-5 text-violet-600" />
+            <Sparkles className="h-5 w-5 text-primary" />
             <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
               O que existe na plataforma
             </h2>
@@ -342,7 +358,7 @@ export default function AppsPage() {
               const Icon = item.icon;
               return (
                 <Link key={item.id} href={item.href}>
-                  <Card className="h-full rounded-[28px] border-zinc-200 bg-white shadow-sm transition-all hover:-translate-y-1 hover:border-violet-300 hover:shadow-xl hover:shadow-violet-200/40 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-violet-500/40 dark:hover:shadow-black/30">
+                  <Card className="h-full rounded-[28px] border-zinc-200 bg-white shadow-sm transition-all hover:-translate-y-1 hover:border-primary/35 hover:shadow-xl hover:shadow-primary/10 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-primary/35 dark:hover:shadow-black/30">
                     <CardContent className="p-5">
                       <div
                         className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-linear-to-br ${item.accentClass}`}
@@ -360,7 +376,7 @@ export default function AppsPage() {
                       <div className="mt-5">
                         <Badge
                           variant="outline"
-                          className="rounded-full border-violet-200 text-violet-700 dark:border-violet-500/30 dark:text-violet-300"
+                          className="rounded-full border-primary/20 text-primary"
                         >
                           Abrir {item.shortLabel.toLowerCase()}
                         </Badge>
