@@ -437,11 +437,11 @@ export default function NewTransactionPage() {
             <p className="mt-3 text-sm text-zinc-500">
               {isInstallment
                 ? installmentValueMode === "split_total"
-                  ? "Voce informa o valor total e o sistema divide automaticamente entre as parcelas."
-                  : "Voce informa o valor de cada parcela e o sistema repete esse valor nas proximas parcelas."
+                  ? "Você informa o valor total e o sistema divide automaticamente entre as parcelas."
+                  : "Você informa o valor de cada parcela e o sistema repete esse valor nas próximas parcelas."
                 : isRecurring
-                  ? "Esse valor sera repetido nos proximos 12 meses."
-                  : "Esse valor sera salvo exatamente como voce digitou."}
+                  ? "Esse valor será repetido nos próximos 12 meses."
+                  : "Esse valor será salvo exatamente como você digitou."}
             </p>
           </div>
 
@@ -449,7 +449,7 @@ export default function NewTransactionPage() {
           <div className="p-6 md:p-8 space-y-6">
             
             {/* DESCRIÇÃO */}
-            <div className="space-y-2">
+            <div id="tour-transactions-description" className="space-y-2">
               <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
                 <AlignLeft className="h-4 w-4 text-zinc-400" /> Descrição
               </Label>
@@ -465,7 +465,7 @@ export default function NewTransactionPage() {
               
               {/* CATEGORIA */}
               <div id="tour-transactions-category" className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-start gap-2">
                   <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
                     <Tag className="h-4 w-4 text-zinc-400" /> Categoria
                   </Label>
@@ -475,7 +475,7 @@ export default function NewTransactionPage() {
                     disabled={isTransactionOnboardingActive}
                     className="text-xs font-semibold text-primary hover:text-primary/80 flex items-center gap-1 hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <Settings2 className="h-3 w-3" /> Gerenciar
+                    <Settings2 className="h-4 w-4" /> Gerenciar
                   </button>
                 </div>
                 <Select value={category} onValueChange={setCategory}>
