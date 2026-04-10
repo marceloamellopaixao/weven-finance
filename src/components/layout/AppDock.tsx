@@ -71,38 +71,12 @@ export function AppDock() {
               interactive
               className={cn(
                 !isSidebar && "w-[min(88vw,428px)] max-w-[428px]",
-                isPlatformTourActive && "ring-2 ring-violet-300 ring-offset-2 ring-offset-zinc-50 dark:ring-offset-zinc-950"
+                isPlatformTourActive && "ring-2 ring-ring/45 ring-offset-2 ring-offset-background"
               )}
             />
           </div>
         </div>
       )}
     </>
-  );
-}
-
-export function AppDockSpacer() {
-  const {
-    isNavigationDockAvailable,
-    navigationPreferences,
-  } = usePlatformExperience();
-
-  const effectivePreferences = navigationPreferences;
-  const shouldRenderMobileDock = isNavigationDockAvailable && effectivePreferences.mobileEnabled;
-  const shouldRenderDesktopDock = isNavigationDockAvailable && effectivePreferences.desktopEnabled;
-
-  if (!shouldRenderMobileDock && !shouldRenderDesktopDock) return null;
-
-  const isSidebar = shouldRenderDesktopDock && effectivePreferences.position !== "center";
-
-  return (
-    <div
-      aria-hidden="true"
-      className={cn(
-        shouldRenderMobileDock && "h-28 md:h-0",
-        shouldRenderDesktopDock && !isSidebar && "md:h-28",
-        shouldRenderDesktopDock && isSidebar && "md:h-0"
-      )}
-    />
   );
 }
