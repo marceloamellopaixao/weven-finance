@@ -19,12 +19,12 @@ type GoalOption = {
 };
 
 const GOAL_OPTIONS: GoalOption[] = [
-  { type: "card_limit", label: "Cofrinho do Cartao", description: "Aumentar limite do cartao com reserva dedicada.", icon: Landmark },
-  { type: "emergency_reserve", label: "Reserva de emergencia", description: "Cobrir imprevistos com mais seguranca.", icon: ShieldCheck },
+  { type: "card_limit", label: "Cofrinho do Cartão", description: "Aumentar limite do cartão com reserva dedicada.", icon: Landmark },
+  { type: "emergency_reserve", label: "Reserva de emergência", description: "Cobrir imprevistos com mais segurança.", icon: ShieldCheck },
   { type: "travel", label: "Fazer uma viagem", description: "Guardar para transporte, hospedagem e passeios.", icon: Plane },
-  { type: "home_renovation", label: "Reformar a casa", description: "Separar valor para materiais e mao de obra.", icon: Home },
-  { type: "dream_purchase", label: "Sonho de consumo", description: "Chegar no objetivo sem baguncar o orcamento.", icon: Sparkles },
-  { type: "custom", label: "Criar novo objetivo", description: "Defina sua propria meta do jeito que fizer sentido.", icon: PlusCircle },
+  { type: "home_renovation", label: "Reformar a casa", description: "Separar valor para materiais e mão de obra.", icon: Home },
+  { type: "dream_purchase", label: "Sonho de consumo", description: "Chegar no objetivo sem baguncar o orçamento.", icon: Sparkles },
+  { type: "custom", label: "Criar novo objetivo", description: "Defina sua própria meta do jeito que fizer sentido.", icon: PlusCircle },
 ];
 
 const formatCurrency = (value: number) =>
@@ -110,7 +110,7 @@ export default function PiggyBankPage() {
         setPiggies(loadedPiggies);
       } catch (error) {
         if (!mounted) return;
-        setFeedback(error instanceof Error ? error.message : "Nao foi possivel carregar suas metas.");
+        setFeedback(error instanceof Error ? error.message : "Não foi possível carregar suas metas.");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -142,7 +142,7 @@ export default function PiggyBankPage() {
               Metas e reservas
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Acompanhe objetivos, reservas e cofrinhos do cartao em um so lugar.
+              Acompanhe objetivos, reservas e cofrinhos do cartão em um só lugar.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -154,7 +154,7 @@ export default function PiggyBankPage() {
             </Link>
             <Link href="/cards">
               <Button variant="outline" className="rounded-xl border-border/70 bg-card">
-                Voltar para cartoes
+                Voltar para cartões
               </Button>
             </Link>
           </div>
@@ -180,14 +180,14 @@ export default function PiggyBankPage() {
           <Card id="tour-piggy-list" className="rounded-3xl border border-border/70 bg-card shadow-sm md:col-span-2">
             <CardHeader>
               <CardTitle>Suas metas ativas</CardTitle>
-              <CardDescription>Abra um objetivo para ver total guardado, historico e ajustes.</CardDescription>
+              <CardDescription>Abra um objetivo para ver total guardado, histórico e ajustes.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {piggies.length === 0 ? (
                 <div className="md:col-span-2 w-full rounded-2xl border border-dashed border-border/70 bg-background/70 p-6 text-center text-sm text-muted-foreground">
                   Nenhuma meta criada ainda.
                   <br />
-                  Use o botao &quot;Criar meta&quot; para comecar sua primeira reserva.
+                  Use o botão &quot;Criar meta&quot; para começar sua primeira reserva.
                 </div>
               ) : (
                 piggies.map((piggy) => (
@@ -212,7 +212,7 @@ export default function PiggyBankPage() {
           <Card id="tour-piggy-shortcuts" className="rounded-3xl border border-border/70 bg-card shadow-sm">
             <CardHeader>
               <CardTitle>Atalhos</CardTitle>
-              <CardDescription>Comece mais rapido usando um tipo de meta ja sugerido.</CardDescription>
+              <CardDescription>Comece mais rápido usando um tipo de meta já sugerido.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {GOAL_OPTIONS.map((goal) => {
