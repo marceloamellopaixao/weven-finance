@@ -1632,7 +1632,7 @@ export default function DashboardPage() {
         </div>
 
         {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.completed && (
-          <Card className={`${fadeInUp} delay-100 app-panel-soft rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg shadow-primary/10`}>
+          <Card className={`${fadeInUp} delay-100 app-panel-soft rounded-2xl border border-color:var(--app-panel-border) shadow-lg shadow-primary/10`}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Info className="h-4 w-4 text-primary" /> Primeiros passos
@@ -1713,7 +1713,7 @@ export default function DashboardPage() {
         )}
 
         {showAutomaticInsights && (
-          <Card className={`${fadeInUp} delay-120 app-panel-soft rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg`}>
+          <Card className={`${fadeInUp} delay-120 app-panel-soft rounded-2xl border border-color:var(--app-panel-border) shadow-lg`}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Insights Automáticos</CardTitle>
               <CardDescription className="text-zinc-500">Resumo inteligente do mês selecionado.</CardDescription>
@@ -1791,7 +1791,7 @@ export default function DashboardPage() {
         )}
 
         {effectivePlanCapabilities.hasSmartDailyLimit && (
-          <Card id="tour-smart-daily-limit" className={`${fadeInUp} delay-140 app-panel-soft text-card-foreground relative rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg overflow-hidden`}>
+          <Card id="tour-smart-daily-limit" className={`${fadeInUp} delay-140 app-panel-soft text-card-foreground relative rounded-2xl border border-color:var(--app-panel-border) shadow-lg overflow-hidden`}>
             <div className="pointer-events-none absolute inset-0 bg-linear-to-r from-primary/12 via-primary/6 to-transparent" />
             <CardContent className="p-5 md:p-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="space-y-1.5">
@@ -1802,7 +1802,7 @@ export default function DashboardPage() {
                 <p className="text-lg md:text-xl font-bold">{smartDailyHeadline}</p>
                 <p className="text-sm text-muted-foreground max-w-2xl">{smartDailyDescription}</p>
               </div>
-              <div className="app-panel-subtle rounded-2xl border border-[color:var(--app-panel-border)] px-4 py-3 min-w-[220px]">
+              <div className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) px-4 py-3 min-w-[220px]">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Base do cálculo</p>
                 <p className="mt-2 text-2xl font-bold">
                   {remainingDaysInSelectedMonth > 0 ? `${remainingDaysInSelectedMonth} dia(s)` : "Mês encerrado"}
@@ -1816,7 +1816,7 @@ export default function DashboardPage() {
         {/* --- KPI Cards --- */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           {/* SALDO EM CAIXA */}
-          <Card id="tour-balance-card" className={`${fadeInUp} delay-150 app-panel-soft relative overflow-hidden rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 group active:scale-[0.99] transition-transform`}>
+          <Card id="tour-balance-card" className={`${fadeInUp} delay-150 app-panel-soft relative overflow-hidden rounded-2xl border border-color:var(--app-panel-border) shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 group active:scale-[0.99] transition-transform`}>
             <div className="absolute inset-0 bg-linear-to-br from-primary/10 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
               <div className="flex items-center gap-2">
@@ -1856,7 +1856,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* MOVIMENTAÇÃO */}
-          <Card id="tour-movement-card" className={`${fadeInUp} delay-300 app-panel-soft relative overflow-hidden rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20`}>
+          <Card id="tour-movement-card" className={`${fadeInUp} delay-300 app-panel-soft relative overflow-hidden rounded-2xl border border-color:var(--app-panel-border) shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20`}>
             <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/6 to-transparent" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
@@ -1899,7 +1899,7 @@ export default function DashboardPage() {
 
           {/* Previsão */}
           {(isBillingExemptRole || effectivePlanCapabilities.hasMonthlyForecast) ? (
-            <Card id="tour-forecast-card" className={`${fadeInUp} delay-500 app-panel-soft relative overflow-hidden rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
+            <Card id="tour-forecast-card" className={`${fadeInUp} delay-500 app-panel-soft relative overflow-hidden rounded-2xl border border-color:var(--app-panel-border) shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Previsão de Fechamento</CardTitle>
@@ -1936,7 +1936,7 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           ) : (
-            <Card className={`${fadeInUp} delay-500 app-panel-soft relative overflow-hidden rounded-2xl border border-[color:var(--app-panel-border)] text-card-foreground shadow-lg shadow-primary/10 md:shadow-xl`}>
+            <Card className={`${fadeInUp} delay-500 app-panel-soft relative overflow-hidden rounded-2xl border border-color:var(--app-panel-border) text-card-foreground shadow-lg shadow-primary/10 md:shadow-xl`}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
                 <div>
                   <CardTitle className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Previsão de Fechamento</CardTitle>
@@ -1967,7 +1967,7 @@ export default function DashboardPage() {
         <div className="w-full space-y-8">
 
           {/* Gráfico do Fluxo Mensal */}
-          <Card className={`${fadeInUp} delay-700 app-panel-soft rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg shadow-zinc-200/50 dark:shadow-black/20`}>
+          <Card className={`${fadeInUp} delay-700 app-panel-soft rounded-2xl border border-color:var(--app-panel-border) shadow-lg shadow-zinc-200/50 dark:shadow-black/20`}>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Fluxo Mensal</CardTitle>
               <CardDescription className="text-zinc-500">Evolução do saldo ao longo do tempo.</CardDescription>
@@ -1978,8 +1978,8 @@ export default function DashboardPage() {
           </Card>
 
           {/* Tabela de Transações */}
-          <Card id="tour-transactions-table" className={`${fadeInUp} delay-700 app-panel-soft rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg shadow-zinc-200/50 dark:shadow-black/20 overflow-hidden`}>
-            <CardHeader className="border-b border-[color:var(--app-panel-border)] py-5 px-6">
+          <Card id="tour-transactions-table" className={`${fadeInUp} delay-700 app-panel-soft rounded-2xl border border-color:var(--app-panel-border) shadow-lg shadow-zinc-200/50 dark:shadow-black/20 overflow-hidden`}>
+            <CardHeader className="border-b border-color:var(--app-panel-border) py-5 px-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Extrato</CardTitle>
@@ -2076,7 +2076,7 @@ export default function DashboardPage() {
                     const overdue = isOverdue(tx);
                     const txId = String(tx.id || "");
                     return (
-                      <div key={tx.id} className={`rounded-2xl border p-3 space-y-2.5 ${overdue ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-900/10" : "border-[color:var(--app-panel-border)] app-panel-subtle"}`}>
+                      <div key={tx.id} className={`rounded-2xl border p-3 space-y-2.5 ${overdue ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-900/10" : "border-color:var(--app-panel-border) app-panel-subtle"}`}>
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-start gap-3 min-w-0">
                             <Checkbox
