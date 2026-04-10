@@ -663,23 +663,23 @@ export default function SettingsPage() {
         {/* Navegação de Abas Personalizada */}
         <div className={`${fadeInUp} delay-150 space-y-6`}>
           <div id="tour-settings-tabs" className="app-panel-subtle grid min-w-full w-full grid-cols-1 gap-1 rounded-2xl border p-1.5 shadow-sm sm:grid-cols-2 md:grid-cols-4">
-            <button id="tour-settings-account-tab" type="button" aria-pressed={activeTab === "account"} onClick={() => handleTabChange("account")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "account" ? "app-panel-soft border border-[color:var(--app-panel-border)] text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+            <button id="tour-settings-account-tab" type="button" aria-pressed={activeTab === "account"} onClick={() => handleTabChange("account")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "account" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <User className="h-4 w-4" /> Geral
             </button>
-            <button id="tour-settings-billing-tab" type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "billing" ? "app-panel-soft border border-[color:var(--app-panel-border)] text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+            <button id="tour-settings-billing-tab" type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "billing" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <CreditCard className="h-4 w-4" /> Planos
             </button>
-            <button id="tour-settings-security-tab" type="button" aria-pressed={activeTab === "security"} onClick={() => handleTabChange("security")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "security" ? "app-panel-soft border border-[color:var(--app-panel-border)] text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+            <button id="tour-settings-security-tab" type="button" aria-pressed={activeTab === "security"} onClick={() => handleTabChange("security")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "security" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <ShieldCheck className="h-4 w-4" /> Privacidade
             </button>
-            <button id="tour-settings-help-tab" type="button" aria-pressed={activeTab === "help"} onClick={() => handleTabChange("help")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "help" ? "app-panel-soft border border-[color:var(--app-panel-border)] text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+            <button id="tour-settings-help-tab" type="button" aria-pressed={activeTab === "help"} onClick={() => handleTabChange("help")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "help" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <HelpCircle className="h-4 w-4" /> Ajuda
             </button>
           </div>
 
           {/* ABA GERAL */}
           {activeTab === "account" && (
-            <Card id="tour-settings-panel" className={`${zoomIn} delay-200 app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20`}>
+            <Card id="tour-settings-panel" className={`${zoomIn} delay-200 app-panel-soft rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20`}>
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-2 text-xl">
                   <div className="rounded-full bg-primary/10 p-2"><User className="h-5 w-5 text-primary" /></div> Perfil do Usuário
@@ -1065,7 +1065,7 @@ export default function SettingsPage() {
               </Card>
 
               {!isBillingExemptRole && (
-                <Card className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] shadow-lg">
+                <Card className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) shadow-lg">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
                       <Clock className="h-4 w-4 text-zinc-600" /> Histórico de cobrança
@@ -1076,17 +1076,17 @@ export default function SettingsPage() {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {isLoadingBillingHistory ? (
-                      <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-[color:var(--app-panel-border)] text-sm text-zinc-500">
+                      <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-zinc-500">
                         <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando histórico...
                       </div>
                     ) : billingHistory.length === 0 ? (
-                      <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-[color:var(--app-panel-border)] text-sm text-zinc-500">
+                      <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-zinc-500">
                         Nenhum evento encontrado.
                       </div>
                     ) : (
                       <div className="space-y-2">
                         {billingHistory.map((item) => (
-                          <div key={item.id} className="app-panel-subtle rounded-xl border border-[color:var(--app-panel-border)] px-3 py-2">
+                          <div key={item.id} className="app-panel-subtle rounded-xl border border-color:var(--app-panel-border) px-3 py-2">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <p className="text-sm font-semibold text-foreground">{formatBillingEventLabel(item)}</p>
                               <Badge variant="secondary" className="text-[10px] uppercase">
@@ -1103,7 +1103,7 @@ export default function SettingsPage() {
                       </div>
                     )}
                     {!isLoadingBillingHistory && billingHistoryTotal > billingHistoryPerPage && (
-                      <div className="app-panel-subtle mt-2 flex items-center justify-between rounded-xl border border-[color:var(--app-panel-border)] px-3 py-2">
+                      <div className="app-panel-subtle mt-2 flex items-center justify-between rounded-xl border border-color:var(--app-panel-border) px-3 py-2">
                         <p className="text-xs text-zinc-500">
                           Página {billingHistoryPage} de {Math.max(1, Math.ceil(billingHistoryTotal / billingHistoryPerPage))} • {billingHistoryTotal} evento(s)
                         </p>
@@ -1251,7 +1251,7 @@ export default function SettingsPage() {
 
           {/* ABA SEGURANÇA */}
           {activeTab === "security" && (
-            <Card id="tour-settings-panel" className={`${zoomIn} delay-200 app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20`}>
+            <Card id="tour-settings-panel" className={`${zoomIn} delay-200 app-panel-soft rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20`}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-full">
@@ -1317,7 +1317,7 @@ export default function SettingsPage() {
           {activeTab === "help" && (
             <div id="tour-settings-panel" className={`${fadeInUp} delay-200 space-y-6`}>
               {/* Card de Tutorial */}
-              <Card className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20 overflow-hidden hover:shadow-2xl transition-shadow">
+              <Card className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20 overflow-hidden hover:shadow-2xl transition-shadow">
                 <CardHeader className="bg-linear-to-r from-primary/10 to-primary/5 p-4">
                   <CardTitle className="flex items-center gap-2 text-primary">
                     <PlayCircle className="h-6 w-6" /> Tutorial Interativo
@@ -1327,7 +1327,7 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="-mt-4">
-                  <div className="app-panel-subtle flex flex-col items-center justify-between gap-4 rounded-2xl border border-[color:var(--app-panel-border)] p-6 shadow-sm sm:flex-row">
+                  <div className="app-panel-subtle flex flex-col items-center justify-between gap-4 rounded-2xl border border-color:var(--app-panel-border) p-6 shadow-sm sm:flex-row">
                     <div className="space-y-1">
                       <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tour da plataforma</h4>
                       <p className="text-sm text-zinc-500">Escolha entre ver tudo ou apenas dashboard, configuracoes, lancamentos, cartoes e metas.</p>
@@ -1342,7 +1342,7 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20 overflow-hidden">
+              <Card className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20 overflow-hidden">
                 <CardHeader className="bg-linear-to-r from-primary/10 to-primary/5 p-4">
                   <CardTitle className="flex items-center gap-2 text-primary">
                     <Sparkles className="h-6 w-6" /> Explorar o App
@@ -1352,7 +1352,7 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="-mt-4">
-                  <div className="app-panel-subtle flex flex-col items-center justify-between gap-4 rounded-2xl border border-[color:var(--app-panel-border)] p-6 shadow-sm sm:flex-row">
+                  <div className="app-panel-subtle flex flex-col items-center justify-between gap-4 rounded-2xl border border-color:var(--app-panel-border) p-6 shadow-sm sm:flex-row">
                     <div className="space-y-1">
                       <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tela de funcionalidades e atalhos</h4>
                       <p className="text-sm text-zinc-500">Acesse a visao geral das paginas e ajuste a barra rapida do seu jeito.</p>
@@ -1370,7 +1370,7 @@ export default function SettingsPage() {
               </Card>
 
               {/* Card de Suporte e Ideias */}
-              <Card className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
+              <Card className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200">
                     <MessageCircle className="h-5 w-5" /> Fale Conosco
@@ -1378,7 +1378,7 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* WhatsApp */}
-                  <a href="https://wa.me/5511992348613" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 rounded-2xl border border-transparent p-4 transition-colors hover:border-[color:var(--app-panel-border)] hover:bg-accent/70 group cursor-pointer">
+                  <a href="https://wa.me/5511992348613" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 rounded-2xl border border-transparent p-4 transition-colors hover:border-color:var(--app-panel-border) hover:bg-accent/70 group cursor-pointer">
                     <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full text-green-600 group-hover:scale-110 transition-transform">
                       <MessageCircle className="h-6 w-6" />
                     </div>
@@ -1392,7 +1392,7 @@ export default function SettingsPage() {
                   <button
                     type="button"
                     onClick={() => setIsSupportModalOpen(true)}
-                    className="group flex w-full cursor-pointer items-center gap-4 rounded-2xl border border-transparent p-4 text-left transition-colors hover:border-[color:var(--app-panel-border)] hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    className="group flex w-full cursor-pointer items-center gap-4 rounded-2xl border border-transparent p-4 text-left transition-colors hover:border-color:var(--app-panel-border) hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   >
                     <div className="rounded-full bg-primary/10 p-3 text-primary transition-transform group-hover:scale-110">
                       <LifeBuoy className="h-6 w-6" />
@@ -1407,7 +1407,7 @@ export default function SettingsPage() {
                   <button
                     type="button"
                     onClick={() => setIsFeatureModalOpen(true)}
-                    className="group flex w-full cursor-pointer items-center gap-4 rounded-2xl border border-transparent p-4 text-left transition-colors hover:border-[color:var(--app-panel-border)] hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                    className="group flex w-full cursor-pointer items-center gap-4 rounded-2xl border border-transparent p-4 text-left transition-colors hover:border-color:var(--app-panel-border) hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                   >
                     <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-full text-amber-600 group-hover:scale-110 transition-transform">
                       <Lightbulb className="h-6 w-6" />
@@ -1420,7 +1420,7 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
+              <Card className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200">
                     <HelpCircle className="h-5 w-5" /> Meus chamados
@@ -1431,16 +1431,16 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {isLoadingMySupportTickets ? (
-                    <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-[color:var(--app-panel-border)] text-sm text-zinc-500">
+                    <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-zinc-500">
                       <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando chamados...
                     </div>
                   ) : mySupportTickets.length === 0 ? (
-                    <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-[color:var(--app-panel-border)] text-sm text-zinc-500">
+                    <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-zinc-500">
                       Nenhum chamado aberto ainda.
                     </div>
                   ) : (
                     mySupportTickets.map((ticket) => (
-                      <div key={ticket.id} className="app-panel-subtle rounded-xl border border-[color:var(--app-panel-border)] px-3 py-2">
+                      <div key={ticket.id} className="app-panel-subtle rounded-xl border border-color:var(--app-panel-border) px-3 py-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className="text-sm font-semibold text-foreground">
                             Protocolo {ticket.protocol || `#${ticket.id.slice(0, 8)}`}
@@ -1457,7 +1457,7 @@ export default function SettingsPage() {
                     ))
                   )}
                   {!isLoadingMySupportTickets && mySupportTotal > mySupportPerPage && (
-                    <div className="app-panel-subtle mt-3 flex items-center justify-between rounded-xl border border-[color:var(--app-panel-border)] px-3 py-2">
+                    <div className="app-panel-subtle mt-3 flex items-center justify-between rounded-xl border border-color:var(--app-panel-border) px-3 py-2">
                       <p className="text-xs text-zinc-500">
                         Página {mySupportPage} de {Math.max(1, Math.ceil(mySupportTotal / mySupportPerPage))} • {mySupportTotal} chamado(s)
                       </p>
