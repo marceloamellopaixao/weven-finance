@@ -32,7 +32,7 @@ export async function getPiggyBankBySlug(slug: string): Promise<PiggyBankDetail>
   const response = await fetchWithAuth(`/api/piggy-banks/${encodeURIComponent(slug)}`, { method: "GET" });
   const payload = (await response.json()) as { ok: boolean; error?: string; piggyBank?: PiggyBankDetail };
   if (!response.ok || !payload.ok || !payload.piggyBank) {
-    throw new Error(payload.error || "Porquinho não encontrado");
+    throw new Error(payload.error || "Não foi possível encontrar o porquinho");
   }
   return payload.piggyBank;
 }

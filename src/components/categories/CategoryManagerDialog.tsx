@@ -133,10 +133,10 @@ export function CategoryManagerDialog({
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro ao criar categoria.";
       if (message === "duplicate_category_name") {
-        toast.error("Essa categoria ja existe.");
+        toast.error("Essa categoria já existe.");
         return;
       }
-      toast.error("Nao foi possivel criar a categoria.");
+      toast.error("Não foi possível criar a categoria.");
     }
   };
 
@@ -153,10 +153,10 @@ export function CategoryManagerDialog({
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro ao excluir categoria.";
       if (message === "duplicate_category_name") {
-        toast.error("Ja existe uma categoria com esse nome.");
+        toast.error("Já existe uma categoria com esse nome.");
         return;
       }
-      toast.error("Nao foi possivel excluir a categoria.");
+      toast.error("Não foi possível excluir a categoria.");
     } finally {
       setDeletingCategoryName(null);
     }
@@ -209,10 +209,10 @@ export function CategoryManagerDialog({
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro ao editar categoria.";
       if (message === "duplicate_category_name") {
-        toast.error("Ja existe uma categoria com esse nome.");
+        toast.error("Já existe uma categoria com esse nome.");
         return;
       }
-      toast.error("Nao foi possivel salvar a categoria.");
+      toast.error("Não foi possível salvar a categoria.");
     } finally {
       setRenamingCategoryName(null);
     }

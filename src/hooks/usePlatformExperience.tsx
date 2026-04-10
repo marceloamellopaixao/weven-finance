@@ -88,7 +88,7 @@ function persistNavigationPreferences(value: NavigationPreferences) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(NAVIGATION_PREFERENCES_CACHE_KEY, JSON.stringify(value));
-  } catch {}
+  } catch { }
 }
 
 function normalizePlatformTourOrder(routeOrder?: PlatformTourRouteKey[]) {
@@ -135,14 +135,14 @@ function persistAppearancePreferences(value: AppearancePreferences) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(APPEARANCE_PREFERENCES_CACHE_KEY, JSON.stringify(value));
-  } catch {}
+  } catch { }
 }
 
 function persistPlatformTourState(value: PlatformTourState) {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.setItem(PLATFORM_TOUR_STORAGE_KEY, JSON.stringify(value));
-  } catch {}
+  } catch { }
 }
 
 export function PlatformExperienceProvider({ children }: { children: ReactNode }) {

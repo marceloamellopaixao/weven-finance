@@ -373,7 +373,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     phone: string
   ) => {
     const normalizedEmail = email.trim().toLowerCase();
-    if (!isValidRealEmail(normalizedEmail)) throw "Por favor, utilize um e-mail valido para cadastro.";
+    if (!isValidRealEmail(normalizedEmail)) throw "Por favor, utilize um e-mail válido para cadastro.";
 
     const phoneCheckResponse = await fetch("/api/auth/phone-availability", {
       method: "POST",
@@ -385,9 +385,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const phoneCheckPayload = (await phoneCheckResponse.json()) as { ok?: boolean; error?: string };
     if (!phoneCheckResponse.ok || !phoneCheckPayload.ok) {
       if (phoneCheckPayload.error === "phone_already_in_use") {
-        throw "Este numero ja esta vinculado a outra conta.";
+        throw "Este número já está vinculado a outra conta.";
       }
-      throw "Nao foi possivel validar seu numero agora.";
+      throw "Não foi possível validar seu número agora.";
     }
 
     const { data, error } = await supabase.auth.signUp({
@@ -398,7 +398,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         data: { displayName: name, completeName, phone },
       },
     });
-    if (error) throw error.message || "Erro ao registrar usuario.";
+    if (error) throw error.message || "Erro ao registrar usuário.";
     rememberPendingVerificationEmail(normalizedEmail);
 
     const token = data.session?.access_token;

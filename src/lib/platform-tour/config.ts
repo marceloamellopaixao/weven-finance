@@ -50,7 +50,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Seu painel principal",
             description:
-              "Aqui voce entende como o mes esta andando e qual deve ser seu proximo passo.",
+              "Aqui você entende como o mês está andando e qual deve ser seu próximo passo.",
             side: "bottom",
             align: "start",
           },
@@ -60,34 +60,34 @@ export function getPlatformTourConfig(
           popover: {
             title: "Registrar dinheiro que entrou ou saiu",
             description:
-              "Este botao e o atalho principal do app. E por aqui que voce comeca a organizar seu mes.",
+              "Este botão é o atalho principal do app. E por aqui que você comeca a organizar seu mês.",
             side: "bottom",
           },
         },
         {
           element: "#tour-month-select",
           popover: {
-            title: "Escolha o mes",
+            title: "Escolha o mês",
             description:
-              "Troque de mes para revisar o passado, acompanhar agora ou planejar o que vem pela frente.",
+              "Troque de mês para revisar o passado, acompanhar agora ou planejar o que vem pela frente.",
             side: "bottom",
           },
         },
         {
           element: "#tour-balance-card",
           popover: {
-            title: "Quanto voce tem hoje",
+            title: "Quanto você tem hoje",
             description:
-              "Este valor mostra o que ja entrou e saiu de verdade ate agora.",
+              "Este valor mostra o que já entrou e saiu de verdade até agora.",
             side: "bottom",
           },
         },
         {
           element: "#tour-movement-card",
           popover: {
-            title: "Entradas e saidas do mes",
+            title: "Entradas e saídas do mês",
             description:
-              "Aqui voce compara o que entrou com o que saiu para saber se o mes esta equilibrado.",
+              "Aqui você compara o que entrou com o que saiu para saber se o mês está equilibrado.",
             side: "bottom",
           },
         },
@@ -95,9 +95,9 @@ export function getPlatformTourConfig(
           stepId: "monthlyForecast",
           element: "#tour-forecast-card",
           popover: {
-            title: "Como o mes deve terminar",
+            title: "Como o mês deve terminar",
             description:
-              "Se os itens pendentes forem pagos ou recebidos, este e o resultado mais provavel para o fechamento.",
+              "Se os itens pendentes forem pagos ou recebidos, este é o resultado mais provável para o fechamento.",
             side: "bottom",
           },
         },
@@ -105,9 +105,9 @@ export function getPlatformTourConfig(
           stepId: "smartDailyLimit",
           element: "#tour-smart-daily-limit",
           popover: {
-            title: "Quanto voce pode gastar hoje",
+            title: "Quanto você pode gastar hoje",
             description:
-              "Este limite diario transforma sua previsao do mes em uma decisao simples para o dia a dia.",
+              "Este limite diário transforma sua previsão do mês em uma decisão simples para o dia a dia.",
             side: "bottom",
           },
         },
@@ -116,7 +116,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Seu extrato",
             description:
-              "Aqui voce encontra cada lancamento, aplica filtros e resolve pendencias sem se perder.",
+              "Aqui você encontra cada lançamento, aplica filtros e resolve pendências sem se perder.",
             side: "top",
           },
         },
@@ -127,7 +127,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Troca de telas",
             description:
-              "Na sua foto ficam os acessos para as areas principais do app. Vamos continuar por la.",
+              "Na sua foto ficam os acessos para as áreas principais do app. Vamos continuar por lá.",
             side: "left",
             align: "start",
           },
@@ -143,7 +143,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Sua conta em um lugar",
             description:
-              "Aqui ficam seus dados, plano, privacidade, ajuda e acoes importantes da conta.",
+              "Aqui ficam seus dados, plano, privacidade, ajuda e ações importantes da conta.",
             side: "bottom",
             align: "start",
           },
@@ -160,9 +160,9 @@ export function getPlatformTourConfig(
         {
           element: "#tour-settings-panel",
           popover: {
-            title: "Conteudo da aba",
+            title: "Conteúdo da aba",
             description:
-              "Esta area muda conforme a aba escolhida, sem tirar voce da mesma tela.",
+              "Esta área muda conforme a aba escolhida, sem tirar você da mesma tela.",
             side: "top",
           },
         },
@@ -171,7 +171,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Plano e assinatura",
             description:
-              "Abra esta aba para ver seu plano, pagamentos e opcoes de upgrade.",
+              "Abra esta aba para ver seu plano, pagamentos e opções de upgrade.",
             side: "bottom",
             onNextClick: clickSelectorAndAdvance("#tour-settings-billing-tab"),
           },
@@ -181,7 +181,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Tudo sobre sua assinatura",
             description:
-              "Aqui voce acompanha cobranca, status do plano e historico sem precisar procurar.",
+              "Aqui você acompanha cobrança, status do plano e histórico sem precisar procurar.",
             side: "top",
           },
         },
@@ -190,7 +190,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Privacidade e senha",
             description:
-              "Aqui ficam modo privacidade, senha e acoes sensiveis da conta.",
+              "Aqui ficam modo privacidade, senha e ações sensiveis da conta.",
             side: "bottom",
             onNextClick: clickSelectorAndAdvance("#tour-settings-security-tab"),
           },
@@ -198,7 +198,7 @@ export function getPlatformTourConfig(
         {
           element: "#tour-settings-panel",
           popover: {
-            title: "Area mais sensivel da conta",
+            title: "Área mais sensível da conta",
             description:
               "Use esta parte quando precisar proteger, revisar ou encerrar sua conta.",
             side: "top",
@@ -209,7 +209,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Ajuda e suporte",
             description:
-              "Se surgir duvida, problema ou vontade de rever o guia, e aqui que voce encontra isso.",
+              "Se surgir dúvidas, problema ou vontade de rever o guia, e aqui que você encontra isso.",
             side: "bottom",
             onNextClick: clickSelectorAndAdvance("#tour-settings-help-tab"),
           },
@@ -219,7 +219,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Tudo bem centralizado",
             description:
-              "Agora vamos para a tela de novo lancamento, onde o app vira valor pratico no mesmo instante.",
+              "Agora vamos para a tela de novo lançamento, onde o app vira valor prático no mesmo instante.",
             side: "top",
           },
         },
@@ -232,7 +232,7 @@ export function getPlatformTourConfig(
         {
           element: "#tour-transactions-header",
           popover: {
-            title: "Registrar um lancamento",
+            title: "Registrar um lançamento",
             description:
               "Esta tela serve para colocar sua vida financeira em ordem, uma entrada ou gasto por vez.",
             side: "bottom",
@@ -252,7 +252,16 @@ export function getPlatformTourConfig(
           popover: {
             title: "Informe o valor",
             description:
-              "Digite o valor com calma. O campo formata sozinho para reduzir erro de digitacao.",
+              "Digite o valor com calma. O campo formata sozinho para reduzir erro de digitação.",
+            side: "bottom",
+          },
+        },
+        {
+          element: "#tour-transactions-description",
+          popover: {
+            title: "Digite a descrição/título do lançamento",
+            description:
+              "Use este campo para lembrar depois do que se tratava este lançamento. Pode ser o nome de um estabelecimento, a descrição de um salário ou o que fizer mais sentido para você.",
             side: "bottom",
           },
         },
@@ -261,16 +270,25 @@ export function getPlatformTourConfig(
           popover: {
             title: "Escolha a categoria",
             description:
-              "As categorias ajudam voce a entender para onde o dinheiro esta indo.",
+              "As categorias ajudam você a entender para onde o dinheiro esta indo.",
+            side: "bottom",
+          },
+        },
+        {
+          element: "#tour-transactions-category",
+          popover: {
+            title: "Categoria (Cartão de Crédito e Débito)",
+            description:
+              "É necessário cadastrar primeiro o cartão para que você consiga vincular o lançamento a ele. Depois disso, as categorias de cartão ficam disponíveis para organizar seus gastos por cartão ou tipo de gasto.",
             side: "bottom",
           },
         },
         {
           element: "#tour-transactions-recurring",
           popover: {
-            title: "Lancamento fixo",
+            title: "Lançamento fixo",
             description:
-              "Use para algo que vai se repetir nos proximos meses, como assinatura, aluguel ou mensalidade.",
+              "Use para algo que vai se repetir nos próximos meses, como assinatura, aluguel ou mensalidade.",
             side: "top",
           },
         },
@@ -280,7 +298,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Compra parcelada",
             description:
-              "Use quando uma compra foi dividida em varias parcelas. Nao e a mesma coisa que algo recorrente.",
+              "Use quando uma compra que foi dividida em várias parcelas. Não é a mesma coisa que algo recorrente (Assinatura).",
             side: "top",
           },
         },
@@ -289,7 +307,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Salvar e continuar",
             description:
-              "Depois de salvar, isso ja aparece no extrato e impacta o seu mes. Agora vamos ver os cartoes.",
+              "Depois de salvar, isso já aparece no extrato e impacta o seu mês. Agora vamos ver os cartões.",
             side: "top",
           },
         },
@@ -302,9 +320,9 @@ export function getPlatformTourConfig(
         {
           element: "#tour-cards-header",
           popover: {
-            title: "Seus cartoes",
+            title: "Seus cartões",
             description:
-              "Aqui voce acompanha limite, fatura e risco antes de passar do ponto.",
+              "Aqui você acompanha limite, fatura e risco antes de passar do ponto.",
             side: "bottom",
             align: "start",
           },
@@ -312,27 +330,27 @@ export function getPlatformTourConfig(
         {
           element: "#tour-cards-add-button",
           popover: {
-            title: "Adicionar cartao",
+            title: "Adicionar cartão",
             description:
-              "Cadastre seus cartoes para centralizar gastos e nao depender de memoria.",
+              "Cadastre seus cartões para centralizar gastos e não depender de memória.",
             side: "bottom",
           },
         },
         {
           element: "#tour-cards-carousel",
           popover: {
-            title: "Trocar de cartao",
+            title: "Trocar de cartão",
             description:
-              "Veja um cartao por vez para entender melhor limite, uso e historico.",
+              "Veja um cartão por vez para entender melhor limite, uso e histórico.",
             side: "bottom",
           },
         },
         {
           element: "#tour-cards-limit-panel",
           popover: {
-            title: "Saude do limite",
+            title: "Saúde do limite",
             description:
-              "Este painel mostra se o cartao esta sob controle ou perto de apertar.",
+              "Este painel mostra se o cartão está sob controle ou perto de apertar.",
             side: "top",
           },
         },
@@ -347,7 +365,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Metas e reservas",
             description:
-              "Use esta area para guardar dinheiro com objetivo claro, sem misturar com o gasto do dia a dia.",
+              "Use esta área para guardar dinheiro com objetivo claro, sem misturar com o gasto do dia a dia.",
             side: "bottom",
             align: "start",
           },
@@ -366,7 +384,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Metas criadas",
             description:
-              "Cada meta tem historico, progresso e novos aportes para voce acompanhar sem se perder.",
+              "Cada meta tem histórico, progresso e novos aportes para você acompanhar sem se perder.",
             side: "top",
           },
         },
@@ -375,7 +393,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Atalhos para comecar",
             description:
-              "Se voce ainda nao sabe por onde comecar, use estas sugestoes para criar sua primeira meta.",
+              "Se você ainda não sabe por onde comecar, use estas sugestões para criar sua primeira meta.",
             side: "left",
           },
         },

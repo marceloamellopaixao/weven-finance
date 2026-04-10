@@ -211,7 +211,7 @@ export function Header() {
             <DropdownMenuSeparator />
 
             {notifications.length === 0 ? (
-              <div className="px-2 py-6 text-center text-xs text-zinc-500">Sem notificações no momento.</div>
+              <div className="px-2 py-6 text-center text-xs text-zinc-500">Sem notificações.</div>
             ) : (
               notifications.slice(0, 8).map((item) => (
                 <DropdownMenuItem
@@ -314,7 +314,7 @@ export function Header() {
             <Link href="/apps" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <Grid2X2 className="mr-2 h-4 w-4" />
-                <span>Apps e barra rapida</span>
+                <span>Apps / Barra Rápida</span>
               </DropdownMenuItem>
             </Link>
 

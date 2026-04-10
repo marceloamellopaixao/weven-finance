@@ -63,7 +63,7 @@ export const getFeatureAccessConfig = async (): Promise<FeatureAccessConfig> => 
       featureAccess?: FeatureAccessConfig;
     };
     if (!response.ok || !payload.ok || !payload.featureAccess) {
-      throw new Error(payload.error || "NÃ£o foi possÃ­vel buscar acessos de funcionalidades");
+      throw new Error(payload.error || "Não foi possível buscar acessos de funcionalidades");
     }
     lastFeatureAccessCache = { at: Date.now(), value: payload.featureAccess };
     return payload.featureAccess;
@@ -84,7 +84,7 @@ export const updateFeatureAccessConfig = async (config: FeatureAccessConfig) => 
   });
   const payload = (await response.json()) as { ok: boolean; error?: string };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "NÃ£o foi possÃ­vel atualizar acessos de funcionalidades");
+    throw new Error(payload.error || "Não foi possível atualizar acessos de funcionalidades");
   }
 };
 

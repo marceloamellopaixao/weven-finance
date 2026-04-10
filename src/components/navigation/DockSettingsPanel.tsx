@@ -42,67 +42,67 @@ const POSITION_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
-  { value: "left", label: "Esquerda", description: "Vira uma barra lateral fixa no lado esquerdo." },
-  { value: "center", label: "Centro", description: "Mantem a barra central do jeito classico." },
-  { value: "right", label: "Direita", description: "Vira uma barra lateral fixa no lado direito." },
-];
+    { value: "left", label: "Esquerda", description: "Vira uma barra lateral fixa no lado esquerdo." },
+    { value: "center", label: "Centro", description: "Mantém a barra central do jeito clássico." },
+    { value: "right", label: "Direita", description: "Vira uma barra lateral fixa no lado direito." },
+  ];
 
 const BEHAVIOR_OPTIONS: Array<{
   value: NavigationDockBehavior;
   label: string;
   description: string;
 }> = [
-  { value: "fixed", label: "Sempre visivel", description: "A barra continua na tela o tempo todo." },
-  { value: "auto-hide", label: "Ocultar sozinha", description: "Ela some e reaparece quando voce precisar." },
-];
+    { value: "fixed", label: "Sempre visível", description: "Fixa na tela e não se oculta." },
+    { value: "auto-hide", label: "Ocultar automaticamente", description: "Oculta sozinha até você precisar dela." },
+  ];
 
 const THEME_OPTIONS: Array<{
   value: NavigationDockTheme;
   label: string;
   description: string;
 }> = [
-  { value: "dark", label: "Escuro", description: "Visual roxo escuro com mais contraste." },
-  { value: "light", label: "Claro", description: "Visual claro com destaque roxo mais leve." },
-];
+    { value: "dark", label: "Escuro", description: "Visual roxo escuro com mais contraste." },
+    { value: "light", label: "Claro", description: "Visual claro com destaque roxo mais leve." },
+  ];
 
 const DENSITY_OPTIONS: Array<{
   value: NavigationDockDensity;
   label: string;
   description: string;
 }> = [
-  { value: "compact", label: "Compacta", description: "Ocupa menos espaco e fica mais enxuta." },
-  { value: "comfortable", label: "Confortavel", description: "Mais respiro para tocar e ler melhor." },
-];
+    { value: "compact", label: "Compacta", description: "Ocupa menos espaço e fica mais enxuta." },
+    { value: "comfortable", label: "Confortável", description: "Mais respiro para tocar e ler melhor." },
+  ];
 
 const LABEL_OPTIONS: Array<{
   value: NavigationDockLabels;
   label: string;
   description: string;
 }> = [
-  { value: "always", label: "Com nomes", description: "Mostra o nome de cada atalho na barra." },
-  { value: "icons-only", label: "So icones", description: "Deixa a barra mais limpa e minimalista." },
-];
+    { value: "always", label: "Com nomes", description: "Mostra o nome de cada atalho na barra." },
+    { value: "icons-only", label: "Somente ícones", description: "Deixa a barra mais limpa e minimalista." },
+  ];
 
 const SURFACE_OPTIONS: Array<{
   value: NavigationDockSurface;
   label: string;
   description: string;
 }> = [
-  { value: "glass", label: "Translucida", description: "Fundo translucido com brilho suave." },
-  { value: "solid", label: "Solida", description: "Fundo mais fechado e contraste mais forte." },
-];
+    { value: "glass", label: "Translucida", description: "Fundo translucido com brilho suave." },
+    { value: "solid", label: "Solida", description: "Fundo mais fechado e contraste mais forte." },
+  ];
 
 const ACCENT_OPTIONS: Array<{
   value: NavigationDockAccent;
   label: string;
   description: string;
 }> = [
-  { value: "violet", label: "Roxo Weven", description: "A cor principal da marca e do app." },
-  { value: "indigo", label: "Indigo", description: "Uma variacao fria e mais executiva." },
-  { value: "fuchsia", label: "Fuchsia", description: "Mais vibrante, mantendo o DNA premium." },
-  { value: "emerald", label: "Emerald", description: "Derivacao limpa para um visual mais fresco." },
-  { value: "amber", label: "Amber", description: "Quente e chamativa, sem fugir do sistema." },
-];
+    { value: "violet", label: "Violet", description: "A cor principal da marca e do app." },
+    { value: "indigo", label: "Indigo", description: "Uma variação fria e mais executiva." },
+    { value: "fuchsia", label: "Fuchsia", description: "Mais vibrante, mantendo o DNA premium." },
+    { value: "emerald", label: "Emerald", description: "Derivação limpa para um visual mais fresco." },
+    { value: "amber", label: "Amber", description: "Quente e chamativa, sem fugir do sistema." },
+  ];
 
 type DockSettingsPanelProps = {
   compact?: boolean;
@@ -226,9 +226,9 @@ function PreviewSurface({
       <div className="flex items-start justify-between gap-4">
         <div>
           <Badge className="rounded-full bg-violet-400/15 px-3 py-1 text-violet-100 hover:bg-violet-400/15">Preview</Badge>
-          <h3 className="mt-3 text-xl font-semibold">Como sua barra rapida vai ficar</h3>
+          <h3 className="mt-3 text-xl font-semibold">Como sua barra rápida vai ficar?</h3>
           <p className="mt-2 max-w-md text-sm leading-6 text-violet-100/80">
-            Esta e uma previa. A barra real so muda depois que voce salvar.
+            Está é uma prévia. A barra real só muda depois que você salvar.
           </p>
         </div>
         <div className="inline-flex rounded-full border border-violet-200/15 bg-white/5 p-1">
@@ -257,7 +257,7 @@ function PreviewSurface({
 
       <div className="mt-5 grid gap-3 xl:grid-cols-3">
         <div className="rounded-2xl border border-violet-200/10 bg-white/5 px-4 py-3">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-violet-200/50">Posicao</p>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-violet-200/50">Posição</p>
           <p className="mt-2 text-sm font-semibold text-white">
             {POSITION_OPTIONS.find((option) => option.value === preferences.position)?.label}
           </p>
@@ -287,7 +287,7 @@ function PreviewSurface({
           {device === "mobile" ? (
             <div className="relative mx-auto h-[440px] w-[280px] rounded-[34px] border border-violet-200/10 bg-white/5 p-5">
               <div className="rounded-3xl border border-violet-200/10 bg-white/5 px-4 py-4">
-                <p className="text-xs text-violet-200/55">Visao no celular</p>
+                <p className="text-xs text-violet-200/55">Visão no celular</p>
                 <p className="mt-1 text-lg font-semibold text-zinc-50">
                   Os atalhos ficam ao alcance do polegar.
                 </p>
@@ -300,7 +300,7 @@ function PreviewSurface({
           ) : (
             <div className="relative h-[300px] rounded-4xl border border-violet-200/10 bg-white/5 p-6">
               <div className="rounded-3xl border border-violet-200/10 bg-white/5 px-5 py-4">
-                <p className="text-xs text-violet-200/55">Visao no desktop</p>
+                <p className="text-xs text-violet-200/55">Visão no desktop</p>
                 <p className="mt-1 text-lg font-semibold text-zinc-50">
                   {isSidebar
                     ? "A barra vira uma coluna lateral para abrir o que voce mais usa."
@@ -352,7 +352,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
   const positionLabel = POSITION_OPTIONS.find((option) => option.value === draft.position)?.label || "Centro";
   const behaviorLabel = BEHAVIOR_OPTIONS.find((option) => option.value === draft.behavior)?.label || "Sempre visivel";
   const themeLabel = THEME_OPTIONS.find((option) => option.value === draft.theme)?.label || "Escuro";
-  const accentLabel = ACCENT_OPTIONS.find((option) => option.value === draft.accent)?.label || "Roxo Weven";
+  const accentLabel = ACCENT_OPTIONS.find((option) => option.value === draft.accent)?.label || "Violet";
   const labelsLabel = LABEL_OPTIONS.find((option) => option.value === draft.labels)?.label || "Com nomes";
   const densityLabel = DENSITY_OPTIONS.find((option) => option.value === draft.density)?.label || "Confortavel";
   const surfaceLabel = SURFACE_OPTIONS.find((option) => option.value === draft.surface)?.label || "Translucida";
@@ -408,7 +408,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
             <Sparkles className="h-5 w-5" />
           </div>
           <div className="space-y-2">
-            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Barra rapida personalizada</h3>
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Barra rápida personalizada</h3>
             <p className="text-sm leading-6 text-zinc-500">
               Ajuste o comportamento da barra e escolha os atalhos que devem ficar sempre por perto.
             </p>
@@ -430,8 +430,8 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                 <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">No celular</p>
-                    <p className="mt-1 text-xs leading-5 text-zinc-500">Barra inferior parecida com app para abrir o que voce usa mais rapido.</p>
+                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">No celular</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">Barra inferior parecida com app para abrir o que você usa mais rápido.</p>
                     </div>
                     <Switch
                       checked={draft.mobileEnabled}
@@ -449,7 +449,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">No computador</p>
-                      <p className="mt-1 text-xs leading-5 text-zinc-500">Ative se quiser navegar com uma barra parecida com app tambem no desktop.</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">Ative se quiser navegar com uma barra parecida com app também no desktop.</p>
                     </div>
                     <Switch
                       checked={draft.desktopEnabled}
@@ -466,7 +466,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
             </PreferenceSection>
 
             <PreferenceSection
-              title="Posicao"
+              title="Posição"
               description="Escolha se a barra fica embaixo ou se vira uma barra lateral no computador."
               summary={[positionLabel]}
             >
@@ -485,7 +485,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
 
             <PreferenceSection
               title="Comportamento"
-              description="Defina se a barra fica sempre visivel ou se pode se esconder sozinha."
+              description="Defina se a barra fica sempre vísivel ou se pode se ocultar sozinha."
               summary={[behaviorLabel]}
             >
               <ChoiceCardGroup
@@ -498,7 +498,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
 
             <PreferenceSection
               title="Estilo"
-              description="Escolha o clima visual da barra para combinar com o jeito que voce gosta de usar."
+              description="Escolha o clima visual da barra para combinar com o jeito que você gosta de usar."
               summary={[themeLabel]}
             >
               <ChoiceCardGroup
@@ -524,7 +524,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
 
             <PreferenceSection
               title="Tamanho"
-              description="Deixe a barra mais compacta ou mais confortavel para tocar e ler."
+              description="Deixe a barra mais compacta ou mais confortável para tocar e ler."
               summary={[densityLabel]}
             >
               <ChoiceCardGroup
@@ -564,7 +564,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
 
           <div className="space-y-4">
             <PreferenceSection
-              title="Atalhos visiveis"
+              title="Atalhos visíveis"
               description={`Escolha ate ${MAX_DOCK_SHORTCUTS} atalhos para deixar sempre por perto.`}
               summary={[`${visibleShortcuts.length}/${MAX_DOCK_SHORTCUTS} ativos`]}
             >
@@ -614,7 +614,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                             Atalho {index + 1}
                           </Badge>
                         ) : (
-                          <span className="text-xs text-zinc-400">Nao aparece na barra rapida</span>
+                          <span className="text-xs text-zinc-400">Não aparece na barra rápida</span>
                         )}
 
                         {enabled && (
@@ -663,9 +663,9 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                 <Sparkles className="h-5 w-5" />
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Aplicar alteracoes</p>
+                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Aplicar alterações</p>
                 <p className="text-xs leading-5 text-zinc-500">
-                  Salve quando quiser usar essas escolhas na barra rapida do app.
+                  Salve quando quiser usar essas escolhas na barra rápida do app.
                 </p>
               </div>
             </div>
@@ -679,7 +679,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                 disabled={isSaving}
               >
                 <RotateCcw className="h-4 w-4" />
-                Restaurar padrao
+                Restaurar padrão
               </Button>
               <Button
                 type="button"
@@ -688,7 +688,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                 disabled={navigationLoading || isSaving || !hasChanges}
               >
                 <Save className="h-4 w-4" />
-                {isSaving ? "Salvando..." : "Salvar preferencias"}
+                {isSaving ? "Salvando..." : "Salvar preferências"}
               </Button>
             </div>
           </div>

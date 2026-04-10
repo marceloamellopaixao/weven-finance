@@ -62,7 +62,7 @@ export async function updateAppearancePreferences(next: AppearancePreferences) {
   };
 
   if (!response.ok || !payload.ok || !payload.appearance) {
-    throw new Error(payload.error || "Nao foi possivel atualizar a aparencia");
+    throw new Error(payload.error || "Não foi possível salvar as preferências de aparência");
   }
 
   emitAppearanceChanged();

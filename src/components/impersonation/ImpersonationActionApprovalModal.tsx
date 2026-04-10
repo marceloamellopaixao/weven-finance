@@ -85,14 +85,14 @@ export function ImpersonationActionApprovalModal() {
             onClick={() => void handleRespond(false)}
             className="hover:cursor-pointer"
           >
-            Negar ação
+            Recusar
           </Button>
           <Button
             disabled={isResponding}
             onClick={() => void handleRespond(true)}
             className="bg-emerald-600 text-white hover:cursor-pointer hover:bg-emerald-700"
           >
-            Aprovar ação
+            Aprovar
           </Button>
         </DialogFooter>
       </DialogContent>

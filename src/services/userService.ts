@@ -248,7 +248,7 @@ export const updateUserRole = async (uid: string, role: UserRole) => {
     }),
   });
   const payload = (await response.json()) as { ok: boolean; error?: string };
-  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao atualizar role");
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao atualizar cargo");
 };
 
 export const updateUserPaymentStatus = async (
@@ -295,9 +295,9 @@ export const updateOwnProfile = async (
   });
   if (!response.ok || !payload.ok) {
     if (payload.error === "phone_already_in_use") {
-      throw new Error("Este numero ja esta vinculado a outra conta.");
+      throw new Error("Este número já está vinculado a outra conta.");
     }
-    throw new Error(payload.error || `Erro ao atualizar perfil do usuario ${uid}`);
+    throw new Error(payload.error || `Erro ao atualizar perfil do usuário ${uid}`);
   }
 
   const supabase = getSupabaseClient();
@@ -398,7 +398,7 @@ export const permanentlyDeleteUser = async (uid: string): Promise<void> => {
     body: JSON.stringify({ action: "permanentDelete", uid }),
   });
   const payload = (await response.json()) as { ok: boolean; error?: string };
-  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao excluir usuario permanentemente");
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao excluir usuário permanentemente");
 };
 
 export const requestOwnAccountDeletion = async (idToken: string): Promise<void> => {
