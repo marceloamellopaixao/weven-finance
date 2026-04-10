@@ -10,7 +10,7 @@ import { ToastContainer } from "react-toastify";
 import { Footer } from "@/components/layout/Footer";
 import { ImpersonationConsentModal } from "@/components/impersonation/ImpersonationConsentModal";
 import { ImpersonationActionApprovalModal } from "@/components/impersonation/ImpersonationActionApprovalModal";
-import { AppDock, AppDockSpacer } from "@/components/layout/AppDock";
+import { AppDock } from "@/components/layout/AppDock";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -33,11 +33,10 @@ export default function RootLayout({
         <AuthProvider>
           <PlatformExperienceProvider>
             <BlockedGuard>
-              <div className="min-h-screen bg-zinc-200 dark:bg-zinc-950 font-sans transition-all duration-800 flex flex-col">
+              <div className="app-shell min-h-screen bg-background font-sans transition-all duration-800 flex flex-col">
                 <Header />
-                <main className="flex-1">
+                <main>
                   {children}
-                  <AppDockSpacer />
                   <ImpersonationConsentModal />
                   <ImpersonationActionApprovalModal />
                   <div aria-live="polite" aria-atomic="true">
