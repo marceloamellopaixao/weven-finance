@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,10 @@ import {
   Sparkles,
   Copy,
   KeyRound,
+  Monitor,
+  Moon,
+  Palette,
+  Sun,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { requestOwnAccountDeletion, updateOwnProfile } from "@/services/userService";
@@ -41,6 +45,8 @@ import { formatPhone, normalizePhone } from "@/lib/phone";
 import { ACCOUNT_DELETION_GRACE_DAYS } from "@/lib/account-deletion/policy";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
+import { useAppearance } from "@/hooks/useAppearance";
+import { AppearanceAccent, AppearanceThemeMode } from "@/types/appearance";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -50,9 +56,34 @@ type FeedbackData = {
   message: string;
 };
 
+const APPEARANCE_THEME_OPTIONS: Array<{
+  value: AppearanceThemeMode;
+  label: string;
+  description: string;
+  icon: typeof Monitor;
+}> = [
+  { value: "system", label: "Seguir dispositivo", description: "Acompanha o tema do seu celular ou computador.", icon: Monitor },
+  { value: "light", label: "Claro", description: "Mais leve para ambientes claros e leitura prolongada.", icon: Sun },
+  { value: "dark", label: "Escuro", description: "Mais contraste visual e menos brilho no uso noturno.", icon: Moon },
+];
+
+const APPEARANCE_ACCENT_OPTIONS: Array<{
+  value: AppearanceAccent;
+  label: string;
+  description: string;
+  swatchClass: string;
+}> = [
+  { value: "violet", label: "Roxo Weven", description: "A cor principal da identidade do app.", swatchClass: "from-violet-500 to-fuchsia-500" },
+  { value: "indigo", label: "Indigo", description: "Mais frio e discreto.", swatchClass: "from-indigo-500 to-blue-500" },
+  { value: "fuchsia", label: "Fuchsia", description: "Mais vibrante e premium.", swatchClass: "from-fuchsia-500 to-pink-500" },
+  { value: "emerald", label: "Emerald", description: "Mais limpo e fresco.", swatchClass: "from-emerald-500 to-teal-500" },
+  { value: "amber", label: "Amber", description: "Mais quente e chamativo.", swatchClass: "from-amber-500 to-orange-500" },
+];
+
 export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode, refreshProfile } = useAuth();
   const { completeTour, isActive: isOnboardingActive, loading: onboardingLoading } = useOnboarding();
+  const { appearancePreferences, appearanceLoading, updateAppearance } = useAppearance();
   const { isImpersonating } = useImpersonation();
   const { plans } = usePlans();
   const router = useRouter();
@@ -92,6 +123,7 @@ export default function SettingsPage() {
   const [isSendingFeature, setIsSendingFeature] = useState(false);
   const [isCopyingSwaggerToken, setIsCopyingSwaggerToken] = useState(false);
   const [isSendingPasswordEmail, setIsSendingPasswordEmail] = useState(false);
+  const [isSavingAppearance, setIsSavingAppearance] = useState(false);
   const [mySupportTickets, setMySupportTickets] = useState<SupportTicket[]>([]);
   const [isLoadingMySupportTickets, setIsLoadingMySupportTickets] = useState(false);
   const [mySupportPage, setMySupportPage] = useState(1);
@@ -246,6 +278,20 @@ export default function SettingsPage() {
       showFeedback('error', 'Erro na Migração', 'Não foi possível completar a migração de criptografia.');
     } finally {
       setIsMigrating(false);
+    }
+  };
+
+  const handleAppearanceChange = async (
+    patch: Partial<{ themeMode: AppearanceThemeMode; accent: AppearanceAccent }>
+  ) => {
+    setIsSavingAppearance(true);
+    try {
+      await updateAppearance((current) => ({ ...current, ...patch }));
+    } catch (error) {
+      console.error("Erro ao salvar aparencia:", error);
+      showFeedback("error", "Falha ao aplicar aparencia", "Nao foi possivel salvar seu tema agora.");
+    } finally {
+      setIsSavingAppearance(false);
     }
   };
 
@@ -596,15 +642,8 @@ export default function SettingsPage() {
   }, [activeTab]);
 
   return (
-    <div className="font-sans p-4 md:p-8 pb-20">
-
-      {/* Background Decorativo */}
-      <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-violet-500/5 rounded-full blur-[100px]" />
-        <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-500/5 rounded-full blur-[100px]" />
-      </div>
-
-      <div className="relative z-10 max-w-5xl mx-auto space-y-8">
+    <div className="font-sans p-4 md:p-8 pb-28 md:pb-32">
+      <div className="max-w-5xl mx-auto space-y-8">
 
         {/* Header */}
         <div id="tour-settings-header" className={`${fadeInUp} flex flex-col md:flex-row justify-between items-start md:items-center gap-4`}>
@@ -623,27 +662,27 @@ export default function SettingsPage() {
 
         {/* Navegação de Abas Personalizada */}
         <div className={`${fadeInUp} delay-150 space-y-6`}>
-          <div id="tour-settings-tabs" className="grid w-full grid-cols-1 gap-1 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-2 min-w-full md:grid-cols-4">
-            <button id="tour-settings-account-tab" type="button" aria-pressed={activeTab === "account"} onClick={() => handleTabChange("account")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "account" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+          <div id="tour-settings-tabs" className="app-panel-subtle grid min-w-full w-full grid-cols-1 gap-1 rounded-2xl border p-1.5 shadow-sm sm:grid-cols-2 md:grid-cols-4">
+            <button id="tour-settings-account-tab" type="button" aria-pressed={activeTab === "account"} onClick={() => handleTabChange("account")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "account" ? "app-panel-soft border border-[color:var(--app-panel-border)] text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <User className="h-4 w-4" /> Geral
             </button>
-            <button id="tour-settings-billing-tab" type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "billing" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button id="tour-settings-billing-tab" type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "billing" ? "app-panel-soft border border-[color:var(--app-panel-border)] text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <CreditCard className="h-4 w-4" /> Planos
             </button>
-            <button id="tour-settings-security-tab" type="button" aria-pressed={activeTab === "security"} onClick={() => handleTabChange("security")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "security" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button id="tour-settings-security-tab" type="button" aria-pressed={activeTab === "security"} onClick={() => handleTabChange("security")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "security" ? "app-panel-soft border border-[color:var(--app-panel-border)] text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <ShieldCheck className="h-4 w-4" /> Privacidade
             </button>
-            <button id="tour-settings-help-tab" type="button" aria-pressed={activeTab === "help"} onClick={() => handleTabChange("help")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "help" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+            <button id="tour-settings-help-tab" type="button" aria-pressed={activeTab === "help"} onClick={() => handleTabChange("help")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "help" ? "app-panel-soft border border-[color:var(--app-panel-border)] text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <HelpCircle className="h-4 w-4" /> Ajuda
             </button>
           </div>
 
           {/* ABA GERAL */}
           {activeTab === "account" && (
-            <Card id="tour-settings-panel" className={`${zoomIn} delay-200 border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl`}>
+            <Card id="tour-settings-panel" className={`${zoomIn} delay-200 app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20`}>
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-2 text-xl">
-                  <div className="p-2 bg-violet-100 dark:bg-violet-900/30 rounded-full"><User className="h-5 w-5 text-violet-600 dark:text-violet-400" /></div> Perfil do Usuário
+                  <div className="rounded-full bg-primary/10 p-2"><User className="h-5 w-5 text-primary" /></div> Perfil do Usuário
                 </CardTitle>
                 <CardDescription>Suas informações pessoais visíveis.</CardDescription>
               </CardHeader>
@@ -660,7 +699,7 @@ export default function SettingsPage() {
                     <h3 className="font-bold text-2xl text-zinc-900 dark:text-zinc-100">{displayName || "Usuário"}</h3>
                     <p className="text-sm text-zinc-500 font-medium">{effectiveProfileEmail}</p>
                     <div className="flex flex-wrap justify-center sm:justify-start gap-2 pt-2">
-                      <Badge variant="secondary" className={`uppercase text-[10px] tracking-wider border ${effectivePlan === 'free' ? 'bg-zinc-100 text-zinc-600 border-zinc-200' : 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300'}`}>
+                      <Badge variant="secondary" className={`uppercase text-[10px] tracking-wider border ${effectivePlan === 'free' ? 'bg-zinc-100 text-zinc-600 border-zinc-200' : 'border-primary/20 bg-accent text-primary'}`}>
                         {isBillingExemptRole ? "Plano Staff (Isento)" : `Plano ${effectivePlan}`}
                       </Badge>
                       <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 gap-1">
@@ -673,15 +712,15 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
-                <Separator className="bg-zinc-100 dark:bg-zinc-800" />
+                <Separator className="bg-border/70" />
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label className="text-zinc-500">Nome de Exibição (Apelido)</Label>
-                    <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500 bg-zinc-50/50 dark:bg-zinc-900/50" />
+                    <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="h-11 rounded-xl" />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-zinc-500">Nome Completo</Label>
-                    <Input value={completeName} onChange={(e) => setCompleteName(e.target.value)} className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500 bg-zinc-50/50 dark:bg-zinc-900/50" />
+                    <Input value={completeName} onChange={(e) => setCompleteName(e.target.value)} className="h-11 rounded-xl" />
                   </div>
                     <div className="space-y-2">
                       <Label className="text-zinc-500">Celular</Label>
@@ -689,26 +728,110 @@ export default function SettingsPage() {
                         value={formatPhone(phone)}
                         onChange={(e) => setPhone(normalizePhone(e.target.value))}
                         maxLength={15}
-                        className="h-11 rounded-xl border-zinc-200 dark:border-zinc-800 focus:ring-violet-500 bg-zinc-50/50 dark:bg-zinc-900/50"
+                        className="h-11 rounded-xl"
                       />
                     </div>
                   <div className="space-y-2">
                     <Label className="text-zinc-500">E-mail de Acesso</Label>
-                    <Input defaultValue={effectiveProfileEmail || ""} disabled className="h-11 rounded-xl bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 opacity-70 cursor-not-allowed" />
+                    <Input defaultValue={effectiveProfileEmail || ""} disabled className="h-11 rounded-xl opacity-70 cursor-not-allowed" />
+                  </div>
+                </div>
+
+                <Separator className="bg-border/70" />
+                <div className="app-panel-soft rounded-2xl border p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-primary">
+                        <Palette className="h-4 w-4" />
+                        <p className="text-sm font-semibold">Aparencia do app</p>
+                      </div>
+                      <p className="text-sm text-zinc-500">
+                        Escolha o tema geral e a cor principal para os campos, focos e destaques do app.
+                      </p>
+                    </div>
+                    {isSavingAppearance || appearanceLoading ? (
+                      <div className="inline-flex items-center gap-2 text-xs text-zinc-500">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Salvando preferencia...
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-5 space-y-5">
+                    <div className="space-y-3">
+                      <Label className="text-zinc-500">Tema</Label>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        {APPEARANCE_THEME_OPTIONS.map((option) => {
+                          const Icon = option.icon;
+                          const selected = appearancePreferences.themeMode === option.value;
+
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => void handleAppearanceChange({ themeMode: option.value })}
+                              disabled={appearanceLoading || isSavingAppearance}
+                              className={`rounded-2xl border p-4 text-left transition-all ${
+                                selected
+                                  ? "border-primary/35 bg-primary/10 ring-2 ring-primary/15"
+                                  : "app-panel-subtle hover:border-primary/25 hover:bg-primary/5"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className={`inline-flex h-9 w-9 items-center justify-center rounded-2xl ${selected ? "bg-primary text-primary-foreground" : "app-panel-subtle text-zinc-600 dark:text-zinc-300"}`}>
+                                  <Icon className="h-4 w-4" />
+                                </div>
+                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{option.label}</p>
+                              </div>
+                              <p className="mt-3 text-xs leading-5 text-zinc-500">{option.description}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <Label className="text-zinc-500">Cor principal</Label>
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        {APPEARANCE_ACCENT_OPTIONS.map((option) => {
+                          const selected = appearancePreferences.accent === option.value;
+
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => void handleAppearanceChange({ accent: option.value })}
+                              disabled={appearanceLoading || isSavingAppearance}
+                              className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition-all ${
+                                selected
+                                  ? "border-primary/35 bg-primary/10 ring-2 ring-primary/15"
+                                  : "app-panel-subtle hover:border-primary/25 hover:bg-primary/5"
+                              }`}
+                            >
+                              <div className={`h-10 w-10 rounded-2xl bg-linear-to-br ${option.swatchClass}`} />
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{option.label}</p>
+                                <p className="text-xs leading-5 text-zinc-500">{option.description}</p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 {!isImpersonating && (
                   <>
-                    <Separator className="bg-zinc-100 dark:bg-zinc-800" />
-                    <div className="rounded-2xl border border-violet-100 bg-violet-50/80 p-5 dark:border-violet-900/40 dark:bg-violet-900/10">
+                    <Separator className="bg-border/70" />
+                    <div className="rounded-2xl border border-primary/15 bg-primary/6 p-5">
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-violet-700 dark:text-violet-300">
+                          <div className="flex items-center gap-2 text-primary">
                             <KeyRound className="h-4 w-4" />
                             <p className="text-sm font-semibold">Acesso por senha</p>
                           </div>
-                          <p className="text-sm text-violet-700/80 dark:text-violet-300/80">
+                          <p className="text-sm text-primary/80">
                             Receba um link seguro para criar ou trocar sua senha em `/first-access`.
                           </p>
                         </div>
@@ -716,7 +839,7 @@ export default function SettingsPage() {
                           type="button"
                           onClick={handlePasswordAccess}
                           disabled={isSendingPasswordEmail}
-                          className="h-11 rounded-xl bg-violet-600 hover:bg-violet-700 text-white"
+                          className="h-11 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground"
                         >
                           {isSendingPasswordEmail ? "Enviando link..." : "Alterar senha"}
                         </Button>
@@ -725,7 +848,7 @@ export default function SettingsPage() {
                   </>
                 )}
               </CardContent>
-              <CardFooter className="flex flex-wrap justify-end gap-2 border-t border-zinc-50 dark:border-zinc-800/50 pt-6 bg-zinc-50/50 dark:bg-zinc-900/50 rounded-b-3xl">
+              <CardFooter className="flex flex-wrap justify-end gap-2 border-t border-border/70 bg-transparent pt-6">
                 {showSwaggerTokenButton && (
                   <Button
                     variant="outline"
@@ -741,7 +864,7 @@ export default function SettingsPage() {
                     Copiar Token Swagger
                   </Button>
                 )}
-                <Button onClick={handleSaveProfile} disabled={isSaving} className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-8 h-11 shadow-lg shadow-violet-500/20 transition-all active:scale-95 hover:cursor-pointer duration-200">
+                <Button onClick={handleSaveProfile} disabled={isSaving} className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl px-8 h-11 shadow-lg shadow-primary/10 transition-all active:scale-95 hover:cursor-pointer duration-200">
                   {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Salvar Alterações"}
                 </Button>
               </CardFooter>
@@ -942,7 +1065,7 @@ export default function SettingsPage() {
               </Card>
 
               {!isBillingExemptRole && (
-                <Card className="border-none shadow-lg rounded-3xl bg-white dark:bg-zinc-900">
+                <Card className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] shadow-lg">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
                       <Clock className="h-4 w-4 text-zinc-600" /> Histórico de cobrança
@@ -953,24 +1076,24 @@ export default function SettingsPage() {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {isLoadingBillingHistory ? (
-                      <div className="h-20 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
+                      <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-[color:var(--app-panel-border)] text-sm text-zinc-500">
                         <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando histórico...
                       </div>
                     ) : billingHistory.length === 0 ? (
-                      <div className="h-20 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
+                      <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-[color:var(--app-panel-border)] text-sm text-zinc-500">
                         Nenhum evento encontrado.
                       </div>
                     ) : (
                       <div className="space-y-2">
                         {billingHistory.map((item) => (
-                          <div key={item.id} className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2">
+                          <div key={item.id} className="app-panel-subtle rounded-xl border border-[color:var(--app-panel-border)] px-3 py-2">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-sm font-semibold text-zinc-900">{formatBillingEventLabel(item)}</p>
+                              <p className="text-sm font-semibold text-foreground">{formatBillingEventLabel(item)}</p>
                               <Badge variant="secondary" className="text-[10px] uppercase">
                                 {item.paymentStatus || "n/a"}
                               </Badge>
                             </div>
-                            <p className="text-xs text-zinc-600 mt-1">
+                            <p className="mt-1 text-xs text-muted-foreground">
                               {item.createdAt ? new Date(item.createdAt).toLocaleString() : "Data indisponível"}
                               {item.plan ? ` • Plano ${item.plan}` : ""}
                               {typeof item.amount === "number" ? ` • ${item.currency || "BRL"} ${item.amount.toFixed(2)}` : ""}
@@ -980,7 +1103,7 @@ export default function SettingsPage() {
                       </div>
                     )}
                     {!isLoadingBillingHistory && billingHistoryTotal > billingHistoryPerPage && (
-                      <div className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 py-2 mt-2">
+                      <div className="app-panel-subtle mt-2 flex items-center justify-between rounded-xl border border-[color:var(--app-panel-border)] px-3 py-2">
                         <p className="text-xs text-zinc-500">
                           Página {billingHistoryPage} de {Math.max(1, Math.ceil(billingHistoryTotal / billingHistoryPerPage))} • {billingHistoryTotal} evento(s)
                         </p>
@@ -1019,7 +1142,7 @@ export default function SettingsPage() {
               {canUpgrade && (
                 <div className="space-y-4">
                   <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-4">
+                    <div className="app-panel-subtle rounded-2xl border px-4 py-4">
                       <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Free</p>
                       <p className="mt-2 text-base font-semibold text-zinc-900">Registrar</p>
                       <p className="mt-1 text-sm text-zinc-600">Para sair do caos e registrar o essencial do mês.</p>
@@ -1038,7 +1161,7 @@ export default function SettingsPage() {
 
                   <div className="grid gap-6 md:grid-cols-2">
                   {effectivePlan !== 'premium' && (
-                    <Card className="relative overflow-hidden h-full flex flex-col border-2 border-slate-300/40 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all bg-white dark:bg-zinc-900 rounded-3xl group transform hover:-translate-y-1 duration-300">
+                    <Card className="app-panel-soft relative overflow-hidden h-full flex flex-col border-2 border-slate-300/40 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300">
                       <div className="absolute top-0 left-0 w-full h-1 bg-slate-400" />
                       <CardHeader className="flex-1">
                         <CardTitle className="flex justify-between items-center">
@@ -1079,7 +1202,7 @@ export default function SettingsPage() {
                       </CardFooter>
                     </Card>
                   )}
-                  <Card className="relative overflow-hidden h-full flex flex-col border-2 border-yellow-300/40 dark:border-yellow-700/30 shadow-lg hover:shadow-xl transition-all bg-white dark:bg-zinc-900 rounded-3xl group transform hover:-translate-y-1 duration-300">
+                  <Card className="app-panel-soft relative overflow-hidden h-full flex flex-col border-2 border-yellow-300/40 dark:border-yellow-700/30 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300">
                     <div className="absolute top-0 left-0 w-full h-1 bg-yellow-400" />
                     <CardHeader className="flex-1">
                       <CardTitle className="flex justify-between items-center">
@@ -1128,7 +1251,7 @@ export default function SettingsPage() {
 
           {/* ABA SEGURANÇA */}
           {activeTab === "security" && (
-            <Card id="tour-settings-panel" className={`${zoomIn} delay-200 border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl`}>
+            <Card id="tour-settings-panel" className={`${zoomIn} delay-200 app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20`}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-full">
@@ -1142,16 +1265,16 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-8">
 
-                <div className="flex items-center justify-between p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-100 dark:border-zinc-800 transition-all hover:border-zinc-300 dark:hover:border-zinc-700">
+                <div className="app-panel-subtle flex items-center justify-between rounded-2xl border p-5 transition-all hover:border-primary/20">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2"><EyeOff className="h-5 w-5 text-zinc-600 dark:text-zinc-400" /><Label className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Modo Discreto (Blur)</Label></div>
                     <p className="text-sm text-zinc-500">Oculta valores monetários no Dashboard para privacidade.</p>
                   </div>
-                  <Switch checked={privacyMode} onCheckedChange={togglePrivacyMode} className="data-[state=checked]:bg-violet-600 hover:cursor-pointer" />
+                  <Switch checked={privacyMode} onCheckedChange={togglePrivacyMode} className="hover:cursor-pointer" />
                 </div>
                 <Separator className="bg-zinc-300 dark:bg-zinc-800" />
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2"><Lock className="h-4 w-4 text-violet-500" /><h3 className="font-semibold text-sm uppercase tracking-wider text-zinc-500">Segurança de Dados</h3></div>
+                  <div className="flex items-center gap-2"><Lock className="h-4 w-4 text-primary" /><h3 className="font-semibold text-sm uppercase tracking-wider text-zinc-500">Segurança de Dados</h3></div>
                   <div className="p-5 rounded-2xl bg-zinc-950 text-zinc-400 font-mono text-xs break-all relative border border-zinc-800 shadow-inner group transition-all hover:border-zinc-700">
                     <div className="absolute top-3 right-3"><Badge variant="outline" className="text-[10px] border-zinc-700 text-emerald-500 font-bold px-2 py-0.5">PRIVACIDADE NO APP</Badge></div>
                     <p className="mb-2 text-zinc-600 uppercase tracking-widest text-[10px] font-bold">Identificador interno</p>
@@ -1194,9 +1317,9 @@ export default function SettingsPage() {
           {activeTab === "help" && (
             <div id="tour-settings-panel" className={`${fadeInUp} delay-200 space-y-6`}>
               {/* Card de Tutorial */}
-              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden hover:shadow-2xl transition-shadow">
-                <CardHeader className="bg-linear-to-r from-violet-500/10 to-indigo-500/10 p-4">
-                  <CardTitle className="flex items-center gap-2 text-violet-700 dark:text-violet-300">
+              <Card className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20 overflow-hidden hover:shadow-2xl transition-shadow">
+                <CardHeader className="bg-linear-to-r from-primary/10 to-primary/5 p-4">
+                  <CardTitle className="flex items-center gap-2 text-primary">
                     <PlayCircle className="h-6 w-6" /> Tutorial Interativo
                   </CardTitle>
                   <CardDescription className="text-zinc-600 dark:text-zinc-400">
@@ -1204,14 +1327,14 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="-mt-4">
-                  <div className="bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="app-panel-subtle flex flex-col items-center justify-between gap-4 rounded-2xl border border-[color:var(--app-panel-border)] p-6 shadow-sm sm:flex-row">
                     <div className="space-y-1">
                       <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tour da plataforma</h4>
                       <p className="text-sm text-zinc-500">Escolha entre ver tudo ou apenas dashboard, configuracoes, lancamentos, cartoes e metas.</p>
                     </div>
                     <Button
                       onClick={handleReplayTour}
-                      className="w-full sm:w-auto bg-violet-600 hover:bg-violet-700 text-white rounded-xl shadow-lg shadow-violet-500/20 hover:scale-105 transition-all"
+                      className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-lg shadow-black/10 hover:scale-105 transition-all"
                     >
                       Escolher Tour
                     </Button>
@@ -1219,9 +1342,9 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
-                <CardHeader className="bg-linear-to-r from-fuchsia-500/10 to-violet-500/10 p-4">
-                  <CardTitle className="flex items-center gap-2 text-fuchsia-700 dark:text-fuchsia-300">
+              <Card className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20 overflow-hidden">
+                <CardHeader className="bg-linear-to-r from-primary/10 to-primary/5 p-4">
+                  <CardTitle className="flex items-center gap-2 text-primary">
                     <Sparkles className="h-6 w-6" /> Explorar o App
                   </CardTitle>
                   <CardDescription className="text-zinc-600 dark:text-zinc-400">
@@ -1229,7 +1352,7 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="-mt-4">
-                  <div className="bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="app-panel-subtle flex flex-col items-center justify-between gap-4 rounded-2xl border border-[color:var(--app-panel-border)] p-6 shadow-sm sm:flex-row">
                     <div className="space-y-1">
                       <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tela de funcionalidades e atalhos</h4>
                       <p className="text-sm text-zinc-500">Acesse a visao geral das paginas e ajuste a barra rapida do seu jeito.</p>
@@ -1238,7 +1361,7 @@ export default function SettingsPage() {
                       type="button"
                       onClick={() => router.push("/apps")}
                       variant="outline"
-                      className="w-full sm:w-auto rounded-xl border-fuchsia-200 text-fuchsia-700 hover:bg-fuchsia-50"
+                      className="w-full sm:w-auto rounded-xl border-primary/20 text-primary hover:bg-accent"
                     >
                       Abrir Explorar App
                     </Button>
@@ -1247,7 +1370,7 @@ export default function SettingsPage() {
               </Card>
 
               {/* Card de Suporte e Ideias */}
-              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl">
+              <Card className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200">
                     <MessageCircle className="h-5 w-5" /> Fale Conosco
@@ -1255,7 +1378,7 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* WhatsApp */}
-                  <a href="https://wa.me/5511992348613" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer">
+                  <a href="https://wa.me/5511992348613" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 rounded-2xl border border-transparent p-4 transition-colors hover:border-[color:var(--app-panel-border)] hover:bg-accent/70 group cursor-pointer">
                     <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full text-green-600 group-hover:scale-110 transition-transform">
                       <MessageCircle className="h-6 w-6" />
                     </div>
@@ -1269,9 +1392,9 @@ export default function SettingsPage() {
                   <button
                     type="button"
                     onClick={() => setIsSupportModalOpen(true)}
-                    className="w-full text-left flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                    className="group flex w-full cursor-pointer items-center gap-4 rounded-2xl border border-transparent p-4 text-left transition-colors hover:border-[color:var(--app-panel-border)] hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   >
-                    <div className="p-3 bg-violet-100 dark:bg-violet-900/30 rounded-full text-violet-600 group-hover:scale-110 transition-transform">
+                    <div className="rounded-full bg-primary/10 p-3 text-primary transition-transform group-hover:scale-110">
                       <LifeBuoy className="h-6 w-6" />
                     </div>
                     <div>
@@ -1284,7 +1407,7 @@ export default function SettingsPage() {
                   <button
                     type="button"
                     onClick={() => setIsFeatureModalOpen(true)}
-                    className="w-full text-left flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                    className="group flex w-full cursor-pointer items-center gap-4 rounded-2xl border border-transparent p-4 text-left transition-colors hover:border-[color:var(--app-panel-border)] hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                   >
                     <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-full text-amber-600 group-hover:scale-110 transition-transform">
                       <Lightbulb className="h-6 w-6" />
@@ -1297,7 +1420,7 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl">
+              <Card className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200">
                     <HelpCircle className="h-5 w-5" /> Meus chamados
@@ -1308,33 +1431,33 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {isLoadingMySupportTickets ? (
-                    <div className="h-20 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
+                    <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-[color:var(--app-panel-border)] text-sm text-zinc-500">
                       <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando chamados...
                     </div>
                   ) : mySupportTickets.length === 0 ? (
-                    <div className="h-20 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
+                    <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-[color:var(--app-panel-border)] text-sm text-zinc-500">
                       Nenhum chamado aberto ainda.
                     </div>
                   ) : (
                     mySupportTickets.map((ticket) => (
-                      <div key={ticket.id} className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2">
+                      <div key={ticket.id} className="app-panel-subtle rounded-xl border border-[color:var(--app-panel-border)] px-3 py-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-sm font-semibold text-zinc-900">
+                          <p className="text-sm font-semibold text-foreground">
                             Protocolo {ticket.protocol || `#${ticket.id.slice(0, 8)}`}
                           </p>
                           <Badge variant="outline" className={getSupportStatusBadgeClass(ticket.status)}>
                             {formatSupportStatus(ticket.status)}
                           </Badge>
                         </div>
-                        <p className="text-xs text-zinc-600 mt-1 line-clamp-1">{ticket.message}</p>
-                        <p className="text-[11px] text-zinc-500 mt-1">
+                        <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{ticket.message}</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
                           {ticket.createdAt.toLocaleString("pt-BR")}
                         </p>
                       </div>
                     ))
                   )}
                   {!isLoadingMySupportTickets && mySupportTotal > mySupportPerPage && (
-                    <div className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 py-2 mt-3">
+                    <div className="app-panel-subtle mt-3 flex items-center justify-between rounded-xl border border-[color:var(--app-panel-border)] px-3 py-2">
                       <p className="text-xs text-zinc-500">
                         Página {mySupportPage} de {Math.max(1, Math.ceil(mySupportTotal / mySupportPerPage))} • {mySupportTotal} chamado(s)
                       </p>
@@ -1374,7 +1497,7 @@ export default function SettingsPage() {
         <Dialog open={isSupportModalOpen} onOpenChange={setIsSupportModalOpen}>
           <DialogContent className="w-[calc(100vw-1rem)] max-w-[500px] rounded-3xl p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-violet-700 dark:text-violet-400">
+              <DialogTitle className="flex items-center gap-2 text-primary">
                 <LifeBuoy className="h-6 w-6" /> Solicitar Suporte
               </DialogTitle>
               <DialogDescription className="pt-2">
@@ -1387,7 +1510,7 @@ export default function SettingsPage() {
                 <Label htmlFor="support-reason">Motivo do Contato</Label>
                 <textarea
                   id="support-reason"
-                  className="flex min-h-[120px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:ring-offset-zinc-950 dark:placeholder:text-zinc-400 dark:focus-visible:ring-violet-800"
+                  className="app-field-surface flex min-h-[120px] w-full rounded-xl border px-3 py-2 text-sm placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:placeholder:text-zinc-400"
                   placeholder="Ex: Não consigo editar uma transação parcelada..."
                   value={supportMessage}
                   onChange={(e) => setSupportMessage(e.target.value)}
@@ -1403,7 +1526,7 @@ export default function SettingsPage() {
               <Button
                 onClick={handleSendSupport}
                 disabled={isSendingSupport}
-                className="w-full rounded-xl bg-violet-600 text-white gap-2 hover:bg-violet-700 sm:w-auto"
+                className="w-full rounded-xl bg-primary text-primary-foreground gap-2 hover:bg-primary/90 sm:w-auto"
               >
                 {isSendingSupport ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
                 Enviar Solicitação
@@ -1466,7 +1589,7 @@ export default function SettingsPage() {
                 <Label htmlFor="feature-idea">Sua Ideia Brilhante</Label>
                 <textarea
                   id="feature-idea"
-                  className="flex min-h-[120px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:ring-offset-zinc-950 dark:placeholder:text-zinc-400 dark:focus-visible:ring-amber-600"
+                  className="app-field-surface flex min-h-[120px] w-full rounded-xl border px-3 py-2 text-sm placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50 dark:placeholder:text-zinc-400 dark:focus-visible:ring-amber-600"
                   placeholder="Ex: Gostaria de ver um gráfico de gastos por categoria..."
                   value={featureMessage}
                   onChange={(e) => setFeatureMessage(e.target.value)}
