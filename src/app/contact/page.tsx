@@ -24,10 +24,10 @@ const CONTACT_OPTIONS = [
 
 export default function ContactPage() {
   return (
-    <div className="min-h-screen bg-zinc-50/40 px-4 py-24">
+    <div className="min-h-screen bg-transparent px-4 py-24">
       <div className="mx-auto max-w-4xl space-y-8">
         <div className="space-y-3 text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-violet-600">Contato</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">Contato</p>
           <h1 className="text-4xl font-bold tracking-tight text-zinc-900">Fale com a WevenFinance</h1>
           <p className="mx-auto max-w-2xl text-base text-zinc-600">
             Se você precisa de ajuda, tem uma dúvida sobre sua conta ou quer sugerir algo, estes são os canais certos.
@@ -41,7 +41,7 @@ export default function ContactPage() {
               <Card key={item.title} className="rounded-3xl border-zinc-200 bg-white shadow-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-3 text-zinc-900">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent text-primary">
                       <Icon className="h-5 w-5" />
                     </span>
                     {item.title}
@@ -60,13 +60,13 @@ export default function ContactPage() {
         <Card className="rounded-3xl border-zinc-200 bg-white shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-zinc-900">
-              <LifeBuoy className="h-5 w-5 text-violet-600" />
+              <LifeBuoy className="h-5 w-5 text-primary" />
               Próximo passo
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 sm:flex-row">
             <Link href="/settings?tab=help" className="w-full sm:w-auto">
-              <Button className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white">
+              <Button className="w-full rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
                 Abrir ajuda no aplicativo
               </Button>
             </Link>
