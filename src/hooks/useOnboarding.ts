@@ -67,13 +67,23 @@ export function useOnboarding() {
 
   const completeTour = async () => {
     if (status.tourCompleted) return;
-    await updateOnboardingStatus({ tourCompleted: true });
     setStatus((prev) => ({ ...prev, tourCompleted: true }));
+    try {
+      await updateOnboardingStatus({ tourCompleted: true });
+    } catch (error) {
+      setStatus((prev) => ({ ...prev, tourCompleted: false }));
+      throw error;
+    }
   };
 
   const resetTour = async () => {
-    await updateOnboardingStatus({ tourCompleted: false });
     setStatus((prev) => ({ ...prev, tourCompleted: false }));
+    try {
+      await updateOnboardingStatus({ tourCompleted: false });
+    } catch (error) {
+      setStatus((prev) => ({ ...prev, tourCompleted: true }));
+      throw error;
+    }
   };
 
   return { status, loading, dismiss, completeStep, completeTour, resetTour, activeStep, isActive };
