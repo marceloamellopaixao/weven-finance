@@ -8,6 +8,7 @@ import {
   getImpersonationTargetUid,
   subscribeToImpersonationChange,
 } from "@/lib/impersonation/client";
+import { isAuthErrorMessage } from "@/lib/api/error";
 import { extractAuthProviders, hasEmailPasswordProvider, shouldRequirePasswordSetup } from "@/lib/auth/providers";
 import { resolveUserUidFromMetadata } from "@/lib/auth/user-uid";
 import { getSupabaseClient } from "@/services/supabase/client";
@@ -287,6 +288,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setUserProfile(profile ?? null);
       } catch (error) {
         console.error("Erro na busca do perfil:", error);
+        const message = error instanceof Error ? error.message : "unknown_error";
+        if (isAuthErrorMessage(message) || message === "missing_auth_user") {
+          await supabase.auth.signOut();
+          if (!cancelled) {
+            setUser(null);
+            setUserProfile(null);
+          }
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -298,7 +307,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [user, impersonationTargetUid]);
+  }, [impersonationTargetUid, supabase, user]);
 
   useEffect(() => {
     if (loading) return;
