@@ -25,12 +25,12 @@ type GoalOption = {
 };
 
 const GOAL_OPTIONS: GoalOption[] = [
-  { type: "card_limit", label: "Cofrinho do cartao", description: "Aumentar limite do cartao com reserva dedicada.", icon: Landmark },
-  { type: "emergency_reserve", label: "Reserva de emergencia", description: "Cobrir imprevistos com mais seguranca.", icon: ShieldCheck },
+  { type: "card_limit", label: "Cofrinho do cartão", description: "Aumentar limite do cartão com reserva dedicada.", icon: Landmark },
+  { type: "emergency_reserve", label: "Reserva de emergência", description: "Cobrir imprevistos com mais segurança.", icon: ShieldCheck },
   { type: "travel", label: "Fazer uma viagem", description: "Guardar para transporte, hospedagem e passeios.", icon: Plane },
-  { type: "home_renovation", label: "Reformar a casa", description: "Separar valor para materiais e mao de obra.", icon: Home },
-  { type: "dream_purchase", label: "Sonho de consumo", description: "Chegar no objetivo sem baguncar o orcamento.", icon: Sparkles },
-  { type: "custom", label: "Criar novo objetivo", description: "Defina sua propria meta do jeito que fizer sentido.", icon: PlusCircle },
+  { type: "home_renovation", label: "Reformar a casa", description: "Separar valor para materiais e mão de obra.", icon: Home },
+  { type: "dream_purchase", label: "Sonho de consumo", description: "Chegar no objetivo sem baguncar o orçamento.", icon: Sparkles },
+  { type: "custom", label: "Criar novo objetivo", description: "Defina sua própria meta do jeito que fizer sentido.", icon: PlusCircle },
 ];
 
 const formatCurrency = (value: number) =>
@@ -100,7 +100,7 @@ export default function NewPiggyBankPage() {
         }
       } catch (error) {
         if (!mounted) return;
-        setFeedback(error instanceof Error ? error.message : "Nao foi possivel carregar os dados do cofrinho.");
+        setFeedback(error instanceof Error ? error.message : "Não foi possível carregar os dados do cofrinho.");
       }
     })();
     return () => {
@@ -171,7 +171,7 @@ export default function NewPiggyBankPage() {
               <div>
                 <CardTitle>Etapa {step} de 3</CardTitle>
                 <CardDescription>
-                  {step === 1 && "Escolha que tipo de objetivo voce quer criar."}
+                  {step === 1 && "Escolha que tipo de objetivo você quer criar."}
                   {step === 2 && "Informe valor, origem e detalhes dessa reserva."}
                   {step === 3 && "Revise tudo antes de confirmar o aporte inicial."}
                 </CardDescription>
@@ -179,14 +179,14 @@ export default function NewPiggyBankPage() {
               <div className="grid gap-2 sm:grid-cols-3">
                 <StepBadge current={step === 1} active={step >= 1} label="Objetivo" />
                 <StepBadge current={step === 2} active={step >= 2} label="Valor e origem" />
-                <StepBadge current={step === 3} active={step >= 3} label="Revisao final" />
+                <StepBadge current={step === 3} active={step >= 3} label="Revisão final" />
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
             {step === 1 && (
               <div className="space-y-5">
-                <Label className="text-base">Qual e o objetivo desta reserva?</Label>
+                <Label className="text-base">Qual é o objetivo desta reserva?</Label>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   {GOAL_OPTIONS.map((goal) => {
                     const Icon = goal.icon;
@@ -225,14 +225,14 @@ export default function NewPiggyBankPage() {
               <div className="space-y-5">
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
                   <div className="space-y-2">
-                    <Label>Quanto voce quer guardar?</Label>
+                    <Label>Quanto você quer guardar?</Label>
                     <Input value={amountInput} onChange={(e) => setAmountInput(formatCurrencyInput(e.target.value))} placeholder="R$ 0,00" inputMode="decimal" />
                   </div>
                   <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
-                    <p className="text-xs text-muted-foreground">Saldo disponivel</p>
+                    <p className="text-xs text-muted-foreground">Saldo disponível</p>
                     <p className="mt-1 text-lg font-bold text-foreground">{formatCurrency(availableBalance)}</p>
                     {parsedAmount > availableBalance && (
-                      <p className="mt-2 text-xs text-red-600">O valor informado excede seu saldo disponivel.</p>
+                      <p className="mt-2 text-xs text-red-600">O valor informado excede seu saldo disponível.</p>
                     )}
                   </div>
                 </div>
@@ -262,9 +262,9 @@ export default function NewPiggyBankPage() {
 
                   {goalType === "card_limit" && (
                     <div className="space-y-2">
-                      <Label>Cartao para aumento de limite</Label>
+                      <Label>Cartão para aumento de limite</Label>
                       <Select value={cardId} onValueChange={setCardId}>
-                        <SelectTrigger><SelectValue placeholder="Selecione um cartao" /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Selecione um cartão" /></SelectTrigger>
                         <SelectContent>
                           {cards.map((card) => (
                             <SelectItem key={card.id} value={card.id}>
@@ -274,7 +274,7 @@ export default function NewPiggyBankPage() {
                         </SelectContent>
                       </Select>
                       {cards.length === 0 && (
-                        <p className="text-xs text-amber-700">Cadastre ao menos um cartao em `/cards` para usar o cofrinho do cartao.</p>
+                        <p className="text-xs text-amber-700">Cadastre ao menos um cartão em `/cards` para usar o cofrinho do cartão.</p>
                       )}
                     </div>
                   )}
@@ -285,7 +285,7 @@ export default function NewPiggyBankPage() {
             {step === 3 && (
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
                 <div className="space-y-3 rounded-2xl border border-border/70 bg-background/80 p-5">
-                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Revisao final</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Revisão final</p>
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm text-muted-foreground">Objetivo</p>
                     <p className="text-right font-semibold text-foreground">{effectiveGoalName}</p>
@@ -321,7 +321,7 @@ export default function NewPiggyBankPage() {
                 <div className="rounded-2xl border border-primary/15 bg-accent p-5 text-sm text-accent-foreground">
                   <p className="font-semibold">O que acontece ao confirmar</p>
                   <p className="mt-2">
-                    O valor entra no historico da meta, atualiza o total guardado e gera o reflexo no extrato da conta.
+                    O valor entra no histórico da meta, atualiza o total guardado e gera o reflexo no extrato da conta.
                   </p>
                 </div>
               </div>
