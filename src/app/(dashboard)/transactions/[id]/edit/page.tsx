@@ -151,9 +151,9 @@ export default function EditTransactionPage() {
   // ESTADO: CARREGANDO
   if (loadingTransactions || !resolvedTransaction) {
     return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-8 flex justify-center items-center pt-32">
+      <div className="flex min-h-screen items-center justify-center bg-transparent p-4 pt-32 md:p-8">
         <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 rounded-full border-4 border-zinc-200 border-t-violet-600 animate-spin" />
+          <div className="h-10 w-10 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
           <p className="text-sm text-zinc-500 font-medium">Buscando detalhes da transação</p>
         </div>
       </div>
@@ -163,14 +163,14 @@ export default function EditTransactionPage() {
   // ESTADO: NÃO ENCONTRADO
   if (!editingTx) {
     return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-8 flex justify-center items-center">
+      <div className="flex min-h-screen items-center justify-center bg-transparent p-4 md:p-8">
         <div className="mx-auto max-w-full text-center  space-y-2">
-          <div className="h-16 w-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
+          <div className="h-16 w-16 bg-red-400 text-red-600 rounded-full flex items-center justify-center mx-auto">
             <AlertCircle className="h-8 w-8" />
           </div>
           <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Lançamento não encontrado</h2>
           <p className="text-zinc-500">Este registro pode ter sido excluído ou você não tem permissão para acessá-lo.</p>
-          <Button variant="default" className="rounded-xl mt-4 bg-zinc-900 hover:bg-zinc-800 text-white" onClick={() => router.back()}>
+          <Button variant="default" className="mt-4 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => router.back()}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
           </Button>
         </div>
@@ -190,14 +190,14 @@ export default function EditTransactionPage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-8 pb-32 font-sans">
+    <div className="min-h-screen bg-transparent p-4 pb-32 font-sans md:p-8">
       <div className="mx-auto max-w-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
         
         {/* HEADER */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-zinc-200/50" onClick={() => router.back()}>
-              <ArrowLeft className="h-5 w-5 text-zinc-700 dark:text-zinc-300" />
+            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-accent" onClick={() => router.back()}>
+              <ArrowLeft className="h-5 w-5 text-muted-foreground" />
             </Button>
             <h1 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
               Editar Lançamento
@@ -221,7 +221,7 @@ export default function EditTransactionPage() {
               isRecurringGroup
                 ? isEndedRecurring
                   ? "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-900/30 dark:text-slate-200"
-                  : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200"
+                  : "border-primary/20 bg-accent text-primary"
                 : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
             }`}
           >
@@ -231,11 +231,11 @@ export default function EditTransactionPage() {
         )}
 
         {/* MAIN CONTAINER */}
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-4xl shadow-sm overflow-hidden mb-6">
+        <div className="mb-6 overflow-hidden rounded-4xl border border-border/70 bg-card shadow-sm">
           
           {/* HERO: VALOR */}
-          <div className={`p-8 pb-6 border-b border-zinc-100 dark:border-zinc-800/50 ${isIncome ? 'bg-emerald-50/30' : 'bg-red-50/30'}`}>
-            <Label className="text-zinc-500 font-medium text-sm flex justify-start mb-2">Valor da transação</Label>
+          <div className={`p-8 pb-6 border-b border-border/70 ${isIncome ? 'bg-emerald-400/30' : 'bg-red-400/30'}`}>
+            <Label className=" font-medium text-sm flex justify-start mb-2">Valor da transação</Label>
             <div className="flex items-center justify-center gap-2">
               <span className={`text-3xl font-bold ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>R$</span>
               <Input 
@@ -251,13 +251,13 @@ export default function EditTransactionPage() {
           <div className="p-6 md:p-8 space-y-6">
             
             <div className="space-y-2">
-              <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm">
+              <Label className="flex items-center gap-2 text-sm text-foreground/85">
                 <AlignLeft className="h-4 w-4 text-zinc-400" /> Descrição
               </Label>
               <Input 
                 value={editingTx.description} 
                 onChange={(e) => setEditingTx({ ...editingTx, description: e.target.value })} 
-                className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 focus-visible:ring-violet-500 text-base"
+                className="h-12 rounded-xl text-base"
                 placeholder="Ex: Supermercado"
               />
             </div>
@@ -266,15 +266,15 @@ export default function EditTransactionPage() {
               {/* CATEGORIA */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm">
+                  <Label className="flex items-center gap-2 text-sm text-foreground/85">
                     <Tag className="h-4 w-4 text-zinc-400" /> Categoria
                   </Label>
-                  <button type="button" onClick={() => setIsCategoryManagerOpen(true)} className="text-xs font-semibold text-violet-600 hover:text-violet-700 flex items-center gap-1">
+                  <button type="button" onClick={() => setIsCategoryManagerOpen(true)} className="text-xs font-semibold text-primary hover:text-primary/80 flex items-center gap-1">
                     <Settings2 className="h-3 w-3" /> Gerenciar
                   </button>
                 </div>
                 <Select value={editingTx.category} onValueChange={(v) => setEditingTx({ ...editingTx, category: v })}>
-                  <SelectTrigger className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+                  <SelectTrigger className="h-12 rounded-xl">
                     <SelectValue placeholder="Selecione..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -289,27 +289,27 @@ export default function EditTransactionPage() {
 
               {/* DATA */}
               <div className="space-y-2">
-                <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm">
+                <Label className="flex items-center gap-2 text-sm text-foreground/85">
                   <Calendar className="h-4 w-4 text-zinc-400" /> Data da Compra
                 </Label>
                 <Input 
                   type="date" 
                   value={editingTx.date} 
                   onChange={(e) => setEditingTx({ ...editingTx, date: e.target.value })} 
-                  className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800"
+                  className="h-12 rounded-xl"
                 />
               </div>
 
               {/* MÉTODO DE PAGAMENTO */}
               <div className="space-y-2">
-                <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm">
+                <Label className="flex items-center gap-2 text-sm text-foreground/85">
                   <CreditCard className="h-4 w-4 text-zinc-400" /> Pagamento
                 </Label>
                 <Select
                   value={editingTx.paymentMethod}
                   onValueChange={(v) => setEditingTx({ ...editingTx, paymentMethod: v as PaymentMethod })}
                 >
-                  <SelectTrigger className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+                  <SelectTrigger className="h-12 rounded-xl">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -321,14 +321,14 @@ export default function EditTransactionPage() {
               {/* DATA DE VENCIMENTO (Condicional) */}
               {showDueDate && (
                 <div className="space-y-2 animate-in fade-in zoom-in-95">
-                  <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm">
+                  <Label className="flex items-center gap-2 text-sm text-foreground/85">
                     <Calendar className="h-4 w-4 text-zinc-400" /> Vencimento
                   </Label>
                   <Input 
                     type="date" 
                     value={editingTx.dueDate} 
                     onChange={(e) => setEditingTx({ ...editingTx, dueDate: e.target.value })} 
-                    className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800"
+                    className="h-12 rounded-xl"
                   />
                 </div>
               )}
@@ -336,7 +336,7 @@ export default function EditTransactionPage() {
               {/* CARTÃO VINCULADO (Condicional) */}
               {(editingTx.paymentMethod === "credit_card" || editingTx.paymentMethod === "debit_card") && (
                 <div className="space-y-2 md:col-span-2 animate-in fade-in zoom-in-95">
-                  <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm">
+                  <Label className="flex items-center gap-2 text-sm text-foreground/85">
                     <ReceiptText className="h-4 w-4 text-zinc-400" /> Cartão Vinculado
                   </Label>
                   <Select
@@ -352,7 +352,7 @@ export default function EditTransactionPage() {
                       });
                     }}
                   >
-                    <SelectTrigger className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+                    <SelectTrigger className="h-12 rounded-xl">
                       <SelectValue placeholder="Selecione um cartão" />
                     </SelectTrigger>
                     <SelectContent>
@@ -378,13 +378,13 @@ export default function EditTransactionPage() {
               isRecurringGroup
                 ? isEndedRecurring
                   ? "bg-slate-50/70 dark:bg-slate-950/20 border-slate-200 dark:border-slate-800/40"
-                  : "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/30"
+                  : "bg-accent/70 border-primary/20"
                 : "bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/30"
             }`}
           >
             <div className="flex items-center gap-2 mb-4">
-              <Info className={`h-6 w-5 ${isRecurringGroup ? (isEndedRecurring ? "text-slate-600 dark:text-slate-300" : "text-blue-600") : "text-amber-600"}`} />
-              <h3 className={`font-semibold ${isRecurringGroup ? (isEndedRecurring ? "text-slate-900 dark:text-slate-100" : "text-blue-900 dark:text-blue-100") : "text-amber-900 dark:text-amber-100"}`}>
+              <Info className={`h-6 w-5 ${isRecurringGroup ? (isEndedRecurring ? "text-slate-600 dark:text-slate-300" : "text-primary") : "text-amber-600"}`} />
+              <h3 className={`font-semibold ${isRecurringGroup ? (isEndedRecurring ? "text-slate-900 dark:text-slate-100" : "text-primary") : "text-amber-900 dark:text-amber-100"}`}>
                 {isRecurringGroup ? "Visão da recorrência" : "Visão do parcelamento"}
               </h3>
             </div>
@@ -398,13 +398,13 @@ export default function EditTransactionPage() {
                       isCurrent
                         ? isRecurringGroup
                           ? isEndedRecurring
-                            ? "bg-white dark:bg-zinc-900 shadow-sm border border-slate-300 ring-1 ring-slate-400"
-                            : "bg-white dark:bg-zinc-900 shadow-sm border border-blue-200 ring-1 ring-blue-500"
-                          : "bg-white dark:bg-zinc-900 shadow-sm border border-amber-200 ring-1 ring-amber-500"
+                            ? "bg-card shadow-sm border border-slate-300 ring-1 ring-slate-400"
+                            : "bg-card shadow-sm border border-primary/20 ring-1 ring-ring/35"
+                          : "bg-card shadow-sm border border-amber-200 ring-1 ring-amber-500"
                         : isRecurringGroup
                           ? isEndedRecurring
                             ? "hover:bg-slate-100/70 dark:hover:bg-slate-900/40"
-                            : "hover:bg-blue-100/50"
+                            : "hover:bg-accent/80"
                           : "hover:bg-amber-100/50"
                     }`}
                   >
@@ -415,7 +415,7 @@ export default function EditTransactionPage() {
                             ? isRecurringGroup
                               ? isEndedRecurring
                                 ? "text-slate-700 dark:text-slate-200"
-                                : "text-blue-700"
+                                : "text-primary"
                               : "text-amber-700"
                             : "text-zinc-500"
                         }`}
@@ -432,7 +432,7 @@ export default function EditTransactionPage() {
                           ? isRecurringGroup
                             ? isEndedRecurring
                               ? "text-slate-700 dark:text-slate-200"
-                              : "text-blue-700"
+                              : "text-primary"
                             : "text-amber-700"
                           : "text-zinc-600"
                       }`}
@@ -449,21 +449,21 @@ export default function EditTransactionPage() {
         {/* ACTIONS */}
         <div className="space-y-4 pt-2">
           {!editingTx.groupId ? (
-            <Button onClick={() => save(false)} disabled={saving} className="w-full h-14 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white text-base shadow-sm">
+            <Button onClick={() => save(false)} disabled={saving} className="w-full h-14 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground text-base shadow-sm">
               <Save className="mr-2 h-5 w-5" /> {saving ? "Salvando..." : "Salvar Alterações"}
             </Button>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Button variant="outline" onClick={() => save(false)} disabled={saving} className="h-14 rounded-2xl border-zinc-200 text-zinc-700 hover:bg-zinc-50">
+              <Button variant="outline" onClick={() => save(false)} disabled={saving} className="h-14 rounded-2xl">
                 {isRecurringGroup ? "Salvar só esta ocorrência" : "Salvar só esta parcela"}
               </Button>
-              <Button onClick={() => save(true)} disabled={saving} className="h-14 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white shadow-sm">
+              <Button onClick={() => save(true)} disabled={saving} className="h-14 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
                 {isRecurringGroup ? "Salvar toda a recorrência" : "Salvar todas as parcelas"}
               </Button>
             </div>
           )}
 
-          <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
+          <div className="pt-4 border-t border-border/70">
             {!editingTx.groupId ? (
               <Button variant="outline" onClick={() => remove(false)} disabled={deleting} className="w-full h-12 rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-colors">
                 <Trash2 className="mr-2 h-4 w-4" /> {deleting ? "Excluindo..." : "Excluir Lançamento"}
