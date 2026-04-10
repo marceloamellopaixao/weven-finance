@@ -137,9 +137,9 @@ export function Header() {
     <nav className="sticky top-0 z-50 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/80 backdrop-blur-xl px-4 md:px-8 h-16 flex items-center justify-between dark:bg-zinc-950/80 transition-all duration-300">
       <div className="flex items-center gap-3">
         <Link href={isAuthenticated ? "/dashboard" : "/"} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-          <div className="bg-linear-to-tr from-violet-600 to-indigo-600 p-2 rounded-xl shadow-lg shadow-violet-500/20">
-            <Wallet className="h-5 w-5 text-white" />
-          </div>
+            <div className="bg-linear-to-tr from-violet-600 to-indigo-600 p-2 rounded-xl shadow-lg shadow-violet-500/20">
+              <Wallet className="h-5 w-5 text-white" />
+            </div>
           <span className="font-bold text-xl tracking-tight text-zinc-800 dark:text-zinc-100 hidden md:block">
             Weven<span className="text-violet-600">Finance</span>
           </span>
@@ -196,7 +196,7 @@ export function Header() {
               <button
                 type="button"
                 onClick={() => void markAllAsRead()}
-                className="text-[11px] text-violet-600 hover:underline"
+                className="text-[11px] text-primary hover:underline"
               >
                 Marcar todas como lidas
               </button>
@@ -220,7 +220,7 @@ export function Header() {
                   onClick={() => void handleNotificationClick(item.id, item.href)}
                 >
                   <div className="flex items-center gap-2 w-full">
-                    {!item.isRead && <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />}
+                    {!item.isRead && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
                     <p className="text-xs font-semibold truncate">{item.title}</p>
                   </div>
                   <p className="text-[11px] text-zinc-500 line-clamp-2">{item.message}</p>
@@ -252,9 +252,9 @@ export function Header() {
         <DropdownMenu open={isAccountMenuOpen} onOpenChange={handleAccountMenuOpenChange}>
           <DropdownMenuTrigger asChild>
             <div id="tour-account-avatar" className="relative">
-              <Avatar className={`h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 transition-all cursor-pointer hover:ring-violet-200 ${
+              <Avatar className={`h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 transition-all cursor-pointer hover:ring-ring/35 ${
                 isOnboardingActive && onboardingActiveStep === "profileMenu"
-                  ? "ring-violet-400 animate-pulse"
+                  ? "ring-ring/70 animate-pulse"
                   : "ring-transparent"
               }`}>
                 <AvatarImage src={displayPhoto} />
@@ -270,49 +270,49 @@ export function Header() {
                 <p className="text-sm font-medium leading-none truncate">{displayName || "Minha Conta"}</p>
                 <p className="text-xs leading-none text-zinc-500 truncate">{displayEmail}</p>
                 {isOnboardingActive && onboardingActiveStep === "profileMenu" && (
-                  <p className="text-[11px] font-medium text-violet-600">Abra este menu para concluir a etapa atual.</p>
+                  <p className="text-[11px] font-medium text-primary">Abra este menu para concluir a etapa atual.</p>
                 )}
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
 
             <Link href="/" className="cursor-pointer">
-              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
+              <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <Home className="mr-2 h-4 w-4" />
                 <span>Início</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/dashboard" className="cursor-pointer">
-              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
+              <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <LayoutDashboard className="mr-2 h-4 w-4" />
                 <span>Dashboard</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/cards" className="cursor-pointer">
-              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
+              <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <CreditCard className="mr-2 h-4 w-4" />
                 <span>Cartões</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/piggy-bank" className="cursor-pointer">
-              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
+              <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <PiggyBank className="mr-2 h-4 w-4" />
                 <span>Porquinho</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/settings" className="cursor-pointer">
-              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
+              <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Configurações</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/apps" className="cursor-pointer">
-              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-zinc-100 dark:focus:bg-zinc-800">
+              <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <Grid2X2 className="mr-2 h-4 w-4" />
                 <span>Apps e barra rapida</span>
               </DropdownMenuItem>
