@@ -5,6 +5,7 @@ import {
   NavigationPreferences,
 } from "@/types/navigation";
 import { normalizeNavigationPreferences } from "@/lib/navigation/apps";
+import { isAuthErrorMessage } from "@/lib/api/error";
 
 const NAVIGATION_CHANGED_EVENT = "wevenfinance:navigation-settings:changed";
 
@@ -85,16 +86,23 @@ async function apiFetchWithOptionalApproval(path: string, init?: RequestInit) {
 }
 
 export async function getNavigationPreferences() {
-  const response = await apiFetch("/api/user-settings/navigation", { method: "GET" });
-  const payload = (await response.json()) as {
-    ok?: boolean;
-    error?: string;
-    navigation?: NavigationPreferences;
-  };
-  if (!response.ok || !payload.ok || !payload.navigation) {
+  try {
+    const response = await apiFetch("/api/user-settings/navigation", { method: "GET" });
+    const payload = (await response.json()) as {
+      ok?: boolean;
+      error?: string;
+      navigation?: NavigationPreferences;
+    };
+    if (!response.ok || !payload.ok || !payload.navigation) {
+      return DEFAULT_NAVIGATION_PREFERENCES;
+    }
+    return normalizeNavigationPreferences(payload.navigation);
+  } catch (error) {
+    if (error instanceof Error && isAuthErrorMessage(error.message)) {
+      return DEFAULT_NAVIGATION_PREFERENCES;
+    }
     return DEFAULT_NAVIGATION_PREFERENCES;
   }
-  return normalizeNavigationPreferences(payload.navigation);
 }
 
 export async function updateNavigationPreferences(next: NavigationPreferences) {
