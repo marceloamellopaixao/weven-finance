@@ -6,7 +6,7 @@ function SettingsLoadingCard({
   tall?: boolean;
 }) {
   return (
-    <div className={`app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] p-6 shadow-lg ${tall ? "min-h-[420px]" : ""}`}>
+    <div className={`app-panel-soft rounded-3xl border border-color:var(--app-panel-border) p-6 shadow-lg ${tall ? "min-h-[420px]" : ""}`}>
       <div className="mb-6 flex items-center gap-3">
         <div className="h-11 w-11 animate-pulse rounded-2xl bg-primary/12" />
         <div className="space-y-2">
@@ -17,7 +17,7 @@ function SettingsLoadingCard({
 
       <div className="space-y-4">
         {Array.from({ length: lines }).map((_, index) => (
-          <div key={index} className="app-panel-subtle rounded-2xl border border-[color:var(--app-panel-border)] p-4">
+          <div key={index} className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
             <div className="h-4 w-28 animate-pulse rounded-full bg-primary/10" />
             <div className="mt-3 h-10 w-full animate-pulse rounded-xl bg-primary/6" />
           </div>
@@ -39,11 +39,11 @@ export default function Loading() {
           <div className="h-11 w-40 animate-pulse rounded-xl bg-red-500/12" />
         </div>
 
-        <div className="app-panel-subtle grid w-full grid-cols-1 gap-1 rounded-2xl border border-[color:var(--app-panel-border)] p-1.5 shadow-sm sm:grid-cols-2 md:grid-cols-4">
+        <div className="app-panel-subtle grid w-full grid-cols-1 gap-1 rounded-2xl border border-color:var(--app-panel-border) p-1.5 shadow-sm sm:grid-cols-2 md:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
             <div
               key={index}
-              className={`rounded-xl px-4 py-3 ${index === 0 ? "app-panel-soft border border-[color:var(--app-panel-border)]" : ""}`}
+              className={`rounded-xl px-4 py-3 ${index === 0 ? "app-panel-soft border border-color:var(--app-panel-border)" : ""}`}
             >
               <div className="h-4 w-24 animate-pulse rounded-full bg-primary/10" />
             </div>
