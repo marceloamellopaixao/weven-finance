@@ -31,6 +31,7 @@ export function usePlatformTour(options: UsePlatformTourOptions) {
   } = usePlatformExperience();
 
   const config = useMemo(() => getPlatformTourConfig(setForceAccountMenuOpen)[route], [route, setForceAccountMenuOpen]);
+  const shouldUseSelectedRouteOrder = (platformTourState.routeOrder?.length || 0) > 0;
   const nextRouteFromSelection = useMemo(() => {
     const selectedOrder = platformTourState.routeOrder || [];
     const currentIndex = selectedOrder.indexOf(route);
@@ -92,7 +93,9 @@ export function usePlatformTour(options: UsePlatformTourOptions) {
       const isLast = index === visibleSteps.length - 1;
       if (!isLast) return step;
 
-      const hasNextRoute = Boolean(nextRouteFromSelection || config.nextRoute);
+      const hasNextRoute = shouldUseSelectedRouteOrder
+        ? Boolean(nextRouteFromSelection)
+        : Boolean(nextRouteFromSelection || config.nextRoute);
 
       return {
         ...step,
@@ -105,8 +108,12 @@ export function usePlatformTour(options: UsePlatformTourOptions) {
             driverRef.current?.destroy();
             driverRef.current = null;
 
-            const resolvedNextRoute = nextRouteFromSelection || config.nextRoute;
-            const resolvedNextHref = nextHrefFromSelection || config.nextHref;
+            const resolvedNextRoute = shouldUseSelectedRouteOrder
+              ? nextRouteFromSelection
+              : nextRouteFromSelection || config.nextRoute;
+            const resolvedNextHref = shouldUseSelectedRouteOrder
+              ? nextHrefFromSelection
+              : nextHrefFromSelection || config.nextHref;
 
             if (resolvedNextRoute && resolvedNextHref) {
               setPlatformTourRoute(resolvedNextRoute);
@@ -114,8 +121,11 @@ export function usePlatformTour(options: UsePlatformTourOptions) {
               return;
             }
 
-            finishPlatformTour();
-            await onCompleteRef.current?.();
+            try {
+              await onCompleteRef.current?.();
+            } finally {
+              finishPlatformTour();
+            }
           },
         },
       };
@@ -163,6 +173,7 @@ export function usePlatformTour(options: UsePlatformTourOptions) {
     finishPlatformTour,
     nextHrefFromSelection,
     nextRouteFromSelection,
+    shouldUseSelectedRouteOrder,
     isPlatformTourActive,
     platformTourState.route,
     route,
