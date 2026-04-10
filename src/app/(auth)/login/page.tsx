@@ -109,13 +109,13 @@ export default function LoginPage() {
               <Wallet className="h-8 w-8 text-white" />
             </div>
             <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100`}>
-              Weven<span className="text-violet-600">Finance</span>
+              Weven<span className="text-primary">Finance</span>
             </h1>
             <p className={`${fadeInUp} delay-200 text-sm text-zinc-500 dark:text-zinc-400`}>
               Bem-vindo de volta!
             </p>
             {pendingUpgradePlan && (
-              <p className="text-xs font-medium text-violet-600 dark:text-violet-300">
+              <p className="text-xs font-medium text-primary">
                 Depois do login, vamos continuar na contratacao do plano {pendingUpgradePlan === "premium" ? "Premium" : "Pro"}.
               </p>
             )}
@@ -131,7 +131,7 @@ export default function LoginPage() {
                   autoComplete="email"
                   inputMode="email"
                   placeholder="seu@email.com"
-                  className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
+                  className="bg-white/50 dark:bg-zinc-800/50"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -141,7 +141,7 @@ export default function LoginPage() {
                   <Label htmlFor="password">Senha</Label>
                   <Link
                     href={pendingUpgradePlan ? `/forgot-password?upgrade_plan=${pendingUpgradePlan}` : "/forgot-password"}
-                    className="text-xs text-violet-600 hover:underline hover:cursor-pointer transition-all duration-200"
+                    className="text-xs text-primary hover:underline hover:cursor-pointer transition-all duration-200"
                   >
                     Esqueceu?
                   </Link>
@@ -151,7 +151,7 @@ export default function LoginPage() {
                   type="password"
                   autoComplete="current-password"
                   placeholder="******"
-                  className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
+                  className="bg-white/50 dark:bg-zinc-800/50"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
@@ -166,7 +166,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={isLoading || isGoogleLoading}
-                className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium shadow-lg shadow-violet-500/20 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
+                className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium shadow-lg shadow-black/10 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
               >
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Entrar"}
               </Button>
@@ -203,7 +203,7 @@ export default function LoginPage() {
                 Nao tem uma conta?{" "}
                 <Link
                   href={pendingUpgradePlan ? `/register?upgrade_plan=${pendingUpgradePlan}` : "/register"}
-                  className="text-violet-600 font-semibold hover:underline hover:cursor-pointer transition-all duration-200"
+                  className="text-primary font-semibold hover:underline hover:cursor-pointer transition-all duration-200"
                 >
                   Cadastre-se
                 </Link>
