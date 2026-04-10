@@ -79,7 +79,7 @@ export default function RegisterPage() {
               Comece a controlar suas financas hoje.
             </p>
             {pendingUpgradePlan && (
-              <p className="text-xs font-medium text-violet-600 dark:text-violet-300">
+              <p className="text-xs font-medium text-primary">
                 Depois do cadastro, vamos continuar na contratacao do plano {pendingUpgradePlan === "premium" ? "Premium" : "Pro"}.
               </p>
             )}
@@ -93,7 +93,7 @@ export default function RegisterPage() {
                   id="displayName"
                   autoComplete="nickname"
                   placeholder="Ex: Marcelo"
-                  className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
+                  className="bg-white/50 dark:bg-zinc-800/50"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                 />
@@ -106,7 +106,7 @@ export default function RegisterPage() {
                   autoComplete="tel-national"
                   inputMode="tel"
                   placeholder="Ex: 1199..."
-                  className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
+                  className="bg-white/50 dark:bg-zinc-800/50"
                   maxLength={15}
                   value={formatPhone(phone)}
                   onChange={(e) => setPhone(normalizePhone(e.target.value))}
@@ -120,7 +120,7 @@ export default function RegisterPage() {
                 id="completeName"
                 autoComplete="name"
                 placeholder="Ex: Marcelo Augusto"
-                className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
+                className="bg-white/50 dark:bg-zinc-800/50"
                 value={completeName}
                 onChange={(e) => setCompleteName(e.target.value)}
               />
@@ -134,7 +134,7 @@ export default function RegisterPage() {
                 autoComplete="email"
                 inputMode="email"
                 placeholder="Ex: seu@email.com"
-                className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
+                className="bg-white/50 dark:bg-zinc-800/50"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -148,7 +148,7 @@ export default function RegisterPage() {
                   type="password"
                   autoComplete="new-password"
                   placeholder="******"
-                  className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
+                  className="bg-white/50 dark:bg-zinc-800/50"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
@@ -161,7 +161,7 @@ export default function RegisterPage() {
                   type="password"
                   autoComplete="new-password"
                   placeholder="******"
-                  className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
+                  className="bg-white/50 dark:bg-zinc-800/50"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                 />
@@ -176,7 +176,7 @@ export default function RegisterPage() {
 
             <Button
               type="submit"
-              className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium shadow-lg shadow-violet-500/20 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
+              className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium shadow-lg shadow-black/10 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
               disabled={isLoading}
             >
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Cadastrar"}
