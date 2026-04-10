@@ -360,13 +360,13 @@ export default function NewTransactionPage() {
   const isIncome = type === "income";
 
   return (
-    <div className="min-h-screen bg-zinc-50/30 dark:bg-zinc-950/30 p-4 md:p-8 pb-32 font-sans">
+    <div className="min-h-screen bg-transparent p-4 pb-32 font-sans md:p-8">
       <div className="mx-auto max-w-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
         
         {/* HEADER NOVO DESIGN */}
         <div id="tour-transactions-header" className="flex items-center gap-3 mb-6">
-          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-zinc-200/50 bg-white dark:bg-zinc-900 shadow-sm border" onClick={() => router.back()}>
-            <ArrowLeft className="h-5 w-5 text-zinc-600 dark:text-zinc-300" />
+          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full border border-border/70 bg-card shadow-sm hover:bg-accent" onClick={() => router.back()}>
+            <ArrowLeft className="h-5 w-5 text-muted-foreground" />
           </Button>
           <h1 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
             Novo Lançamento
@@ -377,10 +377,10 @@ export default function NewTransactionPage() {
         {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.steps.firstTransaction && (
           <div className={`mb-6 rounded-2xl border p-4 flex items-center gap-3 text-sm shadow-sm ${
             isTransactionOnboardingActive
-              ? "border-violet-300 bg-violet-50 text-violet-900 ring-2 ring-violet-200"
-              : "border-violet-200 bg-violet-50 text-violet-800"
+              ? "border-primary/30 bg-primary/8 text-primary ring-2 ring-primary/15"
+              : "border-primary/20 bg-primary/6 text-primary/90"
           }`}>
-            <Info className="h-5 w-5 shrink-0 text-violet-600" />
+            <Info className="h-5 w-5 shrink-0 text-primary" />
             <p><strong>Etapa atual:</strong> salve sua primeira transação para concluir o início guiado.</p>
           </div>
         )}
@@ -394,25 +394,25 @@ export default function NewTransactionPage() {
         )}
 
         {/* MAIN CONTAINER UNIFICADO */}
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-4xl shadow-lg overflow-hidden mb-6">
+        <div className="mb-6 overflow-hidden rounded-4xl border border-border/70 bg-card shadow-lg">
           
           {/* HERO: TIPO & VALOR */}
-          <div className={`p-6 md:p-8 border-b border-zinc-100 dark:border-zinc-800/50 transition-colors duration-500 ${isIncome ? 'bg-emerald-300/50 dark:bg-emerald-950/20' : 'bg-red-300/50 dark:bg-red-950/20'}`}>
+          <div className={`p-6 md:p-8 border-b border-border/70 transition-colors duration-500 ${isIncome ? 'bg-emerald-300/50 dark:bg-emerald-950/20' : 'bg-red-300/50 dark:bg-red-950/20'}`}>
             
             {/* TOGGLE TIPO DE TRANSAÇÃO ELEGANTE */}
             <div className="flex justify-center mb-8">
-              <div id="tour-transactions-type" className="bg-white/60 dark:bg-zinc-950/40 p-1.5 rounded-2xl flex backdrop-blur-md shadow-sm border border-black/5 dark:border-white/5 w-full max-w-full">
+              <div id="tour-transactions-type" className="app-panel-soft flex w-full max-w-full rounded-2xl border p-1.5 shadow-sm backdrop-blur-md">
                   <button
                     type="button"
                     onClick={() => setType("expense")}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all hover:cursor-pointer ${!isIncome ? 'bg-white dark:bg-zinc-800 text-red-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all hover:cursor-pointer ${!isIncome ? 'bg-card text-red-600 shadow-sm' : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground'}`}
                   >
                   <TrendingDown className="h-4 w-4" /> Despesa
                 </button>
                   <button
                     type="button"
                     onClick={() => setType("income")}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all hover:cursor-pointer ${isIncome ? 'bg-white dark:bg-zinc-800 text-emerald-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all hover:cursor-pointer ${isIncome ? 'bg-card text-emerald-600 shadow-sm' : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground'}`}
                   >
                   <TrendingUp className="h-4 w-4" /> Receita
                 </button>
@@ -450,13 +450,13 @@ export default function NewTransactionPage() {
             
             {/* DESCRIÇÃO */}
             <div className="space-y-2">
-              <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium">
+              <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
                 <AlignLeft className="h-4 w-4 text-zinc-400" /> Descrição
               </Label>
               <Input 
                 value={description} 
                 onChange={(e) => setDescription(e.target.value)} 
-                className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 focus-visible:ring-violet-500 text-base font-medium"
+                className="h-12 rounded-xl text-base font-medium"
                 placeholder="Ex: Supermercado"
               />
             </div>
@@ -466,20 +466,20 @@ export default function NewTransactionPage() {
               {/* CATEGORIA */}
               <div id="tour-transactions-category" className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium">
+                  <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
                     <Tag className="h-4 w-4 text-zinc-400" /> Categoria
                   </Label>
                   <button
                     type="button"
                     onClick={handleOpenCategoryManager}
                     disabled={isTransactionOnboardingActive}
-                    className="text-xs font-semibold text-violet-600 hover:text-violet-700 flex items-center gap-1 hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                    className="text-xs font-semibold text-primary hover:text-primary/80 flex items-center gap-1 hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Settings2 className="h-3 w-3" /> Gerenciar
                   </button>
                 </div>
                 <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 font-medium">
+                  <SelectTrigger className="h-12 rounded-xl font-medium">
                     <SelectValue placeholder="Selecione..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -494,27 +494,27 @@ export default function NewTransactionPage() {
 
               {/* DATA */}
               <div className="space-y-2">
-                <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium">
+                <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
                   <Calendar className="h-4 w-4 text-zinc-400" /> Data da Compra
                 </Label>
                 <Input 
                   type="date" 
                   value={date} 
                   onChange={(e) => setDate(e.target.value)} 
-                  className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 font-medium"
+                  className="h-12 rounded-xl font-medium"
                 />
               </div>
 
               {/* MÉTODO DE PAGAMENTO */}
               <div className="space-y-2">
-                <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium">
+                <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
                   <CreditCard className="h-4 w-4 text-zinc-400" /> Forma de Pagamento
                 </Label>
                 <Select
                   value={paymentMethod}
                   onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
                 >
-                  <SelectTrigger className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 font-medium">
+                  <SelectTrigger className="h-12 rounded-xl font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -526,14 +526,14 @@ export default function NewTransactionPage() {
               {/* DATA DE VENCIMENTO (Condicional) */}
               {showDueDateInput && (
                 <div className="space-y-2 animate-in fade-in zoom-in-95">
-                  <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium">
+                  <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
                     <Calendar className="h-4 w-4 text-zinc-400" /> Data de Vencimento
                   </Label>
                   <Input 
                     type="date" 
                     value={dueDate} 
                     onChange={(e) => setDueDate(e.target.value)} 
-                    className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 font-medium"
+                    className="h-12 rounded-xl font-medium"
                   />
                 </div>
               )}
@@ -541,14 +541,14 @@ export default function NewTransactionPage() {
               {/* CARTÃO VINCULADO (Condicional) */}
               {(paymentMethod === "credit_card" || paymentMethod === "debit_card") && (
                 <div className="space-y-2 md:col-span-2 animate-in fade-in slide-in-from-top-2">
-                  <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium">
+                  <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
                     <ReceiptText className="h-4 w-4 text-zinc-400" /> Cartão Vinculado
                   </Label>
                   <Select
                     value={selectedCardId}
                     onValueChange={setSelectedCardId}
                   >
-                    <SelectTrigger className="h-12 rounded-xl bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 font-medium">
+                    <SelectTrigger className="h-12 rounded-xl font-medium">
                       <SelectValue placeholder="Selecione um cartão para vincular" />
                     </SelectTrigger>
                     <SelectContent>
@@ -566,20 +566,20 @@ export default function NewTransactionPage() {
             </div>
 
             {/* OPÇÕES AVANÇADAS: RECORRÊNCIA E PARCELAMENTO */}
-            <div className="pt-6 mt-6 space-y-4 border-t border-zinc-100 dark:border-zinc-800/50">
+            <div className="pt-6 mt-6 space-y-4 border-t border-border/70">
               <Label className="text-zinc-500 font-semibold text-xs tracking-wider uppercase">Opções Avançadas</Label>
               
               {/* ASSINATURA / FIXA (Disponível para Receita e Despesa) */}
-              <div id="tour-transactions-recurring" className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${isRecurring ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900' : 'bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 hover:border-blue-200'}`} onClick={() => handleToggleRecurring(!isRecurring)}>
+              <div id="tour-transactions-recurring" className={`cursor-pointer rounded-2xl border p-4 transition-all duration-300 ${isRecurring ? 'border-primary/25 bg-accent text-accent-foreground ring-1 ring-primary/10' : 'app-panel-subtle hover:border-primary/20'}`} onClick={() => handleToggleRecurring(!isRecurring)}>
                 <div className="flex items-center justify-between">
-                  <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium cursor-pointer">
-                    <Repeat className={`h-4 w-4 ${isRecurring ? 'text-blue-600' : 'text-zinc-400'}`} /> 
+                  <Label className="flex items-center gap-2 text-sm font-medium cursor-pointer text-foreground/85">
+                    <Repeat className={`h-4 w-4 ${isRecurring ? 'text-primary' : 'text-zinc-400'}`} /> 
                     Lançamento Fixo / Assinatura
                   </Label>
-                  <Switch checked={isRecurring} onCheckedChange={handleToggleRecurring} onClick={(e) => e.stopPropagation()} />
+                  <Switch className="data-[state=checked]:bg-primary" checked={isRecurring} onCheckedChange={handleToggleRecurring} onClick={(e) => e.stopPropagation()} />
                 </div>
                 {isRecurring && (
-                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 ml-6 animate-in fade-in">
+                  <p className="mt-2 ml-6 animate-in fade-in text-xs text-primary">
                     Este lançamento será repetido automaticamente todos os meses.
                   </p>
                 )}
@@ -591,34 +591,34 @@ export default function NewTransactionPage() {
                   id="tour-transactions-installment"
                   className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${
                     !canUseInstallments
-                      ? 'bg-zinc-50/80 dark:bg-zinc-950/40 border-dashed border-zinc-300 dark:border-zinc-700'
+                      ? 'app-panel-subtle border-dashed border-border/80'
                       : isInstallment
-                        ? 'bg-violet-50/50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-900'
-                        : 'bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 hover:border-violet-200'
+                        ? 'bg-primary/6 border-primary/20'
+                        : 'app-panel-subtle hover:border-primary/20'
                   }`}
                   onClick={() => handleToggleInstallment(!isInstallment)}
                 >
                   <div className="flex items-center justify-between">
-                    <Label className="text-zinc-700 dark:text-zinc-300 flex items-center gap-2 text-sm font-medium cursor-pointer">
-                      <Layers className={`h-4 w-4 ${isInstallment ? 'text-violet-600' : 'text-zinc-400'}`} /> 
+                    <Label className="flex items-center gap-2 text-sm font-medium cursor-pointer text-foreground/85">
+                      <Layers className={`h-4 w-4 ${isInstallment ? 'text-primary' : 'text-zinc-400'}`} /> 
                       Compra Parcelada
                     </Label>
                     <Switch checked={isInstallment} disabled={!canUseInstallments} onCheckedChange={handleToggleInstallment} onClick={(e) => e.stopPropagation()} />
                   </div>
 
                   {!canUseInstallments && (
-                    <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-3 text-sm text-violet-800">
+                    <div className="mt-3 rounded-xl border border-primary/20 bg-primary/8 px-3 py-3 text-sm text-primary">
                       <p className="flex items-center gap-2 font-semibold">
-                        <Crown className="h-4 w-4 text-violet-600" />
+                        <Crown className="h-4 w-4 text-primary" />
                         Disponível no Premium e no Pro
                       </p>
-                      <p className="mt-1 text-xs text-violet-700">
+                      <p className="mt-1 text-xs text-primary/80">
                         Faça upgrade para lançar compras parceladas e acompanhar o mês com mais precisão.
                       </p>
                       <Button
                         type="button"
                         variant="outline"
-                        className="mt-3 h-9 rounded-xl border-violet-200 text-violet-700 hover:bg-violet-100"
+                        className="mt-3 h-9 rounded-xl border-primary/20 text-primary hover:bg-primary/10"
                         onClick={(e) => {
                           e.stopPropagation();
                           router.push("/settings?tab=billing");
@@ -630,7 +630,7 @@ export default function NewTransactionPage() {
                   )}
 
                   {canUseInstallments && isInstallment && (
-                    <div className="pt-4 mt-3 border-t border-violet-100 dark:border-violet-900/50 animate-in fade-in slide-in-from-top-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="pt-4 mt-3 border-t border-primary/12 animate-in fade-in slide-in-from-top-2" onClick={(e) => e.stopPropagation()}>
                       <Label className="text-zinc-500 text-xs mb-1.5 block">Em quantas vezes?</Label>
                       <Input
                         type="number"
@@ -639,15 +639,15 @@ export default function NewTransactionPage() {
                         value={installmentsCount}
                         onChange={(e) => setInstallmentsCount(e.target.value)}
                         placeholder="Número de parcelas"
-                        className="h-11 rounded-xl bg-white dark:bg-zinc-900 border-violet-200 dark:border-violet-800 focus-visible:ring-violet-500 font-medium"
+                        className="h-11 rounded-xl border-primary/20 font-medium"
                       />
-                      <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
+                      <div className="mt-3 rounded-xl border border-primary/20 bg-primary/8 px-3 py-3">
                         <div className="flex items-center justify-between gap-4">
                           <div>
-                            <Label htmlFor="installment-split-mode" className="text-sm font-semibold text-violet-900">
+                            <Label htmlFor="installment-split-mode" className="text-sm font-semibold text-primary">
                               Dividir o valor total
                             </Label>
-                            <p className="mt-1 text-xs text-violet-700">
+                            <p className="mt-1 text-xs text-primary/80">
                               Ative para informar o valor total da compra. Desative se o valor digitado já for o de cada parcela.
                             </p>
                           </div>
@@ -669,15 +669,15 @@ export default function NewTransactionPage() {
 
         {/* ACTIONS */}
         <div className="flex flex-col sm:flex-row gap-3 pt-2">
-          <Button variant="outline" onClick={() => router.back()} className="h-14 sm:flex-1 rounded-2xl border-zinc-200 text-zinc-700 bg-white hover:bg-zinc-50 text-base shadow-sm hover:cursor-pointer">
+          <Button variant="outline" onClick={() => router.back()} className="h-14 text-base shadow-sm hover:cursor-pointer sm:flex-1 rounded-2xl">
             Cancelar
           </Button>
           <Button
             id="tour-transactions-submit"
             onClick={onSubmit}
             disabled={saving}
-            className={`h-14 sm:flex-2 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white shadow-sm text-base hover:cursor-pointer ${
-              isTransactionOnboardingActive ? "ring-2 ring-violet-300 ring-offset-2 ring-offset-zinc-50 dark:ring-offset-zinc-950" : ""
+            className={`h-14 sm:flex-2 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm text-base hover:cursor-pointer ${
+              isTransactionOnboardingActive ? "ring-2 ring-ring/45 ring-offset-2 ring-offset-background" : ""
             }`}
           >
             {saving ? (
@@ -685,7 +685,7 @@ export default function NewTransactionPage() {
                 <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> Salvando...
               </span>
             ) : (
-              <span className="flex items-center gap-2">{saving ? <><div className="h-10 w-10 rounded-full border-4 border-zinc-200 border-t-violet-600 animate-spin" /> Salvando...</> : <><Plus className="h-5 w-5" /> Adicionar Lançamento</>}</span>
+              <span className="flex items-center gap-2">{saving ? <><div className="h-10 w-10 rounded-full border-4 border-white/30 border-t-white animate-spin" /> Salvando...</> : <><Plus className="h-5 w-5" /> Adicionar Lançamento</>}</span>
             )}
           </Button>
         </div>
