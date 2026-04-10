@@ -1120,14 +1120,14 @@ export default function DashboardPage() {
   // --- COMPONENTE DO FORMULÁRIO ---
   const TransactionFormContent = (
     <div className="space-y-5 pb-3">
-      <div className="grid grid-cols-2 gap-1 p-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl">
-        <button onClick={() => changeType('expense')} className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 hover:cursor-pointer ${type === 'expense' ? 'bg-white dark:bg-zinc-700 shadow-sm text-red-600' : 'text-zinc-500 hover:text-zinc-700'}`}>Gasto</button>
-        <button onClick={() => changeType('income')} className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 hover:cursor-pointer ${type === 'income' ? 'bg-white dark:bg-zinc-700 shadow-sm text-emerald-600' : 'text-zinc-500 hover:text-zinc-700'}`}>Renda</button>
+      <div className="app-panel-subtle grid grid-cols-2 gap-1 rounded-xl border p-1.5">
+        <button onClick={() => changeType('expense')} className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 hover:cursor-pointer ${type === 'expense' ? 'bg-card shadow-sm text-red-600' : 'text-zinc-500 hover:text-zinc-700'}`}>Gasto</button>
+        <button onClick={() => changeType('income')} className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 hover:cursor-pointer ${type === 'income' ? 'bg-card shadow-sm text-emerald-600' : 'text-zinc-500 hover:text-zinc-700'}`}>Renda</button>
       </div>
       <div className="space-y-4">
         <div>
           <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Titulo {type === 'expense' ? 'do Gasto' : 'da Renda'}</Label>
-          <Input className="mt-1.5 h-12 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl" placeholder={type === 'expense' ? "Ex: Netflix" : "Ex: Salário"} value={desc} onChange={e => setDesc(e.target.value)} />
+          <Input className="mt-1.5 h-12 rounded-xl" placeholder={type === 'expense' ? "Ex: Netflix" : "Ex: Salário"} value={desc} onChange={e => setDesc(e.target.value)} />
         </div>
         <div>
           <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">
@@ -1135,7 +1135,7 @@ export default function DashboardPage() {
           </Label>
           <div className="relative mt-1.5">
             <span className="absolute left-3.5 top-3 text-zinc-400 font-semibold">R$</span>
-            <Input type="number" className="pl-10 h-12 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl font-semibold text-lg" placeholder="0,00" value={amount} onChange={e => setAmount(e.target.value)} />
+            <Input type="number" className="h-12 rounded-xl pl-10 text-lg font-semibold" placeholder="0,00" value={amount} onChange={e => setAmount(e.target.value)} />
           </div>
           <p className="text-[10px] text-zinc-400 mt-1.5 text-right font-medium">
             {isInstallment
@@ -1153,7 +1153,7 @@ export default function DashboardPage() {
           <Label className="text-xs font-medium text-zinc-400 ml-1 uppercase">Categoria</Label>
           <div className="flex gap-2">
             <Select onValueChange={setCategory} value={category}>
-              <SelectTrigger className="h-12 rounded-xl bg-zinc-50 border-zinc-200 w-full">
+              <SelectTrigger className="h-12 w-full rounded-xl">
                 <SelectValue placeholder="Selecione" /></SelectTrigger>
               <SelectContent>
                 {orderedAvailableCategories.map((cat) => (
@@ -1172,13 +1172,13 @@ export default function DashboardPage() {
                       setIsNewCategoryOpen(true);
                     }}
                     variant="outline"
-                    className="h-12 w-12 rounded-xl shrink-0 p-0 border-zinc-200 bg-zinc-50 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="h-12 w-12 rounded-xl shrink-0 p-0 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={isOnboardingActive && onboardingActiveStep === "firstTransaction"}
                   >
-                    <Settings className="h-5 w-5 text-violet-600" />
+                    <Settings className="h-5 w-5 text-primary" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="bg-violet-600 text-white border-violet-700 font-bold shadow-xl">
+                <TooltipContent side="top" className="border-primary/40 bg-primary text-primary-foreground font-bold shadow-xl">
                   <p>Gerenciar Categorias</p>
                 </TooltipContent>
               </Tooltip>
@@ -1188,7 +1188,7 @@ export default function DashboardPage() {
         <div className="space-y-1.5">
           <Label className="text-xs font-medium text-zinc-400 ml-1 uppercase">Método</Label>
           <Select onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} value={paymentMethod}>
-            <SelectTrigger className="h-12 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-12 rounded-xl"><SelectValue /></SelectTrigger>
             <SelectContent>{PAYMENT_METHODS.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
           </Select>
         </div>
@@ -1208,7 +1208,7 @@ export default function DashboardPage() {
               }
             }}
           >
-            <SelectTrigger className="h-12 rounded-xl bg-zinc-50 border-zinc-200">
+            <SelectTrigger className="h-12 rounded-xl">
               <SelectValue placeholder="Selecione um cartão cadastrado em /cards" />
             </SelectTrigger>
             <SelectContent>
@@ -1231,7 +1231,7 @@ export default function DashboardPage() {
           {selectedPaymentCard && selectedCardIndicator && (
             <div
               className={`rounded-xl border px-3 py-2 text-xs ${selectedCardIndicator.kind === "debit"
-                  ? "border-blue-200 bg-blue-50 text-blue-700"
+                  ? "border-primary/20 bg-accent text-primary"
                   : selectedCardIndicator.value < 0
                     ? "border-red-200 bg-red-50 text-red-700"
                     : "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -1247,55 +1247,55 @@ export default function DashboardPage() {
           )}
         </div>
       )}
-      <div className="bg-zinc-50/80 dark:bg-zinc-800/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800 space-y-4">
+      <div className="app-panel-subtle space-y-4 rounded-xl border p-4">
         <div className="grid grid-cols-2 gap-3">
           {type === 'expense' && (
             <div className="space-y-1.5">
               <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Data do Gasto</Label>
-              <Input type="date" className="h-10 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={date} onChange={e => setDate(e.target.value)} />
+              <Input type="date" className="h-10 rounded-lg text-xs" value={date} onChange={e => setDate(e.target.value)} />
             </div>
           )}
           {(showDueDateInput || type === 'income') && (
             <div className={`space-y-1.5 ${type === 'income' ? 'col-span-2' : ''}`}>
               <Label className={`text-[10px] font-bold uppercase tracking-wider ${type === 'expense' ? 'text-red-500' : 'text-emerald-600'}`}>{type === 'expense' ? 'Vencimento' : 'Data Crédito'}</Label>
-              <Input type="date" className="h-10 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+              <Input type="date" className="h-10 rounded-lg text-xs" value={dueDate} onChange={e => setDueDate(e.target.value)} />
             </div>
           )}
         </div>
-        <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
+        <div className="flex items-center justify-between border-t border-border/60 pt-1">
           <Label htmlFor="recurring-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
-            <Repeat className="h-3.5 w-3.5 text-blue-500" />
+            <Repeat className="h-3.5 w-3.5 text-primary" />
             Lançamento Fixo / Assinatura
           </Label>
           <Switch
             id="recurring-switch"
-            className="scale-100 data-[state=checked]:bg-blue-600"
+            className="scale-100 data-[state=checked]:bg-primary"
             checked={isRecurring}
             onCheckedChange={handleToggleRecurring}
           />
         </div>
         {isRecurring && (
-          <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 text-xs text-blue-800 animate-in fade-in">
+          <div className="rounded-xl border border-primary/20 bg-accent px-3 py-3 text-xs text-accent-foreground animate-in fade-in">
             Este lançamento será criado para o mês atual e para os próximos 11 meses.
           </div>
         )}
-        <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
+        <div className="flex items-center justify-between border-t border-border/60 pt-1">
           <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
-            <Layers className="h-3.5 w-3.5 text-violet-500" />
+            <Layers className="h-3.5 w-3.5 text-primary" />
             {type === 'expense' ? 'Compra Parcelada' : 'Recebimento Parcelado'}
           </Label>
           <Switch
             id="inst-switch"
-            className="scale-100 data-[state=checked]:bg-violet-600"
+            className="scale-100 data-[state=checked]:bg-primary"
             checked={isInstallment}
             disabled={!isBillingExemptRole && !effectivePlanCapabilities.hasInstallments}
             onCheckedChange={handleToggleInstallment}
           />
         </div>
         {!isBillingExemptRole && !effectivePlanCapabilities.hasInstallments && (
-          <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-3 text-xs text-violet-800">
+          <div className="rounded-xl border border-primary/20 bg-accent px-3 py-3 text-xs text-accent-foreground">
             <p className="font-semibold">Parcelamentos disponíveis no Premium e no Pro.</p>
-            <p className="mt-1 text-violet-700">
+            <p className="mt-1 text-primary">
               Faça upgrade para lançar compras parceladas e acompanhar melhor o fechamento do mês.
             </p>
           </div>
@@ -1305,14 +1305,14 @@ export default function DashboardPage() {
             <Label className="text-xs font-medium text-zinc-500">
               Numero de parcelas
             </Label>
-            <Input type="number" className="h-10 mt-1.5 bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" min="2" max="60" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
-            <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
+            <Input type="number" className="mt-1.5 h-10 rounded-lg" min="2" max="60" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
+            <div className="mt-3 rounded-xl border border-primary/20 bg-accent px-3 py-3">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <Label htmlFor="dashboard-installment-split-mode" className="text-sm font-semibold text-violet-900">
+                  <Label htmlFor="dashboard-installment-split-mode" className="text-sm font-semibold text-accent-foreground">
                     Dividir o valor total
                   </Label>
-                  <p className="mt-1 text-xs text-violet-700">
+                  <p className="mt-1 text-xs text-primary">
                     Ative para informar o total da compra. Desative se o valor digitado ja for o de cada parcela.
                   </p>
                 </div>
@@ -1519,7 +1519,7 @@ export default function DashboardPage() {
   const renderTransactionActions = (tx: Transaction) => (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg hover:cursor-pointer duration-200">
+        <Button variant="ghost" className="h-8 w-8 p-0 rounded-lg hover:bg-accent hover:cursor-pointer duration-200">
           <MoreHorizontal className="h-4 w-4 text-zinc-400" />
         </Button>
       </DropdownMenuTrigger>
@@ -1573,7 +1573,7 @@ export default function DashboardPage() {
         variant={isPending ? "default" : "outline"}
         className={`h-8 rounded-lg px-2 text-[11px] font-semibold ${isPending
             ? "bg-emerald-600 text-white hover:bg-emerald-700"
-            : "border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            : "border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground"
           }`}
         onClick={() => handleCheckinAction(tx, isPending)}
       >
@@ -1599,20 +1599,20 @@ export default function DashboardPage() {
             <Button
               id="tour-new-transaction"
               onClick={() => router.push("/transactions/new")}
-              className="h-11 rounded-xl bg-linear-to-r from-violet-600 to-indigo-600 text-white font-bold shadow-lg shadow-violet-500/25 active:scale-[0.98] transition-all w-full sm:w-auto hover:cursor-pointer duration-200"
+              className="h-11 w-full rounded-xl bg-primary font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all duration-200 active:scale-[0.98] hover:cursor-pointer hover:bg-primary/90 sm:w-auto"
             >
               <Plus className="mr-2 h-4 w-4" /> Nova Transação
             </Button>
 
             {/* Seletor de Mês */}
-            <div id="tour-month-select" className="flex items-center gap-2 bg-white dark:bg-zinc-900 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm w-full sm:w-auto justify-between md:justify-start">
-              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0 hover:cursor-pointer duration-200" onClick={() => changeMonth(-1)} disabled={!canGoBack}>
+            <div id="tour-month-select" className="app-panel-subtle flex items-center justify-between gap-2 rounded-2xl border p-1 shadow-sm w-full sm:w-auto md:justify-start">
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-accent disabled:opacity-30 shrink-0 hover:cursor-pointer duration-200" onClick={() => changeMonth(-1)} disabled={!canGoBack}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <Select value={selectedMonth} onValueChange={setSelectedMonth}>
                 <SelectTrigger className="w-full md:w-40 h-7 border-none shadow-none focus:ring-0 font-semibold text-sm bg-transparent flex justify-center text-center hover:cursor-pointer duration-200">
                   <div className="flex items-center gap-2">
-                    <Calendar className="h-3.5 w-3.5 text-violet-500 shrink-0" />
+                    <Calendar className="h-3.5 w-3.5 shrink-0 text-primary" />
                     <SelectValue placeholder="Selecione" />
                   </div>
                 </SelectTrigger>
@@ -1624,7 +1624,7 @@ export default function DashboardPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 shrink-0 hover:cursor-pointer duration-200" onClick={() => changeMonth(1)} disabled={!canGoForward}>
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-accent disabled:opacity-30 shrink-0 hover:cursor-pointer duration-200" onClick={() => changeMonth(1)} disabled={!canGoForward}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -1632,10 +1632,10 @@ export default function DashboardPage() {
         </div>
 
         {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.completed && (
-          <Card className={`${fadeInUp} delay-100 border-none shadow-lg shadow-blue-200/40 bg-white dark:bg-zinc-900 rounded-2xl`}>
+          <Card className={`${fadeInUp} delay-100 app-panel-soft rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg shadow-primary/10`}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <Info className="h-4 w-4 text-blue-600" /> Primeiros passos
+                <Info className="h-4 w-4 text-primary" /> Primeiros passos
               </CardTitle>
               <CardDescription>
                 Complete o onboarding para liberar o melhor da plataforma.
@@ -1644,7 +1644,7 @@ export default function DashboardPage() {
             <CardContent className="space-y-3">
               <div className="h-2 w-full rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
                 <div
-                  className="h-full bg-linear-to-r from-blue-500 to-violet-600 transition-all duration-300"
+                  className="h-full bg-primary transition-all duration-300"
                   style={{ width: `${(onboardingStatus.progress / onboardingStatus.total) * 100}%` }}
                 />
               </div>
@@ -1658,8 +1658,8 @@ export default function DashboardPage() {
                   className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstTransaction
                       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                       : onboardingActiveStep === "firstTransaction"
-                        ? "border-violet-300 bg-violet-50 text-violet-700 ring-2 ring-violet-200"
-                        : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+                        ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
+                        : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
                   {onboardingStatus.steps.firstTransaction ? "✓ " : onboardingActiveStep === "firstTransaction" ? "• " : ""}Primeira transação
@@ -1670,8 +1670,8 @@ export default function DashboardPage() {
                   className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstCard
                       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                       : onboardingActiveStep === "firstCard"
-                        ? "border-violet-300 bg-violet-50 text-violet-700 ring-2 ring-violet-200"
-                        : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+                        ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
+                        : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
                   {onboardingStatus.steps.firstCard ? "✓ " : onboardingActiveStep === "firstCard" ? "• " : ""}Primeiro cartão
@@ -1682,8 +1682,8 @@ export default function DashboardPage() {
                   className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstGoal
                       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                       : onboardingActiveStep === "firstGoal"
-                        ? "border-violet-300 bg-violet-50 text-violet-700 ring-2 ring-violet-200"
-                        : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+                        ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
+                        : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
                   {onboardingStatus.steps.firstGoal ? "✓ " : onboardingActiveStep === "firstGoal" ? "• " : ""}Primeira meta
@@ -1696,8 +1696,8 @@ export default function DashboardPage() {
                   className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.profileMenu
                       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                       : onboardingActiveStep === "profileMenu"
-                        ? "border-violet-300 bg-violet-50 text-violet-700 ring-2 ring-violet-200"
-                        : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+                        ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
+                        : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
                   {onboardingStatus.steps.profileMenu ? "✓ " : onboardingActiveStep === "profileMenu" ? "• " : ""}Abrir menu da conta (foto no topo)
@@ -1713,13 +1713,13 @@ export default function DashboardPage() {
         )}
 
         {showAutomaticInsights && (
-          <Card className={`${fadeInUp} delay-120 border-none shadow-lg bg-white dark:bg-zinc-900 rounded-2xl`}>
+          <Card className={`${fadeInUp} delay-120 app-panel-soft rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg`}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Insights Automáticos</CardTitle>
               <CardDescription className="text-zinc-500">Resumo inteligente do mês selecionado.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
+              <div className="app-panel-subtle rounded-xl border px-3 py-2">
                 <p className="text-xs text-zinc-500">Maior gasto do mês</p>
                 {monthlyInsights.biggestExpense ? (
                   <p className="text-sm font-semibold text-zinc-900 mt-1">
@@ -1749,7 +1749,7 @@ export default function DashboardPage() {
         {upgradePrompt && (
           <Card className={`${fadeInUp} delay-130 border-none shadow-lg rounded-2xl ${upgradePrompt.kind === "billing"
               ? "bg-linear-to-r from-amber-600 to-orange-600 text-white"
-              : "bg-linear-to-r from-violet-600 to-indigo-600 text-white"
+              : "bg-primary text-primary-foreground"
             }`}>
             <CardContent className="p-4 md:p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div className="space-y-1">
@@ -1762,7 +1762,7 @@ export default function DashboardPage() {
               <div className="flex flex-col sm:flex-row gap-2 min-w-fit">
                 {upgradePrompt.kind === "billing" ? (
                   <Button
-                    className="h-9 bg-white text-amber-700 hover:bg-zinc-100"
+                    className="h-9 bg-card text-amber-700 hover:bg-accent"
                     onClick={() => void handleRecoverPayment()}
                     disabled={isRecoveringBilling}
                   >
@@ -1771,14 +1771,14 @@ export default function DashboardPage() {
                 ) : (
                   <>
                     <Button
-                      className="h-9 bg-white text-violet-700 hover:bg-zinc-300"
+                      className="h-9 bg-card text-primary hover:bg-accent"
                       onClick={() => handleStartCheckout(upgradePrompt.targetPlan)}
                       disabled={isOpeningCheckout === upgradePrompt.targetPlan}
                     >
                       {isOpeningCheckout === upgradePrompt.targetPlan ? "Abrindo..." : upgradePrompt.ctaPrimary}
                     </Button>
                     <Button
-                      className="h-9 bg-white text-violet-700 hover:bg-zinc-300"
+                      className="h-9 bg-card text-primary hover:bg-accent"
                       onClick={() => router.push("/settings?tab=billing")}
                     >
                       Ver planos
@@ -1791,22 +1791,23 @@ export default function DashboardPage() {
         )}
 
         {effectivePlanCapabilities.hasSmartDailyLimit && (
-          <Card id="tour-smart-daily-limit" className={`${fadeInUp} delay-140 border-none shadow-lg rounded-2xl bg-linear-to-r from-zinc-900 to-zinc-800 text-white overflow-hidden`}>
+          <Card id="tour-smart-daily-limit" className={`${fadeInUp} delay-140 app-panel-soft text-card-foreground relative rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg overflow-hidden`}>
+            <div className="pointer-events-none absolute inset-0 bg-linear-to-r from-primary/12 via-primary/6 to-transparent" />
             <CardContent className="p-5 md:p-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-violet-200">
+                <div className="flex items-center gap-2 text-primary">
                   <CalendarDays className="h-4 w-4" />
                   <p className="text-xs font-semibold uppercase tracking-[0.18em]">Limite diário inteligente</p>
                 </div>
                 <p className="text-lg md:text-xl font-bold">{smartDailyHeadline}</p>
-                <p className="text-sm text-white/75 max-w-2xl">{smartDailyDescription}</p>
+                <p className="text-sm text-muted-foreground max-w-2xl">{smartDailyDescription}</p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 min-w-[220px]">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-white/55">Base do cálculo</p>
+              <div className="app-panel-subtle rounded-2xl border border-[color:var(--app-panel-border)] px-4 py-3 min-w-[220px]">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Base do cálculo</p>
                 <p className="mt-2 text-2xl font-bold">
                   {remainingDaysInSelectedMonth > 0 ? `${remainingDaysInSelectedMonth} dia(s)` : "Mês encerrado"}
                 </p>
-                <p className="mt-1 text-xs text-white/60">Restantes para distribuir sua folga prevista.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Restantes para distribuir sua folga prevista.</p>
               </div>
             </CardContent>
           </Card>
@@ -1815,8 +1816,8 @@ export default function DashboardPage() {
         {/* --- KPI Cards --- */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           {/* SALDO EM CAIXA */}
-          <Card id="tour-balance-card" className={`${fadeInUp} delay-150 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl group active:scale-[0.99] transition-transform`}>
-            <div className="absolute inset-0 bg-linear-to-br from-blue-500/5 to-transparent pointer-events-none" />
+          <Card id="tour-balance-card" className={`${fadeInUp} delay-150 app-panel-soft relative overflow-hidden rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 group active:scale-[0.99] transition-transform`}>
+            <div className="absolute inset-0 bg-linear-to-br from-primary/10 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
               <div className="flex items-center gap-2">
                 <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Saldo Atual (Hoje)</CardTitle>
@@ -1844,10 +1845,10 @@ export default function DashboardPage() {
                   </Tooltip>
                 </TooltipProvider>
               </div>
-              <div className="p-2 bg-blue-500/10 rounded-xl text-blue-600 dark:text-blue-400"><DollarSign className="h-5 w-5" /></div>
+              <div className="rounded-xl bg-primary/10 p-2 text-primary"><DollarSign className="h-5 w-5" /></div>
             </CardHeader>
             <CardContent className="relative h-full flex flex-col justify-center">
-              <div className={`text-3xl font-bold tracking-tight ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (realCurrentBalance < 0 ? 'text-red-500' : 'text-blue-600 dark:text-zinc-50')}`}>
+              <div className={`text-3xl font-bold tracking-tight ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (realCurrentBalance < 0 ? 'text-red-500' : 'text-primary')}`}>
                 {formatCurrencyDisplay(realCurrentBalance)}
               </div>
               <p className="text-xs text-zinc-400 mt-2 font-medium">O que você tem hoje (Realizado).</p>
@@ -1855,8 +1856,8 @@ export default function DashboardPage() {
           </Card>
 
           {/* MOVIMENTAÇÃO */}
-          <Card id="tour-movement-card" className={`${fadeInUp} delay-300 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl`}>
-            <div className="absolute inset-0 bg-linear-to-br from-violet-500/5 to-transparent pointer-events-none" />
+          <Card id="tour-movement-card" className={`${fadeInUp} delay-300 app-panel-soft relative overflow-hidden rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20`}>
+            <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/6 to-transparent" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
                 <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Movimentação (Mês)</CardTitle>
@@ -1898,7 +1899,7 @@ export default function DashboardPage() {
 
           {/* Previsão */}
           {(isBillingExemptRole || effectivePlanCapabilities.hasMonthlyForecast) ? (
-            <Card id="tour-forecast-card" className={`${fadeInUp} delay-500 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
+            <Card id="tour-forecast-card" className={`${fadeInUp} delay-500 app-panel-soft relative overflow-hidden rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Previsão de Fechamento</CardTitle>
@@ -1925,7 +1926,7 @@ export default function DashboardPage() {
                     </Tooltip>
                   </TooltipProvider>
                 </div>
-                <div className="p-2 bg-violet-500/10 rounded-xl text-violet-600 dark:text-violet-400"><Calculator className="h-5 w-5" /></div>
+                <div className="rounded-xl bg-primary/10 p-2 text-primary"><Calculator className="h-5 w-5" /></div>
               </CardHeader>
               <CardContent className="relative h-full flex flex-col justify-center">
                 <div className={`text-3xl font-bold tracking-tight ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (projectedAccumulatedBalance >= 0 ? 'text-emerald-600' : 'text-red-600')}`}>
@@ -1935,23 +1936,23 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           ) : (
-            <Card className={`${fadeInUp} delay-500 relative overflow-hidden border-none shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-linear-to-br from-violet-600 to-indigo-600 rounded-2xl text-white`}>
+            <Card className={`${fadeInUp} delay-500 app-panel-soft relative overflow-hidden rounded-2xl border border-[color:var(--app-panel-border)] text-card-foreground shadow-lg shadow-primary/10 md:shadow-xl`}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
                 <div>
-                  <CardTitle className="text-sm font-medium text-white/85">Previsão de Fechamento</CardTitle>
-                  <CardDescription className="text-white/75">Disponível no Premium e no Pro</CardDescription>
+                  <CardTitle className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Previsão de Fechamento</CardTitle>
+                  <CardDescription className="text-zinc-500 dark:text-zinc-400">Disponível no Premium e no Pro</CardDescription>
                 </div>
-                <div className="p-2 bg-white/10 rounded-xl text-white"><Calculator className="h-5 w-5" /></div>
+                <div className="rounded-xl bg-primary/10 p-2 text-primary"><Calculator className="h-5 w-5" /></div>
               </CardHeader>
               <CardContent className="relative h-full flex flex-col justify-between gap-4">
                 <div>
                   <p className="text-xl font-bold tracking-tight">Entenda antes se o mês vai fechar no verde.</p>
-                  <p className="text-sm text-white/80 mt-2">
+                  <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
                     No Premium, o dashboard mostra sua previsão de fechamento com base no saldo atual, contas a pagar e valores a receber.
                   </p>
                 </div>
                 <Button
-                  className="h-10 w-full bg-white text-violet-700 hover:bg-zinc-100"
+                  className="h-10 w-full bg-primary text-primary-foreground hover:bg-primary/90"
                   onClick={() => handleStartCheckout("premium")}
                   disabled={isOpeningCheckout === "premium"}
                 >
@@ -1966,7 +1967,7 @@ export default function DashboardPage() {
         <div className="w-full space-y-8">
 
           {/* Gráfico do Fluxo Mensal */}
-          <Card className={`${fadeInUp} delay-700 border-none shadow-lg shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl`}>
+          <Card className={`${fadeInUp} delay-700 app-panel-soft rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg shadow-zinc-200/50 dark:shadow-black/20`}>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Fluxo Mensal</CardTitle>
               <CardDescription className="text-zinc-500">Evolução do saldo ao longo do tempo.</CardDescription>
@@ -1977,8 +1978,8 @@ export default function DashboardPage() {
           </Card>
 
           {/* Tabela de Transações */}
-          <Card id="tour-transactions-table" className={`${fadeInUp} delay-700 border-none shadow-lg shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden`}>
-            <CardHeader className="border-b border-zinc-100 dark:border-zinc-800 py-5 px-6">
+          <Card id="tour-transactions-table" className={`${fadeInUp} delay-700 app-panel-soft rounded-2xl border border-[color:var(--app-panel-border)] shadow-lg shadow-zinc-200/50 dark:shadow-black/20 overflow-hidden`}>
+            <CardHeader className="border-b border-[color:var(--app-panel-border)] py-5 px-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Extrato</CardTitle>
@@ -1992,14 +1993,14 @@ export default function DashboardPage() {
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" />
                     <Input
                       placeholder="Buscar..."
-                      className="pl-9 h-9 text-xs rounded-lg bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700"
+                      className="pl-9 h-9 text-xs rounded-lg"
                       value={searchTerm}
                       onChange={e => setSearchTerm(e.target.value)}
                     />
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
                     <Select value={filterType} onValueChange={(v) => setFilterType(v as "all" | "income" | "expense")}>
-                      <SelectTrigger className="w-[100px] h-9 text-xs rounded-lg bg-zinc-50 dark:bg-zinc-800"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-[100px] h-9 text-xs rounded-lg"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todos</SelectItem>
                         <SelectItem value="expense">Despesas</SelectItem>
@@ -2007,7 +2008,7 @@ export default function DashboardPage() {
                       </SelectContent>
                     </Select>
                     <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as "all" | "paid" | "pending")}>
-                      <SelectTrigger className="w-[200px] h-9 text-xs rounded-lg bg-zinc-50"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-[200px] h-9 text-xs rounded-lg"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todos Status</SelectItem>
                         <SelectItem value="pending">Pendente</SelectItem>
@@ -2015,7 +2016,7 @@ export default function DashboardPage() {
                       </SelectContent>
                     </Select>
                     <Select value={filterCategory} onValueChange={setFilterCategory}>
-                      <SelectTrigger className="w-full h-9 text-xs rounded-lg bg-zinc-50"><SelectValue placeholder="Categoria" /></SelectTrigger>
+                      <SelectTrigger className="w-full h-9 text-xs rounded-lg"><SelectValue placeholder="Categoria" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todas Categ.</SelectItem>
                         {uniqueCategories.map(c => <SelectItem key={c} value={c}>{isSubcategory(c) ? `* ${getSubcategoryName(c)}` : c}</SelectItem>)}
@@ -2066,7 +2067,7 @@ export default function DashboardPage() {
 
             <div className="p-3">
               {pagedTransactions.length === 0 ? (
-                <div className="h-28 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/50 flex items-center justify-center text-sm text-zinc-400">
+                <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border text-sm text-zinc-400">
                   Nenhum lançamento encontrado com estes filtros.
                 </div>
               ) : (
@@ -2075,7 +2076,7 @@ export default function DashboardPage() {
                     const overdue = isOverdue(tx);
                     const txId = String(tx.id || "");
                     return (
-                      <div key={tx.id} className={`rounded-2xl border p-3 space-y-2.5 ${overdue ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-900/10" : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/40"}`}>
+                      <div key={tx.id} className={`rounded-2xl border p-3 space-y-2.5 ${overdue ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-900/10" : "border-[color:var(--app-panel-border)] app-panel-subtle"}`}>
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-start gap-3 min-w-0">
                             <Checkbox
@@ -2115,12 +2116,12 @@ export default function DashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => handleOpenCardFromTransaction(tx.cardId as string)}
-                                className="text-[10px] px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700 font-medium transition-colors hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/35"
+                                className="rounded-full border border-primary/20 bg-accent px-2 py-0.5 text-[10px] font-medium text-primary transition-colors hover:bg-accent/80"
                               >
                                 Cartão: {tx.cardLabel}
                               </button>
                             ) : (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-700 font-medium dark:border-violet-900 dark:bg-violet-900/20 dark:text-violet-300">
+                              <span className="rounded-full border border-primary/20 bg-accent px-2 py-0.5 text-[10px] font-medium text-primary">
                                 Cartão: {tx.cardLabel}
                               </span>
                             )
@@ -2129,8 +2130,8 @@ export default function DashboardPage() {
                             <span
                               className={`flex items-center text-[10px] px-2 py-0.5 rounded-full border ${tx.isRecurring
                                   ? tx.recurrenceEnded
-                                    ? "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/20 dark:text-slate-300"
-                                    : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-900/20 dark:text-blue-300"
+                                  ? "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/20 dark:text-slate-300"
+                                    : "border-primary/20 bg-accent text-primary dark:border-primary/20 dark:bg-accent dark:text-primary"
                                   : "border-zinc-200 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700"
                                 }`}
                             >
@@ -2158,7 +2159,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Paginação Footer */}
-            <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+            <div className="app-panel-subtle flex items-center justify-between border-t border-border/70 px-6 py-4">
               <div className="text-xs text-zinc-500 font-medium">
                 Página {currentPage} de {totalPages || 1}
               </div>
@@ -2228,7 +2229,7 @@ export default function DashboardPage() {
                         <span className={`flex items-center text-[10px] px-2 py-1 rounded-full border font-medium ${editingTx.isRecurring
                             ? editingTx.recurrenceEnded
                               ? "bg-slate-50 text-slate-700 border-slate-200"
-                              : "bg-blue-50 text-blue-700 border-blue-200"
+                              : "border-primary/20 bg-accent text-primary"
                             : "bg-amber-50 text-amber-700 border-amber-200"
                           }`}>
                           {editingTx.isRecurring ? <Repeat className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
@@ -2247,10 +2248,10 @@ export default function DashboardPage() {
 
                   {editingTx.groupId && editingGroupTransactions.length > 0 && (
                     <div className={`mb-5 rounded-xl border p-3 ${editingTx.isRecurring
-                        ? "border-blue-200 bg-blue-50/70"
+                        ? "border-primary/20 bg-accent/70"
                         : "border-amber-200 bg-amber-50/70"
                       }`}>
-                      <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${editingTx.isRecurring ? "text-blue-700" : "text-amber-700"
+                      <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${editingTx.isRecurring ? "text-primary" : "text-amber-700"
                         }`}>
                         {editingTx.isRecurring ? "Ocorrências desta recorrência" : "Parcelas deste grupo"}
                       </p>
@@ -2259,9 +2260,9 @@ export default function DashboardPage() {
                           <div
                             key={parcel.id}
                             className={`text-xs rounded-lg border px-2 py-1.5 flex items-center justify-between ${parcel.id === editingTx.id
-                                ? "border-violet-300 bg-violet-50 text-violet-700"
+                                ? "border-primary/35 bg-accent text-primary"
                                 : editingTx.isRecurring
-                                  ? "border-blue-200 bg-white text-zinc-600"
+                                  ? "border-primary/20 bg-card text-zinc-600 dark:text-zinc-300"
                                   : "border-amber-200 bg-white text-zinc-600"
                               }`}
                           >
@@ -2273,7 +2274,7 @@ export default function DashboardPage() {
                           </div>
                         ))}
                       </div>
-                      <p className={`text-[11px] mt-2 ${editingTx.isRecurring ? "text-blue-700" : "text-amber-700"}`}>
+                      <p className={`text-[11px] mt-2 ${editingTx.isRecurring ? "text-primary" : "text-amber-700"}`}>
                         {editingTx.isRecurring
                           ? "Você pode salvar só esta ocorrência ou aplicar a edição para toda a recorrência."
                           : "Você pode salvar só esta parcela ou aplicar a edição para todas."}
@@ -2285,7 +2286,7 @@ export default function DashboardPage() {
                     <div className="space-y-2">
                       <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Descrição</Label>
                       <Input
-                        className="h-11 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl"
+                        className="h-11 rounded-xl"
                         value={editingTx.description}
                         onChange={e => setEditingTx({ ...editingTx, description: e.target.value })}
                       />
@@ -2298,7 +2299,7 @@ export default function DashboardPage() {
                           <span className="absolute left-3.5 top-2.5 text-zinc-400 font-semibold">R$</span>
                           <Input
                             type="number"
-                            className="pl-10 h-11 bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 rounded-xl font-semibold text-lg"
+                            className="h-11 rounded-xl pl-10 text-lg font-semibold"
                             placeholder="0,00"
                             value={editingTx.amount}
                             onChange={e => setEditingTx({ ...editingTx, amount: Number(e.target.value) })}
@@ -2309,7 +2310,7 @@ export default function DashboardPage() {
                         <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Categoria</Label>
                         <div className="flex gap-2">
                           <Select value={editingTx.category} onValueChange={(v) => setEditingTx({ ...editingTx, category: v })}>
-                            <SelectTrigger className="h-11 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               {(() => {
                                 const availableForEdit = categories.filter(cat => cat.type === editingTx.type || cat.type === 'both');
@@ -2331,12 +2332,12 @@ export default function DashboardPage() {
                                 <Button
                                   onClick={() => setIsNewCategoryOpen(true)}
                                   variant="outline"
-                                  className="h-11 w-11 rounded-xl shrink-0 p-0 border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+                                  className="h-11 w-11 rounded-xl shrink-0 p-0"
                                 >
-                                  <Settings className="h-4 w-4 text-violet-600" />
+                                  <Settings className="h-4 w-4 text-primary" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent side="top" className="bg-violet-600 text-white border-violet-700 font-bold shadow-xl">
+                              <TooltipContent side="top" className="border-primary/40 bg-primary text-primary-foreground font-bold shadow-xl">
                                 <p>Gerenciar Categorias</p>
                               </TooltipContent>
                             </Tooltip>
@@ -2365,7 +2366,7 @@ export default function DashboardPage() {
                           });
                         }}
                       >
-                        <SelectTrigger className="h-11 rounded-xl bg-zinc-50 border-zinc-200"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
                         <SelectContent>{PAYMENT_METHODS.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
@@ -2387,7 +2388,7 @@ export default function DashboardPage() {
                             });
                           }}
                         >
-                          <SelectTrigger className="h-11 rounded-xl bg-zinc-50 border-zinc-200">
+                          <SelectTrigger className="h-11 rounded-xl">
                             <SelectValue placeholder="Selecione um cartão cadastrado em /cards" />
                           </SelectTrigger>
                           <SelectContent>
@@ -2405,22 +2406,22 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    <div className="bg-zinc-50/80 dark:bg-zinc-800/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                    <div className="app-panel-subtle rounded-xl border p-4">
                       {editingTx.type === 'income' ? (
                         <div className="w-full space-y-2">
                           <Label className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Data de Crédito</Label>
-                          <Input type="date" className="h-10 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={editingTx.date} onChange={e => setEditingTx({ ...editingTx, date: e.target.value })} />
+                          <Input type="date" className="h-10 rounded-lg text-xs" value={editingTx.date} onChange={e => setEditingTx({ ...editingTx, date: e.target.value })} />
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="space-y-2">
                             <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Data Compra</Label>
-                            <Input type="date" className="h-10 text-xs bg-white dark:bg-zinc-900 border-zinc-200 rounded-lg" value={editingTx.date} onChange={e => setEditingTx({ ...editingTx, date: e.target.value })} />
+                            <Input type="date" className="h-10 rounded-lg text-xs" value={editingTx.date} onChange={e => setEditingTx({ ...editingTx, date: e.target.value })} />
                           </div>
                           {(editingTx.paymentMethod === 'boleto' || editingTx.paymentMethod === 'credit_card') && (
                             <div className="space-y-2">
                               <Label className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Vencimento</Label>
-                              <Input type="date" className="h-10 text-xs bg-white dark:bg-zinc-900 border-red-200 rounded-lg" value={editingTx.dueDate} onChange={e => setEditingTx({ ...editingTx, dueDate: e.target.value })} />
+                              <Input type="date" className="h-10 rounded-lg border-red-200 text-xs" value={editingTx.dueDate} onChange={e => setEditingTx({ ...editingTx, dueDate: e.target.value })} />
                             </div>
                           )}
                         </div>
@@ -2439,10 +2440,10 @@ export default function DashboardPage() {
                     {editingTx.groupId ? (
                       <>
                         <Button variant="outline" className="w-full sm:w-auto h-11 rounded-xl font-medium border-zinc-200" onClick={() => handleConfirmEdit(false)}>Salvar Apenas Esta</Button>
-                        <Button className="w-full sm:w-auto h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold shadow-lg shadow-violet-500/20" onClick={() => handleConfirmEdit(true)}>Salvar Todas</Button>
+                        <Button className="h-11 w-full rounded-xl bg-primary font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto" onClick={() => handleConfirmEdit(true)}>Salvar Todas</Button>
                       </>
                     ) : (
-                      <Button className="w-full sm:w-auto h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold shadow-lg shadow-violet-500/20" onClick={() => handleConfirmEdit(false)}>Salvar Alterações</Button>
+                      <Button className="h-11 w-full rounded-xl bg-primary font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto" onClick={() => handleConfirmEdit(false)}>Salvar Alterações</Button>
                     )}
                   </DialogFooter>
                 </div>
@@ -2573,7 +2574,7 @@ export default function DashboardPage() {
         <Dialog open={showCheckinModal} onOpenChange={setShowCheckinModal}>
           <DialogContent className="sm:max-w-[425px] rounded-3xl p-6">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-violet-600">
+              <DialogTitle className="flex items-center gap-2 text-primary">
                 <CheckCircle2 className="h-6 w-6" /> Check-in Diário
               </DialogTitle>
               <DialogDescription className="pt-2 text-base">
@@ -2582,7 +2583,7 @@ export default function DashboardPage() {
             </DialogHeader>
 
             {pendingCheckins.length > 0 && (
-              <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800 my-2">
+              <div className="app-panel-subtle my-2 rounded-xl border p-4">
                 <p className="font-semibold text-lg">{pendingCheckins[0].description}</p>
                 <p className="text-sm text-zinc-500 mb-2">Venceu em: {formatDateDisplay(pendingCheckins[0].dueDate)}</p>
                 <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
@@ -2611,13 +2612,13 @@ export default function DashboardPage() {
 
         {/* Modal de UPGRADE */}
         <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
-          <DialogContent className="w-[calc(100vw-2rem)] max-w-[520px] sm:max-w-md rounded-2xl p-6 sm:p-8 border-violet-500 border-2 max-h-[85vh] overflow-y-auto">
+          <DialogContent className="max-h-[85vh] w-[calc(100vw-2rem)] max-w-[520px] rounded-2xl border-2 border-primary/35 p-6 sm:max-w-md sm:p-8 overflow-y-auto">
             <DialogHeader className="text-center items-center">
-              <div className="p-4 bg-violet-100 dark:bg-violet-900/30 rounded-full mb-4 animate-bounce">
-                <Crown className="h-8 w-8 text-violet-600 dark:text-violet-400" />
+              <div className="mb-4 animate-bounce rounded-full bg-primary/10 p-4">
+                <Crown className="h-8 w-8 text-primary" />
               </div>
 
-              <DialogTitle className="text-2xl font-bold text-violet-600">
+              <DialogTitle className="text-2xl font-bold text-primary">
                 Limite Atingido!
               </DialogTitle>
 
@@ -2644,22 +2645,22 @@ export default function DashboardPage() {
                   onClick={() => handleStartCheckout("premium")}
                   disabled={isOpeningCheckout === "premium"}
                   variant="outline"
-                  className="w-full h-12 rounded-xl sm:text-lg font-bold border-violet-200 text-violet-700 hover:bg-violet-50 shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
+                  className="h-12 w-full rounded-xl border-primary/20 text-primary shadow-lg shadow-primary/15 transition-all duration-400 hover:cursor-pointer hover:bg-accent sm:text-lg font-bold"
                 >
-                  <Medal className="inline-block h-6 w-6 text-violet-600 dark:text-violet-400" /> {isOpeningCheckout === "premium" ? "Abrindo..." : "Premium"}
+                  <Medal className="inline-block h-6 w-6 text-primary" /> {isOpeningCheckout === "premium" ? "Abrindo..." : "Premium"}
                 </Button>
 
                 <Button
                   onClick={() => handleStartCheckout("pro")}
                   disabled={isOpeningCheckout === "pro"}
-                  className="w-full h-12 rounded-xl bg-violet-600 hover:bg-violet-700 sm:text-lg font-bold shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
+                  className="h-12 w-full rounded-xl bg-primary font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all duration-400 hover:cursor-pointer hover:bg-primary/90 sm:text-lg"
                 >
                   <Medal className="inline-block h-6 w-6 text-zinc-100 dark:text-zinc-200" /> {isOpeningCheckout === "pro" ? "Abrindo..." : "Pro"}
                 </Button>
 
                 <Button
                   variant="ghost"
-                  className="col-span-2 w-full h-12 sm:text-lg rounded-xl bg-violet-500 text-zinc-100 hover:bg-violet-700 hover:text-zinc-200 shadow-lg shadow-violet-500/25 transition-all duration-400 hover:cursor-pointer"
+                  className="col-span-2 h-12 w-full rounded-xl bg-accent text-primary shadow-lg shadow-primary/10 transition-all duration-400 hover:cursor-pointer hover:bg-accent/80 sm:text-lg"
                   onClick={() => setShowUpgradeModal(false)}
                 >
                   Continuar no Grátis
@@ -2673,8 +2674,8 @@ export default function DashboardPage() {
         <Dialog open={isNewCategoryOpen} onOpenChange={setIsNewCategoryOpen}>
           <DialogContent className="rounded-2xl w-[calc(100vw-1rem)] max-w-[680px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <div className="mx-auto p-3 bg-violet-100 dark:bg-violet-900/30 rounded-full mb-2 w-fit">
-                <Tag className="h-6 w-6 text-violet-600 dark:text-violet-400" />
+              <div className="mx-auto mb-2 w-fit rounded-full bg-primary/10 p-3">
+                <Tag className="h-6 w-6 text-primary" />
               </div>
               <DialogTitle className="text-center">Gerenciar Categorias</DialogTitle>
               <DialogDescription className="text-center pt-2">
@@ -2718,7 +2719,7 @@ export default function DashboardPage() {
                   className="rounded-xl h-11"
                 />
               </div>
-              <div className="space-y-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+              <div className="space-y-2 border-t border-border/70 pt-2">
                 <Label>Categorias padrão</Label>
                 <p className="text-xs text-zinc-500">Você pode ocultar as categorias padrão sem apagar.</p>
                 <div className="max-h-32 overflow-y-auto space-y-2 pr-1">
@@ -2732,13 +2733,13 @@ export default function DashboardPage() {
                     .map((cat) => {
                       const hidden = cat.name !== "Outros" && !categories.some((c) => c.name === cat.name);
                       return (
-                        <div key={`default-${cat.name}`} className="rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div key={`default-${cat.name}`} className="app-panel-subtle flex flex-col gap-2 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                           <p className="text-sm font-medium truncate">{cat.name}</p>
                           <Button
                             type="button"
                             size="sm"
                             className={`h-8 px-2 shrink-0 w-full sm:w-auto text-white ${cat.name === "Outros"
-                                ? "bg-zinc-500 hover:bg-zinc-600"
+                                ? "bg-primary/75 hover:bg-primary/90"
                                 : hidden
                                   ? "bg-emerald-600 hover:bg-emerald-700"
                                   : "bg-amber-500 hover:bg-amber-600"
@@ -2753,7 +2754,7 @@ export default function DashboardPage() {
                     })}
                 </div>
               </div>
-              <div className="space-y-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+              <div className="space-y-2 border-t border-border/70 pt-2">
                 <Label>Gerenciar categorias personalizadas</Label>
                 <p className="text-xs text-zinc-500">Ao excluir, lançamentos vinculados são movidos para <strong>Outros</strong>.</p>
                 <Select value={customParentFilter} onValueChange={setCustomParentFilter}>
@@ -2776,7 +2777,7 @@ export default function DashboardPage() {
                     const sub = isSubcategory(cat.name);
                     const linked = isLinkedSubcategory(cat.name);
                     return (
-                      <div key={cat.name} className="rounded-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2 space-y-2">
+                      <div key={cat.name} className="app-panel-subtle space-y-2 rounded-lg border px-3 py-2">
                         {isEditing ? (
                           <>
                             <div className="grid grid-cols-1 gap-2">
@@ -2810,7 +2811,7 @@ export default function DashboardPage() {
                               )}
                             </div>
                             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1 shrink-0 sm:justify-end">
-                              <Button type="button" size="sm" className="h-8 px-2 w-full sm:w-auto justify-center bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleStartEditCategory(cat.name)}>
+                              <Button type="button" size="sm" className="h-8 px-2 w-full sm:w-auto justify-center bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => handleStartEditCategory(cat.name)}>
                                 <Pencil className="h-3.5 w-3.5 mr-1" />Editar
                               </Button>
                               <Button type="button" size="sm" className="h-8 px-2 w-full sm:w-auto justify-center bg-red-600 hover:bg-red-700 text-white" disabled={deletingCategoryName === cat.name} onClick={() => handleDeleteCategory(cat.name)}>
@@ -2837,7 +2838,7 @@ export default function DashboardPage() {
         <Dialog open={feedbackModal.isOpen} onOpenChange={(open) => !open && setFeedbackModal({ ...feedbackModal, isOpen: false })}>
           <DialogContent className="rounded-2xl sm:max-w-[400px]">
             <DialogHeader>
-              <div className={`mx-auto p-3 rounded-full mb-2 w-fit ${feedbackModal.type === 'success' ? 'bg-emerald-100 text-emerald-600' : feedbackModal.type === 'error' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+              <div className={`mx-auto p-3 rounded-full mb-2 w-fit ${feedbackModal.type === 'success' ? 'bg-emerald-100 text-emerald-600' : feedbackModal.type === 'error' ? 'bg-red-100 text-red-600' : 'bg-primary/10 text-primary'}`}>
                 {feedbackModal.type === 'success' ? <CheckCircle2 className="h-6 w-6" /> : feedbackModal.type === 'error' ? <AlertTriangle className="h-6 w-6" /> : <Info className="h-6 w-6" />}
               </div>
               <DialogTitle className="text-center">{feedbackModal.title}</DialogTitle>
