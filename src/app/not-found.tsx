@@ -10,11 +10,11 @@ export default function NotFound() {
   const zoomIn = "animate-in fade-in zoom-in-50 duration-500 fill-mode-both";
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans px-4 bg-zinc-50 dark:bg-zinc-950">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-transparent px-4 font-sans">
       
       {/* Background Decorativo */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-[100px]" />
+        <div className="absolute top-[-10%] left-[-10%] h-[500px] w-[500px] rounded-full bg-primary/10 blur-[100px]" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[100px]" />
       </div>
 
@@ -22,9 +22,9 @@ export default function NotFound() {
         
         {/* Logo / Icone */}
         <div className="flex justify-center">
-          <div className={`${zoomIn} bg-white dark:bg-zinc-900 p-4 rounded-3xl shadow-xl shadow-violet-200/50 dark:shadow-violet-900/20 border border-zinc-100 dark:border-zinc-800`}>
-             <div className="bg-violet-100 dark:bg-violet-900/30 p-4 rounded-2xl">
-                <FileQuestion className="h-10 w-10 text-violet-600 dark:text-violet-400" />
+          <div className={`${zoomIn} rounded-3xl border border-zinc-100 bg-white p-4 shadow-xl shadow-primary/10 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-primary/10`}>
+             <div className="rounded-2xl bg-primary/10 p-4">
+                <FileQuestion className="h-10 w-10 text-primary" />
              </div>
           </div>
         </div>
@@ -48,7 +48,7 @@ export default function NotFound() {
 
         <div className={`${fadeInUp} delay-300 flex flex-col gap-3`}>
             <Link href="/" className="w-full">
-              <Button className="w-full h-12 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-medium shadow-lg shadow-violet-500/20 active:scale-[0.98] hover:cursor-pointer transition-all duration-200">
+              <Button className="h-12 w-full rounded-xl bg-primary font-medium text-primary-foreground shadow-lg shadow-primary/20 transition-all duration-200 hover:cursor-pointer hover:bg-primary/90 active:scale-[0.98]">
                 <MoveLeft className="mr-2 h-4 w-4" /> Voltar para o Início
               </Button>
             </Link>
