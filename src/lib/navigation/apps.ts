@@ -139,6 +139,7 @@ export function normalizeNavigationPreferences(
       ? input.surface
       : DEFAULT_NAVIGATION_PREFERENCES.surface,
     accent:
+      input?.accent === "app" ||
       input?.accent === "violet" ||
       input?.accent === "indigo" ||
       input?.accent === "fuchsia" ||

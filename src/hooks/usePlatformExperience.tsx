@@ -301,12 +301,30 @@ export function PlatformExperienceProvider({ children }: { children: ReactNode }
       const next = normalizeAppearancePreferences(
         typeof updater === "function" ? updater(appearancePreferences) : updater
       );
+      const shouldDockFollowAppAccent =
+        next.accent !== appearancePreferences.accent &&
+        navigationPreferences.accent !== "app" &&
+        navigationPreferences.accent === appearancePreferences.accent;
       setAppearancePreferences(next);
       persistAppearancePreferences(next);
       try {
         const saved = await updateAppearancePreferences(next);
         setAppearancePreferences(saved);
         persistAppearancePreferences(saved);
+        if (shouldDockFollowAppAccent) {
+          const nextNavigationPreferences = normalizeNavigationPreferences({
+            ...navigationPreferences,
+            accent: "app",
+          });
+          setNavigationPreferences(nextNavigationPreferences);
+          persistNavigationPreferences(nextNavigationPreferences);
+          void updateNavigationPreferences(nextNavigationPreferences)
+            .then((savedNavigationPreferences) => {
+              setNavigationPreferences(savedNavigationPreferences);
+              persistNavigationPreferences(savedNavigationPreferences);
+            })
+            .catch(() => {});
+        }
         return saved;
       } catch (error) {
         setAppearancePreferences(appearancePreferences);
@@ -314,7 +332,7 @@ export function PlatformExperienceProvider({ children }: { children: ReactNode }
         throw error;
       }
     },
-    [appearancePreferences]
+    [appearancePreferences, navigationPreferences]
   );
 
   const startPlatformTour = useCallback((route: PlatformTourRouteKey = "dashboard", routeOrder?: PlatformTourRouteKey[]) => {

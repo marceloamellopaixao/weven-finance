@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getNavigationAppItem } from "@/lib/navigation/apps";
+import { useAppearance } from "@/hooks/useAppearance";
 import { NavigationAppId, NavigationDockAccent, NavigationPreferences } from "@/types/navigation";
 
 type NavigationDockBarProps = {
@@ -14,7 +15,7 @@ type NavigationDockBarProps = {
 };
 
 const ACCENT_CLASSES: Record<
-  NavigationDockAccent,
+  Exclude<NavigationDockAccent, "app">,
   {
     lightSolid: string;
     lightGlass: string;
@@ -78,16 +79,30 @@ const ACCENT_CLASSES: Record<
   },
 };
 
-function getDockSurfaceClasses(preferences: NavigationPreferences) {
-  const accent = ACCENT_CLASSES[preferences.accent];
+function resolveDockAccent(
+  preferences: NavigationPreferences,
+  appAccent: Exclude<NavigationDockAccent, "app">
+) {
+  return preferences.accent === "app" ? appAccent : preferences.accent;
+}
+
+function getDockSurfaceClasses(
+  preferences: NavigationPreferences,
+  resolvedAccent: Exclude<NavigationDockAccent, "app">
+) {
+  const accent = ACCENT_CLASSES[resolvedAccent];
   if (preferences.theme === "light") {
     return preferences.surface === "solid" ? accent.lightSolid : accent.lightGlass;
   }
   return preferences.surface === "solid" ? accent.darkSolid : accent.darkGlass;
 }
 
-function getDockItemClasses(preferences: NavigationPreferences, active: boolean) {
-  const accent = ACCENT_CLASSES[preferences.accent];
+function getDockItemClasses(
+  preferences: NavigationPreferences,
+  active: boolean,
+  resolvedAccent: Exclude<NavigationDockAccent, "app">
+) {
+  const accent = ACCENT_CLASSES[resolvedAccent];
   if (active) {
     return preferences.theme === "light" ? accent.activeLight : accent.activeDark;
   }
@@ -102,6 +117,8 @@ export function NavigationDockBar({
   interactive = false,
   className,
 }: NavigationDockBarProps) {
+  const { appearancePreferences } = useAppearance();
+  const resolvedAccent = resolveDockAccent(preferences, appearancePreferences.accent);
   const items = preferences.shortcuts.map((id) => getNavigationAppItem(id));
   const isSidebar = !mobile && preferences.position !== "center";
   const compact = preferences.density === "compact";
@@ -109,7 +126,7 @@ export function NavigationDockBar({
 
   const containerClass = cn(
     "border shadow-2xl",
-    getDockSurfaceClasses(preferences),
+    getDockSurfaceClasses(preferences, resolvedAccent),
     isSidebar
       ? cn(
           "flex flex-col rounded-[28px]",
@@ -131,7 +148,7 @@ export function NavigationDockBar({
   const itemClass = (active: boolean) =>
     cn(
       "min-w-0 font-medium transition-all",
-      getDockItemClasses(preferences, active),
+      getDockItemClasses(preferences, active, resolvedAccent),
       isSidebar
         ? cn(
             "flex flex-col items-center rounded-[22px]",

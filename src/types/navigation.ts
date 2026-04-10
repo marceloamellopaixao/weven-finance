@@ -12,7 +12,7 @@ export type NavigationDockTheme = "dark" | "light";
 export type NavigationDockDensity = "compact" | "comfortable";
 export type NavigationDockLabels = "always" | "icons-only";
 export type NavigationDockSurface = "glass" | "solid";
-export type NavigationDockAccent = "violet" | "indigo" | "fuchsia" | "emerald" | "amber";
+export type NavigationDockAccent = "app" | "violet" | "indigo" | "fuchsia" | "emerald" | "amber";
 
 export type NavigationPreferences = {
   mobileEnabled: boolean;
@@ -55,7 +55,7 @@ export const DEFAULT_NAVIGATION_PREFERENCES: NavigationPreferences = {
   density: "comfortable",
   labels: "always",
   surface: "glass",
-  accent: "violet",
+  accent: "app",
   shortcuts: ["dashboard", "transactions-new", "cards", "piggy-bank", "settings"],
 };
 

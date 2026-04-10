@@ -105,19 +105,19 @@ export default function AppsPage() {
   };
 
   return (
-    <div className="min-h-screen p-3 sm:p-6 md:p-8">
+    <div className="p-3 sm:p-6 md:p-8">
       <div className="mx-auto max-w-6xl space-y-6">
-        <section className="overflow-hidden rounded-4xl border border-zinc-200 bg-white shadow-xl shadow-zinc-200/50 dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-black/20">
+        <section className="app-panel-soft overflow-hidden rounded-4xl border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
           <div className="grid gap-6 px-6 py-8 md:grid-cols-[1.3fr_0.7fr] md:px-8 md:py-10">
             <div className="space-y-4">
               <Badge className="rounded-full bg-accent px-3 py-1 text-primary">
                 Navegação rápida do app
               </Badge>
               <div className="space-y-3">
-                <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100 md:text-4xl">
+                <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">
                   Explore o WevenFinance como um app
                 </h1>
-                <p className="max-w-2xl text-sm leading-6 text-zinc-500 md:text-base">
+                <p className="max-w-2xl text-sm leading-6 text-muted-foreground md:text-base">
                   Veja o que cada área faz, personalize sua barra rápida e monte
                   um tour guiado do jeito que fizer mais sentido para você.
                 </p>
@@ -145,22 +145,22 @@ export default function AppsPage() {
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-zinc-200 bg-linear-to-br from-accent to-white p-5 dark:border-zinc-800 dark:from-accent/30 dark:to-zinc-950">
+            <div className="app-panel-subtle rounded-[28px] border border-[color:var(--app-panel-border)] p-5">
               <div className="flex items-center gap-3">
                 <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
                   <Compass className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  <p className="text-sm font-semibold text-foreground">
                     Conta atual
                   </p>
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-muted-foreground">
                     {userProfile?.displayName || "Usuario"} · plano{" "}
                     {(userProfile?.plan || "free").toUpperCase()}
                   </p>
                 </div>
               </div>
-              <div className="mt-5 rounded-2xl border border-primary/20 bg-white/90 p-4 text-sm text-zinc-600 shadow-sm dark:bg-zinc-950/80 dark:text-zinc-300">
+              <div className="mt-5 rounded-2xl border border-primary/20 bg-background/60 p-4 text-sm text-muted-foreground shadow-sm">
                 Use esta tela para revisar as áreas do app, escolher quais
                 capítulos do tour você quer ver e ajustar seus atalhos sem sair
                 do contexto.
@@ -173,30 +173,30 @@ export default function AppsPage() {
           id="tour-guided"
           className="grid gap-4 xl:grid-cols-[0.96fr_1.04fr]"
         >
-          <Card className="rounded-[30px] border-none bg-white shadow-xl shadow-zinc-200/50 dark:bg-zinc-950 dark:shadow-black/20">
+          <Card className="app-panel-soft rounded-[30px] border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
             <CardContent className="space-y-6 p-6 sm:p-7">
               <div className="space-y-2">
                 <Badge className="rounded-full bg-accent px-3 py-1 text-primary">
                   Tour guiado
                 </Badge>
-                <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+                <h2 className="text-2xl font-semibold tracking-tight text-foreground">
                   Escolha tudo ou só as partes que você quer rever
                 </h2>
-                <p className="text-sm leading-6 text-zinc-500">
+                <p className="text-sm leading-6 text-muted-foreground">
                   O guia segue a ordem natural da plataforma, mas você pode
                   pular o que já domina e focar apenas nas telas que ainda quer
                   entender melhor.
                 </p>
               </div>
 
-              <div className="rounded-[26px] border border-primary/20 bg-linear-to-br from-primary to-primary/70 p-px shadow-lg shadow-primary/15">
-                <div className="rounded-[25px] bg-white/95 p-5 dark:bg-zinc-950/95">
+              <div className="rounded-[26px] border border-primary/20 bg-linear-to-br from-primary/70 to-primary/35 p-px shadow-lg shadow-primary/15">
+                <div className="app-panel-subtle rounded-[25px] p-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-medium uppercase tracking-[0.22em] text-primary">
                         Guia selecionado
                       </p>
-                      <p className="mt-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+                      <p className="mt-2 text-2xl font-semibold text-foreground">
                         {selectedCount === 0
                           ? "Nenhuma etapa marcada"
                           : `${selectedCount} etapa${selectedCount > 1 ? "s" : ""} pronta${selectedCount > 1 ? "s" : ""}`}
@@ -215,7 +215,7 @@ export default function AppsPage() {
                         type="button"
                         variant="ghost"
                         onClick={handleClearRoutes}
-                        className="rounded-xl text-zinc-500 hover:bg-zinc-100"
+                        className="rounded-xl text-muted-foreground hover:bg-accent"
                       >
                         Limpar
                       </Button>
@@ -234,7 +234,7 @@ export default function AppsPage() {
                         </Badge>
                       ))
                     ) : (
-                      <p className="text-sm text-zinc-500">
+                      <p className="text-sm text-muted-foreground">
                         Marque ao menos uma tela para iniciar um tour sob medida.
                       </p>
                     )}
@@ -254,7 +254,7 @@ export default function AppsPage() {
                         ? "Iniciar tour completo"
                         : "Iniciar partes selecionadas"}
                     </Button>
-                    <p className="text-sm leading-6 text-zinc-500">
+                    <p className="text-sm leading-6 text-muted-foreground">
                       {isOnboardingActive
                         ? "Conclua o início guiado atual antes de abrir outro tour."
                         : "Ao terminar uma etapa, o tour segue apenas pelas telas marcadas."}
@@ -265,13 +265,13 @@ export default function AppsPage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-[30px] border-none bg-white shadow-xl shadow-zinc-200/50 dark:bg-zinc-950 dark:shadow-black/20">
+          <Card className="app-panel-soft rounded-[30px] border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
             <CardContent className="space-y-4 p-6 sm:p-7">
               <div className="space-y-1">
-                <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                <h3 className="text-lg font-semibold text-foreground">
                   Capítulos do tour
                 </h3>
-                <p className="text-sm text-zinc-500">
+                <p className="text-sm text-muted-foreground">
                   Ligue ou desligue cada parte. A sequência final respeita a ordem
                   natural do produto.
                 </p>
@@ -296,7 +296,7 @@ export default function AppsPage() {
                       className={`group flex w-full items-start gap-4 rounded-3xl border p-4 text-left transition-all ${
                         isSelected
                           ? "border-primary/35 bg-accent shadow-sm shadow-primary/10 dark:border-primary/40 dark:bg-accent/25"
-                          : "border-zinc-200 bg-white hover:border-primary/20 hover:bg-accent/60 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-primary/30"
+                          : "app-panel-subtle border-[color:var(--app-panel-border)] hover:border-primary/25 hover:bg-accent/60"
                       }`}
                     >
                       <div
@@ -318,7 +318,7 @@ export default function AppsPage() {
                       </div>
                       <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-medium uppercase tracking-[0.22em] text-zinc-400">
+                          <p className="text-sm font-medium uppercase tracking-[0.22em] text-muted-foreground">
                             {copy.eyebrow}
                           </p>
                           {isSelected ? (
@@ -327,10 +327,10 @@ export default function AppsPage() {
                             </Badge>
                           ) : null}
                         </div>
-                        <h4 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                        <h4 className="text-base font-semibold text-foreground">
                           {copy.title}
                         </h4>
-                        <p className="text-sm leading-6 text-zinc-500">
+                        <p className="text-sm leading-6 text-muted-foreground">
                           {copy.description}
                         </p>
                       </div>
@@ -348,7 +348,7 @@ export default function AppsPage() {
         <section className="space-y-4">
           <div className="flex items-center gap-3">
             <Sparkles className="h-5 w-5 text-primary" />
-            <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+            <h2 className="text-xl font-semibold text-foreground">
               O que existe na plataforma?
             </h2>
           </div>
@@ -358,7 +358,7 @@ export default function AppsPage() {
               const Icon = item.icon;
               return (
                 <Link key={item.id} href={item.href}>
-                  <Card className="h-full rounded-[28px] border-zinc-200 bg-white shadow-sm transition-all hover:-translate-y-1 hover:border-primary/35 hover:shadow-xl hover:shadow-primary/10 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-primary/35 dark:hover:shadow-black/30">
+                  <Card className="app-panel-soft h-full rounded-[28px] border border-[color:var(--app-panel-border)] shadow-sm transition-all hover:-translate-y-1 hover:border-primary/35 hover:shadow-xl hover:shadow-primary/10 dark:hover:shadow-black/30">
                     <CardContent className="p-5">
                       <div
                         className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-linear-to-br ${item.accentClass}`}
@@ -366,10 +366,10 @@ export default function AppsPage() {
                         <Icon className="h-5 w-5" />
                       </div>
                       <div className="mt-4 space-y-2">
-                        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                        <h3 className="text-base font-semibold text-foreground">
                           {item.label}
                         </h3>
-                        <p className="text-sm leading-6 text-zinc-500">
+                        <p className="text-sm leading-6 text-muted-foreground">
                           {item.description}
                         </p>
                       </div>
@@ -391,10 +391,10 @@ export default function AppsPage() {
 
         <section className="space-y-4">
           <div className="space-y-1">
-            <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+            <h2 className="text-xl font-semibold text-foreground">
               Personalizar barra rápida e atalhos
             </h2>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-muted-foreground">
               Esta é a tela oficial para configurar sua barra rápida no celular
               e no desktop.
             </p>

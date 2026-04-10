@@ -1,7 +1,5 @@
-import { NavigationDockAccent } from "@/types/navigation";
-
 export type AppearanceThemeMode = "system" | "light" | "dark";
-export type AppearanceAccent = NavigationDockAccent;
+export type AppearanceAccent = "violet" | "indigo" | "fuchsia" | "emerald" | "amber";
 
 export type AppearancePreferences = {
   themeMode: AppearanceThemeMode;
