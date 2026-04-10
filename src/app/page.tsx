@@ -188,7 +188,7 @@ export default function LandingPage() {
 
             {/* PLANO FREE */}
             {plans.free.active && (
-              <Card className="bg-zinc-50/50 border-zinc-200 shadow-sm hover:shadow-md hover:border-zinc-300 transition-all rounded-4xl scale-90 hover:scale-95 z-0 duration-300">
+              <Card className="app-panel-subtle shadow-sm hover:border-primary/20 hover:shadow-md transition-all rounded-4xl scale-90 hover:scale-95 z-0 duration-300">
                 <CardHeader className="p-8 pb-0">
                   <div className="flex items-center justify-between gap-3">
                     <CardTitle className="text-xl font-bold text-zinc-900 flex items-center gap-2">
