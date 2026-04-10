@@ -73,13 +73,18 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     const status = resolveApiErrorStatus(message);
-    apiLogger.error({
+    const logPayload = {
       message: "profile_me_get_failed",
       requestId: meta.requestId,
       route: meta.route,
       method: meta.method,
       meta: { uid, error: message },
-    });
+    };
+    if (status === 401) {
+      apiLogger.warn(logPayload);
+    } else {
+      apiLogger.error(logPayload);
+    }
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
