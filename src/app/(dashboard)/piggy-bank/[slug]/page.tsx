@@ -25,8 +25,8 @@ const formatDateTime = (value?: string) => {
 };
 
 const getPiggyErrorMessage = (message?: string | null) => {
-  if (!message) return "Nao foi possivel carregar a meta.";
-  if (message === "piggy_bank_not_found") return "Essa meta nao existe mais ou foi removida.";
+  if (!message) return "Não foi possível carregar a meta.";
+  if (message === "piggy_bank_not_found") return "Essa meta não existe mais ou foi removida.";
   return message;
 };
 
@@ -181,8 +181,8 @@ export default function PiggyBankDetailPage() {
             <CardContent className="flex min-h-56 flex-col items-center justify-center gap-4 p-8 text-center">
               <PiggyBankIcon className="h-10 w-10 text-red-500" />
               <div className="space-y-2">
-                <p className="text-lg font-semibold text-foreground">Meta indisponivel</p>
-                <p className="text-sm text-red-600">{error || "Meta nao encontrada."}</p>
+                <p className="text-lg font-semibold text-foreground">Meta indisponível</p>
+                <p className="text-sm text-red-600">{error || "Meta não encontrada."}</p>
               </div>
               <Button variant="outline" className="rounded-xl border-border/70 bg-card" onClick={() => router.push("/piggy-bank")}>
                 <ArrowLeft className="mr-1 h-4 w-4" />
@@ -204,7 +204,7 @@ export default function PiggyBankDetailPage() {
               <PiggyBankIcon className="h-7 w-7 text-primary" />
               {detail.name}
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">Acompanhamento do total guardado e do historico desta meta.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Acompanhamento do total guardado e do histórico desta meta.</p>
           </div>
           <Link href="/piggy-bank">
             <Button variant="outline" className="rounded-xl border-border/70 bg-card">
@@ -232,11 +232,11 @@ export default function PiggyBankDetailPage() {
               <div className="grid gap-3">
                 <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
                   <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Retirada</p>
-                  <p className="mt-2 font-semibold text-foreground">{detail.withdrawalMode || "Nao informado"}</p>
+                  <p className="mt-2 font-semibold text-foreground">{detail.withdrawalMode || "Não informado"}</p>
                 </div>
                 <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
                   <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Rendimento</p>
-                  <p className="mt-2 font-semibold text-foreground">{detail.yieldType || "Nao informado"}</p>
+                  <p className="mt-2 font-semibold text-foreground">{detail.yieldType || "Não informado"}</p>
                 </div>
               </div>
 
@@ -260,12 +260,12 @@ export default function PiggyBankDetailPage() {
           <Card className="rounded-3xl border border-border/70 bg-card shadow-sm">
             <CardHeader>
               <CardTitle>Historico</CardTitle>
-              <CardDescription>{totalEntries} movimentacao(oes) registrada(s).</CardDescription>
+              <CardDescription>{totalEntries} movimentação(ões) registrada(s).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {detail.history.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border/70 bg-background/70 p-5 text-sm text-muted-foreground">
-                  Ainda nao ha movimentacoes nesta meta.
+                  Ainda não há movimentações nesta meta.
                 </div>
               ) : (
                 detail.history.map((entry) => (
@@ -278,8 +278,8 @@ export default function PiggyBankDetailPage() {
                       <span>Origem: {entry.sourceType === "cash" ? "Dinheiro vivo" : "Saldo em banco"}</span>
                       {entry.withdrawalMode && <span>Retirada: {entry.withdrawalMode}</span>}
                       {entry.yieldType && <span>Rendimento: {entry.yieldType}</span>}
-                      {entry.appliedToCardLimit && <span>Aplicado no limite do cartao</span>}
-                      {entry.cardLabel && <span>Cartao: {entry.cardLabel}</span>}
+                      {entry.appliedToCardLimit && <span>Aplicado no limite do cartão</span>}
+                      {entry.cardLabel && <span>Cartão: {entry.cardLabel}</span>}
                     </div>
                   </div>
                 ))
@@ -309,7 +309,7 @@ export default function PiggyBankDetailPage() {
                 <Label>Valor</Label>
                 <Input value={adjustAmount} onChange={(e) => setAdjustAmount(formatCurrencyInput(e.target.value))} placeholder="R$ 0,00" inputMode="decimal" />
                 {adjustDirection === "withdraw" && (
-                  <p className="text-xs text-muted-foreground">Saldo disponivel para retirada: {formatCurrency(detail.totalSaved)}</p>
+                  <p className="text-xs text-muted-foreground">Saldo disponível para retirada: {formatCurrency(detail.totalSaved)}</p>
                 )}
               </div>
               <div className="space-y-2">
@@ -336,7 +336,7 @@ export default function PiggyBankDetailPage() {
           <DialogContent className="rounded-2xl border border-border/70 bg-card">
             <DialogHeader>
               <DialogTitle>Editar meta</DialogTitle>
-              <DialogDescription>Atualize o nome e as informacoes complementares desta reserva.</DialogDescription>
+              <DialogDescription>Atualize o nome e as informações complementares desta reserva.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -355,7 +355,7 @@ export default function PiggyBankDetailPage() {
             <DialogFooter>
               <Button variant="ghost" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
               <Button onClick={handleEdit} disabled={isSubmitting || !editName.trim()}>
-                {isSubmitting ? "Salvando..." : "Salvar alteracoes"}
+                {isSubmitting ? "Salvando..." : "Salvar alterações"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -366,7 +366,7 @@ export default function PiggyBankDetailPage() {
             <DialogHeader>
               <DialogTitle>Excluir meta</DialogTitle>
               <DialogDescription>
-                Essa acao remove a meta, o historico dela e desfaz vinculos aplicados, como aumento de limite em cartao.
+                Essa ação remove a meta, o histórico dela e desfaz vínculos aplicados, como aumento de limite em cartão.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
