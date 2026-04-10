@@ -1522,11 +1522,11 @@ export default function AdminPage() {
     return null;
 
   return (
-    <div className="font-sans min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-8 pb-20 relative overflow-hidden">
+    <div className="relative min-h-screen overflow-hidden p-4 pb-20 font-sans md:p-8">
 
       {/* Background Decorativo */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-violet-500/5 rounded-full blur-[100px]" />
+        <div className="absolute top-[-10%] right-[-10%] h-[500px] w-[500px] rounded-full bg-primary/5 blur-[100px]" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-500/5 rounded-full blur-[100px]" />
       </div>
 
@@ -1570,7 +1570,7 @@ export default function AdminPage() {
           <div className="grid grid-cols-1 gap-1 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-2 min-w-full md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             {/* Aba Usuários: Apenas Admin e Moderator */}
             {(userProfile?.role === 'admin' || userProfile?.role === 'moderator') && (
-              <button type="button" aria-pressed={activeTab === "users"} onClick={() => setActiveTabAndPersist("users")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "users" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-pressed={activeTab === "users"} onClick={() => setActiveTabAndPersist("users")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeTab === "users" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <UserIcon className="h-4 w-4" /> Gerenciar Usuários
               </button>
             )}
@@ -1580,7 +1580,7 @@ export default function AdminPage() {
               aria-pressed={activeTab === "support"}
               onClick={() => setActiveTabAndPersist("support")}
               className={`
-                  flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 
+                  flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring 
                   ${activeTab === "support" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" :
                   "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`
               }
@@ -1594,24 +1594,24 @@ export default function AdminPage() {
             </button>
 
             {canRestore && (
-              <button type="button" aria-pressed={activeTab === "restore"} onClick={() => setActiveTabAndPersist("restore")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "restore" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-pressed={activeTab === "restore"} onClick={() => setActiveTabAndPersist("restore")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeTab === "restore" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <History className="h-4 w-4" /> Restaurar Dados
               </button>
             )}
 
 
             {canManageSensitive && (
-              <button type="button" aria-pressed={activeTab === "plans"} onClick={() => setActiveTabAndPersist("plans")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "plans" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-pressed={activeTab === "plans"} onClick={() => setActiveTabAndPersist("plans")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeTab === "plans" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                 <CreditCard className="h-4 w-4" /> Gerenciar Planos
               </button>
             )}
 
             {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
               <>
-                <button type="button" aria-pressed={activeTab === "audit"} onClick={() => setActiveTabAndPersist("audit")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "audit" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+                <button type="button" aria-pressed={activeTab === "audit"} onClick={() => setActiveTabAndPersist("audit")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeTab === "audit" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                   <ShieldCheck className="h-4 w-4" /> Auditoria
                 </button>
-                <button type="button" aria-pressed={activeTab === "metrics"} onClick={() => setActiveTabAndPersist("metrics")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${activeTab === "metrics" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+                <button type="button" aria-pressed={activeTab === "metrics"} onClick={() => setActiveTabAndPersist("metrics")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeTab === "metrics" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
                   <Calculator className="h-4 w-4" /> Métricas
                   {criticalMetricsAlerts.length > 0 && (
                     <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-bold">
@@ -1627,9 +1627,9 @@ export default function AdminPage() {
           {activeTab === "support" && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
-                <CardHeader className="py-4 px-6 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+                <CardHeader className="app-panel-subtle border-b border-border/70 px-6 py-4">
                   <CardTitle className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                    <HeadphonesIcon className="h-5 w-5 text-violet-600" /> Central de Atendimento
+                    <HeadphonesIcon className="h-5 w-5 text-primary" /> Central de Atendimento
                   </CardTitle>
                   <CardDescription>
                     {userProfile?.role === 'admin'
@@ -1719,7 +1719,7 @@ export default function AdminPage() {
                   </div>
                   <div className="p-4 md:p-5 grid grid-cols-1 xl:grid-cols-2 gap-4">
                     {supportTicketsOrdered.length === 0 ? (
-                      <div className="col-span-full h-32 rounded-2xl border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-500 bg-zinc-50/50 dark:bg-zinc-900/30">
+                      <div className="app-panel-subtle col-span-full flex h-32 items-center justify-center rounded-2xl border text-zinc-500">
                         Nenhum chamado encontrado.
                       </div>
                     ) : (
@@ -1750,7 +1750,7 @@ export default function AdminPage() {
                                   <Lightbulb className="h-3 w-3" /> Ideia
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="bg-violet-50 text-violet-700 border-violet-200 gap-1">
+                                <Badge variant="outline" className="gap-1 border-primary/20 bg-accent text-primary">
                                   <MessageSquare className="h-3 w-3" /> Suporte
                                 </Badge>
                               )}
@@ -1922,7 +1922,7 @@ export default function AdminPage() {
                                       <Lightbulb className="h-3 w-3" /> Ideia
                                     </Badge>
                                   ) : (
-                                    <Badge variant="outline" className="bg-violet-50 text-violet-700 border-violet-200 gap-1">
+                                    <Badge variant="outline" className="gap-1 border-primary/20 bg-accent text-primary">
                                       <MessageSquare className="h-3 w-3" /> Suporte
                                     </Badge>
                                   )}
@@ -2147,7 +2147,7 @@ export default function AdminPage() {
           {activeTab === "audit" && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
-                <CardHeader className="py-4 px-6 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+                <CardHeader className="app-panel-subtle border-b border-border/70 px-6 py-4">
                   <CardTitle className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                     <ShieldCheck className="h-5 w-5 text-emerald-600" /> Auditoria Operacional
                   </CardTitle>
@@ -2312,7 +2312,7 @@ export default function AdminPage() {
           {activeTab === "metrics" && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
-                <CardHeader className="py-4 px-6 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+                <CardHeader className="app-panel-subtle border-b border-border/70 px-6 py-4">
                   <CardTitle className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                     <Calculator className="h-5 w-5 text-blue-600" /> Métricas Operacionais
                   </CardTitle>
@@ -2581,9 +2581,9 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <Card className="border-none shadow-xl shadow-violet-400/50 dark:shadow-black/20 bg-white dark:bg-violet-900 rounded-3xl overflow-hidden">
-                <CardHeader className="py-4 px-6 border-b border-zinc-100 dark:border-zinc-800 bg-violet-200/50 dark:bg-violet-900/50">
-                  <CardTitle className="text-lg font-semibold text-violet-600 dark:text-violet-400">Base de Usuários</CardTitle>
+              <Card className="overflow-hidden rounded-3xl border-none bg-white shadow-xl shadow-primary/10 dark:bg-zinc-950 dark:shadow-black/20">
+                <CardHeader className="border-b border-zinc-100 bg-accent/70 px-6 py-4 dark:border-zinc-800 dark:bg-accent/20">
+                  <CardTitle className="text-lg font-semibold text-primary">Base de Usuários</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="md:hidden p-3 space-y-3">
@@ -2732,8 +2732,8 @@ export default function AdminPage() {
 
                   <div className="hidden md:block overflow-x-auto">
                     <Table>
-                      <TableHeader className="bg-violet-100 dark:bg-violet-950">
-                        <TableRow className="border-violet-100 dark:border-violet-800 hover:bg-transparent">
+                      <TableHeader className="bg-accent/70 dark:bg-accent/20">
+                        <TableRow className="border-border hover:bg-transparent">
                           <TableHead className="pl-6 font-semibold">Usuário</TableHead>
                           <TableHead className="font-semibold">Cadastro</TableHead>
                           <TableHead className="font-semibold">Plano</TableHead>
@@ -2953,7 +2953,7 @@ export default function AdminPage() {
                         })}
                       </TableBody>
                     </Table>
-                    <div className="flex items-center justify-between p-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+                    <div className="app-panel-subtle flex items-center justify-between border-t border-border/70 p-4">
                       <p className="text-xs text-zinc-500 font-medium">Página {currentPage} de {totalPages || 1}</p>
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" className="h-8 w-8 p-0 rounded-lg" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
@@ -3568,7 +3568,7 @@ export default function AdminPage() {
               {viewTicket?.type === 'feature' ? (
                 <Lightbulb className="h-5 w-5 text-amber-600" />
               ) : (
-                <HeadphonesIcon className="h-5 w-5 text-violet-600" />
+                <HeadphonesIcon className="h-5 w-5 text-primary" />
               )}
               Detalhes da Solicitação
             </DialogTitle>
