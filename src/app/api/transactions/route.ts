@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
         request,
         acting,
         actionType: "transactions:createMany",
-        actionLabel: "Criar lancamentos financeiros",
+        actionLabel: "Criar lançamentos financeiros",
       });
       if (!approval.allowed) {
         return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });
@@ -296,7 +296,7 @@ export async function POST(request: NextRequest) {
         request,
         acting,
         actionType: "transactions:updateMany",
-        actionLabel: "Atualizar lancamentos financeiros",
+        actionLabel: "Atualizar lançamentos financeiros",
       });
       if (!approval.allowed) {
         return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });
@@ -448,7 +448,7 @@ export async function PATCH(request: NextRequest) {
       request,
       acting,
       actionType: "transactions:patch",
-      actionLabel: "Editar lancamento financeiro",
+      actionLabel: "Editar lançamento financeiro",
     });
     if (!approval.allowed) {
       return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });
@@ -505,7 +505,7 @@ export async function DELETE(request: NextRequest) {
       request,
       acting,
       actionType: "transactions:delete",
-      actionLabel: "Excluir lancamento financeiro",
+      actionLabel: "Excluir lançamento financeiro",
     });
     if (!approval.allowed) {
       return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });

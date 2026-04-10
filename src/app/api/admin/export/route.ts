@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
       });
 
       const csv = toCsv(
-        ["uid", "nome", "email", "plano", "cargo", "status", "pagamento", "lancamentos", "criado_em"],
+        ["uid", "nome", "email", "plano", "cargo", "status", "pagamento", "lançamentos", "criado_em"],
         mapped.map((row) => [
           row.uid,
           row.display_name,
@@ -158,7 +158,7 @@ export async function GET(request: NextRequest) {
       });
 
       const csv = toCsv(
-        ["id", "protocolo", "tipo", "status", "prioridade", "solicitante", "email", "responsavel", "mensagem", "criado_em"],
+        ["id", "protocolo", "tipo", "status", "prioridade", "solicitante", "email", "responsável", "mensagem", "criado_em"],
         filtered.map((row) => {
           const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
           return [

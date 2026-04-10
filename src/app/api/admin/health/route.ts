@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
         code: "webhook_delayed",
         level: "high",
         title: "Webhook possivelmente atrasado",
-        description: `Ultimo evento Mercado Pago ha ${webhookDelayMinutes} minutos.`,
+        description: `Último evento do Mercado Pago há ${webhookDelayMinutes} minutos.`,
       });
     }
     if (failedPayments24h >= 10) {
@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
         code: "payment_failures_high",
         level: "high",
         title: "Falhas de pagamento elevadas",
-        description: `${failedPayments24h} falhas nas ultimas 24h.`,
+        description: `${failedPayments24h} falhas nas últimas 24h.`,
       });
     }
     if (webhookFailures24h > 0) {
@@ -151,7 +151,7 @@ export async function GET(request: NextRequest) {
         code: "webhook_failures_detected",
         level: webhookFailures24h >= 5 ? "high" : "medium",
         title: "Falhas no processamento do webhook",
-        description: `${webhookFailures24h} eventos com falha nas ultimas 24h.`,
+        description: `${webhookFailures24h} eventos com falha nas últimas 24h.`,
       });
     }
     if (apiErrors1h >= 15) {
@@ -159,15 +159,15 @@ export async function GET(request: NextRequest) {
         code: "api_errors_high",
         level: "critical",
         title: "Erros de API elevados",
-        description: `${apiErrors1h} erros 5xx na ultima hora.`,
+        description: `${apiErrors1h} erros 5xx na última hora.`,
       });
     }
     if (apiAvgLatency1h >= 1200) {
       alerts.push({
         code: "api_latency_high",
         level: "medium",
-        title: "Latencia elevada",
-        description: `Latencia media ${apiAvgLatency1h}ms na ultima hora.`,
+        title: "Latência elevada",
+        description: `Latência média ${apiAvgLatency1h}ms na última hora.`,
       });
     }
 

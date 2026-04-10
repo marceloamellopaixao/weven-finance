@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       request,
       acting,
       actionType: "categories:default-visibility",
-      actionLabel: "Ocultar ou mostrar categoria padrao",
+      actionLabel: "Ocultar ou mostrar categoria padrão",
     });
     if (!approval.allowed) {
       return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });

@@ -52,8 +52,8 @@ function slugifyGoalName(value: string) {
 }
 
 function getDefaultGoalName(goalType: PiggyBankGoalType) {
-  if (goalType === "card_limit") return "Cofrinho do Cartao";
-  if (goalType === "emergency_reserve") return "Reserva de Emergencia";
+  if (goalType === "card_limit") return "Cofrinho do Cartão";
+  if (goalType === "emergency_reserve") return "Reserva de Emergência";
   if (goalType === "travel") return "Fazer uma Viagem";
   if (goalType === "home_renovation") return "Reformar a Casa";
   if (goalType === "dream_purchase") return "Sonho de Consumo";
