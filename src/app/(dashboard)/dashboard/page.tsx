@@ -274,7 +274,7 @@ export default function DashboardPage() {
 
   // Helper para display na UI (com blur)
   const formatCurrencyDisplay = (value: number) => {
-    if (privacyMode) return "R$ ⬢⬢⬢⬢⬢⬢";
+    if (privacyMode) return "R$ ******";
     return formatCurrency(value);
   };
 
@@ -288,7 +288,7 @@ export default function DashboardPage() {
     }
   }, [pathname, router, searchParams, shouldForceTour]);
 
-  // --- 3. CHECK-IN DI?RIO (Pop-up Inteligente) ---
+  // --- 3. CHECK-IN DIÁRIO (Pop-up Inteligente) ---
   useEffect(() => {
     if (loading || !user || hasRunCheckin || isOnboardingActive) return;
 
@@ -361,7 +361,7 @@ export default function DashboardPage() {
     const pendingTransactions = transactions.filter(t => {
       if (t.status === 'paid') return false;
       if (typeof t.dueDate !== "string") return false;
-      if (t.dueDate < todayStr) return false; // ja considerado no Saldo Atual
+      if (t.dueDate < todayStr) return false; // Já considerado no Saldo Atual
       return t.dueDate <= selectedMonthEnd;
     });
     const pendingNet = pendingTransactions.reduce((acc, t) => {
@@ -548,7 +548,7 @@ export default function DashboardPage() {
       return {
         ok: false as const,
         title: "Limite insuficiente no cartão",
-        message: `Limite restante em ${card.bankName} ⬢⬢⬢⬢ ${card.last4}: ${formatCurrency(remaining)}. Valor informado: ${formatCurrency(amountTotal)}.`,
+        message: `Limite restante em ${card.bankName} **** ${card.last4}: ${formatCurrency(remaining)}. Valor informado: ${formatCurrency(amountTotal)}.`,
       };
     }
     return { ok: true as const };
@@ -803,7 +803,7 @@ export default function DashboardPage() {
         category: category, // Categoria
         paymentMethod: paymentMethod, // Método de Pagamento
         cardId: selectedPaymentCard?.id,
-        cardLabel: selectedPaymentCard ? `${selectedPaymentCard.bankName} ⬢⬢⬢⬢ ${selectedPaymentCard.last4}` : undefined,
+        cardLabel: selectedPaymentCard ? `${selectedPaymentCard.bankName} **** ${selectedPaymentCard.last4}` : undefined,
         cardType: normalizeCardTypeForTransaction(selectedPaymentCard?.type, paymentMethod),
         date: transactionDate, // Data do Gasto (para despesas) ou Data de Crédito (para rendas)
         dueDate: transactionDueDate, // Data de Vencimento (para despesas) ou Data de Crédito (para rendas)
@@ -1143,8 +1143,8 @@ export default function DashboardPage() {
                 ? "O sistema vai dividir este total pelas parcelas."
                 : "O valor digitado sera repetido em cada parcela."
               : isRecurring
-                ? "Este valor sera repetido nos proximos 12 meses."
-                : "Valor unico"}
+                ? "Este valor sera repetido nos próximos 12 meses."
+                : "Valor único"}
           </p>
         </div>
       </div>
@@ -1217,7 +1217,7 @@ export default function DashboardPage() {
               ) : (
                 availablePaymentCards.map((card) => (
                   <SelectItem key={card.id} value={card.id}>
-                    {card.bankName} ⬢⬢⬢⬢ {card.last4} ({card.type === "credit_card" ? "Crédito" : card.type === "debit_card" ? "Débito" : "Crédito e Débito"})
+                    {card.bankName} **** {card.last4} ({card.type === "credit_card" ? "Crédito" : card.type === "debit_card" ? "Débito" : "Crédito e Débito"})
                   </SelectItem>
                 ))
               )}
@@ -1313,7 +1313,7 @@ export default function DashboardPage() {
                     Dividir o valor total
                   </Label>
                   <p className="mt-1 text-xs text-primary">
-                    Ative para informar o total da compra. Desative se o valor digitado ja for o de cada parcela.
+                    Ative para informar o total da compra. Desative se o valor digitado já for o de cada parcela.
                   </p>
                 </div>
                 <Switch
@@ -2361,7 +2361,7 @@ export default function DashboardPage() {
                             ...editingTx,
                             paymentMethod: fallbackCard.type === "credit_card" || fallbackCard.type === "debit_card" ? fallbackCard.type : nextMethod,
                             cardId: fallbackCard.id,
-                            cardLabel: fallbackCard ? `${fallbackCard.bankName} ⬢⬢⬢⬢ ${fallbackCard.last4}` : undefined,
+                            cardLabel: fallbackCard ? `${fallbackCard.bankName} **** ${fallbackCard.last4}` : undefined,
                             cardType: normalizeCardTypeForTransaction(fallbackCard.type, nextMethod),
                           });
                         }}
@@ -2383,7 +2383,7 @@ export default function DashboardPage() {
                               ...editingTx,
                               paymentMethod: card.type === "credit_and_debit" ? editingTx.paymentMethod : card.type,
                               cardId: card.id,
-                              cardLabel: `${card.bankName} ⬢⬢⬢⬢ ${card.last4}`,
+                              cardLabel: `${card.bankName} **** ${card.last4}`,
                               cardType: normalizeCardTypeForTransaction(card.type, editingTx.paymentMethod),
                             });
                           }}
@@ -2397,7 +2397,7 @@ export default function DashboardPage() {
                             ) : (
                               paymentCards.map((card) => (
                                 <SelectItem key={card.id} value={card.id}>
-                                  {card.bankName} ⬢⬢⬢⬢ {card.last4} ({card.type === "credit_card" ? "Crédito" : card.type === "debit_card" ? "Débito" : "Crédito e Débito"})
+                                  {card.bankName} **** {card.last4} ({card.type === "credit_card" ? "Crédito" : card.type === "debit_card" ? "Débito" : "Crédito e Débito"})
                                 </SelectItem>
                               ))
                             )}
