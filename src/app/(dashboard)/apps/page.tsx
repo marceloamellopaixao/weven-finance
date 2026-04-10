@@ -28,28 +28,28 @@ const PLATFORM_TOUR_COPY: Record<
 > = {
   dashboard: {
     title: "Dashboard",
-    eyebrow: "Comeco do tour",
-    description: "Entenda saldo, previsao do mes, extrato e o que fazer primeiro ao entrar.",
+    eyebrow: "Começo do tour",
+    description: "Entenda saldo, previsão do mês, extrato e o que fazer primeiro ao entrar.",
   },
   settings: {
-    title: "Configuracoes",
+    title: "Configurações",
     eyebrow: "Conta e assinatura",
-    description: "Veja onde ficam dados pessoais, plano, privacidade, ajuda e acoes sensiveis.",
+    description: "Veja onde ficam dados pessoais, plano, privacidade, ajuda e ações sensíveis.",
   },
   "transactions-new": {
-    title: "Novo lancamento",
-    eyebrow: "Registrar entradas e saidas",
-    description: "Aprenda a criar receitas, despesas, recorrencias e compras parceladas sem confundir os fluxos.",
+    title: "Novo lançamento",
+    eyebrow: "Registrar entradas e saídas",
+    description: "Aprenda a criar receitas, despesas, recorrências e compras parceladas sem confundir os fluxos.",
   },
   cards: {
-    title: "Cartoes",
+    title: "Cartões",
     eyebrow: "Limites e faturas",
-    description: "Veja como acompanhar limite usado, risco da fatura e saude dos cartoes.",
+    description: "Veja como acompanhar limite usado, risco da fatura e saúde dos cartões.",
   },
   "piggy-bank": {
     title: "Metas",
     eyebrow: "Objetivos e reservas",
-    description: "Entenda como criar metas, fazer aportes e acompanhar sua evolucao no porquinho.",
+    description: "Entenda como criar metas, fazer aportes e acompanhar sua evolução no porquinho.",
   },
 };
 
@@ -111,15 +111,15 @@ export default function AppsPage() {
           <div className="grid gap-6 px-6 py-8 md:grid-cols-[1.3fr_0.7fr] md:px-8 md:py-10">
             <div className="space-y-4">
               <Badge className="rounded-full bg-accent px-3 py-1 text-primary">
-                Navegacao rapida do app
+                Navegação rápida do app
               </Badge>
               <div className="space-y-3">
                 <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100 md:text-4xl">
                   Explore o WevenFinance como um app
                 </h1>
                 <p className="max-w-2xl text-sm leading-6 text-zinc-500 md:text-base">
-                  Veja o que cada area faz, personalize sua barra rapida e monte
-                  um tour guiado do jeito que fizer mais sentido para voce.
+                  Veja o que cada área faz, personalize sua barra rápida e monte
+                  um tour guiado do jeito que fizer mais sentido para você.
                 </p>
               </div>
 
@@ -134,7 +134,7 @@ export default function AppsPage() {
                 >
                   <PlayCircle className="mr-2 h-4 w-4" />
                   {isOnboardingActive
-                    ? "Conclua o inicio guiado primeiro"
+                    ? "Conclua o início guiado primeiro"
                     : "Iniciar tour completo"}
                 </Button>
                 <Link href="/dashboard">
@@ -161,8 +161,8 @@ export default function AppsPage() {
                 </div>
               </div>
               <div className="mt-5 rounded-2xl border border-primary/20 bg-white/90 p-4 text-sm text-zinc-600 shadow-sm dark:bg-zinc-950/80 dark:text-zinc-300">
-                Use esta tela para revisar as areas do app, escolher quais
-                capitulos do tour voce quer ver e ajustar seus atalhos sem sair
+                Use esta tela para revisar as áreas do app, escolher quais
+                capítulos do tour você quer ver e ajustar seus atalhos sem sair
                 do contexto.
               </div>
             </div>
@@ -180,11 +180,11 @@ export default function AppsPage() {
                   Tour guiado
                 </Badge>
                 <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-                  Escolha tudo ou so as partes que voce quer rever
+                  Escolha tudo ou só as partes que você quer rever
                 </h2>
                 <p className="text-sm leading-6 text-zinc-500">
-                  O guia segue a ordem natural da plataforma, mas voce pode
-                  pular o que ja domina e focar apenas nas telas que ainda quer
+                  O guia segue a ordem natural da plataforma, mas você pode
+                  pular o que já domina e focar apenas nas telas que ainda quer
                   entender melhor.
                 </p>
               </div>
@@ -256,7 +256,7 @@ export default function AppsPage() {
                     </Button>
                     <p className="text-sm leading-6 text-zinc-500">
                       {isOnboardingActive
-                        ? "Conclua o inicio guiado atual antes de abrir outro tour."
+                        ? "Conclua o início guiado atual antes de abrir outro tour."
                         : "Ao terminar uma etapa, o tour segue apenas pelas telas marcadas."}
                     </p>
                   </div>
@@ -269,10 +269,10 @@ export default function AppsPage() {
             <CardContent className="space-y-4 p-6 sm:p-7">
               <div className="space-y-1">
                 <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                  Capitulos do tour
+                  Capítulos do tour
                 </h3>
                 <p className="text-sm text-zinc-500">
-                  Ligue ou desligue cada parte. A sequencia final respeita a ordem
+                  Ligue ou desligue cada parte. A sequência final respeita a ordem
                   natural do produto.
                 </p>
               </div>
@@ -349,7 +349,7 @@ export default function AppsPage() {
           <div className="flex items-center gap-3">
             <Sparkles className="h-5 w-5 text-primary" />
             <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
-              O que existe na plataforma
+              O que existe na plataforma?
             </h2>
           </div>
 
@@ -392,10 +392,10 @@ export default function AppsPage() {
         <section className="space-y-4">
           <div className="space-y-1">
             <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
-              Personalizar barra rapida e atalhos
+              Personalizar barra rápida e atalhos
             </h2>
             <p className="text-sm text-zinc-500">
-              Esta e a tela oficial para configurar sua barra rapida no celular
+              Esta é a tela oficial para configurar sua barra rápida no celular
               e no desktop.
             </p>
           </div>
