@@ -5,6 +5,7 @@ import { readSecureSettingData, writeSecureSettingData } from "@/lib/secure-stor
 import { normalizeNavigationPreferences } from "@/lib/navigation/apps";
 import { DEFAULT_NAVIGATION_PREFERENCES, NavigationPreferences } from "@/types/navigation";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
+import { resolveApiErrorStatus } from "@/lib/api/error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, navigation }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "missing_auth_token" ? 401 : 500;
+    const status = resolveApiErrorStatus(message);
     return NextResponse.json(
       { ok: false, error: message, navigation: DEFAULT_NAVIGATION_PREFERENCES },
       { status }
@@ -86,10 +87,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ ok: true, navigation }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status =
-      message === "missing_auth_token" ? 401
-      : message.startsWith("impersonation_") ? 403
-      : 500;
+    const status = resolveApiErrorStatus(message);
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
