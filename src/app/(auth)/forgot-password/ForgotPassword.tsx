@@ -90,7 +90,7 @@ export default function ForgotPasswordPage() {
                     id="email"
                     type="email"
                     placeholder="seu@email.com"
-                    className="bg-white/50 dark:bg-zinc-800/50 focus-visible:ring-violet-500"
+                  className="bg-white/50 dark:bg-zinc-800/50"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
@@ -105,7 +105,7 @@ export default function ForgotPasswordPage() {
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium shadow-lg shadow-violet-500/20 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
+                  className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium shadow-lg shadow-black/10 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
                 >
                   {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Enviar Link"}
                 </Button>
