@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, CheckCircle2, CreditCard, Loader2 } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
@@ -18,21 +18,29 @@ function sleep(ms: number) {
 }
 
 export default function BillingActivatingPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, loading, refreshProfile } = useAuth();
+  const { user, userProfile, loading, refreshProfile } = useAuth();
   const [state, setState] = useState<ActivationState>("preparing");
   const [message, setMessage] = useState("Estamos validando sua assinatura com o Mercado Pago.");
   const startedKeyRef = useRef("");
 
-  const expectedPlan = useMemo(() => {
+  const expectedPlanFromQuery = useMemo(() => {
     const value = searchParams.get("plan");
     return value === "premium" || value === "pro" ? value : undefined;
   }, [searchParams]);
 
-  const checkoutAttemptId = useMemo(() => searchParams.get("attempt") || undefined, [searchParams]);
+  const pendingPlan = userProfile?.billing?.pendingPlan;
+  const expectedPlan = expectedPlanFromQuery || (pendingPlan === "premium" || pendingPlan === "pro" ? pendingPlan : undefined);
+  const checkoutAttemptIdFromQuery = useMemo(() => searchParams.get("attempt") || undefined, [searchParams]);
+  const checkoutAttemptId = checkoutAttemptIdFromQuery || userProfile?.billing?.pendingCheckoutAttemptId;
 
   useEffect(() => {
     if (loading) return;
+    if (user && !expectedPlan) {
+      router.replace("/settings?tab=billing");
+      return;
+    }
     if (!user || !expectedPlan) {
       return;
     }
@@ -40,8 +48,6 @@ export default function BillingActivatingPage() {
     const attemptKey = `${user.uid}:${expectedPlan}:${checkoutAttemptId || "no-attempt"}`;
     if (startedKeyRef.current === attemptKey) return;
     startedKeyRef.current = attemptKey;
-
-    let cancelled = false;
 
     const run = async () => {
       setState("confirming");
@@ -55,11 +61,8 @@ export default function BillingActivatingPage() {
           if (delayMs > 0) {
             await sleep(delayMs);
           }
-          if (cancelled) return;
-
           try {
             const result = await confirmPreapproval(undefined, token, expectedPlan, checkoutAttemptId);
-            if (cancelled) return;
 
             await refreshProfile();
             setState("success");
@@ -73,14 +76,10 @@ export default function BillingActivatingPage() {
           }
         }
 
-        if (cancelled) return;
-
         console.error("Falha ao ativar assinatura:", lastError);
         setState("error");
         setMessage("Ainda não conseguimos confirmar seu pagamento automaticamente. Tente verificar novamente.");
       } catch (error) {
-        if (cancelled) return;
-
         console.error("Falha ao preparar confirmação da assinatura:", error);
         setState("error");
         setMessage("Não foi possível validar sua assinatura agora.");
@@ -89,10 +88,7 @@ export default function BillingActivatingPage() {
 
     void run();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [checkoutAttemptId, expectedPlan, loading, refreshProfile, user]);
+  }, [checkoutAttemptId, expectedPlan, loading, refreshProfile, router, user]);
 
   const resolvedState: ActivationState =
     !loading && !user
@@ -111,25 +107,25 @@ export default function BillingActivatingPage() {
   const isLoadingState = resolvedState === "preparing" || resolvedState === "confirming";
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans px-4">
-      <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-[100px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[100px]" />
+    <div className="relative flex min-h-[calc(100svh-4rem)] items-center justify-center overflow-hidden px-4 py-10 font-sans sm:px-6">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute left-[-12%] top-[-12%] h-[420px] w-[420px] rounded-full bg-primary/10 blur-[100px]" />
+        <div className="absolute bottom-[-14%] right-[-14%] h-[420px] w-[420px] rounded-full bg-primary/6 blur-[110px]" />
       </div>
 
-      <div className="w-full max-w-[460px] relative z-10">
-        <div className="bg-white/75 backdrop-blur-xl border border-white/20 shadow-2xl rounded-3xl p-6 md:p-8 text-center">
-          <div className="inline-flex items-center justify-center p-3 bg-linear-to-tr from-violet-600 to-indigo-600 rounded-2xl shadow-lg shadow-violet-500/20 mb-5">
+      <div className="relative z-10 w-full max-w-[460px]">
+        <div className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) p-5 text-center shadow-2xl shadow-primary/10 backdrop-blur-xl sm:p-6 md:p-8">
+          <div className="mb-5 inline-flex items-center justify-center rounded-2xl bg-primary p-3 text-primary-foreground shadow-lg shadow-primary/20">
             {resolvedState === "success" ? (
-              <CheckCircle2 className="h-6 w-6 text-white" />
+              <CheckCircle2 className="h-6 w-6" />
             ) : resolvedState === "error" ? (
-              <AlertTriangle className="h-6 w-6 text-white" />
+              <AlertTriangle className="h-6 w-6" />
             ) : (
-              <CreditCard className="h-6 w-6 text-white" />
+              <CreditCard className="h-6 w-6" />
             )}
           </div>
 
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             {resolvedState === "success"
               ? "Plano ativado"
               : resolvedState === "error"
@@ -139,10 +135,10 @@ export default function BillingActivatingPage() {
                   : "Ativando seu plano"}
           </h1>
 
-          <p className="mt-3 text-sm text-zinc-500 leading-relaxed">{resolvedMessage}</p>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{resolvedMessage}</p>
 
           {isLoadingState && (
-            <div className="mt-6 flex items-center justify-center gap-2 text-sm text-violet-600 font-medium">
+            <div className="mt-6 flex items-center justify-center gap-2 text-sm font-medium text-primary">
               <Loader2 className="h-4 w-4 animate-spin" />
               Processando assinatura
             </div>
@@ -152,7 +148,7 @@ export default function BillingActivatingPage() {
             <div className="mt-6 space-y-3">
               <Button
                 onClick={() => window.location.reload()}
-                className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium"
+                className="h-11 w-full rounded-xl bg-primary font-medium text-primary-foreground hover:bg-primary/90"
               >
                 Verificar novamente
               </Button>
@@ -167,7 +163,7 @@ export default function BillingActivatingPage() {
           {resolvedState === "login_required" && (
             <div className="mt-6 space-y-3">
               <Link href="/login" className="block">
-                <Button className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium">
+                <Button className="h-11 w-full rounded-xl bg-primary font-medium text-primary-foreground hover:bg-primary/90">
                   Entrar na conta
                 </Button>
               </Link>
