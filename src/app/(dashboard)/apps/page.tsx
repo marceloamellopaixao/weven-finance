@@ -107,7 +107,7 @@ export default function AppsPage() {
   return (
     <div className="p-3 sm:p-6 md:p-8">
       <div className="mx-auto max-w-6xl space-y-6">
-        <section className="app-panel-soft overflow-hidden rounded-4xl border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
+        <section className="app-panel-soft overflow-hidden rounded-4xl border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
           <div className="grid gap-6 px-6 py-8 md:grid-cols-[1.3fr_0.7fr] md:px-8 md:py-10">
             <div className="space-y-4">
               <Badge className="rounded-full bg-accent px-3 py-1 text-primary">
@@ -145,7 +145,7 @@ export default function AppsPage() {
               </div>
             </div>
 
-            <div className="app-panel-subtle rounded-[28px] border border-[color:var(--app-panel-border)] p-5">
+            <div className="app-panel-subtle rounded-[28px] border border-color:var(--app-panel-border) p-5">
               <div className="flex items-center gap-3">
                 <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
                   <Compass className="h-5 w-5" />
@@ -173,7 +173,7 @@ export default function AppsPage() {
           id="tour-guided"
           className="grid gap-4 xl:grid-cols-[0.96fr_1.04fr]"
         >
-          <Card className="app-panel-soft rounded-[30px] border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
+          <Card className="app-panel-soft rounded-[30px] border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
             <CardContent className="space-y-6 p-6 sm:p-7">
               <div className="space-y-2">
                 <Badge className="rounded-full bg-accent px-3 py-1 text-primary">
@@ -265,7 +265,7 @@ export default function AppsPage() {
             </CardContent>
           </Card>
 
-          <Card className="app-panel-soft rounded-[30px] border border-[color:var(--app-panel-border)] shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
+          <Card className="app-panel-soft rounded-[30px] border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
             <CardContent className="space-y-4 p-6 sm:p-7">
               <div className="space-y-1">
                 <h3 className="text-lg font-semibold text-foreground">
@@ -296,7 +296,7 @@ export default function AppsPage() {
                       className={`group flex w-full items-start gap-4 rounded-3xl border p-4 text-left transition-all ${
                         isSelected
                           ? "border-primary/35 bg-accent shadow-sm shadow-primary/10 dark:border-primary/40 dark:bg-accent/25"
-                          : "app-panel-subtle border-[color:var(--app-panel-border)] hover:border-primary/25 hover:bg-accent/60"
+                          : "app-panel-subtle border-color:var(--app-panel-border) hover:border-primary/25 hover:bg-accent/60"
                       }`}
                     >
                       <div
@@ -358,7 +358,7 @@ export default function AppsPage() {
               const Icon = item.icon;
               return (
                 <Link key={item.id} href={item.href}>
-                  <Card className="app-panel-soft h-full rounded-[28px] border border-[color:var(--app-panel-border)] shadow-sm transition-all hover:-translate-y-1 hover:border-primary/35 hover:shadow-xl hover:shadow-primary/10 dark:hover:shadow-black/30">
+                  <Card className="app-panel-soft h-full rounded-[28px] border border-color:var(--app-panel-border) shadow-sm transition-all hover:-translate-y-1 hover:border-primary/35 hover:shadow-xl hover:shadow-primary/10 dark:hover:shadow-black/30">
                     <CardContent className="p-5">
                       <div
                         className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-linear-to-br ${item.accentClass}`}
