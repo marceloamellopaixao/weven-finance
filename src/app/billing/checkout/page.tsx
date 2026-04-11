@@ -42,6 +42,11 @@ export default function BillingCheckoutPage() {
   }, [planFromQuery]);
 
   useEffect(() => {
+    if (loading || plan) return;
+    router.replace(user ? "/settings?tab=billing" : "/login");
+  }, [loading, plan, router, user]);
+
+  useEffect(() => {
     if (loading || !plan) return;
 
     rememberPendingUpgradePlan(plan);
@@ -67,8 +72,6 @@ export default function BillingCheckoutPage() {
     if (startedRef.current === requestKey) return;
     startedRef.current = requestKey;
 
-    let cancelled = false;
-
     const run = async () => {
       setState("redirecting");
       setMessage(`Redirecionando para a contratação do plano ${plan === "premium" ? "Premium" : "Pro"}.`);
@@ -76,11 +79,9 @@ export default function BillingCheckoutPage() {
       try {
         const token = await user.getIdToken();
         const session = await getCheckoutLink(plan, token);
-        if (cancelled) return;
         clearPendingUpgradePlan();
         window.location.assign(session.checkoutUrl);
       } catch (error) {
-        if (cancelled) return;
         console.error("Falha ao iniciar checkout:", error);
         setState("error");
         setMessage("Não foi possível abrir o checkout agora. Tente novamente em alguns instantes.");
@@ -89,9 +90,6 @@ export default function BillingCheckoutPage() {
 
     void run();
 
-    return () => {
-      cancelled = true;
-    };
   }, [loading, plan, router, user, userProfile]);
 
   const resolvedState: CheckoutState = !loading && !plan ? "error" : state;
@@ -101,30 +99,30 @@ export default function BillingCheckoutPage() {
       : message;
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans px-4">
-      <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-[100px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[100px]" />
+    <div className="relative flex min-h-[calc(100svh-4rem)] items-center justify-center overflow-hidden px-4 py-10 font-sans sm:px-6">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute left-[-12%] top-[-12%] h-[420px] w-[420px] rounded-full bg-primary/10 blur-[100px]" />
+        <div className="absolute bottom-[-14%] right-[-14%] h-[420px] w-[420px] rounded-full bg-primary/6 blur-[110px]" />
       </div>
 
-      <div className="w-full max-w-[460px] relative z-10">
-        <div className="bg-white/75 backdrop-blur-xl border border-white/20 shadow-2xl rounded-3xl p-6 md:p-8 text-center">
-          <div className="inline-flex items-center justify-center p-3 bg-linear-to-tr from-violet-600 to-indigo-600 rounded-2xl shadow-lg shadow-violet-500/20 mb-5">
+      <div className="relative z-10 w-full max-w-[460px]">
+        <div className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) p-5 text-center shadow-2xl shadow-primary/10 backdrop-blur-xl sm:p-6 md:p-8">
+          <div className="mb-5 inline-flex items-center justify-center rounded-2xl bg-primary p-3 text-primary-foreground shadow-lg shadow-primary/20">
             {resolvedState === "error" ? (
-              <AlertTriangle className="h-6 w-6 text-white" />
+              <AlertTriangle className="h-6 w-6" />
             ) : (
-              <CreditCard className="h-6 w-6 text-white" />
+              <CreditCard className="h-6 w-6" />
             )}
           </div>
 
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             {resolvedState === "error" ? "Não foi possível continuar" : "Continuando sua contratação"}
           </h1>
 
-          <p className="mt-3 text-sm text-zinc-500 leading-relaxed">{resolvedMessage}</p>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{resolvedMessage}</p>
 
           {resolvedState !== "error" && (
-            <div className="mt-6 flex items-center justify-center gap-2 text-sm text-violet-600 font-medium">
+            <div className="mt-6 flex items-center justify-center gap-2 text-sm font-medium text-primary">
               <Loader2 className="h-4 w-4 animate-spin" />
               Abrindo checkout
             </div>
@@ -134,7 +132,7 @@ export default function BillingCheckoutPage() {
             <div className="mt-6 space-y-3">
               <Button
                 onClick={() => window.location.assign(buildUpgradeCheckoutPath(plan))}
-                className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium"
+                className="h-11 w-full rounded-xl bg-primary font-medium text-primary-foreground hover:bg-primary/90"
               >
                 Tentar novamente
               </Button>
