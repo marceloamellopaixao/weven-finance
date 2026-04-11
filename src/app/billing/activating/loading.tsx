@@ -11,7 +11,7 @@ export default function Loading() {
       </div>
 
       <div className="relative z-10 w-full max-w-[460px]">
-        <div className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] p-5 text-center shadow-2xl shadow-primary/10 backdrop-blur-xl sm:p-6 md:p-8">
+        <div className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) p-5 text-center shadow-2xl shadow-primary/10 backdrop-blur-xl sm:p-6 md:p-8">
           <Pulse className="mx-auto h-12 w-12 rounded-2xl" />
           <Pulse className="mx-auto mt-5 h-7 w-64" />
           <Pulse className="mx-auto mt-4 h-4 w-full max-w-sm" />
