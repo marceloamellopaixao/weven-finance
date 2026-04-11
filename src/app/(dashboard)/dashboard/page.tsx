@@ -34,7 +34,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { InstallmentValueMode, PaymentMethod, Transaction, TransactionType } from "@/types/transaction";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
-import { confirmPreapproval, getCheckoutLink } from "@/services/billingService";
+import { confirmPreapproval } from "@/services/billingService";
 import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -43,6 +43,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { getPlanCapabilities } from "@/lib/plans/capabilities";
 import { getOnboardingStepHref } from "@/lib/onboarding/flow";
 import { buildInstallmentPlan } from "@/lib/transactions/installments";
+import { buildUpgradeCheckoutPath } from "@/services/billing/checkoutIntent";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -1461,9 +1462,7 @@ export default function DashboardPage() {
 
     setIsOpeningCheckout(plan);
     try {
-      const token = await user.getIdToken();
-      const session = await getCheckoutLink(plan, token);
-      window.location.assign(session.checkoutUrl);
+      router.push(buildUpgradeCheckoutPath(plan));
     } catch (error) {
       console.error(error);
       setFeedbackModal({
@@ -1493,8 +1492,7 @@ export default function DashboardPage() {
         return;
       }
 
-      const session = await getCheckoutLink(recoveryPlan, token);
-      window.location.assign(session.checkoutUrl);
+      router.push(buildUpgradeCheckoutPath(recoveryPlan));
     } catch (error) {
       console.error(error);
       setFeedbackModal({
