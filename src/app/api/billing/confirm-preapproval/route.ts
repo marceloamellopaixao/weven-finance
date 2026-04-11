@@ -33,6 +33,26 @@ function parsePlan(value: unknown): UserPlan | undefined {
   return undefined;
 }
 
+function getConfirmErrorStatus(message: string) {
+  if (message === "missing_auth_token") return 401;
+  if (message === "preapproval_not_found_for_user") return 404;
+  if (message === "preapproval_ambiguous_match") return 409;
+  if (message === "payer_email_mismatch") return 403;
+  if (message === "plan_mismatch") return 409;
+  if (message === "user_not_found") return 404;
+  return 500;
+}
+
+function isExpectedConfirmError(message: string) {
+  return (
+    message === "preapproval_not_found_for_user" ||
+    message === "preapproval_ambiguous_match" ||
+    message === "payer_email_mismatch" ||
+    message === "plan_mismatch" ||
+    message === "user_not_found"
+  );
+}
+
 export async function POST(request: NextRequest) {
   const meta = getRequestMeta(request);
   const startedAt = Date.now();
@@ -173,14 +193,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "missing_auth_token" ? 401 : 500;
-    apiLogger.error({
+    const status = getConfirmErrorStatus(message);
+    const logPayload = {
       message: "billing_confirm_preapproval_failed",
       requestId: meta.requestId,
       route: meta.route,
       method: meta.method,
+      uid: uid ?? undefined,
       meta: { uid, error: message },
-    });
+    };
+    if (isExpectedConfirmError(message)) {
+      apiLogger.warn(logPayload);
+    } else {
+      apiLogger.error(logPayload);
+    }
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid, errorCode: message });
     return NextResponse.json(
       { ok: false, error: message },
