@@ -38,7 +38,8 @@ import { usePlans } from "@/hooks/usePlans";
 import { migrateCryptography } from "@/services/transactionService";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { sendFeatureRequest, sendSupportRequest, subscribeToSupportTickets, type SupportTicket } from "@/hooks/supportService";
-import { BillingHistoryItem, cancelSubscription, confirmPreapproval, getBillingHistory, getCheckoutLink } from "@/services/billingService";
+import { BillingHistoryItem, cancelSubscription, confirmPreapproval, getBillingHistory } from "@/services/billingService";
+import { buildUpgradeCheckoutPath } from "@/services/billing/checkoutIntent";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { sendPasswordAccessEmail } from "@/services/auth/passwordAccess";
 import { formatPhone, normalizePhone } from "@/lib/phone";
@@ -398,10 +399,9 @@ export default function SettingsPage() {
     }
 
     setIsOpeningCheckout(plan);
+    
     try {
-      const token = await user?.getIdToken();
-      const session = await getCheckoutLink(plan, token);
-      window.location.assign(session.checkoutUrl);
+      router.push(buildUpgradeCheckoutPath(plan));
     } catch (error) {
       console.error(error);
       showFeedback("error", "Falha no checkout", "Não foi possível abrir o pagamento agora.");
@@ -1139,7 +1139,7 @@ export default function SettingsPage() {
               {canUpgrade && (
                 <div className="space-y-4">
                   <div className="grid gap-3 md:grid-cols-3">
-                    <div className="app-panel-subtle rounded-2xl border px-4 py-4">
+                    <div className="app-panel-subtle rounded-2xl border-slate-200 bg-slate-50/80 px-4 py-4">
                       <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Free</p>
                       <p className="mt-2 text-base font-semibold text-zinc-900">Registrar</p>
                       <p className="mt-1 text-sm text-zinc-600">Para sair do caos e registrar o essencial do mês.</p>
