@@ -9,7 +9,6 @@ import Link from "next/link";
 import { usePlans } from "@/hooks/usePlans";
 import { useAuth } from "@/hooks/useAuth";
 import { buildUpgradeCheckoutPath, rememberPendingUpgradePlan } from "@/services/billing/checkoutIntent";
-import { getCheckoutLink } from "@/services/billingService";
 
 export default function LandingPage() {
   const { plans, loading: plansLoading } = usePlans();
@@ -42,10 +41,8 @@ export default function LandingPage() {
 
     setIsOpeningCheckout(plan);
     try {
-      const token = await user.getIdToken();
       rememberPendingUpgradePlan(plan);
-      const session = await getCheckoutLink(plan, token);
-      window.location.assign(session.checkoutUrl || buildUpgradeCheckoutPath(plan));
+      window.location.assign(buildUpgradeCheckoutPath(plan));
     } catch (error) {
       console.error("Erro ao iniciar checkout:", error);
     } finally {
