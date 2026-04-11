@@ -156,7 +156,7 @@ function ChoiceCardGroup<T extends string>({
                 "rounded-3xl border p-4 text-left transition-all",
                 value === option.value
                   ? "border-primary/40 bg-accent shadow-sm ring-2 ring-ring/20"
-                  : "app-panel-subtle border-[color:var(--app-panel-border)] hover:border-primary/25 hover:bg-accent/60"
+                  : "app-panel-subtle border-color:var(--app-panel-border) hover:border-primary/25 hover:bg-accent/60"
               )}
             >
               <div className="flex items-start gap-3">
@@ -201,7 +201,7 @@ function PreferenceSection({
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <div className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] p-4 shadow-sm">
+      <div className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) p-4 shadow-sm">
         <CollapsibleTrigger asChild>
           <button
             type="button"
@@ -226,7 +226,7 @@ function PreferenceSection({
             </div>
             <div
               className={cn(
-                "app-panel-subtle inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-[color:var(--app-panel-border)] text-muted-foreground transition-all",
+                "app-panel-subtle inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-color:var(--app-panel-border) text-muted-foreground transition-all",
                 open && "rotate-180 border-primary/25 bg-accent text-primary"
               )}
             >
@@ -236,7 +236,7 @@ function PreferenceSection({
         </CollapsibleTrigger>
 
         <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
-          <div className="mt-5 space-y-5 border-t border-[color:var(--app-panel-border)] pt-5">
+          <div className="mt-5 space-y-5 border-t border-color:var(--app-panel-border) pt-5">
             {children}
           </div>
         </CollapsibleContent>
@@ -434,7 +434,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
 
   return (
     <div className={cn("space-y-6 overflow-x-hidden", compact ? "text-sm" : "")}>
-      <div className="app-panel-soft rounded-4xl border border-[color:var(--app-panel-border)] p-6 shadow-sm">
+      <div className="app-panel-soft rounded-4xl border border-color:var(--app-panel-border) p-6 shadow-sm">
         <div className="flex items-start gap-4">
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
             <Sparkles className="h-5 w-5" />
@@ -459,7 +459,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
               defaultOpen
             >
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="app-panel-subtle rounded-2xl border border-[color:var(--app-panel-border)] p-4">
+                <div className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">No celular</p>
@@ -477,7 +477,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                   </div>
                 </div>
 
-                <div className="app-panel-subtle rounded-2xl border border-[color:var(--app-panel-border)] p-4">
+                <div className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">No computador</p>
@@ -621,7 +621,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                         "rounded-3xl border p-4 transition-all",
                         enabled
                           ? "border-primary/35 bg-accent shadow-sm"
-                          : "app-panel-subtle border-[color:var(--app-panel-border)]"
+                          : "app-panel-subtle border-color:var(--app-panel-border)"
                       )}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -688,7 +688,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
       </div>
 
       <div className="sticky bottom-4 z-20">
-        <div className="app-panel-soft rounded-4xl border border-[color:var(--app-panel-border)] p-4 shadow-4xl shadow-primary/10 backdrop-blur-xl">
+        <div className="app-panel-soft rounded-4xl border border-color:var(--app-panel-border) p-4 shadow-4xl shadow-primary/10 backdrop-blur-xl">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-3">
               <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
