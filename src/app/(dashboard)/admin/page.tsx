@@ -36,6 +36,7 @@ import {
   PlanDetails,
 } from "@/types/system";
 import { computePermanentDeleteAt } from "@/lib/account-deletion/policy";
+import { cn } from "@/lib/utils";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
@@ -216,6 +217,83 @@ const CREATOR_SUPREME = "Z3ciyXudWuZZywhojA6iWJTurH52";
 const ADMIN_USERS_FILTERS_STORAGE_KEY = "wevenfinance:admin:users-filters:v1";
 const ADMIN_SUPPORT_FILTERS_STORAGE_KEY = "wevenfinance:admin:support-filters:v1";
 const ADMIN_AUDIT_FILTERS_STORAGE_KEY = "wevenfinance:admin:audit-filters:v1";
+
+function getAdminTabButtonClass(active: boolean) {
+  return cn(
+    "flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    active
+      ? "app-panel-soft border border-color:var(--app-panel-border) text-foreground shadow-sm"
+      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+  );
+}
+
+function AdminPulse({ className = "" }: { className?: string }) {
+  return <div className={cn("animate-pulse rounded-full bg-primary/10", className)} />;
+}
+
+function AdminPageLoadingShell() {
+  return (
+    <div className="relative min-h-screen overflow-hidden p-4 pb-20 font-sans md:p-8">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute right-[-10%] top-[-10%] h-[500px] w-[500px] rounded-full bg-primary/6 blur-[100px]" />
+        <div className="absolute bottom-[-12%] left-[-12%] h-[500px] w-[500px] rounded-full bg-primary/4 blur-[110px]" />
+      </div>
+
+      <div className="relative z-10 mx-auto max-w-7xl space-y-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-3">
+            <AdminPulse className="h-9 w-64" />
+            <AdminPulse className="h-4 w-72" />
+          </div>
+          <AdminPulse className="h-11 w-64 rounded-xl" />
+        </div>
+
+        <div className="app-panel-subtle grid grid-cols-1 gap-1 rounded-2xl border border-color:var(--app-panel-border) p-1.5 shadow-sm sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={index}
+              className={cn(
+                "rounded-xl px-6 py-3",
+                index === 0 && "app-panel-soft border border-color:var(--app-panel-border)"
+              )}
+            >
+              <AdminPulse className="h-4 w-full" />
+            </div>
+          ))}
+        </div>
+
+        <div className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
+          <div className="app-panel-subtle border-b border-color:var(--app-panel-border) px-6 py-5">
+            <AdminPulse className="h-5 w-56" />
+            <AdminPulse className="mt-3 h-3 w-80" />
+          </div>
+          <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
+                <AdminPulse className="h-3 w-24" />
+                <AdminPulse className="mt-4 h-7 w-16" />
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-4 p-5 pt-0 xl:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
+                <div className="flex justify-between gap-4">
+                  <div className="space-y-3">
+                    <AdminPulse className="h-3 w-28" />
+                    <AdminPulse className="h-4 w-44" />
+                    <AdminPulse className="h-3 w-56" />
+                  </div>
+                  <AdminPulse className="h-8 w-8 rounded-lg" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AdminPage() {
   const { user, userProfile, loading } = useAuth();
@@ -1513,13 +1591,18 @@ export default function AdminPage() {
     setSupportPage(1);
   }, [supportTypeFilter, supportStatusFilter, supportPriorityFilter, supportSearch]);
 
-  if (
-    loading ||
-    (userProfile?.role !== "admin" && userProfile?.role !== "moderator" && userProfile?.role !== "support") ||
-    !editedPlans ||
-    (canManageSensitive && !editedFeatureAccess)
-  )
+  const hasAdminAccess =
+    userProfile?.role === "admin" ||
+    userProfile?.role === "moderator" ||
+    userProfile?.role === "support";
+
+  if (loading || (user && !userProfile) || !editedPlans || (canManageSensitive && !editedFeatureAccess)) {
+    return <AdminPageLoadingShell />;
+  }
+
+  if (!hasAdminAccess) {
     return null;
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden p-4 pb-20 font-sans md:p-8">
@@ -1527,17 +1610,17 @@ export default function AdminPage() {
       {/* Background Decorativo */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] h-[500px] w-[500px] rounded-full bg-primary/5 blur-[100px]" />
-        <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-500/5 rounded-full blur-[100px]" />
+        <div className="absolute bottom-[-10%] left-[-10%] h-[500px] w-[500px] rounded-full bg-primary/4 blur-[100px]" />
       </div>
 
       <div className="container mx-auto max-w-7xl relative z-10">
         <div className={`${fadeInUp} flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8`}>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+            <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight text-foreground">
               <ShieldAlert className="h-8 w-8 text-red-600" />
               Administração
             </h1>
-            <p className="text-zinc-500 dark:text-zinc-400">Controle total da plataforma.</p>
+            <p className="text-muted-foreground">Controle total da plataforma.</p>
           </div>
 
           {canManageSensitive && activeTab === 'users' && (
@@ -1545,7 +1628,7 @@ export default function AdminPage() {
               onClick={() => setShowNormalizeConfirm(true)}
               disabled={isNormalizing}
               variant="outline"
-              className="bg-white dark:bg-zinc-900 border-amber-200 text-amber-700 hover:bg-amber-50 gap-2 rounded-xl shadow-sm hover:scale-105 hover:cursor-pointer transition-all"
+              className="gap-2 rounded-xl border-amber-200 bg-amber-50/80 text-amber-700 shadow-sm transition-all hover:scale-105 hover:cursor-pointer hover:bg-amber-100 dark:bg-amber-950/20 dark:text-amber-300 dark:hover:bg-amber-950/30"
             >
               {isNormalizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
               Corrigir/Normalizar Dados Antigos
@@ -1567,10 +1650,10 @@ export default function AdminPage() {
 
         <div className={`${fadeInUp} delay-150 space-y-6`}>
           {/* Navegação de Abas Moderna */}
-          <div className="grid grid-cols-1 gap-1 rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-2 min-w-full md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+          <div className="app-panel-subtle grid min-w-full grid-cols-1 gap-1 rounded-2xl border border-color:var(--app-panel-border) p-1.5 shadow-sm sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             {/* Aba Usuários: Apenas Admin e Moderator */}
             {(userProfile?.role === 'admin' || userProfile?.role === 'moderator') && (
-              <button type="button" aria-pressed={activeTab === "users"} onClick={() => setActiveTabAndPersist("users")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeTab === "users" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-pressed={activeTab === "users"} onClick={() => setActiveTabAndPersist("users")} className={getAdminTabButtonClass(activeTab === "users")}>
                 <UserIcon className="h-4 w-4" /> Gerenciar Usuários
               </button>
             )}
@@ -1579,11 +1662,7 @@ export default function AdminPage() {
             <button type="button"
               aria-pressed={activeTab === "support"}
               onClick={() => setActiveTabAndPersist("support")}
-              className={`
-                  flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring 
-                  ${activeTab === "support" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" :
-                  "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`
-              }
+              className={getAdminTabButtonClass(activeTab === "support")}
             >
               <HeadphonesIcon className="h-4 w-4" /> Suporte & Ideias
               {unseenSupportCount > 0 && (
@@ -1594,24 +1673,24 @@ export default function AdminPage() {
             </button>
 
             {canRestore && (
-              <button type="button" aria-pressed={activeTab === "restore"} onClick={() => setActiveTabAndPersist("restore")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeTab === "restore" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-pressed={activeTab === "restore"} onClick={() => setActiveTabAndPersist("restore")} className={getAdminTabButtonClass(activeTab === "restore")}>
                 <History className="h-4 w-4" /> Restaurar Dados
               </button>
             )}
 
 
             {canManageSensitive && (
-              <button type="button" aria-pressed={activeTab === "plans"} onClick={() => setActiveTabAndPersist("plans")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeTab === "plans" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-pressed={activeTab === "plans"} onClick={() => setActiveTabAndPersist("plans")} className={getAdminTabButtonClass(activeTab === "plans")}>
                 <CreditCard className="h-4 w-4" /> Gerenciar Planos
               </button>
             )}
 
             {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
               <>
-                <button type="button" aria-pressed={activeTab === "audit"} onClick={() => setActiveTabAndPersist("audit")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeTab === "audit" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+                <button type="button" aria-pressed={activeTab === "audit"} onClick={() => setActiveTabAndPersist("audit")} className={getAdminTabButtonClass(activeTab === "audit")}>
                   <ShieldCheck className="h-4 w-4" /> Auditoria
                 </button>
-                <button type="button" aria-pressed={activeTab === "metrics"} onClick={() => setActiveTabAndPersist("metrics")} className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeTab === "metrics" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
+                <button type="button" aria-pressed={activeTab === "metrics"} onClick={() => setActiveTabAndPersist("metrics")} className={getAdminTabButtonClass(activeTab === "metrics")}>
                   <Calculator className="h-4 w-4" /> Métricas
                   {criticalMetricsAlerts.length > 0 && (
                     <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-bold">
@@ -1626,9 +1705,9 @@ export default function AdminPage() {
           {/* --- SUPPORT TAB --- */}
           {activeTab === "support" && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
-              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
+              <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                 <CardHeader className="app-panel-subtle border-b border-border/70 px-6 py-4">
-                  <CardTitle className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
                     <HeadphonesIcon className="h-5 w-5 text-primary" /> Central de Atendimento
                   </CardTitle>
                   <CardDescription>
@@ -1638,25 +1717,25 @@ export default function AdminPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="p-4 md:p-5 border-b border-zinc-100 dark:border-zinc-800 grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <p className="text-xs text-zinc-500">Fila aberta</p>
+                  <div className="grid grid-cols-2 gap-3 border-b border-color:var(--app-panel-border) p-4 md:p-5 lg:grid-cols-4">
+                    <div className="app-panel-subtle rounded-xl border border-color:var(--app-panel-border) p-3">
+                      <p className="text-xs text-muted-foreground">Fila aberta</p>
                       <p className="text-lg font-bold">{supportQueueMetrics.open}</p>
                     </div>
-                    <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-3 dark:border-red-900/40 dark:bg-red-950/20">
                       <p className="text-xs text-red-600">SLA estourado</p>
                       <p className="text-lg font-bold text-red-600">{supportQueueMetrics.overdue}</p>
                     </div>
-                    <div className="rounded-xl border border-orange-200 bg-orange-50 p-3">
+                    <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 dark:border-orange-900/40 dark:bg-orange-950/20">
                       <p className="text-xs text-orange-700">Alta/Urgente</p>
                       <p className="text-lg font-bold text-orange-700">{supportQueueMetrics.urgent}</p>
                     </div>
-                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
-                      <p className="text-xs text-blue-700">TMA resolução</p>
-                      <p className="text-lg font-bold text-blue-700">{supportQueueMetrics.avgResolutionMinutes} min</p>
+                    <div className="rounded-xl border border-primary/20 bg-accent p-3">
+                      <p className="text-xs text-primary">TMA resolução</p>
+                      <p className="text-lg font-bold text-primary">{supportQueueMetrics.avgResolutionMinutes} min</p>
                     </div>
                   </div>
-                  <div className="p-4 md:p-5 border-b border-zinc-100 dark:border-zinc-800 space-y-3">
+                  <div className="space-y-3 border-b border-color:var(--app-panel-border) p-4 md:p-5">
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                       <Input
                         value={supportSearch}
@@ -1719,7 +1798,7 @@ export default function AdminPage() {
                   </div>
                   <div className="p-4 md:p-5 grid grid-cols-1 xl:grid-cols-2 gap-4">
                     {supportTicketsOrdered.length === 0 ? (
-                      <div className="app-panel-subtle col-span-full flex h-32 items-center justify-center rounded-2xl border text-zinc-500">
+                      <div className="app-panel-subtle col-span-full flex h-32 items-center justify-center rounded-2xl border border-color:var(--app-panel-border) text-muted-foreground">
                         Nenhum chamado encontrado.
                       </div>
                     ) : (
@@ -1731,7 +1810,7 @@ export default function AdminPage() {
                         const isUnseen = !Array.isArray(ticket.staffSeenBy) || (userProfile ? !ticket.staffSeenBy.includes(userProfile.uid) : false);
 
                         return (
-                          <div key={ticket.id} className={`rounded-2xl border ${tone.border} bg-white dark:bg-zinc-950/50 p-4 space-y-3`}>
+                          <div key={ticket.id} className={`app-panel-subtle rounded-2xl border ${tone.border} p-4 space-y-3`}>
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <p className="text-xs text-zinc-500">{dateStr}</p>
@@ -1809,20 +1888,20 @@ export default function AdminPage() {
                                     <MoreVertical className="h-4 w-4 text-zinc-500" />
                                   </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 shadow-xl">
+                                <DropdownMenuContent align="end" className="w-48 rounded-xl border border-color:var(--app-menu-border) bg-var(--app-menu-bg) p-1 shadow-xl">
                                   <DropdownMenuItem onClick={() => setViewTicket(ticket)}>
                                     <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
                                   </DropdownMenuItem>
 
                                   {canEditStatus && (
                                     <DropdownMenuSub>
-                                      <DropdownMenuSubTrigger className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200 focus:bg-zinc-100 dark:focus:bg-zinc-800 data-[state=open]:bg-zinc-100 dark:data-[state=open]:bg-zinc-800">
+                                      <DropdownMenuSubTrigger className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-foreground focus:bg-var(--app-menu-hover) data-state=open:bg-var(--app-menu-hover)">
                                         <span className="flex items-center">
                                           <RefreshCcw className="mr-2 h-4 w-4 text-zinc-500" />
                                           Alterar Status
                                         </span>
                                       </DropdownMenuSubTrigger>
-                                      <DropdownMenuSubContent className="w-56 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 shadow-xl">
+                                      <DropdownMenuSubContent className="w-56 rounded-xl border border-color:var(--app-menu-border) bg-var(--app-menu-bg) p-1 shadow-xl">
                                         {ticket.type === 'support' && (
                                           <>
                                             <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'pending')}>Pendente</DropdownMenuItem>
@@ -1846,10 +1925,10 @@ export default function AdminPage() {
 
                                   {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
                                     <DropdownMenuSub>
-                                      <DropdownMenuSubTrigger className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200 focus:bg-zinc-100 dark:focus:bg-zinc-800 data-[state=open]:bg-zinc-100 dark:data-[state=open]:bg-zinc-800">
+                                      <DropdownMenuSubTrigger className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-foreground focus:bg-var(--app-menu-hover) data-state=open:bg-var(--app-menu-hover)">
                                         Prioridade
                                       </DropdownMenuSubTrigger>
-                                      <DropdownMenuSubContent className="w-44 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 shadow-xl">
+                                      <DropdownMenuSubContent className="w-44 rounded-xl border border-color:var(--app-menu-border) bg-var(--app-menu-bg) p-1 shadow-xl">
                                         <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "low")}>Baixa</DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "medium")}>Média</DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "high")}>Alta</DropdownMenuItem>
@@ -2113,8 +2192,8 @@ export default function AdminPage() {
                       </TableBody>
                     </Table>
                   </div>
-                  <div className="px-4 md:px-6 pb-4 flex items-center justify-between gap-2 border-t border-zinc-100 dark:border-zinc-800">
-                    <p className="text-xs text-zinc-500 font-medium">
+                  <div className="flex items-center justify-between gap-2 border-t border-color:var(--app-panel-border) px-4 pb-4 md:px-6">
+                    <p className="text-xs font-medium text-muted-foreground">
                       Página {supportPage} de {supportTotalPages || 1} • {ticketsTotal} chamado(s)
                     </p>
                     <div className="flex gap-2">
@@ -2146,9 +2225,9 @@ export default function AdminPage() {
           {/* --- AUDIT TAB --- */}
           {activeTab === "audit" && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
-              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
+              <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                 <CardHeader className="app-panel-subtle border-b border-border/70 px-6 py-4">
-                  <CardTitle className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
                     <ShieldCheck className="h-5 w-5 text-emerald-600" /> Auditoria Operacional
                   </CardTitle>
                   <CardDescription>
@@ -2248,16 +2327,16 @@ export default function AdminPage() {
 
                   <div className="space-y-3">
                     {isLoadingAuditLogs ? (
-                      <div className="h-28 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500">
+                      <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-muted-foreground">
                         <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando auditoria...
                       </div>
                     ) : auditLogs.length === 0 ? (
-                      <div className="h-28 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500">
+                      <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-muted-foreground">
                         Nenhum registro encontrado.
                       </div>
                     ) : (
                       auditLogs.map((log) => (
-                        <div key={log.id} className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-3 md:p-4 space-y-2 bg-white dark:bg-zinc-950/40">
+                        <div key={log.id} className="app-panel-subtle space-y-2 rounded-2xl border border-color:var(--app-panel-border) p-3 md:p-4">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{formatAuditAction(log.action)}</p>
                             <Badge className="bg-zinc-800 text-white">{(log.method || "N/A").toUpperCase()}</Badge>
@@ -2311,10 +2390,10 @@ export default function AdminPage() {
           {/* --- METRICS TAB --- */}
           {activeTab === "metrics" && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
-              <Card className="border-none shadow-xl shadow-zinc-200/50 dark:shadow-black/20 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
+              <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                 <CardHeader className="app-panel-subtle border-b border-border/70 px-6 py-4">
-                  <CardTitle className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                    <Calculator className="h-5 w-5 text-blue-600" /> Métricas Operacionais
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                    <Calculator className="h-5 w-5 text-primary" /> Métricas Operacionais
                   </CardTitle>
                   <CardDescription>
                     Tráfego, erros, rate limit e latência das APIs monitoradas.
@@ -2345,19 +2424,19 @@ export default function AdminPage() {
                           </p>
                         </CardContent>
                       </Card>
-                      <Card className="rounded-2xl border border-zinc-200">
+                      <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
                         <CardContent className="p-3">
                           <p className="text-xs text-zinc-500">Webhook MP (min)</p>
                           <p className="text-base font-bold">{healthData.webhookDelayMinutes ?? "-"} min</p>
                         </CardContent>
                       </Card>
-                      <Card className="rounded-2xl border border-zinc-200">
+                      <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
                         <CardContent className="p-3">
                           <p className="text-xs text-zinc-500">Falhas pagamento 24h</p>
                           <p className="text-base font-bold">{healthData.failedPayments24h}</p>
                         </CardContent>
                       </Card>
-                      <Card className="rounded-2xl border border-zinc-200">
+                      <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
                         <CardContent className="p-3">
                           <p className="text-xs text-zinc-500">Recuperação pendente</p>
                           <p className="text-base font-bold">{healthData.pendingRecoveryUsers}</p>
@@ -2392,13 +2471,13 @@ export default function AdminPage() {
                   )}
 
                   {isLoadingMetrics ? (
-                    <div className="h-24 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500">
+                    <div className="app-panel-subtle flex h-24 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando métricas...
                     </div>
                   ) : (
                     <>
                       <div className="grid grid-cols-2 lg:grid-cols-8 gap-3">
-                        <Card className="rounded-2xl border border-zinc-200">
+                        <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
                           <CardContent className="p-3">
                             <p className="text-xs text-zinc-500">Total Requests</p>
                             <p className="text-xl font-bold">{metricsSummary?.total ?? 0}</p>
@@ -2416,10 +2495,10 @@ export default function AdminPage() {
                             <p className="text-xl font-bold text-amber-700">{metricsSummary?.rateLimited ?? 0}</p>
                           </CardContent>
                         </Card>
-                        <Card className="rounded-2xl border border-blue-200">
+                        <Card className="rounded-2xl border border-primary/20 bg-accent">
                           <CardContent className="p-3">
-                            <p className="text-xs text-blue-700">Latência Média</p>
-                            <p className="text-xl font-bold text-blue-700">{metricsSummary?.avgDurationMs ?? 0} ms</p>
+                            <p className="text-xs text-primary">Latência Média</p>
+                            <p className="text-xl font-bold text-primary">{metricsSummary?.avgDurationMs ?? 0} ms</p>
                           </CardContent>
                         </Card>
                         <Card className="rounded-2xl border border-red-200">
@@ -2434,13 +2513,13 @@ export default function AdminPage() {
                             <p className="text-xl font-bold text-amber-700">{metricsSummary?.rateLimitedPct ?? 0}%</p>
                           </CardContent>
                         </Card>
-                        <Card className="rounded-2xl border border-zinc-200">
+                        <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
                           <CardContent className="p-3">
                             <p className="text-xs text-zinc-500">Janela Anterior</p>
                             <p className="text-xl font-bold">{metricsSummary?.previousTotal ?? 0}</p>
                           </CardContent>
                         </Card>
-                        <Card className="rounded-2xl border border-zinc-200">
+                        <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
                           <CardContent className="p-3">
                             <p className="text-xs text-zinc-500">Variação Tráfego</p>
                             <p className={`text-xl font-bold ${(metricsSummary?.trafficDropPct ?? 0) > 0 ? "text-orange-700" : "text-emerald-700"}`}>
@@ -2450,7 +2529,7 @@ export default function AdminPage() {
                         </Card>
                       </div>
 
-                      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                      <div className="overflow-hidden rounded-2xl border border-color:var(--app-panel-border)">
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -2498,7 +2577,7 @@ export default function AdminPage() {
                   <Search className="absolute left-3 top-3.5 h-4 w-4 text-zinc-400" />
                   <Input
                     placeholder="Buscar usuário (nome ou email)..."
-                    className="pl-9 h-11 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
+                    className="h-11 rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg) pl-9"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
@@ -2507,7 +2586,7 @@ export default function AdminPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Filtro: Plano */}
                   <Select value={planFilter} onValueChange={(val) => setPlanFilter(val as UserPlan | "all")}>
-                    <SelectTrigger className="w-full h-11 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+                    <SelectTrigger className="h-11 w-full rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
                       <SelectValue placeholder="Plano" />
                     </SelectTrigger>
                     <SelectContent>
@@ -2520,7 +2599,7 @@ export default function AdminPage() {
 
                   {/* Filtro: Cargo */}
                   <Select value={roleFilter} onValueChange={(val) => setRoleFilter(val as UserRole | "all")}>
-                    <SelectTrigger className="w-full h-11 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+                    <SelectTrigger className="h-11 w-full rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
                       <SelectValue placeholder="Cargo" />
                     </SelectTrigger>
                     <SelectContent>
@@ -2533,7 +2612,7 @@ export default function AdminPage() {
 
                   {/* Filtro: Status */}
                   <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val as UserStatus | "all")}>
-                    <SelectTrigger className="w-full h-11 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+                    <SelectTrigger className="h-11 w-full rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -2546,7 +2625,7 @@ export default function AdminPage() {
 
                   {/* Filtro: Pagamento */}
                   <Select value={paymentStatusFilter} onValueChange={(val) => setPaymentStatusFilter(val as PaymentFilterType)}>
-                    <SelectTrigger className="w-full h-11 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+                    <SelectTrigger className="h-11 w-full rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
                       <SelectValue placeholder="Pagamento" />
                     </SelectTrigger>
                     <SelectContent>
@@ -2581,18 +2660,18 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <Card className="overflow-hidden rounded-3xl border-none bg-white shadow-xl shadow-primary/10 dark:bg-zinc-950 dark:shadow-black/20">
-                <CardHeader className="border-b border-zinc-100 bg-accent/70 px-6 py-4 dark:border-zinc-800 dark:bg-accent/20">
+              <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
+                <CardHeader className="border-b border-color:var(--app-panel-border) bg-accent/70 px-6 py-4 dark:bg-accent/20">
                   <CardTitle className="text-lg font-semibold text-primary">Base de Usuários</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="md:hidden p-3 space-y-3">
                     {isLoadingUsers ? (
-                      <div className="h-28 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
+                      <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-muted-foreground">
                         <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando base de dados...
                       </div>
                     ) : paginatedUsers.length === 0 ? (
-                      <div className="h-28 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
+                      <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-muted-foreground">
                         Nenhum usuário encontrado com os filtros atuais.
                       </div>
                     ) : (
@@ -2605,7 +2684,7 @@ export default function AdminPage() {
                         const canDeleteThisUser = canDeleteUser(u);
                         const canChangePayment = canEditThisUser || (userProfile?.role === "admin" && u.uid === userProfile.uid);
                         return (
-                          <div key={u.uid} className="rounded-2xl border border-zinc-200 bg-white p-3 space-y-3">
+                          <div key={u.uid} className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-3 space-y-3">
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <p className="font-semibold text-zinc-900 truncate">{u.displayName}</p>
@@ -2771,7 +2850,7 @@ export default function AdminPage() {
                           const canChangePayment = canEditThisUser || (userProfile?.role === "admin" && u.uid === userProfile.uid);
 
                           return (
-                            <TableRow key={u.uid} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-zinc-100 dark:border-zinc-800 transition-colors">
+                              <TableRow key={u.uid} className="border-color:var(--app-panel-border) transition-colors hover:bg-accent/60">
                               <TableCell className="pl-6">
                                 <div>
                                   <p className="font-semibold text-zinc-900 dark:text-zinc-100">
@@ -2788,7 +2867,7 @@ export default function AdminPage() {
                               <TableCell>
                                 {canChangePlan ? (
                                   <Select value={u.plan} onValueChange={(val) => handlePlanChange(u.uid, val)}>
-                                    <SelectTrigger className="w-[120px] h-8 text-xs border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 rounded-lg">
+                                    <SelectTrigger className="h-8 w-[120px] rounded-lg border-color:var(--app-field-border) bg-var(--app-field-bg) text-xs">
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -2807,7 +2886,7 @@ export default function AdminPage() {
                               <TableCell>
                                 {canChangeRole ? (
                                   <Select value={u.role} onValueChange={(val) => handleRoleChange(u.uid, val)}>
-                                    <SelectTrigger className="w-[110px] h-8 text-xs border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 rounded-lg">
+                                    <SelectTrigger className="h-8 w-[110px] rounded-lg border-color:var(--app-field-border) bg-var(--app-field-bg) text-xs">
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -2843,7 +2922,7 @@ export default function AdminPage() {
                                       onValueChange={(val) => handlePaymentStatusChange(u.uid, val)}
                                       disabled={!canChangePayment}
                                     >
-                                      <SelectTrigger className={`w-[110px] h-8 text-xs border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 rounded-lg ${u.paymentStatus === 'overdue' || u.paymentStatus === 'not_paid' ? 'text-red-600 font-bold' :
+                                      <SelectTrigger className={`h-8 w-[110px] rounded-lg border-color:var(--app-field-border) bg-var(--app-field-bg) text-xs ${u.paymentStatus === 'overdue' || u.paymentStatus === 'not_paid' ? 'text-red-600 font-bold' :
                                         u.paymentStatus === 'paid' ? 'text-emerald-600 font-medium' : ''
                                         }`}>
                                         <SelectValue />
@@ -2973,7 +3052,7 @@ export default function AdminPage() {
           {/* --- RESTORE TAB --- */}
           {activeTab === "restore" && canRestore && (
             <div className={`${fadeInUp} delay-200`}>
-              <Card className="border-none shadow-lg shadow-orange-500/10 bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
+              <Card className="app-panel-soft overflow-hidden rounded-3xl border border-orange-200/70 shadow-lg shadow-orange-500/10 dark:border-orange-900/30">
                 <CardHeader className="py-4 px-6 border-b border-orange-100 dark:border-orange-900/30 bg-orange-50/50 dark:bg-orange-900/10">
                   <CardTitle className="text-lg font-semibold text-orange-600 flex items-center gap-2">
                     <ArchiveRestore className="h-5 w-5" /> Usuários Excluídos & Arquivados
@@ -2982,7 +3061,7 @@ export default function AdminPage() {
                 <CardContent className="p-0">
                   <div className="md:hidden p-3 space-y-3">
                     {deletedUsers.length === 0 ? (
-                      <div className="h-28 rounded-xl border border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-500 text-sm">
+                      <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-muted-foreground">
                         Nenhum usuário excluído encontrado.
                       </div>
                     ) : (
@@ -3124,7 +3203,7 @@ export default function AdminPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* FREE */}
-                <Card className="border-2 border-amber-700/30 rounded-3xl bg-white dark:bg-zinc-900 shadow-xl shadow-amber-700/5 hover:shadow-amber-700/10 transition-shadow">
+                <Card className="app-panel-soft rounded-3xl border-2 border-amber-700/30 shadow-xl shadow-amber-700/5 transition-shadow hover:shadow-amber-700/10">
                   <CardHeader className="bg-amber-50 dark:bg-amber-900/10 rounded-t-3xl p-6 flex flex-row items-center justify-between border-b border-amber-100/50 dark:border-amber-900/20">
                     <div className="flex flex-col justify-center">
                       <CardTitle className="text-amber-700 font-bold text-lg">
@@ -3160,7 +3239,7 @@ export default function AdminPage() {
                 </Card>
 
                 {/* PREMIUM */}
-                <Card className="border-2 border-slate-400/40 rounded-3xl bg-white dark:bg-zinc-900 shadow-xl shadow-slate-400/5 hover:shadow-slate-400/10 transition-shadow">
+                <Card className="app-panel-soft rounded-3xl border-2 border-slate-400/40 shadow-xl shadow-slate-400/5 transition-shadow hover:shadow-slate-400/10">
                   <CardHeader className="bg-slate-50 dark:bg-slate-900/20 rounded-t-3xl p-6 flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800">
                     <div className="flex flex-col justify-center">
                       <CardTitle className="text-slate-600 dark:text-slate-400 font-bold text-lg">
@@ -3205,7 +3284,7 @@ export default function AdminPage() {
                 </Card>
 
                 {/* PRO */}
-                <Card className="border-2 border-yellow-500/40 rounded-3xl bg-white dark:bg-zinc-900 shadow-xl shadow-yellow-500/10 hover:shadow-yellow-500/20 transition-shadow">
+                <Card className="app-panel-soft rounded-3xl border-2 border-yellow-500/40 shadow-xl shadow-yellow-500/10 transition-shadow hover:shadow-yellow-500/20">
                   <CardHeader className="bg-yellow-100 dark:bg-yellow-900/20 rounded-t-3xl p-6 flex flex-row items-center justify-between border-b border-yellow-200 dark:border-yellow-900/30">
                     <div className="flex flex-col justify-center">
                       <CardTitle className="text-yellow-600 font-bold text-lg">
@@ -3257,9 +3336,9 @@ export default function AdminPage() {
               </div>
 
               {editedFeatureAccess && (
-                <Card className="border-none shadow-xl bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden">
-                  <CardHeader className="border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60">
-                    <CardTitle className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
+                  <CardHeader className="app-panel-subtle border-b border-color:var(--app-panel-border)">
+                    <CardTitle className="text-lg font-semibold text-foreground">
                       Liberações Promocionais de Funcionalidades
                     </CardTitle>
                     <CardDescription>
@@ -3268,16 +3347,16 @@ export default function AdminPage() {
                   </CardHeader>
                   <CardContent className="p-6 space-y-4">
                     {editedFeatureAccess.grants.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-zinc-300 dark:border-zinc-700 p-6 text-sm text-zinc-500 text-center">
+                      <div className="rounded-2xl border border-dashed border-color:var(--app-panel-border) p-6 text-center text-sm text-muted-foreground">
                         Nenhuma liberação promocional configurada. Adicione uma regra para liberar recursos temporariamente sem mexer no plano base.
                       </div>
                     ) : (
                       <div className="space-y-4">
                         {editedFeatureAccess.grants.map((grant, index) => (
-                          <div key={grant.id} className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-4">
+                          <div key={grant.id} className="app-panel-subtle space-y-4 rounded-2xl border border-color:var(--app-panel-border) p-4">
                             <div className="flex items-center justify-between gap-4">
                               <div>
-                                <p className="font-semibold text-zinc-900 dark:text-zinc-100">
+                                <p className="font-semibold text-foreground">
                                   {FEATURE_LABELS[grant.feature]} para {FEATURE_SCOPE_LABELS[grant.scope]}
                                 </p>
                                 <p className="text-xs text-zinc-500">
