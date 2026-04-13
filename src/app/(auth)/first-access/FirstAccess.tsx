@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AuthPageShell, authIconClassName, authPanelClassName } from "@/components/auth/AuthPageShell";
 import { getSupabaseClient } from "@/services/supabase/client";
 import {
   clearPasswordAccessContext,
@@ -234,27 +235,21 @@ export default function FirstAccessPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans px-4">
-      <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-[100px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[100px]" />
-      </div>
-
-      <div className="w-full max-w-[440px] relative z-10">
-        <div className={`${zoomIn} bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl border border-white/20 dark:border-zinc-800 shadow-2xl rounded-3xl p-6 md:p-8`}>
+    <AuthPageShell maxWidthClassName="max-w-[440px]">
+        <div className={`${zoomIn} ${authPanelClassName}`}>
           {loading ? (
-            <div className="py-10 flex flex-col items-center justify-center gap-4 text-zinc-500">
+            <div className="flex flex-col items-center justify-center gap-4 py-10 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="text-sm">Preparando seu acesso...</p>
             </div>
           ) : isComplete ? (
             <div className={`${fadeInUp} text-center space-y-6 py-4`}>
-              <div className="mx-auto bg-emerald-100 dark:bg-emerald-900/30 p-4 rounded-full w-fit">
-                <CheckCircle2 className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
+              <div className="mx-auto w-fit rounded-full bg-primary/10 p-4 text-primary">
+                <CheckCircle2 className="h-10 w-10" />
               </div>
               <div className="space-y-2">
-                <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{successTitle}</h1>
-                <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                <h1 className="text-2xl font-bold text-foreground">{successTitle}</h1>
+                <p className="text-sm text-muted-foreground leading-relaxed">
                   {successDescription}
                 </p>
               </div>
@@ -268,13 +263,13 @@ export default function FirstAccessPage() {
           ) : showPasswordForm ? (
             <>
               <div className="text-center mb-6 space-y-2">
-                <div className={`${zoomIn} inline-flex items-center justify-center p-3 bg-linear-to-tr from-violet-600 to-indigo-600 rounded-2xl shadow-lg shadow-violet-500/20 mb-4`}>
-                  <KeyRound className="h-6 w-6 text-white" />
+                <div className={`${zoomIn} ${authIconClassName} mb-4`}>
+                  <KeyRound className="h-6 w-6" />
                 </div>
-                <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100`}>
+                <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-foreground`}>
                   {pageTitle}
                 </h1>
-                <p className={`${fadeInUp} delay-200 text-sm text-zinc-500 dark:text-zinc-400`}>
+                <p className={`${fadeInUp} delay-200 text-sm text-muted-foreground`}>
                   {requiresPasswordSetup
                     ? "Defina sua senha agora para liberar acesso por Google e também por e-mail e senha."
                     : "Crie sua nova senha com segurança e volte ao painel."}
@@ -282,7 +277,7 @@ export default function FirstAccessPage() {
               </div>
 
               {requiresPasswordSetup && emailSent && (
-                <div className="mb-5 flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300">
+                <div className="mb-5 flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/10 p-4 text-sm text-primary">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
                   Também enviamos um link de segurança para <strong>{user?.email}</strong>, caso você prefira concluir por e-mail.
                 </div>
@@ -294,8 +289,9 @@ export default function FirstAccessPage() {
                   <Input
                     id="password"
                     type="password"
+                    autoComplete="new-password"
                     placeholder="Mínimo de 6 caracteres"
-                    className="bg-white/50 dark:bg-zinc-800/50"
+                    className="app-field-surface h-11 rounded-xl"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
@@ -306,15 +302,16 @@ export default function FirstAccessPage() {
                   <Input
                     id="confirm-password"
                     type="password"
+                    autoComplete="new-password"
                     placeholder="Repita a nova senha"
-                    className="bg-white/50 dark:bg-zinc-800/50"
+                    className="app-field-surface h-11 rounded-xl"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                   />
                 </div>
 
                 {error && (
-                  <div className="text-red-500 text-xs text-center font-medium bg-red-50 dark:bg-red-900/20 p-2 rounded-lg animate-in fade-in slide-in-from-top-2">
+                  <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-2 text-center text-xs font-medium text-destructive animate-in fade-in slide-in-from-top-2">
                     {error}
                   </div>
                 )}
@@ -333,7 +330,7 @@ export default function FirstAccessPage() {
                     variant="outline"
                     onClick={handleSendEmail}
                     disabled={isSendingEmail}
-                    className="w-full h-11 rounded-xl border-zinc-200 hover:bg-zinc-50"
+                    className="h-11 w-full rounded-xl"
                   >
                     {isSendingEmail ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Receber link por e-mail"}
                   </Button>
@@ -343,19 +340,19 @@ export default function FirstAccessPage() {
           ) : (
             <>
               <div className="text-center mb-6 space-y-2">
-                <div className={`${zoomIn} inline-flex items-center justify-center p-3 bg-linear-to-tr from-violet-600 to-indigo-600 rounded-2xl shadow-lg shadow-violet-500/20 mb-4`}>
-                  <Mail className="h-6 w-6 text-white" />
+                <div className={`${zoomIn} ${authIconClassName} mb-4`}>
+                  <Mail className="h-6 w-6" />
                 </div>
-                <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100`}>
+                <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-foreground`}>
                   {pageTitle}
                 </h1>
-                <p className={`${fadeInUp} delay-200 text-sm text-zinc-500 dark:text-zinc-400`}>
+                <p className={`${fadeInUp} delay-200 text-sm text-muted-foreground`}>
                   {pageDescription}
                 </p>
               </div>
 
               <div className={`${fadeInUp} delay-300 space-y-4`}>
-                <div className="app-panel-subtle rounded-2xl border p-4 text-sm text-zinc-600 dark:text-zinc-300">
+                <div className="app-panel-subtle rounded-2xl border p-4 text-sm text-muted-foreground">
                   {emailSent ? (
                     <>
                       Enviamos um link seguro para <strong>{user?.email || "seu e-mail"}</strong>. Abra a mensagem para definir sua nova senha aqui no WevenFinance.
@@ -366,7 +363,7 @@ export default function FirstAccessPage() {
                 </div>
 
                 {error && (
-                  <div className="text-red-500 text-xs text-center font-medium bg-red-50 dark:bg-red-900/20 p-2 rounded-lg animate-in fade-in slide-in-from-top-2">
+                  <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-2 text-center text-xs font-medium text-destructive animate-in fade-in slide-in-from-top-2">
                     {error}
                   </div>
                 )}
@@ -375,7 +372,7 @@ export default function FirstAccessPage() {
                   <Button
                     onClick={handleSendEmail}
                     disabled={isSendingEmail}
-                  className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium shadow-lg shadow-black/10 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
+                    className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium shadow-lg shadow-black/10 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
                   >
                     {isSendingEmail ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Enviar link novamente"}
                   </Button>
@@ -387,13 +384,12 @@ export default function FirstAccessPage() {
           <div className={`${fadeInUp} delay-500 mt-8 text-center`}>
             <Link
               href={user ? "/dashboard" : "/login"}
-              className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 flex items-center justify-center gap-1 hover:cursor-pointer transition-all duration-200"
+              className="flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground hover:cursor-pointer transition-colors duration-200"
             >
               <ArrowLeft className="w-3 h-3" /> {user ? "Voltar ao painel" : "Voltar para login"}
             </Link>
           </div>
         </div>
-      </div>
-    </div>
+    </AuthPageShell>
   );
 }
