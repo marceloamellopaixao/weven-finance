@@ -14,6 +14,7 @@ import {
   readPendingVerificationEmail,
 } from "@/services/auth/emailVerification";
 import { resolvePendingUpgradePath } from "@/services/billing/checkoutIntent";
+import { AuthPageShell, authIconClassName } from "@/components/auth/AuthPageShell";
 
 export default function VerifyEmailPage() {
   const { logout, user, userProfile } = useAuth();
@@ -112,25 +113,24 @@ export default function VerifyEmailPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 font-sans">
-      <div className="relative z-10 w-full max-w-lg">
-        <Card className="overflow-hidden rounded-3xl border-zinc-200 bg-white/80 shadow-lg backdrop-blur-xl dark:border-zinc-800 dark:bg-zinc-900/80">
-          <div className="h-2 w-full bg-linear-to-r from-violet-500 to-emerald-500" />
+    <AuthPageShell maxWidthClassName="max-w-lg">
+        <Card className="app-panel-soft overflow-hidden rounded-3xl border border-[color:var(--app-panel-border)] shadow-2xl shadow-primary/10 backdrop-blur-xl">
+          <div className="h-2 w-full bg-primary" />
           <CardHeader className="pb-2 pt-8 text-center">
-            <div className="mx-auto mb-4 w-fit rounded-full bg-violet-100 p-4 dark:bg-violet-900/30">
-              <Mail className="h-8 w-8 text-violet-600 dark:text-violet-400" />
+            <div className={`${authIconClassName} mx-auto mb-4`}>
+              <Mail className="h-8 w-8" />
             </div>
-            <CardTitle className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Verifique seu e-mail</CardTitle>
-            <CardDescription className="mt-2 text-base text-zinc-600 dark:text-zinc-400">
+            <CardTitle className="text-2xl font-bold text-foreground">Verifique seu e-mail</CardTitle>
+            <CardDescription className="mt-2 text-base text-muted-foreground">
               Enviamos um link de confirmação para <strong>{displayEmail || "seu e-mail"}</strong>.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 pt-6">
-            <div className="flex items-start gap-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-5 dark:border-emerald-900/50 dark:bg-emerald-900/20">
-              <div className="shrink-0 rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/50">
-                <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            <div className="flex items-start gap-4 rounded-2xl border border-primary/20 bg-primary/10 p-5">
+              <div className="shrink-0 rounded-lg bg-primary/10 p-2 text-primary">
+                <ShieldCheck className="h-6 w-6" />
               </div>
-              <p className="text-xs leading-relaxed text-emerald-700 dark:text-emerald-300">
+              <p className="text-xs leading-relaxed text-foreground">
                 Após verificar o e-mail, você terá acesso imediato ao painel.
               </p>
             </div>
@@ -139,7 +139,7 @@ export default function VerifyEmailPage() {
             <Button
               onClick={checkVerification}
               disabled={isChecking}
-              className="h-12 w-full rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
+              className="h-12 w-full rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {isChecking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
               Já verifiquei meu e-mail
@@ -158,7 +158,6 @@ export default function VerifyEmailPage() {
             )}
           </CardFooter>
         </Card>
-      </div>
-    </div>
+    </AuthPageShell>
   );
 }
