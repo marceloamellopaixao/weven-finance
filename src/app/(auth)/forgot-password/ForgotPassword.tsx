@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Loader2, ArrowLeft, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { sendPasswordAccessEmail } from "@/services/auth/passwordAccess";
+import { AuthPageShell, authIconClassName, authPanelClassName } from "@/components/auth/AuthPageShell";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -61,24 +62,18 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans px-4">
-      <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-[100px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[100px]" />
-      </div>
-
-      <div className="w-full max-w-[400px] relative z-10">
-        <div className={`${zoomIn} bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl border border-white/20 dark:border-zinc-800 shadow-2xl rounded-3xl p-6 md:p-8`}>
+    <AuthPageShell maxWidthClassName="max-w-[400px]">
+        <div className={`${zoomIn} ${authPanelClassName}`}>
           {!isSent ? (
             <>
               <div className="text-center mb-6 space-y-2">
-                <div className={`${zoomIn} inline-flex items-center justify-center p-3 bg-linear-to-tr from-violet-600 to-indigo-600 rounded-2xl shadow-lg shadow-violet-500/20 mb-4`}>
-                  <KeyRound className="h-6 w-6 text-white" />
+                <div className={`${zoomIn} ${authIconClassName} mb-4`}>
+                  <KeyRound className="h-6 w-6" />
                 </div>
-                <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100`}>
+                <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-foreground`}>
                   Recuperar Senha
                 </h1>
-                <p className={`${fadeInUp} delay-200 text-sm text-zinc-500 dark:text-zinc-400`}>
+                <p className={`${fadeInUp} delay-200 text-sm text-muted-foreground`}>
                   Digite seu e-mail para receber um link de redefinição.
                 </p>
               </div>
@@ -89,15 +84,18 @@ export default function ForgotPasswordPage() {
                   <Input
                     id="email"
                     type="email"
+                    autoComplete="email"
+                    inputMode="email"
                     placeholder="seu@email.com"
-                  className="bg-white/50 dark:bg-zinc-800/50"
+                    spellCheck={false}
+                    className="app-field-surface h-11 rounded-xl"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
 
                 {error && (
-                  <div className="text-red-500 text-xs text-center font-medium bg-red-50 dark:bg-red-900/20 p-2 rounded-lg animate-in fade-in slide-in-from-top-2">
+                  <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-2 text-center text-xs font-medium text-destructive animate-in fade-in slide-in-from-top-2">
                     {error}
                   </div>
                 )}
@@ -113,12 +111,12 @@ export default function ForgotPasswordPage() {
             </>
           ) : (
             <div className={`${fadeInUp} text-center space-y-6 py-4`}>
-              <div className="mx-auto bg-emerald-100 dark:bg-emerald-900/30 p-4 rounded-full w-fit animate-in zoom-in duration-300">
-                <CheckCircle2 className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
+              <div className="mx-auto w-fit rounded-full bg-primary/10 p-4 text-primary animate-in zoom-in duration-300">
+                <CheckCircle2 className="h-10 w-10" />
               </div>
               <div className="space-y-2">
-                <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">E-mail Enviado!</h2>
-                <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                <h2 className="text-2xl font-bold text-foreground">E-mail Enviado!</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed">
                   Verifique sua caixa de entrada (e spam) no endereço <strong>{email}</strong>.
                 </p>
               </div>
@@ -126,7 +124,7 @@ export default function ForgotPasswordPage() {
               <Button
                 onClick={() => setIsSent(false)}
                 variant="outline"
-                className="w-full h-11 rounded-xl border-zinc-200 hover:bg-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800 hover:cursor-pointer transition-all duration-200"
+                className="h-11 w-full rounded-xl"
               >
                 Tentar outro e-mail
               </Button>
@@ -136,14 +134,13 @@ export default function ForgotPasswordPage() {
           <div className={`${fadeInUp} delay-500 mt-8 text-center`}>
             <Link
               href="/login"
-              className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 flex items-center justify-center gap-1 hover:cursor-pointer transition-all duration-200"
+              className="flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground hover:cursor-pointer transition-colors duration-200"
             >
               <ArrowLeft className="w-3 h-3" /> Voltar para Login
             </Link>
           </div>
         </div>
-      </div>
-    </div>
+    </AuthPageShell>
   );
 }
 
