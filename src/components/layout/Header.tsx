@@ -107,22 +107,22 @@ export function Header() {
   // Se não tiver usuário logado, mostra o header da landing page.
   if (!isAuthenticated) {
     return (
-      <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-zinc-100 dark:bg-zinc-950/80 dark:border-zinc-800 transition-all duration-300">
-        <div className="container mx-auto px-6 h-16 flex items-center justify-between">
+      <nav className="fixed top-0 z-50 w-full border-b border-border/70 bg-background/80 backdrop-blur-md transition-all duration-300">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2 group">
-            <div className="bg-violet-600 p-2 rounded-xl shadow-lg shadow-violet-200 dark:shadow-violet-900/20 group-hover:scale-105 transition-transform">
-              <Wallet className="h-5 w-5 text-white" />
+            <div className="rounded-xl bg-primary p-2 text-primary-foreground shadow-lg shadow-primary/20 transition-transform group-hover:scale-105">
+              <Wallet className="h-5 w-5" />
             </div>
-            <span className="font-bold text-xl tracking-tight text-zinc-900 dark:text-zinc-100">
-              Weven<span className="text-violet-600">Finance</span>
+            <span className="text-xl font-bold tracking-tight text-foreground">
+              Weven<span className="text-primary">Finance</span>
             </span>
           </Link>
           <div className="flex items-center gap-4">
             <Link href="/login" className="hidden sm:block">
-              <Button variant="ghost" className="rounded-full font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800">Login</Button>
+              <Button variant="ghost" className="rounded-full font-medium text-muted-foreground hover:bg-accent hover:text-foreground">Login</Button>
             </Link>
             <Link href="/register">
-              <Button className="rounded-full bg-zinc-900 text-white hover:bg-zinc-800 font-medium px-6 shadow-lg shadow-zinc-200/50 hover:shadow-xl transition-all hover:scale-105 dark:bg-white dark:text-black dark:hover:bg-zinc-200">
+              <Button className="rounded-full bg-primary px-5 font-medium text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-105 hover:bg-primary/90 hover:shadow-xl sm:px-6">
                 Começar Agora
               </Button>
             </Link>
@@ -134,14 +134,14 @@ export function Header() {
 
   // Se estiver logado (ou bloqueado), mostra o header da aplicação.
   return (
-    <nav className="sticky top-0 z-50 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/80 backdrop-blur-xl px-4 md:px-8 h-16 flex items-center justify-between dark:bg-zinc-950/80 transition-all duration-300">
+    <nav className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b border-border/70 bg-background/80 px-4 backdrop-blur-xl transition-all duration-300 md:px-8">
       <div className="flex items-center gap-3">
         <Link href={isAuthenticated ? "/dashboard" : "/"} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <div className="bg-linear-to-tr from-violet-600 to-indigo-600 p-2 rounded-xl shadow-lg shadow-violet-500/20">
-              <Wallet className="h-5 w-5 text-white" />
+            <div className="rounded-xl bg-primary p-2 text-primary-foreground shadow-lg shadow-primary/20">
+              <Wallet className="h-5 w-5" />
             </div>
-          <span className="font-bold text-xl tracking-tight text-zinc-800 dark:text-zinc-100 hidden md:block">
-            Weven<span className="text-violet-600">Finance</span>
+          <span className="hidden text-xl font-bold tracking-tight text-foreground md:block">
+            Weven<span className="text-primary">Finance</span>
           </span>
         </Link>
       </div>
@@ -180,7 +180,7 @@ export function Header() {
           }}
         >
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon" className="relative h-9 w-9 rounded-full border-zinc-200 dark:border-zinc-800" disabled={isPlatformTourActive}>
+            <Button variant="outline" size="icon" className="relative h-9 w-9 rounded-full border-[color:var(--app-panel-border)] bg-card/50" disabled={isPlatformTourActive}>
               <Bell className="h-4 w-4" />
               {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] px-1 flex items-center justify-center">
@@ -190,7 +190,7 @@ export function Header() {
             </Button>
           </DropdownMenuTrigger>
 
-          <DropdownMenuContent align="end" className="w-80 rounded-xl p-2">
+          <DropdownMenuContent align="end" className="app-panel-soft w-[calc(100vw-2rem)] max-w-80 rounded-xl border-[color:var(--app-panel-border)] p-2 shadow-xl shadow-primary/10">
             <div className="flex items-center justify-between px-2 py-1">
               <DropdownMenuLabel className="p-0">Notificações</DropdownMenuLabel>
               <button
@@ -203,7 +203,7 @@ export function Header() {
               <button
                 type="button"
                 onClick={() => void clearAll()}
-                className="text-[11px] text-zinc-500 hover:underline"
+                className="text-[11px] text-muted-foreground hover:text-primary hover:underline"
               >
                 Limpar
               </button>
@@ -211,7 +211,7 @@ export function Header() {
             <DropdownMenuSeparator />
 
             {notifications.length === 0 ? (
-              <div className="px-2 py-6 text-center text-xs text-zinc-500">Sem notificações.</div>
+              <div className="px-2 py-6 text-center text-xs text-muted-foreground">Sem notificações.</div>
             ) : (
               notifications.slice(0, 8).map((item) => (
                 <DropdownMenuItem
@@ -223,7 +223,7 @@ export function Header() {
                     {!item.isRead && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
                     <p className="text-xs font-semibold truncate">{item.title}</p>
                   </div>
-                  <p className="text-[11px] text-zinc-500 line-clamp-2">{item.message}</p>
+                  <p className="line-clamp-2 text-[11px] text-muted-foreground">{item.message}</p>
                 </DropdownMenuItem>
               ))
             )}
@@ -232,15 +232,15 @@ export function Header() {
 
         {/* Informações do Usuário (Desktop) */}
         <div className="text-right hidden md:block">
-          <p className="text-sm font-semibold leading-none text-zinc-900 dark:text-zinc-100">
+          <p className="text-sm font-semibold leading-none text-foreground">
             {displayName}
           </p>
           <div className="flex justify-end mt-1">
             <Badge
               variant="secondary"
               className={`text-[10px] uppercase border h-5 px-1.5 ${userProfile?.plan === "pro" || userProfile?.plan === "premium"
-                ? "bg-violet-100 text-violet-600 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400"
-                : "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
+                ? "border-primary/25 bg-primary/10 text-primary"
+                : "border-border bg-muted text-muted-foreground"
                 }`}
             >
               {userProfile?.plan || "Free"}
@@ -252,23 +252,23 @@ export function Header() {
         <DropdownMenu open={isAccountMenuOpen} onOpenChange={handleAccountMenuOpenChange}>
           <DropdownMenuTrigger asChild>
             <div id="tour-account-avatar" className="relative">
-              <Avatar className={`h-9 w-9 md:h-10 md:w-10 border-2 border-white dark:border-zinc-800 shadow-sm ring-2 transition-all cursor-pointer hover:ring-ring/35 ${
+              <Avatar className={`h-9 w-9 cursor-pointer border-2 border-background shadow-sm ring-2 transition-all hover:ring-ring/35 md:h-10 md:w-10 ${
                 isOnboardingActive && onboardingActiveStep === "profileMenu"
                   ? "ring-ring/70 animate-pulse"
                   : "ring-transparent"
               }`}>
                 <AvatarImage src={displayPhoto} />
-                <AvatarFallback className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600 font-bold">
+                <AvatarFallback className="bg-muted font-bold text-muted-foreground">
                   {(displayName || "U").charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
             </div>
           </DropdownMenuTrigger>
-          <DropdownMenuContent id="tour-account-menu-panel" align="end" className="w-56 rounded-xl shadow-xl border-zinc-200 dark:border-zinc-800 p-2">
+          <DropdownMenuContent id="tour-account-menu-panel" align="end" className="app-panel-soft w-[calc(100vw-2rem)] max-w-56 rounded-xl border-[color:var(--app-panel-border)] p-2 shadow-xl shadow-primary/10">
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium leading-none truncate">{displayName || "Minha Conta"}</p>
-                <p className="text-xs leading-none text-zinc-500 truncate">{displayEmail}</p>
+                <p className="truncate text-xs leading-none text-muted-foreground">{displayEmail}</p>
                 {isOnboardingActive && onboardingActiveStep === "profileMenu" && (
                   <p className="text-[11px] font-medium text-primary">Abra este menu para concluir a etapa atual.</p>
                 )}
@@ -327,7 +327,7 @@ export function Header() {
                       ? "text-red-600 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-900/10"
                       : userProfile.role === "moderator"
                         ? "text-amber-600 focus:text-amber-700 focus:bg-amber-50 dark:focus:bg-amber-900/10"
-                        : "text-zinc-600 focus:text-zinc-700 focus:bg-zinc-100 dark:focus:bg-zinc-800"
+                        : "text-muted-foreground focus:bg-accent focus:text-foreground"
                       }`}
                   >
                     <ShieldAlert className="mr-2 h-4 w-4" />
