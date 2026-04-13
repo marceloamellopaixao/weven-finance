@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getSupabaseClient } from "@/services/supabase/client";
+import { AuthPageShell } from "@/components/auth/AuthPageShell";
 
 function formatDate(value: string | null) {
   if (!value) return null;
@@ -127,17 +128,17 @@ export default function GoodbyePage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-3xl items-center justify-center px-4 py-16">
-      <Card className="w-full rounded-3xl border-zinc-200 shadow-xl shadow-zinc-950/5 dark:border-zinc-800 dark:bg-zinc-900">
+    <AuthPageShell maxWidthClassName="max-w-3xl" className="items-start sm:items-center">
+      <Card className="app-panel-soft w-full rounded-3xl border border-[color:var(--app-panel-border)] shadow-xl shadow-primary/10">
         <CardHeader className="space-y-4 text-center">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-zinc-100 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
-            <ShieldCheck className="h-10 w-10 text-emerald-600" />
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-4 border-background bg-primary/10 text-primary shadow-lg">
+            <ShieldCheck className="h-10 w-10" />
           </div>
           <div className="space-y-2">
-            <CardTitle className="text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">
+            <CardTitle className="text-3xl font-bold tracking-tight text-foreground">
               Conta encerrada
             </CardTitle>
-            <CardDescription className="mx-auto max-w-xl text-base leading-relaxed text-zinc-500">
+            <CardDescription className="mx-auto max-w-xl text-base leading-relaxed text-muted-foreground">
               Seu acesso foi bloqueado e os dados ficaram indisponiveis. 
               Se a exclusão foi acidental, ainda existe uma oportunidade para revisar esse encerramento.
             </CardDescription>
@@ -157,11 +158,11 @@ export default function GoodbyePage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+          <div className="app-panel-subtle rounded-2xl border p-4 text-sm text-muted-foreground">
             <div className="flex items-start gap-3">
-              <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-zinc-500" />
+              <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
               <div>
-                <p className="font-semibold text-zinc-900 dark:text-zinc-100">Exclusão permanente automática</p>
+                <p className="font-semibold text-foreground">Exclusão permanente automática</p>
                 <p className="mt-1">
                   {permanentDeleteLabel
                     ? `Se nada for solicitado, a exclusão permanente será concluída automaticamente em ${permanentDeleteLabel}.`
@@ -172,8 +173,8 @@ export default function GoodbyePage() {
           </div>
 
           {!deletionWindowExpired ? (
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/40 dark:bg-blue-950/20">
-              <div className="mb-4 flex items-start gap-3 text-sm text-blue-800 dark:text-blue-300">
+            <div className="app-panel-subtle rounded-2xl border border-[color:var(--app-panel-border)] p-4">
+              <div className="mb-4 flex items-start gap-3 text-sm text-foreground">
                 <RotateCcw className="mt-0.5 h-5 w-5 shrink-0" />
                 <div>
                   <p className="font-semibold">Precisa revisar essa exclusão?</p>
@@ -185,17 +186,21 @@ export default function GoodbyePage() {
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <Input
+                  autoComplete="name"
                   value={restoreName}
                   onChange={(e) => setRestoreName(e.target.value)}
                   placeholder="Seu nome"
-                  className="rounded-xl border-blue-200 bg-white dark:border-blue-900/40 dark:bg-zinc-950"
+                  className="app-field-surface h-11 rounded-xl"
                 />
                 <Input
                   type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  spellCheck={false}
                   value={restoreEmail}
                   onChange={(e) => setRestoreEmail(e.target.value)}
                   placeholder="seu@email.com"
-                  className="rounded-xl border-blue-200 bg-white dark:border-blue-900/40 dark:bg-zinc-950"
+                  className="app-field-surface h-11 rounded-xl"
                 />
               </div>
 
@@ -203,18 +208,18 @@ export default function GoodbyePage() {
                 value={restoreMessage}
                 onChange={(e) => setRestoreMessage(e.target.value)}
                 placeholder="Conte brevemente por que deseja reativar sua conta."
-                className="mt-3 min-h-[110px] w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-0 placeholder:text-zinc-500 focus:border-blue-400 dark:border-blue-900/40 dark:bg-zinc-950 dark:text-zinc-100"
+                className="app-field-surface mt-3 min-h-[110px] w-full rounded-xl px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               />
 
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-blue-700/80 dark:text-blue-300/80">
+                <p className="text-xs text-muted-foreground">
                   O suporte recebe essa solicitação com prioridade e valida a conta antes de qualquer reativação.
                 </p>
                 <Button
                   type="button"
                   onClick={handleRestoreRequest}
                   disabled={isSubmittingRestore || !restoreName.trim() || !restoreEmail.trim()}
-                  className="rounded-xl bg-blue-600 text-white hover:bg-blue-700"
+                  className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   {isSubmittingRestore ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
                   Solicitar reativação
@@ -234,7 +239,7 @@ export default function GoodbyePage() {
           ) : null}
 
           {error ? (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
+            <div role="alert" className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               {error}
             </div>
           ) : null}
@@ -252,13 +257,13 @@ export default function GoodbyePage() {
             type="button"
             onClick={handleFreshStart}
             disabled={isRestarting}
-            className="w-full rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 sm:w-auto"
+            className="w-full rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto"
           >
             {isRestarting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
             Criar nova conta do zero
           </Button>
         </CardFooter>
       </Card>
-    </div>
+    </AuthPageShell>
   );
 }
