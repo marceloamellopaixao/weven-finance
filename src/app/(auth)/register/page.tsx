@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AuthPageShell, authIconClassName, authPanelClassName } from "@/components/auth/AuthPageShell";
 import { formatPhone, normalizePhone } from "@/lib/phone";
 import { parseUpgradePlan, readPendingUpgradePlan, rememberPendingUpgradePlan } from "@/services/billing/checkoutIntent";
 
@@ -61,22 +62,16 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans px-4">
-      <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-[100px]" />
-        <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[100px]" />
-      </div>
-
-      <div className="w-full max-w-[400px] relative z-10">
-        <div className={`${zoomIn} bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl border border-white/20 dark:border-zinc-800 shadow-2xl rounded-3xl p-6 md:p-8`}>
+    <AuthPageShell maxWidthClassName="max-w-[440px]">
+        <div className={`${zoomIn} ${authPanelClassName}`}>
           <div className="text-center mb-6 space-y-2">
-            <div className={`${zoomIn} inline-flex items-center justify-center p-3 bg-linear-to-tr from-violet-600 to-indigo-600 rounded-2xl shadow-lg shadow-violet-500/20 mb-4`}>
-              <Wallet className="h-6 w-6 text-white" />
+            <div className={`${zoomIn} ${authIconClassName} mb-4`}>
+              <Wallet className="h-6 w-6" />
             </div>
-            <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100`}>
+            <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-foreground`}>
               Crie sua conta
             </h1>
-            <p className={`${fadeInUp} delay-200 text-sm text-zinc-500 dark:text-zinc-400`}>
+            <p className={`${fadeInUp} delay-200 text-sm text-muted-foreground`}>
               Comece a controlar suas financas hoje.
             </p>
             {pendingUpgradePlan && (
@@ -87,14 +82,14 @@ export default function RegisterPage() {
           </div>
 
           <form onSubmit={handleRegister} className={`${fadeInUp} delay-300 space-y-4`}>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="displayName">Apelido</Label>
                 <Input
                   id="displayName"
                   autoComplete="nickname"
                   placeholder="Ex: Marcelo"
-                  className="bg-white/50 dark:bg-zinc-800/50"
+                  className="app-field-surface h-11 rounded-xl"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                 />
@@ -107,7 +102,7 @@ export default function RegisterPage() {
                   autoComplete="tel-national"
                   inputMode="tel"
                   placeholder="Ex: 1199..."
-                  className="bg-white/50 dark:bg-zinc-800/50"
+                  className="app-field-surface h-11 rounded-xl"
                   maxLength={15}
                   value={formatPhone(phone)}
                   onChange={(e) => setPhone(normalizePhone(e.target.value))}
@@ -121,7 +116,7 @@ export default function RegisterPage() {
                 id="completeName"
                 autoComplete="name"
                 placeholder="Ex: Marcelo Augusto"
-                className="bg-white/50 dark:bg-zinc-800/50"
+                className="app-field-surface h-11 rounded-xl"
                 value={completeName}
                 onChange={(e) => setCompleteName(e.target.value)}
               />
@@ -135,13 +130,14 @@ export default function RegisterPage() {
                 autoComplete="email"
                 inputMode="email"
                 placeholder="Ex: seu@email.com"
-                className="bg-white/50 dark:bg-zinc-800/50"
+                spellCheck={false}
+                className="app-field-surface h-11 rounded-xl"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="password">Senha</Label>
                 <Input
@@ -149,7 +145,7 @@ export default function RegisterPage() {
                   type="password"
                   autoComplete="new-password"
                   placeholder="******"
-                  className="bg-white/50 dark:bg-zinc-800/50"
+                  className="app-field-surface h-11 rounded-xl"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
@@ -162,7 +158,7 @@ export default function RegisterPage() {
                   type="password"
                   autoComplete="new-password"
                   placeholder="******"
-                  className="bg-white/50 dark:bg-zinc-800/50"
+                  className="app-field-surface h-11 rounded-xl"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                 />
@@ -170,7 +166,7 @@ export default function RegisterPage() {
             </div>
 
             {error && (
-              <div className="text-red-500 text-xs text-center font-medium bg-red-50 dark:bg-red-900/20 p-2 rounded-lg animate-in fade-in slide-in-from-top-2">
+              <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-2 text-center text-xs font-medium text-destructive animate-in fade-in slide-in-from-top-2">
                 {error}
               </div>
             )}
@@ -187,16 +183,15 @@ export default function RegisterPage() {
           <div className={`${fadeInUp} delay-500 mt-6 text-center`}>
             <Link
               href={pendingUpgradePlan ? `/login?upgrade_plan=${pendingUpgradePlan}` : "/login"}
-              className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 flex items-center justify-center gap-1 hover:cursor-pointer transition-all duration-200"
+              className="flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground hover:cursor-pointer transition-colors duration-200"
             >
               <ArrowLeft className="w-3 h-3" /> Voltar para Login
             </Link>
           </div>
         </div>
-        <p className={`${fadeInUp} delay-500 text-center text-[10px] text-zinc-400 mt-6 opacity-60`}>
+        <p className={`${fadeInUp} delay-500 mt-6 text-center text-[10px] text-muted-foreground/70`}>
           © 2026 WevenFinance.
         </p>
-      </div>
-    </div>
+    </AuthPageShell>
   );
 }
