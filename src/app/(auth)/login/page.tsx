@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AuthPageShell, authIconClassName, authPanelClassName } from "@/components/auth/AuthPageShell";
 import {
   buildUpgradeCheckoutPath,
   parseUpgradePlan,
@@ -17,7 +18,7 @@ import {
 } from "@/services/billing/checkoutIntent";
 
 const GoogleIcon = () => (
-  <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
+  <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24" aria-hidden="true">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
@@ -96,22 +97,16 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans px-4">
-      <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-[100px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[100px]" />
-      </div>
-
-      <div className="w-full max-w-[400px] relative z-10">
-        <div className={`${zoomIn} bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl border border-white/20 dark:border-zinc-800 shadow-2xl rounded-3xl p-6 md:p-8`}>
+    <AuthPageShell maxWidthClassName="max-w-[400px]">
+        <div className={`${zoomIn} ${authPanelClassName}`}>
           <div className="text-center mb-6 space-y-2">
-            <div className={`${zoomIn} inline-flex items-center justify-center p-3 bg-linear-to-tr from-violet-600 to-indigo-600 rounded-2xl shadow-lg shadow-violet-500/20 mb-4`}>
-              <Wallet className="h-8 w-8 text-white" />
+            <div className={`${zoomIn} ${authIconClassName} mb-4`}>
+              <Wallet className="h-8 w-8" />
             </div>
-            <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100`}>
+            <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-foreground`}>
               Weven<span className="text-primary">Finance</span>
             </h1>
-            <p className={`${fadeInUp} delay-200 text-sm text-zinc-500 dark:text-zinc-400`}>
+            <p className={`${fadeInUp} delay-200 text-sm text-muted-foreground`}>
               Bem-vindo de volta!
             </p>
             {pendingUpgradePlan && (
@@ -131,7 +126,8 @@ export default function LoginPage() {
                   autoComplete="email"
                   inputMode="email"
                   placeholder="seu@email.com"
-                  className="bg-white/50 dark:bg-zinc-800/50"
+                  spellCheck={false}
+                  className="app-field-surface h-11 rounded-xl"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -151,14 +147,14 @@ export default function LoginPage() {
                   type="password"
                   autoComplete="current-password"
                   placeholder="******"
-                  className="bg-white/50 dark:bg-zinc-800/50"
+                  className="app-field-surface h-11 rounded-xl"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
 
               {error && (
-                <div className="text-red-500 text-xs text-center font-medium bg-red-50 dark:bg-red-900/20 p-2 rounded-lg animate-in fade-in slide-in-from-top-2">
+                <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-2 text-center text-xs font-medium text-destructive animate-in fade-in slide-in-from-top-2">
                   {error}
                 </div>
               )}
@@ -174,10 +170,10 @@ export default function LoginPage() {
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-zinc-200 dark:border-zinc-800" />
+                <span className="w-full border-t border-border/70" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm px-2 text-zinc-400 font-medium rounded">
+                <span className="app-panel-soft rounded px-2 font-medium text-muted-foreground backdrop-blur-sm">
                   Ou continue com
                 </span>
               </div>
@@ -186,7 +182,8 @@ export default function LoginPage() {
             <Button
               onClick={handleGoogleLogin}
               disabled={isLoading || isGoogleLoading}
-              className="w-full h-11 bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-100 dark:border-zinc-700 font-medium shadow-sm active:scale-[0.98] rounded-xl hover:cursor-pointer transition-all duration-200"
+              variant="outline"
+              className="h-11 w-full rounded-xl border-[color:var(--app-panel-border)] bg-background/70 font-medium shadow-sm active:scale-[0.98]"
             >
               {isGoogleLoading ? (
                 <span className="flex items-center gap-2">Conectando...</span>
@@ -199,7 +196,7 @@ export default function LoginPage() {
             </Button>
 
             <div className="text-center pt-2">
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              <p className="text-sm text-muted-foreground">
                 Nao tem uma conta?{" "}
                 <Link
                   href={pendingUpgradePlan ? `/register?upgrade_plan=${pendingUpgradePlan}` : "/register"}
@@ -212,10 +209,9 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className={`${fadeInUp} delay-500 text-center text-[10px] text-zinc-400 mt-6 opacity-60`}>
+        <p className={`${fadeInUp} delay-500 mt-6 text-center text-[10px] text-muted-foreground/70`}>
           © 2026 WevenFinance.
         </p>
-      </div>
-    </div>
+    </AuthPageShell>
   );
 }
