@@ -3,12 +3,12 @@ import crypto from "node:crypto";
 import {
   buildApprovedRequestPatch,
   buildRejectedRequestPatch,
-  canManageImpersonation,
   createSupportAccessLog,
   getAuthContextFromRequest,
   type ImpersonationActionRequestDoc,
   type SupportAccessRequestDoc,
 } from "@/lib/impersonation/server";
+import { canAccessResource } from "@/lib/access-control/server";
 import { UserRole } from "@/types/user";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { apiLogger } from "@/lib/observability/logger";
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (mode === "mine") {
-      if (!canManageImpersonation(auth.role)) {
+      if (!(await canAccessResource(auth.uid, "admin.impersonation", "write"))) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
       const targetUid = request.nextUrl.searchParams.get("targetUid")?.trim();
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (mode === "status") {
-      if (!canManageImpersonation(auth.role)) {
+      if (!(await canAccessResource(auth.uid, "admin.impersonation", "write"))) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
       const targetUid = request.nextUrl.searchParams.get("targetUid")?.trim();
@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (mode === "action-status") {
-      if (!canManageImpersonation(auth.role)) {
+      if (!(await canAccessResource(auth.uid, "admin.impersonation", "write"))) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
       const actionRequestId = request.nextUrl.searchParams.get("actionRequestId")?.trim();
@@ -176,7 +176,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "invalid_mode" }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "missing_auth_token" ? 401 : 500;
+    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
       | { action: "respond-action"; actionRequestId?: string; approved?: boolean };
 
     if (body.action === "request") {
-      if (!canManageImpersonation(auth.role)) {
+      if (!(await canAccessResource(auth.uid, "admin.impersonation", "write"))) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
       const targetUid = body.targetUid?.trim();
@@ -421,7 +421,7 @@ export async function POST(request: NextRequest) {
       method: "POST",
       meta: { error: message },
     });
-    const status = message === "missing_auth_token" ? 401 : 500;
+    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }

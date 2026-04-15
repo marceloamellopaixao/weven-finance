@@ -1,4 +1,4 @@
-import { FileText, ShieldCheck, CreditCard, AlertTriangle } from "lucide-react";
+import { AlertTriangle, CreditCard, FileText, ShieldCheck } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -27,12 +27,12 @@ const SECTIONS = [
 
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-transparent px-4 py-24">
+    <div className="bg-transparent px-4 py-16 sm:py-20 lg:py-24">
       <div className="mx-auto max-w-4xl space-y-8">
         <div className="space-y-3 text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">Termos</p>
-          <h1 className="text-4xl font-bold tracking-tight text-zinc-900">Termos de uso resumidos</h1>
-          <p className="mx-auto max-w-2xl text-base text-zinc-600">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">Termos de uso resumidos</h1>
+          <p className="mx-auto max-w-2xl text-base leading-7 text-muted-foreground">
             Esta versão resume os pontos principais de uso do produto até a publicação de uma versão jurídica expandida.
           </p>
         </div>
@@ -41,16 +41,16 @@ export default function TermsPage() {
           {SECTIONS.map((section) => {
             const Icon = section.icon;
             return (
-              <Card key={section.title} className="rounded-3xl border-zinc-200 bg-white shadow-sm">
+              <Card key={section.title} className="app-panel-soft rounded-3xl border-color:var(--app-panel-border) shadow-sm transition-all duration-300 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-3 text-zinc-900">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent text-primary">
+                  <CardTitle className="flex items-center gap-3 text-foreground">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent text-primary">
                       <Icon className="h-5 w-5" />
                     </span>
                     {section.title}
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="text-sm leading-6 text-zinc-600">
+                <CardContent className="text-sm leading-6 text-muted-foreground">
                   {section.text}
                 </CardContent>
               </Card>

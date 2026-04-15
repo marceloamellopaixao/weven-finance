@@ -5,6 +5,7 @@ import { resolveApiErrorStatus } from "@/lib/api/error";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { buildMonthlyTransactionLimitMessage, getPlanCapabilities } from "@/lib/plans/capabilities";
 import { getUserPlanContext } from "@/lib/plans/server";
+import { hasAccess } from "@/lib/access-control/config";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
@@ -231,13 +232,19 @@ export async function POST(request: NextRequest) {
 
       const planContext = await getUserPlanContext(uid);
       const capabilities = getPlanCapabilities(planContext.plan, planContext.plans, planContext.featureAccess);
+      const accessContext = { uid, plan: planContext.plan, role: planContext.role };
+
+      if (!planContext.isBillingExempt && !hasAccess(planContext.accessControl, accessContext, "transactions.create", "write")) {
+        return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+      }
 
       const hasInstallmentTransactions = txs.some((tx) => {
         const installmentTotal = Number(tx.installmentTotal ?? 0);
         return !Boolean(tx.isRecurring) && (Boolean(tx.groupId) || installmentTotal > 1);
       });
+      const hasRecurringTransactions = txs.some((tx) => Boolean(tx.isRecurring));
 
-      if (!planContext.isBillingExempt && hasInstallmentTransactions && !capabilities.hasInstallments) {
+      if (!planContext.isBillingExempt && (hasInstallmentTransactions || hasRecurringTransactions) && !capabilities.hasInstallments) {
         return NextResponse.json(
           {
             ok: false,
@@ -307,6 +314,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
       }
 
+      const planContext = await getUserPlanContext(uid);
+      if (
+        !planContext.isBillingExempt &&
+        !hasAccess(planContext.accessControl, { uid, plan: planContext.plan, role: planContext.role }, "transactions.edit", "write")
+      ) {
+        return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+      }
+
       const current = await fetchUserTransactions(uid);
       const byId = new Map(current.map((row) => [String(row.source_id || ""), row]));
       const nextRows: Array<Record<string, unknown>> = [];
@@ -343,6 +358,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
       }
 
+      const planContext = await getUserPlanContext(uid);
+      if (
+        !planContext.isBillingExempt &&
+        !hasAccess(planContext.accessControl, { uid, plan: planContext.plan, role: planContext.role }, "transactions.edit", "write")
+      ) {
+        return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+      }
+
       const current = await fetchUserTransactions(uid);
       const existing = current.find((row) => String(row.source_id || "") === body.transactionId);
       if (!existing) {
@@ -374,6 +397,14 @@ export async function POST(request: NextRequest) {
 
       if (!body.groupId || !body.lastInstallmentDate) {
         return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+      }
+
+      const planContext = await getUserPlanContext(uid);
+      if (
+        !planContext.isBillingExempt &&
+        !hasAccess(planContext.accessControl, { uid, plan: planContext.plan, role: planContext.role }, "transactions.delete", "write")
+      ) {
+        return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
 
       const current = await fetchUserTransactions(uid);
@@ -516,6 +547,14 @@ export async function DELETE(request: NextRequest) {
 
     if (!transactionId && !groupId) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    }
+
+    const planContext = await getUserPlanContext(uid);
+    if (
+      !planContext.isBillingExempt &&
+      !hasAccess(planContext.accessControl, { uid, plan: planContext.plan, role: planContext.role }, "transactions.delete", "write")
+    ) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
     if (groupId) {

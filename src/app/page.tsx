@@ -81,36 +81,36 @@ export default function LandingPage() {
                 {primaryLabel} <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
-            <Button size="lg" variant="outline" className="h-14 w-full rounded-full border-[color:var(--app-panel-border)] px-8 text-lg text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-foreground hover:cursor-pointer sm:w-auto" asChild>
+            <Button size="lg" variant="outline" className="h-14 w-full rounded-full border-color:var(--app-panel-border) px-8 text-lg text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-foreground hover:cursor-pointer sm:w-auto" asChild>
               <a href="#pricing">Ver Preços</a>
             </Button>
           </div>
 
           <div className={`${fadeInUp} delay-400 flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground sm:flex-row`}>
-            <span className="rounded-full border border-[color:var(--app-panel-border)] bg-card/70 px-4 py-2 backdrop-blur">Entenda o que vence</span>
-            <span className="rounded-full border border-[color:var(--app-panel-border)] bg-card/70 px-4 py-2 backdrop-blur">Controle cartões e parcelas</span>
-            <span className="rounded-full border border-[color:var(--app-panel-border)] bg-card/70 px-4 py-2 backdrop-blur">Saiba quanto ainda pode gastar</span>
+            <span className="rounded-full border border-color:var(--app-panel-border) bg-card/70 px-4 py-2 backdrop-blur">Entenda o que vence</span>
+            <span className="rounded-full border border-color:var(--app-panel-border) bg-card/70 px-4 py-2 backdrop-blur">Controle cartões e parcelas</span>
+            <span className="rounded-full border border-color:var(--app-panel-border) bg-card/70 px-4 py-2 backdrop-blur">Saiba quanto ainda pode gastar</span>
           </div>
 
           {/* Dashboard Preview Mockup */}
-          <div className={`${fadeInUp} delay-500 group relative mx-auto mt-16 aspect-video max-w-5xl overflow-hidden rounded-2xl border border-[color:var(--app-panel-border)] bg-card/50 shadow-2xl shadow-primary/10 backdrop-blur-sm`}>
+          <div className={`${fadeInUp} delay-500 group relative mx-auto mt-12 aspect-4/3 max-w-5xl overflow-hidden rounded-2xl border border-color:var(--app-panel-border) bg-card/50 shadow-2xl shadow-primary/10 backdrop-blur-sm sm:mt-16 sm:aspect-video`}>
             <div className="absolute inset-0 z-10 bg-linear-to-t from-background via-transparent to-transparent" />
             {/* Abstract UI representation */}
-            <div className="p-6 grid grid-cols-3 gap-6 h-full opacity-60 group-hover:opacity-100 transition-opacity duration-700">
-              <div className="col-span-1 space-y-4 pt-8 pl-4">
-                <div className="h-24 w-full rounded-xl border border-[color:var(--app-panel-border)] bg-primary/15" />
-                <div className="h-24 w-full rounded-xl border border-[color:var(--app-panel-border)] bg-primary/10" />
-                <div className="h-40 w-full rounded-xl border border-[color:var(--app-panel-border)] bg-muted/60" />
+            <div className="absolute inset-4 grid grid-cols-[0.85fr_1.15fr] gap-3 opacity-60 transition-opacity duration-700 group-hover:opacity-100 sm:inset-6 sm:grid-cols-3 sm:gap-6">
+              <div className="grid min-h-0 grid-rows-[0.8fr_0.8fr_1.2fr] gap-3 sm:col-span-1 sm:gap-4">
+                <div className="min-h-0 rounded-xl border border-color:var(--app-panel-border) bg-primary/15" />
+                <div className="min-h-0 rounded-xl border border-color:var(--app-panel-border) bg-primary/10" />
+                <div className="min-h-0 rounded-xl border border-color:var(--app-panel-border) bg-muted/60" />
               </div>
-              <div className="col-span-2 space-y-4 pt-8 pr-4">
-                <div className="flex h-64 w-full items-center justify-center rounded-xl border border-[color:var(--app-panel-border)] bg-muted/60 font-mono text-sm text-muted-foreground">
-                  Gráfico Interativo
+              <div className="grid min-h-0 grid-rows-[1.45fr_0.75fr] gap-3 sm:col-span-2 sm:gap-4">
+                <div className="flex min-h-0 items-center justify-center rounded-xl border border-color:var(--app-panel-border) bg-muted/60 font-mono text-xs text-muted-foreground sm:text-sm">
+                  <span className="hidden sm:inline">Gráfico Interativo</span>
                 </div>
-                <div className="h-32 w-full rounded-xl border border-[color:var(--app-panel-border)] bg-primary/10" />
+                <div className="min-h-0 rounded-xl border border-color:var(--app-panel-border) bg-primary/10" />
               </div>
             </div>
-            <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20">
-              <p className="rounded-full border border-[color:var(--app-panel-border)] bg-card/80 px-4 py-2 text-sm font-medium text-muted-foreground shadow-sm backdrop-blur-md">Clareza para agir hoje, não só para olhar números.</p>
+            <div className="absolute bottom-4 left-1/2 z-20 w-full max-w-[calc(100%-2rem)] -translate-x-1/2 sm:bottom-10 sm:w-auto sm:max-w-none">
+              <p className="rounded-full border border-color:var(--app-panel-border) bg-card/80 px-3 py-2 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur-md sm:px-4 sm:text-sm">Clareza para agir hoje, não só para olhar números.</p>
             </div>
           </div>
         </div>
@@ -125,7 +125,7 @@ export default function LandingPage() {
           </div>
 
           <div className="grid gap-6 md:grid-cols-3 md:gap-8">
-            <Card className="app-panel-soft group border-[color:var(--app-panel-border)] shadow-sm transition-[border-color,box-shadow] duration-300 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10">
+            <Card className="app-panel-soft group border-color:var(--app-panel-border) shadow-sm transition-[border-color,box-shadow] duration-300 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10">
               <CardHeader>
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
                   <ShieldCheck className="h-6 w-6 transition-transform group-hover:scale-110" />
@@ -139,7 +139,7 @@ export default function LandingPage() {
               </CardContent>
             </Card>
 
-            <Card className="app-panel-soft group border-[color:var(--app-panel-border)] shadow-sm transition-[border-color,box-shadow] duration-300 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10">
+            <Card className="app-panel-soft group border-color:var(--app-panel-border) shadow-sm transition-[border-color,box-shadow] duration-300 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10">
               <CardHeader>
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
                   <Zap className="h-6 w-6 transition-transform group-hover:scale-110" />
@@ -153,7 +153,7 @@ export default function LandingPage() {
               </CardContent>
             </Card>
 
-            <Card className="app-panel-soft group border-[color:var(--app-panel-border)] shadow-sm transition-[border-color,box-shadow] duration-300 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10">
+            <Card className="app-panel-soft group border-color:var(--app-panel-border) shadow-sm transition-[border-color,box-shadow] duration-300 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10">
               <CardHeader>
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
                   <Smartphone className="h-6 w-6 transition-transform group-hover:scale-110" />
@@ -185,7 +185,7 @@ export default function LandingPage() {
 
             {/* PLANO FREE */}
             {plans.free.active && (
-              <Card className="app-panel-subtle z-0 rounded-4xl border-[color:var(--app-panel-border)] shadow-sm transition-all duration-300 hover:border-primary/25 hover:shadow-md md:scale-90 md:hover:scale-95">
+              <Card className="app-panel-subtle z-0 rounded-4xl border-color:var(--app-panel-border) shadow-sm transition-all duration-300 hover:border-primary/25 hover:shadow-md md:scale-90 md:hover:scale-95">
                 <CardHeader className="p-8 pb-0">
                   <div className="flex items-center justify-between gap-3">
                     <CardTitle className="text-xl font-bold  flex items-center gap-2">
@@ -207,7 +207,7 @@ export default function LandingPage() {
                 </CardContent>
                 <CardFooter className="p-8 pt-0">
                   <Link href={primaryHref} className="w-full">
-                    <Button className="h-12 w-full rounded-2xl border border-[color:var(--app-panel-border)] bg-card text-foreground shadow-sm transition-all duration-200 hover:scale-105 hover:bg-accent active:scale-95">
+                    <Button className="h-12 w-full rounded-2xl border border-color:var(--app-panel-border) bg-card text-foreground shadow-sm transition-all duration-200 hover:scale-105 hover:bg-accent active:scale-95">
                       {hasSession ? "Abrir painel" : "Começar no Free"}
                     </Button>
                   </Link>
@@ -255,7 +255,7 @@ export default function LandingPage() {
 
             {/* PLANO PRO */}
             {plans.pro.active && (
-              <Card className="app-panel-subtle z-0 rounded-4xl border-[color:var(--app-panel-border)] shadow-sm transition-all duration-300 hover:border-primary/25 hover:shadow-md md:scale-90 md:hover:scale-95">
+              <Card className="app-panel-subtle z-0 rounded-4xl border-color:var(--app-panel-border) shadow-sm transition-all duration-300 hover:border-primary/25 hover:shadow-md md:scale-90 md:hover:scale-95">
                 <CardHeader className="p-8 pb-0">
                   <div className="flex justify-between items-center mb-2">
                     <CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
@@ -278,7 +278,7 @@ export default function LandingPage() {
                 </CardContent>
                 <CardFooter className="p-8 pt-0">
                   <Button
-                    className="h-12 w-full rounded-2xl border border-[color:var(--app-panel-border)] bg-card text-foreground shadow-sm transition-all duration-200 hover:scale-105 hover:bg-accent active:scale-95"
+                    className="h-12 w-full rounded-2xl border border-color:var(--app-panel-border) bg-card text-foreground shadow-sm transition-all duration-200 hover:scale-105 hover:bg-accent active:scale-95"
                     variant="outline"
                     disabled={isOpeningCheckout !== null}
                     onClick={() => void handlePlanCheckout("pro")}

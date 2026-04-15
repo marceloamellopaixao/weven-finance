@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyRequestAuth } from "@/lib/auth/server";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { syncFromWebhook } from "@/lib/billing/mercadopago";
+import { requireAccessResource } from "@/lib/access-control/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
-
-type StaffRole = "admin" | "moderator" | "support" | "client";
 
 type ReconcileCandidate = {
   id: string;
@@ -18,20 +16,6 @@ type ReconcileCandidate = {
   status: string;
   raw: Record<string, unknown>;
 };
-
-async function getAuthContext(request: NextRequest) {
-  const decoded = await verifyRequestAuth(request);
-  const rows = await supabaseSelect("profiles", { filters: { uid: decoded.uid }, limit: 1 });
-  if (rows.length === 0) throw new Error("user_not_found");
-  const row = rows[0];
-  const raw = (row.raw as Record<string, unknown> | null) ?? {};
-  const role = String(row.role || raw.role || "client") as StaffRole;
-  return { uid: decoded.uid, role };
-}
-
-function isManager(role: StaffRole) {
-  return role === "admin" || role === "moderator";
-}
 
 function parseTopic(value: unknown): ReconcileCandidate["topic"] | null {
   if (value === "payment" || value === "merchant_order" || value === "preapproval") {
@@ -90,20 +74,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const auth = await getAuthContext(request);
+    const { auth } = await requireAccessResource(request, "admin.billing_jobs", "write");
     uid = auth.uid;
-    if (!isManager(auth.role)) {
-      await writeApiMetric({
-        route: meta.route,
-        method: meta.method,
-        status: 403,
-        durationMs: Date.now() - startedAt,
-        requestId: meta.requestId,
-        uid,
-        errorCode: "forbidden",
-      });
-      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
-    }
 
     const limit = Math.min(Math.max(Number(request.nextUrl.searchParams.get("limit") || "25"), 1), 100);
     const onlyFailed = request.nextUrl.searchParams.get("onlyFailed") === "true";

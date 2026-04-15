@@ -8,23 +8,28 @@ import { writeApiMetric } from "@/lib/observability/metrics";
 import { permanentlyDeleteUserData, setArchivedStateForUserData } from "@/lib/account-archive/server";
 import { computePermanentDeleteAt, isDeletionWindowExpired, resolvePermanentDeleteAt } from "@/lib/account-deletion/policy";
 import { readSecureProfilePayload, writeSecureProfilePayload } from "@/lib/secure-store/profile";
+import {
+  CREATOR_SUPREME_UID,
+  getServerAccessControlConfig,
+  isAccessAllowed,
+  ServerAccessProfile,
+} from "@/lib/access-control/server";
 import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
 import { deleteSupabaseAuthUser, isUuid, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
 
-type UserRole = "admin" | "moderator" | "support" | "client";
-
-async function getAuthContext(request: NextRequest) {
+async function getAuthContext(request: NextRequest): Promise<ServerAccessProfile> {
   const decoded = await verifyRequestAuth(request);
-  const rows = await supabaseSelect("profiles", { filters: { uid: decoded.uid }, limit: 1 });
+  const rows = await supabaseSelect("profiles", { select: "uid,role,plan,raw", filters: { uid: decoded.uid }, limit: 1 });
   if (rows.length === 0) throw new Error("user_not_found");
   const row = rows[0];
   const raw = (row.raw as Record<string, unknown> | null) ?? {};
-  const role = String(row.role || raw.role || "client") as UserRole;
-  return { uid: decoded.uid, role };
-}
-
-function isManager(role: UserRole) {
-  return role === "admin" || role === "moderator";
+  const rawPlan = row.plan ?? raw.plan;
+  return {
+    uid: decoded.uid,
+    role: String(row.role || raw.role || "client"),
+    plan: rawPlan === "premium" || rawPlan === "pro" ? rawPlan : "free",
+    isSupremeAdmin: decoded.uid === CREATOR_SUPREME_UID,
+  };
 }
 
 async function deleteAllTransactions(uid: string) {
@@ -86,7 +91,8 @@ export async function GET(request: NextRequest) {
     }
 
     const auth = await getAuthContext(request);
-    if (!isManager(auth.role)) {
+    const accessControl = await getServerAccessControlConfig();
+    if (!isAccessAllowed(auth, accessControl, "admin.users.read", "read")) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
@@ -185,7 +191,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     const auth = await getAuthContext(request);
-    if (!isManager(auth.role)) {
+    const accessControl = await getServerAccessControlConfig();
+    if (!isAccessAllowed(auth, accessControl, "admin.users.write", "write")) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
@@ -197,7 +204,7 @@ export async function PATCH(request: NextRequest) {
     if (!body.uid || !body.updates) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
-    if (body.requiresAdmin && auth.role !== "admin") {
+    if (body.requiresAdmin && !isAccessAllowed(auth, accessControl, "admin.users.write", "write")) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
@@ -266,7 +273,8 @@ export async function POST(request: NextRequest) {
     }
 
     const auth = await getAuthContext(request);
-    if (!isManager(auth.role)) {
+    const accessControl = await getServerAccessControlConfig();
+    if (!isAccessAllowed(auth, accessControl, "admin.users.read", "read")) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
@@ -277,7 +285,7 @@ export async function POST(request: NextRequest) {
     };
 
     if (body.action === "normalize") {
-      if (auth.role !== "admin") {
+      if (!isAccessAllowed(auth, accessControl, "admin.users.write", "write")) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
       const snapshot = await supabaseSelect("profiles");
@@ -326,6 +334,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.action === "resetFinancialData") {
+      if (!isAccessAllowed(auth, accessControl, "admin.users.delete", "write")) {
+        return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+      }
       const deleted = await deleteAllTransactions(body.uid);
       await supabaseUpsertRows("profiles", [{ uid: body.uid, transaction_count: 0, updated_at: new Date().toISOString() }], {
         onConflict: "uid",
@@ -346,7 +357,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.action === "softDelete") {
-      if (auth.role !== "admin") {
+      if (!isAccessAllowed(auth, accessControl, "admin.users.delete", "write")) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
       const deletedAt = new Date().toISOString();
@@ -398,6 +409,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.action === "restore") {
+      if (!isAccessAllowed(auth, accessControl, "admin.restore.write", "write")) {
+        return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+      }
       const profileRows = await supabaseSelect("profiles", { filters: { uid: body.uid }, limit: 1 });
       const currentRaw = ((profileRows[0]?.raw as Record<string, unknown> | undefined) ?? {});
       const deletedAt =
@@ -452,7 +466,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.action === "permanentDelete") {
-      if (auth.role !== "admin") {
+      if (!isAccessAllowed(auth, accessControl, "admin.restore.delete", "write")) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
 
@@ -496,6 +510,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.action === "recountTransactionCount") {
+      if (!isAccessAllowed(auth, accessControl, "admin.users.write", "write")) {
+        return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+      }
       const rows = await supabaseSelect("transactions", {
         select: "source_id",
         filters: { uid: body.uid },

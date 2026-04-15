@@ -1,9 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePlans } from "@/hooks/usePlans";
-import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import {
   fetchAdminUsersPage,
   updateUserStatus,
@@ -19,7 +18,7 @@ import {
   getStaffUsers,
   downloadAdminCsv,
 } from "@/services/userService";
-import { updateFeatureAccessConfig, updatePlansConfig } from "@/services/systemService";
+import { getAccessControlConfig, updateAccessControlConfig, updatePlansConfig } from "@/services/systemService";
 import {
   UserProfile,
   UserStatus,
@@ -28,13 +27,16 @@ import {
   UserPaymentStatus,
 } from "@/types/user";
 import {
-  FeatureAccessConfig,
-  ManagedFeatureGrant,
-  ManagedFeatureKey,
-  ManagedFeatureScope,
+  AccessControlConfig,
+  AccessPermissionLevel,
+  AccessResourceKey,
+  AccessRoleDefinition,
+  AccessSubjectType,
+  DEFAULT_ACCESS_CONTROL_CONFIG,
   PlansConfig,
   PlanDetails,
 } from "@/types/system";
+import { ACCESS_RESOURCE_LABEL_BY_KEY, ACCESS_SCREENS, hasAccess } from "@/lib/access-control/config";
 import { computePermanentDeleteAt } from "@/lib/account-deletion/policy";
 import { cn } from "@/lib/utils";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -81,6 +83,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   User,
   ShieldAlert,
@@ -95,6 +98,7 @@ import {
   User as UserIcon,
   CreditCard,
   Wrench,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ArchiveRestore,
@@ -112,7 +116,7 @@ import {
   Download,
   FilterX,
 } from "lucide-react";
-import { deleteTicket, fetchSupportTicketsPage, markSupportTicketsAsSeen, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
+import { deleteTicket, FeatureRequestStatus, fetchSupportTicketsPage, markSupportTicketsAsSeen, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
 import { DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@radix-ui/react-dropdown-menu";
 import {
@@ -131,6 +135,10 @@ type FeedbackData = {
   title: string;
   message: string;
 };
+
+type AccessEditorLevel = AccessPermissionLevel | "inherit";
+type AdminPermissionArea = "users" | "support" | "restore" | "metrics" | "plans" | "audit" | "permissions";
+type AdminPermissionMinimum = "read" | "write" | "full";
 
 type AdminAuditLog = {
   id: string;
@@ -182,19 +190,6 @@ type AdminHealth = {
   apiAvgLatency1h: number;
 };
 
-const FEATURE_LABELS: Record<ManagedFeatureKey, string> = {
-  installments: "Parcelamentos e lançamentos fixos",
-  monthlyForecast: "Previsão de fechamento do mês",
-  smartDailyLimit: "Limite diário inteligente",
-};
-
-const FEATURE_SCOPE_LABELS: Record<ManagedFeatureScope, string> = {
-  all: "Todos os planos",
-  free: "Free",
-  premium: "Premium",
-  pro: "Pro",
-};
-
 function formatDateSafe(value: unknown) {
   if (value instanceof Date) return value.toLocaleDateString();
   if (typeof value === "string") {
@@ -217,6 +212,56 @@ const CREATOR_SUPREME = "Z3ciyXudWuZZywhojA6iWJTurH52";
 const ADMIN_USERS_FILTERS_STORAGE_KEY = "wevenfinance:admin:users-filters:v1";
 const ADMIN_SUPPORT_FILTERS_STORAGE_KEY = "wevenfinance:admin:support-filters:v1";
 const ADMIN_AUDIT_FILTERS_STORAGE_KEY = "wevenfinance:admin:audit-filters:v1";
+const ADMIN_DIALOG_CONTENT_CLASS = "app-panel-soft w-[calc(100vw-1rem)] max-h-[calc(100svh-2rem)] overflow-y-auto rounded-3xl border border-color:var(--app-panel-border) p-5 shadow-2xl shadow-primary/10 sm:p-6";
+
+type TicketPriority = NonNullable<SupportTicket["priority"]>;
+type TicketStatus = SupportRequestStatus | FeatureRequestStatus;
+
+const SUPPORT_STATUS_OPTIONS: Array<{ value: SupportRequestStatus; label: string }> = [
+  { value: "pending", label: "Pendente" },
+  { value: "in_progress", label: "Em Progresso" },
+  { value: "resolved", label: "Resolvido" },
+  { value: "rejected", label: "Rejeitado" },
+];
+
+const FEATURE_STATUS_OPTIONS: Array<{ value: FeatureRequestStatus; label: string }> = [
+  { value: "pending", label: "Pendente" },
+  { value: "under_review", label: "Em Análise" },
+  { value: "approved", label: "Aprovado" },
+  { value: "rejected", label: "Rejeitado" },
+  { value: "implemented", label: "Implementado" },
+];
+
+const TICKET_PRIORITY_OPTIONS: Array<{ value: TicketPriority; label: string }> = [
+  { value: "low", label: "Baixa" },
+  { value: "medium", label: "Média" },
+  { value: "high", label: "Alta" },
+  { value: "urgent", label: "Urgente" },
+];
+
+const ACCESS_SUBJECT_LABELS: Record<AccessSubjectType, string> = {
+  global: "Todos",
+  plan: "Plano",
+  role: "Cargo",
+  user: "Usuário",
+};
+
+const ACCESS_LEVEL_LABELS: Record<AccessPermissionLevel, string> = {
+  none: "Sem acesso",
+  read: "Read",
+  write: "Write",
+  full: "Full",
+};
+
+const ADMIN_RESOURCE_ACCESS: Record<AdminPermissionArea, { read: AccessResourceKey; write?: AccessResourceKey; delete?: AccessResourceKey }> = {
+  users: { read: "admin.users.read", write: "admin.users.write", delete: "admin.users.delete" },
+  support: { read: "admin.support.read", write: "admin.support.write", delete: "admin.support.delete" },
+  restore: { read: "admin.restore.read", write: "admin.restore.write", delete: "admin.restore.delete" },
+  metrics: { read: "admin.metrics.read" },
+  plans: { read: "admin.plans.read", write: "admin.plans.write" },
+  audit: { read: "admin.audit.read" },
+  permissions: { read: "admin.permissions.read", write: "admin.permissions.write", delete: "admin.permissions.delete" },
+};
 
 function getAdminTabButtonClass(active: boolean) {
   return cn(
@@ -298,7 +343,6 @@ function AdminPageLoadingShell() {
 export default function AdminPage() {
   const { user, userProfile, loading } = useAuth();
   const { plans } = usePlans();
-  const { featureAccess } = useFeatureAccess();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -329,6 +373,7 @@ export default function AdminPage() {
   const [staffMembers, setStaffMembers] = useState<UserProfile[]>([]);
   const [viewTicket, setViewTicket] = useState<SupportTicket | null>(null);
   const [ticketToDelete, setTicketToDelete] = useState<SupportTicket | null>(null);
+  const [restoreDetailsUser, setRestoreDetailsUser] = useState<UserProfile | null>(null);
   const [isMarkingSupportSeen, setIsMarkingSupportSeen] = useState(false);
   const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
   const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
@@ -390,14 +435,46 @@ export default function AdminPage() {
 
   // Plans
   const [editedPlans, setEditedPlans] = useState<PlansConfig | null>(null);
-  const [editedFeatureAccess, setEditedFeatureAccess] = useState<FeatureAccessConfig | null>(null);
+  const [editedAccessControl, setEditedAccessControl] = useState<AccessControlConfig | null>(null);
   const [isSavingPlans, setIsSavingPlans] = useState(false);
+  const [isSavingAccessControl, setIsSavingAccessControl] = useState(false);
+  const [accessSubjectType, setAccessSubjectType] = useState<AccessSubjectType>("plan");
+  const [accessSubjectId, setAccessSubjectId] = useState("free");
 
   // --- Permissões ---
-  const canManageSensitive = userProfile?.role === "admin";
-  const canRestore = userProfile?.role === "admin" || userProfile?.role === "moderator";
-  const canImpersonateUsers =
-    userProfile?.role === "admin" || userProfile?.role === "moderator" || userProfile?.role === "support";
+  const isSupremeAdmin = userProfile?.uid === CREATOR_SUPREME;
+  const accessControlConfig = editedAccessControl ?? DEFAULT_ACCESS_CONTROL_CONFIG;
+  const hasAdminPermission = useCallback((
+    resource: AdminPermissionArea,
+    minimum: AdminPermissionMinimum = "read"
+  ) => {
+    if (!userProfile) return false;
+    if (isSupremeAdmin) return true;
+    if (userProfile.role === "client") return false;
+
+    const mapped = ADMIN_RESOURCE_ACCESS[resource];
+    const accessResource =
+      minimum === "full" ? mapped.delete ?? mapped.write ?? mapped.read :
+      minimum === "write" ? mapped.write ?? mapped.read :
+      mapped.read;
+
+    return hasAccess(accessControlConfig, {
+      uid: userProfile.uid,
+      plan: userProfile.plan,
+      role: userProfile.role,
+    }, accessResource, minimum === "read" ? "read" : "write");
+  }, [accessControlConfig, isSupremeAdmin, userProfile]);
+  const canManageSensitive = hasAdminPermission("plans", "write");
+  const canViewPermissions = hasAdminPermission("permissions", "read");
+  const canManagePermissions = hasAdminPermission("permissions", "write");
+  const canDeletePermissions = hasAdminPermission("permissions", "full");
+  const canDeleteRecords =
+    canDeletePermissions ||
+    hasAdminPermission("users", "full") ||
+    hasAdminPermission("support", "full") ||
+    hasAdminPermission("restore", "full");
+  const canRestore = hasAdminPermission("restore", "read");
+  const canImpersonateUsers = hasAdminPermission("users", "write") || hasAdminPermission("support", "write");
 
   const unseenSupportTickets = useMemo(() => {
     if (!userProfile) return [];
@@ -409,17 +486,16 @@ export default function AdminPage() {
 
   const allowedTabs = useMemo(() => {
     if (!userProfile) return ["users", "support", "audit"];
-    const tabs = ["support", "audit"];
-    if (userProfile.role === "admin" || userProfile.role === "moderator") {
-      tabs.unshift("users");
-      tabs.push("restore");
-      tabs.push("metrics");
-    }
-    if (userProfile.role === "admin") {
-      tabs.push("plans");
-    }
+    const tabs: string[] = [];
+    if (hasAdminPermission("users", "read")) tabs.push("users");
+    if (hasAdminPermission("support", "read")) tabs.push("support");
+    if (hasAdminPermission("restore", "read")) tabs.push("restore");
+    if (hasAdminPermission("audit", "read")) tabs.push("audit");
+    if (hasAdminPermission("metrics", "read")) tabs.push("metrics");
+    if (hasAdminPermission("plans", "read")) tabs.push("plans");
+    if (hasAdminPermission("permissions", "read")) tabs.push("permissions");
     return tabs;
-  }, [userProfile]);
+  }, [hasAdminPermission, userProfile]);
 
   const setActiveTabAndPersist = useCallback((tab: string) => {
     setActiveTab(tab);
@@ -440,6 +516,7 @@ export default function AdminPage() {
   // Permissão de Visualização na Tabela de Usuários
   const canViewRole = useCallback((targetRole: UserRole) => {
     if (!userProfile) return false;
+    if (hasAdminPermission("users", "read")) return true;
     if (userProfile.role === "admin") return true;
 
     // Moderador vê Cliente e Suporte
@@ -447,15 +524,16 @@ export default function AdminPage() {
       return targetRole === "client" || targetRole === "support";
     };
 
-    // Suporte não tem acesso à tabela de usuários
+    // Suporte não tem acesso Ã  tabela de usuários
     return false;
-  }, [userProfile]);
+  }, [hasAdminPermission, userProfile]);
 
   // Permissão de Edição de Cargo
   const canEditRole = useCallback((targetUser: UserProfile) => {
     if (!userProfile) return false;
     if (targetUser.uid === userProfile.uid) return false; // Não edita a si mesmo
     if (targetUser.uid === CREATOR_SUPREME) return false; // Não edita o Criador Supremo
+    if (hasAdminPermission("users", "write")) return true;
 
     if (userProfile.role === 'admin') {
       if (userProfile.uid === CREATOR_SUPREME) return true; // Criador edita tudo
@@ -469,24 +547,25 @@ export default function AdminPage() {
     };
 
     return false;
-  }, [userProfile]);
+  }, [hasAdminPermission, userProfile]);
 
   // Permissão de Edição de Plano/Status
   const canEditPlan = useCallback((targetUser: UserProfile) => {
     if (!userProfile) return false;
     if (targetUser.uid === userProfile.uid) return userProfile.role === "admin";
+    if (hasAdminPermission("users", "write")) return true;
 
-    const hierarchy = { admin: 3, moderator: 2, support: 1, client: 0 };
-    const myRank = hierarchy[userProfile.role];
-    const targetRank = hierarchy[targetUser.role];
+    const hierarchy: Record<string, number> = { admin: 3, moderator: 2, support: 1, client: 0 };
+    const myRank = hierarchy[userProfile.role] ?? 0;
+    const targetRank = hierarchy[targetUser.role] ?? 0;
 
     // Só pode editar se tiver hierarquia maior e não for o Criador Supremo
     if (userProfile.uid === CREATOR_SUPREME) return true;
 
     return myRank > targetRank;
-  }, [userProfile]);
+  }, [hasAdminPermission, userProfile]);
 
-  // PERMISSÕES no usuário (Bloquear, Resetar, Deletar)
+  // PERMISSÃ•ES no usuário (Bloquear, Resetar, Deletar)
   const canEditUser = useCallback((targetUser: UserProfile) => {
     if (!userProfile) return false;
 
@@ -495,29 +574,32 @@ export default function AdminPage() {
 
     // Criador Supremo pode se editar
     if (userProfile.uid === CREATOR_SUPREME) return true;
+    if (hasAdminPermission("users", "write")) return true;
 
-    const hierarchy: Record<UserRole, number> = { admin: 3, moderator: 2, support: 1, client: 0 };
-    const myRank = hierarchy[userProfile.role];
-    const targetRank = hierarchy[targetUser.role];
+    const hierarchy: Record<string, number> = { admin: 3, moderator: 2, support: 1, client: 0 };
+    const myRank = hierarchy[userProfile.role] ?? 0;
+    const targetRank = hierarchy[targetUser.role] ?? 0;
 
     // Criador supremo edita todos
     if (userProfile.uid === CREATOR_SUPREME) return true;
 
     // Regra geral: Só edita quem está abaixo na hierarquia
     return myRank > targetRank;
-  }, [userProfile]);
+  }, [hasAdminPermission, userProfile]);
 
   const canResetUser = useCallback((targetUser: UserProfile) => {
     if (!userProfile) return false;
+    if (!canDeleteRecords) return false;
     if (targetUser.uid === userProfile.uid) return userProfile.uid === CREATOR_SUPREME;
     return canEditUser(targetUser);
-  }, [canEditUser, userProfile]);
+  }, [canDeleteRecords, canEditUser, userProfile]);
 
   const canDeleteUser = useCallback((targetUser: UserProfile) => {
     if (!userProfile) return false;
+    if (!canDeleteRecords) return false;
     if (targetUser.uid === userProfile.uid) return false;
     return canEditUser(targetUser);
-  }, [canEditUser, userProfile]);
+  }, [canDeleteRecords, canEditUser, userProfile]);
 
   const canToggleUserStatus = useCallback((targetUser: UserProfile) => {
     if (!userProfile) return false;
@@ -527,20 +609,47 @@ export default function AdminPage() {
 
   // --- Guards ---
   useEffect(() => {
-    if (!loading) {
-      if (userProfile?.role !== "admin" && userProfile?.role !== "moderator" && userProfile?.role !== "support") {
-        router.push("/");
-      }
+    if (loading || !userProfile) return;
+    if (userProfile.role === "client") {
+      router.push("/");
+      return;
     }
-  }, [userProfile, loading, router]);
+    if (!editedAccessControl) return;
+    if (allowedTabs.length === 0) router.push("/");
+  }, [allowedTabs.length, editedAccessControl, userProfile, loading, router]);
 
   useEffect(() => {
     if (plans) setEditedPlans(plans);
   }, [plans]);
 
   useEffect(() => {
-    if (featureAccess) setEditedFeatureAccess(featureAccess);
-  }, [featureAccess]);
+    if (!userProfile || userProfile.role === "client") return;
+    let cancelled = false;
+    void getAccessControlConfig().then((config) => {
+      if (!cancelled) setEditedAccessControl(config);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userProfile]);
+
+  useEffect(() => {
+    if (accessSubjectType === "global") {
+      setAccessSubjectId("all");
+      return;
+    }
+    if (accessSubjectType === "plan" && !["free", "premium", "pro"].includes(accessSubjectId)) {
+      setAccessSubjectId("free");
+      return;
+    }
+    if (accessSubjectType === "role" && editedAccessControl && !editedAccessControl.roles.some((role) => role.key === accessSubjectId)) {
+      setAccessSubjectId(editedAccessControl.roles[0]?.key || "client");
+      return;
+    }
+    if (accessSubjectType === "user" && !accessSubjectId && users[0]?.uid) {
+      setAccessSubjectId(users[0].uid);
+    }
+  }, [accessSubjectId, accessSubjectType, editedAccessControl, users]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -686,7 +795,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (loading || !userProfile) return;
     if (userProfile.role !== "admin" && userProfile.role !== "moderator") return;
-    if (activeTab !== "users" && activeTab !== "restore") return;
+    if (activeTab !== "users" && activeTab !== "restore" && activeTab !== "permissions") return;
 
     let cancelled = false;
     const loadUsers = async () => {
@@ -860,6 +969,15 @@ export default function AdminPage() {
     if (priority === "medium") return "bg-amber-500 text-white";
     return "bg-zinc-500 text-white";
   };
+
+  const isTicketFinalStatus = (status: SupportTicket["status"]) =>
+    status === "resolved" || status === "implemented" || status === "rejected";
+
+  const canEditTicketStatus = (ticket: SupportTicket) => {
+    return userProfile?.role === "admin" || !isTicketFinalStatus(ticket.status);
+  };
+
+  const canEditTicketPriority = userProfile?.role === "admin" || userProfile?.role === "moderator";
 
   const parseIsoToMs = (value?: string | Date | null) => {
     if (!value) return 0;
@@ -1200,9 +1318,11 @@ export default function AdminPage() {
     }
   };
 
-  const handleChangeTicketStatus = async (ticketId: string, status: string) => {
+  const handleChangeTicketStatus = async (ticketId: string, status: TicketStatus) => {
     try {
-      await updateTicket(ticketId, { status: status as SupportRequestStatus });
+      await updateTicket(ticketId, { status } as Partial<SupportTicket>);
+      setTickets((prev) => prev.map((ticket) => (ticket.id === ticketId ? { ...ticket, status } : ticket)));
+      setViewTicket((ticket) => (ticket?.id === ticketId ? { ...ticket, status } : ticket));
     } catch {
       showFeedback('error', 'Erro', 'Falha ao atualizar status.');
     }
@@ -1210,10 +1330,12 @@ export default function AdminPage() {
 
   const handleChangeTicketPriority = async (
     ticketId: string,
-    priority: "low" | "medium" | "high" | "urgent"
+    priority: TicketPriority
   ) => {
     try {
       await updateTicket(ticketId, { priority } as Partial<SupportTicket>);
+      setTickets((prev) => prev.map((ticket) => (ticket.id === ticketId ? { ...ticket, priority } : ticket)));
+      setViewTicket((ticket) => (ticket?.id === ticketId ? { ...ticket, priority } : ticket));
     } catch {
       showFeedback('error', 'Erro', 'Falha ao atualizar prioridade.');
     }
@@ -1221,6 +1343,11 @@ export default function AdminPage() {
 
   const handleDeleteTicket = async () => {
     if (!ticketToDelete) return;
+    if (!canDeleteRecords) {
+      showFeedback('error', 'Acesso negado', 'Somente o ADMIN Supremo pode excluir registros.');
+      setTicketToDelete(null);
+      return;
+    }
     try {
       await deleteTicket(ticketToDelete.id);
       showFeedback('success', 'Excluído', 'O chamado foi removido permanentemente.');
@@ -1362,6 +1489,11 @@ export default function AdminPage() {
 
   const confirmResetData = async () => {
     if (!userToReset) return;
+    if (!canDeleteRecords) {
+      showFeedback('error', 'Acesso negado', 'Somente o ADMIN Supremo pode resetar dados.');
+      setUserToReset(null);
+      return;
+    }
     await resetUserFinancialData(userToReset.uid);
     setUserToReset(null);
     showFeedback('success', 'Dados Resetados', 'Todas as transações do usuário foram apagadas permanentemente.');
@@ -1376,6 +1508,11 @@ export default function AdminPage() {
 
   const confirmDeleteUser = async () => {
     if (!userToDelete) return;
+    if (!canDeleteRecords) {
+      showFeedback('error', 'Acesso negado', 'Somente o ADMIN Supremo pode arquivar contas.');
+      setUserToDelete(null);
+      return;
+    }
     try {
       const data = { name: userToDelete.displayName, email: userToDelete.email };
       await softDeleteUser(userToDelete.uid);
@@ -1389,6 +1526,11 @@ export default function AdminPage() {
 
   const confirmPermanentDeleteUser = async () => {
     if (!userToPermanentDelete) return;
+    if (!canDeleteRecords) {
+      showFeedback('error', 'Acesso negado', 'Somente o ADMIN Supremo pode excluir permanentemente.');
+      setUserToPermanentDelete(null);
+      return;
+    }
     try {
       await permanentlyDeleteUser(userToPermanentDelete.uid);
       showFeedback('success', 'Exclusão Permanente Concluída', `A conta de ${userToPermanentDelete.displayName} foi removida definitivamente, incluindo o login.`);
@@ -1427,56 +1569,133 @@ export default function AdminPage() {
     });
   };
 
-  const handleFeatureGrantEdit = (
+  const getDefaultAccessSubjectId = useCallback((subjectType: AccessSubjectType) => {
+    if (subjectType === "global") return "all";
+    if (subjectType === "plan") return "free";
+    if (subjectType === "role") return editedAccessControl?.roles[0]?.key || "client";
+    return users[0]?.uid || "";
+  }, [editedAccessControl?.roles, users]);
+
+  const handleAccessSubjectTypeChange = (subjectType: AccessSubjectType) => {
+    setAccessSubjectType(subjectType);
+    setAccessSubjectId(getDefaultAccessSubjectId(subjectType));
+  };
+
+  const handleAccessRoleEdit = (
     index: number,
-    field: keyof ManagedFeatureGrant,
-    value: string | boolean | null
+    field: keyof AccessRoleDefinition,
+    value: string | boolean
   ) => {
-    if (!editedFeatureAccess) return;
-    setEditedFeatureAccess({
-      grants: editedFeatureAccess.grants.map((grant, grantIndex) =>
-        grantIndex === index ? { ...grant, [field]: value } : grant
+    if (!editedAccessControl || !canManagePermissions) return;
+    setEditedAccessControl({
+      ...editedAccessControl,
+      roles: editedAccessControl.roles.map((role, roleIndex) =>
+        roleIndex === index ? { ...role, [field]: value } : role
       ),
     });
   };
 
-  const handleAddFeatureGrant = () => {
-    if (!editedFeatureAccess) return;
-    setEditedFeatureAccess({
-      grants: [
-        ...editedFeatureAccess.grants,
+  const handleAddAccessRole = () => {
+    if (!editedAccessControl || !canManagePermissions) return;
+    const id = crypto.randomUUID();
+    setEditedAccessControl({
+      ...editedAccessControl,
+      roles: [
+        ...editedAccessControl.roles,
         {
-          id: crypto.randomUUID(),
-          feature: "installments",
-          scope: "free",
-          label: "",
+          id,
+          key: `role_${id.slice(0, 6)}`,
+          name: "Novo cargo",
+          description: "",
           active: true,
-          startsAt: null,
-          endsAt: null,
+          system: false,
         },
       ],
     });
   };
 
-  const handleRemoveFeatureGrant = (id: string) => {
-    if (!editedFeatureAccess) return;
-    setEditedFeatureAccess({
-      grants: editedFeatureAccess.grants.filter((grant) => grant.id !== id),
+  const handleRemoveAccessRole = (key: string) => {
+    if (!editedAccessControl || !canDeletePermissions) return;
+    setEditedAccessControl({
+      roles: editedAccessControl.roles.filter((role) => role.key !== key || role.system),
+      rules: editedAccessControl.rules.filter((rule) => rule.subjectType !== "role" || rule.subjectId !== key),
     });
   };
 
-  const savePlans = async () => {
-    if (!editedPlans || !editedFeatureAccess) return;
-    setIsSavingPlans(true);
+  const getAccessRuleForSelection = useCallback((resource: AccessResourceKey) => {
+    const subjectId = accessSubjectType === "global" ? "all" : accessSubjectId;
+    return editedAccessControl?.rules.find(
+      (rule) =>
+        rule.subjectType === accessSubjectType &&
+        rule.subjectId === subjectId &&
+        rule.resource === resource
+    ) ?? null;
+  }, [accessSubjectId, accessSubjectType, editedAccessControl?.rules]);
+
+  const getAccessEditorLevel = useCallback((resource: AccessResourceKey): AccessEditorLevel => {
+    const rule = getAccessRuleForSelection(resource);
+    if (!rule || !rule.active) return "inherit";
+    return rule.level;
+  }, [getAccessRuleForSelection]);
+
+  const handleAccessLevelChange = (resource: AccessResourceKey, level: AccessEditorLevel) => {
+    if (!editedAccessControl || !canManagePermissions) return;
+    const subjectId = accessSubjectType === "global" ? "all" : accessSubjectId;
+    if (!subjectId) return;
+    const existing = getAccessRuleForSelection(resource);
+
+    setEditedAccessControl({
+      ...editedAccessControl,
+      rules: existing
+        ? editedAccessControl.rules.map((rule) =>
+            rule.id === existing.id
+              ? {
+                  ...rule,
+                  active: level !== "inherit",
+                  level: level === "inherit" ? rule.level : level,
+                }
+              : rule
+          )
+        : [
+            ...editedAccessControl.rules,
+            {
+              id: crypto.randomUUID(),
+              subjectType: accessSubjectType,
+              subjectId,
+              resource,
+              level: level === "inherit" ? "read" : level,
+              label: "",
+              active: level !== "inherit",
+              startsAt: null,
+              endsAt: null,
+            },
+          ],
+    });
+  };
+
+  const saveAccessControl = async () => {
+    if (!editedAccessControl) return;
+    setIsSavingAccessControl(true);
     try {
-      await Promise.all([
-        updatePlansConfig(editedPlans),
-        updateFeatureAccessConfig(editedFeatureAccess),
-      ]);
-      showFeedback('success', 'Configurações Atualizadas', 'Planos e liberações promocionais foram salvos com sucesso.');
+      await updateAccessControlConfig(editedAccessControl);
+      showFeedback("success", "Permissões Atualizadas", "As permissões do SaaS foram salvas.");
     } catch (error) {
       console.error(error);
-      showFeedback('error', 'Erro ao Salvar', 'Não foi possível atualizar os planos e liberações.');
+      showFeedback("error", "Erro ao Salvar", "Não foi possível atualizar as permissões.");
+    } finally {
+      setIsSavingAccessControl(false);
+    }
+  };
+
+  const savePlans = async () => {
+    if (!editedPlans) return;
+    setIsSavingPlans(true);
+    try {
+      await updatePlansConfig(editedPlans);
+      showFeedback('success', 'Configurações Atualizadas', 'Planos foram salvos com sucesso.');
+    } catch (error) {
+      console.error(error);
+      showFeedback('error', 'Erro ao Salvar', 'Não foi possível atualizar os planos.');
     } finally {
       setIsSavingPlans(false);
     }
@@ -1486,10 +1705,10 @@ export default function AdminPage() {
   const filteredUsers = useMemo(() => {
     const list = users.filter((u) => u.status !== "deleted" && canViewRole(u.role));
 
-    const rolePriority: Record<UserRole, number> = {
+    const rolePriority: Record<string, number> = {
       admin: 1, moderator: 2, support: 3, client: 4
     };
-    return list.sort((a, b) => rolePriority[a.role] - rolePriority[b.role]);
+    return list.sort((a, b) => (rolePriority[a.role] ?? 99) - (rolePriority[b.role] ?? 99));
   }, [users, canViewRole]);
 
   const handleExportUsersCsv = useCallback(async () => {
@@ -1591,12 +1810,14 @@ export default function AdminPage() {
     setSupportPage(1);
   }, [supportTypeFilter, supportStatusFilter, supportPriorityFilter, supportSearch]);
 
-  const hasAdminAccess =
-    userProfile?.role === "admin" ||
-    userProfile?.role === "moderator" ||
-    userProfile?.role === "support";
+  const hasAdminAccess = Boolean(userProfile && userProfile.role !== "client" && allowedTabs.length > 0);
+  const shouldLoadAdminConfig = Boolean(userProfile && userProfile.role !== "client");
 
-  if (loading || (user && !userProfile) || !editedPlans || (canManageSensitive && !editedFeatureAccess)) {
+  if (
+    loading ||
+    (user && !userProfile) ||
+    (shouldLoadAdminConfig && (!editedAccessControl || !editedPlans))
+  ) {
     return <AdminPageLoadingShell />;
   }
 
@@ -1623,7 +1844,7 @@ export default function AdminPage() {
             <p className="text-muted-foreground">Controle total da plataforma.</p>
           </div>
 
-          {canManageSensitive && activeTab === 'users' && (
+          {hasAdminPermission("users", "write") && activeTab === 'users' && (
             <Button
               onClick={() => setShowNormalizeConfirm(true)}
               disabled={isNormalizing}
@@ -1650,27 +1871,29 @@ export default function AdminPage() {
 
         <div className={`${fadeInUp} delay-150 space-y-6`}>
           {/* Navegação de Abas Moderna */}
-          <div className="app-panel-subtle grid min-w-full grid-cols-1 gap-1 rounded-2xl border border-color:var(--app-panel-border) p-1.5 shadow-sm sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+          <div className="app-panel-subtle grid min-w-full grid-cols-1 gap-1 rounded-2xl border border-color:var(--app-panel-border) p-1.5 shadow-sm sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
             {/* Aba Usuários: Apenas Admin e Moderator */}
-            {(userProfile?.role === 'admin' || userProfile?.role === 'moderator') && (
+            {hasAdminPermission("users", "read") && (
               <button type="button" aria-pressed={activeTab === "users"} onClick={() => setActiveTabAndPersist("users")} className={getAdminTabButtonClass(activeTab === "users")}>
                 <UserIcon className="h-4 w-4" /> Gerenciar Usuários
               </button>
             )}
 
             {/* Aba Suporte: Todos da Equipe */}
-            <button type="button"
-              aria-pressed={activeTab === "support"}
-              onClick={() => setActiveTabAndPersist("support")}
-              className={getAdminTabButtonClass(activeTab === "support")}
-            >
-              <HeadphonesIcon className="h-4 w-4" /> Suporte & Ideias
-              {unseenSupportCount > 0 && (
-                <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">
-                  {unseenSupportCount > 99 ? "99+" : unseenSupportCount}
-                </span>
-              )}
-            </button>
+            {hasAdminPermission("support", "read") && (
+              <button type="button"
+                aria-pressed={activeTab === "support"}
+                onClick={() => setActiveTabAndPersist("support")}
+                className={getAdminTabButtonClass(activeTab === "support")}
+              >
+                <HeadphonesIcon className="h-4 w-4" /> Suporte & Ideias
+                {unseenSupportCount > 0 && (
+                  <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">
+                    {unseenSupportCount > 99 ? "99+" : unseenSupportCount}
+                  </span>
+                )}
+              </button>
+            )}
 
             {canRestore && (
               <button type="button" aria-pressed={activeTab === "restore"} onClick={() => setActiveTabAndPersist("restore")} className={getAdminTabButtonClass(activeTab === "restore")}>
@@ -1679,17 +1902,24 @@ export default function AdminPage() {
             )}
 
 
-            {canManageSensitive && (
+            {hasAdminPermission("plans", "read") && (
               <button type="button" aria-pressed={activeTab === "plans"} onClick={() => setActiveTabAndPersist("plans")} className={getAdminTabButtonClass(activeTab === "plans")}>
                 <CreditCard className="h-4 w-4" /> Gerenciar Planos
               </button>
             )}
 
-            {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
-              <>
+            {canManagePermissions && (
+              <button type="button" aria-pressed={activeTab === "permissions"} onClick={() => setActiveTabAndPersist("permissions")} className={getAdminTabButtonClass(activeTab === "permissions")}>
+                <Lock className="h-4 w-4" /> Permissões
+              </button>
+            )}
+
+            {hasAdminPermission("audit", "read") && (
                 <button type="button" aria-pressed={activeTab === "audit"} onClick={() => setActiveTabAndPersist("audit")} className={getAdminTabButtonClass(activeTab === "audit")}>
                   <ShieldCheck className="h-4 w-4" /> Auditoria
                 </button>
+            )}
+            {hasAdminPermission("metrics", "read") && (
                 <button type="button" aria-pressed={activeTab === "metrics"} onClick={() => setActiveTabAndPersist("metrics")} className={getAdminTabButtonClass(activeTab === "metrics")}>
                   <Calculator className="h-4 w-4" /> Métricas
                   {criticalMetricsAlerts.length > 0 && (
@@ -1698,12 +1928,11 @@ export default function AdminPage() {
                     </span>
                   )}
                 </button>
-              </>
             )}
           </div>
 
           {/* --- SUPPORT TAB --- */}
-          {activeTab === "support" && (
+          {activeTab === "support" && hasAdminPermission("support", "read") && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                 <CardHeader className="app-panel-subtle border-b border-border/70 px-6 py-4">
@@ -1937,7 +2166,7 @@ export default function AdminPage() {
                                     </DropdownMenuSub>
                                   )}
 
-                                  {userProfile?.role === 'admin' && (
+                                  {canDeleteRecords && (
                                     <>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
@@ -2171,7 +2400,7 @@ export default function AdminPage() {
                                         </DropdownMenuSub>
                                       )}
 
-                                      {userProfile?.role === 'admin' && (
+                                      {canDeleteRecords && (
                                         <>
                                           <DropdownMenuSeparator />
                                           <DropdownMenuItem
@@ -2223,7 +2452,7 @@ export default function AdminPage() {
           )}
 
           {/* --- AUDIT TAB --- */}
-          {activeTab === "audit" && (
+          {activeTab === "audit" && hasAdminPermission("audit", "read") && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                 <CardHeader className="app-panel-subtle border-b border-border/70 px-6 py-4">
@@ -2388,7 +2617,7 @@ export default function AdminPage() {
           )}
 
           {/* --- METRICS TAB --- */}
-          {activeTab === "metrics" && (
+          {activeTab === "metrics" && hasAdminPermission("metrics", "read") && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                 <CardHeader className="app-panel-subtle border-b border-border/70 px-6 py-4">
@@ -2569,7 +2798,7 @@ export default function AdminPage() {
           )}
 
           {/* --- USERS TAB --- */}
-          {activeTab === "users" && (
+          {activeTab === "users" && hasAdminPermission("users", "read") && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               {/* Filtros e Busca */}
               <div className="space-y-2">
@@ -2604,9 +2833,9 @@ export default function AdminPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos os Cargos</SelectItem>
-                      <SelectItem value="admin">Administradores</SelectItem>
-                      <SelectItem value="moderator">Moderadores</SelectItem>
-                      <SelectItem value="client">Clientes</SelectItem>
+                      {accessControlConfig.roles.map((role) => (
+                        <SelectItem key={role.key} value={role.key}>{role.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
 
@@ -2711,7 +2940,7 @@ export default function AdminPage() {
                                       <User className="mr-2 h-4 w-4" /> Impersonar
                                     </DropdownMenuItem>
                                   )}
-                                  {canManageSensitive && (
+                                  {canDeleteRecords && (
                                     <>
                                       <DropdownMenuItem
                                         onClick={() => setUserToReset(u)}
@@ -2756,15 +2985,14 @@ export default function AdminPage() {
                                   <Select value={u.role} onValueChange={(val) => handleRoleChange(u.uid, val)}>
                                     <SelectTrigger className="w-full h-8 text-xs rounded-lg"><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="client">Cliente</SelectItem>
-                                      <SelectItem value="support">Suporte</SelectItem>
-                                      <SelectItem value="moderator">Moderador</SelectItem>
-                                      <SelectItem value="admin">Admin</SelectItem>
+                                      {accessControlConfig.roles.map((role) => (
+                                        <SelectItem key={role.key} value={role.key}>{role.name}</SelectItem>
+                                      ))}
                                     </SelectContent>
                                   </Select>
                                 ) : (
                                   <Badge variant="secondary" className="mt-1">
-                                    {u.role === 'client' ? 'Cliente' : u.role === 'support' ? 'Suporte' : u.role === 'moderator' ? 'Moderador' : 'Admin'}
+                                    {accessControlConfig.roles.find((role) => role.key === u.role)?.name || u.role}
                                   </Badge>
                                 )}
                               </div>
@@ -2890,15 +3118,14 @@ export default function AdminPage() {
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="client">Cliente</SelectItem>
-                                      <SelectItem value="support">Suporte</SelectItem>
-                                      <SelectItem value="moderator">Moderador</SelectItem>
-                                      <SelectItem value="admin">Admin</SelectItem>
+                                      {accessControlConfig.roles.map((role) => (
+                                        <SelectItem key={role.key} value={role.key}>{role.name}</SelectItem>
+                                      ))}
                                     </SelectContent>
                                   </Select>
                                 ) : (
                                   <div className="flex items-center gap-1 text-xs text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-lg w-fit cursor-not-allowed">
-                                    <Lock className="h-3 w-3" /> {u.role === 'client' ? 'Cliente' : u.role === 'support' ? 'Suporte' : u.role === 'moderator' ? 'Moderador' : 'Admin'}
+                                    <Lock className="h-3 w-3" /> {accessControlConfig.roles.find((role) => role.key === u.role)?.name || u.role}
                                   </div>
                                 )}
                               </TableCell>
@@ -3004,7 +3231,7 @@ export default function AdminPage() {
                                           </DropdownMenuItem>
                                         </>
                                       )}
-                                      {canManageSensitive && (
+                                      {canDeleteRecords && (
                                         <>
                                           <DropdownMenuItem
                                             onClick={() => setUserToReset(u)}
@@ -3082,13 +3309,17 @@ export default function AdminPage() {
                               <DropdownMenuContent align="end" className="rounded-xl border-orange-100 dark:border-orange-900/30">
                                 <DropdownMenuLabel className="text-orange-700 dark:text-orange-400">Ações de Restauração</DropdownMenuLabel>
                                 <DropdownMenuSeparator className="bg-orange-100 dark:bg-orange-900/30" />
+                                <DropdownMenuItem onClick={() => setRestoreDetailsUser(u)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
+                                  <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator className="bg-orange-100 dark:bg-orange-900/30" />
                                 <DropdownMenuItem disabled={isRestoreExpired(u)} onClick={() => handleRestoreUser(u, false)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
                                   <UserIcon className="mr-2 h-4 w-4" /> Restaurar Somente a Conta
                                 </DropdownMenuItem>
                                 <DropdownMenuItem disabled={isRestoreExpired(u)} onClick={() => handleRestoreUser(u, true)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
                                   <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar Conta e Dados
                                 </DropdownMenuItem>
-                                {canManageSensitive && (
+                                {canDeleteRecords && (
                                   <DropdownMenuItem
                                     onClick={() => setUserToPermanentDelete(u)}
                                     className="cursor-pointer rounded-lg text-xs font-medium text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20"
@@ -3159,13 +3390,17 @@ export default function AdminPage() {
                                   <DropdownMenuContent align="end" className="rounded-xl border-orange-100 dark:border-orange-900/30">
                                     <DropdownMenuLabel className="text-orange-700 dark:text-orange-400">Ações de Restauração</DropdownMenuLabel>
                                     <DropdownMenuSeparator className="bg-orange-100 dark:bg-orange-900/30" />
+                                    <DropdownMenuItem onClick={() => setRestoreDetailsUser(u)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
+                                      <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator className="bg-orange-100 dark:bg-orange-900/30" />
                                     <DropdownMenuItem disabled={isRestoreExpired(u)} onClick={() => handleRestoreUser(u, false)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
                                       <UserIcon className="mr-2 h-4 w-4" /> Restaurar Somente a Conta
                                     </DropdownMenuItem>
                                     <DropdownMenuItem disabled={isRestoreExpired(u)} onClick={() => handleRestoreUser(u, true)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
                                       <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar Conta e Dados
                                     </DropdownMenuItem>
-                                    {canManageSensitive && (
+                                    {canDeleteRecords && (
                                       <DropdownMenuItem
                                         onClick={() => setUserToPermanentDelete(u)}
                                         className="cursor-pointer rounded-lg text-xs font-medium text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20"
@@ -3188,7 +3423,7 @@ export default function AdminPage() {
           )}
 
           {/* --- PLANS TAB --- */}
-          {activeTab === "plans" && canManageSensitive && (
+          {activeTab === "plans" && canManageSensitive && editedPlans && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <div className="flex justify-end mb-4">
                 <Button
@@ -3335,135 +3570,253 @@ export default function AdminPage() {
                 )}
               </div>
 
-              {editedFeatureAccess && (
+            </div>
+          )}
+
+          {activeTab === "permissions" && canViewPermissions && editedAccessControl && (
+            <div className={`${fadeInUp} delay-200 space-y-4`}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground">Controle de Acesso</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Escolha um plano, cargo ou usuário e defina o que ele pode fazer em cada tela.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button type="button" variant="outline" className="rounded-xl" onClick={handleAddAccessRole} disabled={!canManagePermissions}>
+                    Novo cargo
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={saveAccessControl}
+                    disabled={!canManagePermissions || isSavingAccessControl}
+                    className="rounded-xl"
+                  >
+                    {isSavingAccessControl ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Salvar Permissões
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[380px_1fr]">
                 <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                   <CardHeader className="app-panel-subtle border-b border-color:var(--app-panel-border)">
-                    <CardTitle className="text-lg font-semibold text-foreground">
-                      Liberações Promocionais de Funcionalidades
+                    <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                      <Lock className="h-5 w-5 text-primary" /> Cargos da plataforma
                     </CardTitle>
                     <CardDescription>
-                      Use esta área para liberar recursos por plano ou para todos os usuários, de forma permanente ou por tempo limitado.
+                      Cargo é o conjunto base de acesso para equipe interna e usuários customizados.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="p-6 space-y-4">
-                    {editedFeatureAccess.grants.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-color:var(--app-panel-border) p-6 text-center text-sm text-muted-foreground">
-                        Nenhuma liberação promocional configurada. Adicione uma regra para liberar recursos temporariamente sem mexer no plano base.
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {editedFeatureAccess.grants.map((grant, index) => (
-                          <div key={grant.id} className="app-panel-subtle space-y-4 rounded-2xl border border-color:var(--app-panel-border) p-4">
-                            <div className="flex items-center justify-between gap-4">
-                              <div>
-                                <p className="font-semibold text-foreground">
-                                  {FEATURE_LABELS[grant.feature]} para {FEATURE_SCOPE_LABELS[grant.scope]}
-                                </p>
-                                <p className="text-xs text-zinc-500">
-                                  Se não houver datas, a liberação fica permanente até você desligar.
-                                </p>
+                  <CardContent className="space-y-3 p-4">
+                    {editedAccessControl.roles.map((role, index) => (
+                      <Collapsible key={role.id} className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
+                        <div className="flex items-center justify-between gap-3 p-4">
+                          <CollapsibleTrigger asChild>
+                            <button type="button" className="group flex min-w-0 flex-1 items-center gap-3 text-left">
+                              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                              <div className="min-w-0">
+                                <p className="truncate font-semibold text-foreground">{role.name}</p>
+                                <p className="truncate font-mono text-[11px] text-muted-foreground">{role.key}</p>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <Switch
-                                  checked={grant.active}
-                                  onCheckedChange={(checked) => handleFeatureGrantEdit(index, "active", checked)}
-                                />
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="rounded-xl text-red-600 border-red-200 hover:bg-red-50"
-                                  onClick={() => handleRemoveFeatureGrant(grant.id)}
-                                >
-                                  Remover
-                                </Button>
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                              <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase text-zinc-400">Funcionalidade</Label>
-                                <Select
-                                  value={grant.feature}
-                                  onValueChange={(value) => handleFeatureGrantEdit(index, "feature", value as ManagedFeatureKey)}
-                                >
-                                  <SelectTrigger className="rounded-xl h-10">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="installments">{FEATURE_LABELS.installments}</SelectItem>
-                                    <SelectItem value="monthlyForecast">{FEATURE_LABELS.monthlyForecast}</SelectItem>
-                                    <SelectItem value="smartDailyLimit">{FEATURE_LABELS.smartDailyLimit}</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-
-                              <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase text-zinc-400">Escopo</Label>
-                                <Select
-                                  value={grant.scope}
-                                  onValueChange={(value) => handleFeatureGrantEdit(index, "scope", value as ManagedFeatureScope)}
-                                >
-                                  <SelectTrigger className="rounded-xl h-10">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="all">Todos os planos</SelectItem>
-                                    <SelectItem value="free">Free</SelectItem>
-                                    <SelectItem value="premium">Premium</SelectItem>
-                                    <SelectItem value="pro">Pro</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-
-                              <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase text-zinc-400">Início</Label>
-                                <Input
-                                  type="datetime-local"
-                                  className="rounded-xl h-10"
-                                  value={grant.startsAt ? grant.startsAt.slice(0, 16) : ""}
-                                  onChange={(e) => handleFeatureGrantEdit(index, "startsAt", e.target.value ? new Date(e.target.value).toISOString() : null)}
-                                />
-                              </div>
-
-                              <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase text-zinc-400">Fim</Label>
-                                <Input
-                                  type="datetime-local"
-                                  className="rounded-xl h-10"
-                                  value={grant.endsAt ? grant.endsAt.slice(0, 16) : ""}
-                                  onChange={(e) => handleFeatureGrantEdit(index, "endsAt", e.target.value ? new Date(e.target.value).toISOString() : null)}
-                                />
-                              </div>
-                            </div>
-
+                            </button>
+                          </CollapsibleTrigger>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Badge variant="secondary" className="rounded-full">{role.system ? "Sistema" : "Custom"}</Badge>
+                            <Switch
+                              checked={role.active}
+                              onCheckedChange={(checked) => handleAccessRoleEdit(index, "active", checked)}
+                              disabled={!canManagePermissions}
+                            />
+                          </div>
+                        </div>
+                        <CollapsibleContent>
+                          <div className="space-y-3 border-t border-color:var(--app-panel-border) p-4 pt-3">
                             <div className="space-y-2">
-                              <Label className="text-xs font-bold uppercase text-zinc-400">Rótulo interno</Label>
+                              <Label className="text-xs font-bold uppercase text-muted-foreground">Chave interna</Label>
                               <Input
-                                className="rounded-xl h-10"
-                                value={grant.label || ""}
-                                onChange={(e) => handleFeatureGrantEdit(index, "label", e.target.value)}
-                                placeholder="Ex: Promo de aniversário · 90 dias"
+                                value={role.key}
+                                disabled={role.system || !canManagePermissions}
+                                onChange={(event) => handleAccessRoleEdit(index, "key", event.target.value)}
+                                className="h-10 rounded-xl font-mono text-xs"
                               />
                             </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase text-muted-foreground">Nome do cargo</Label>
+                              <Input
+                                value={role.name}
+                                disabled={!canManagePermissions}
+                                onChange={(event) => handleAccessRoleEdit(index, "name", event.target.value)}
+                                className="h-10 rounded-xl"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase text-muted-foreground">Descrição</Label>
+                              <Input
+                                value={role.description || ""}
+                                disabled={!canManagePermissions}
+                                onChange={(event) => handleAccessRoleEdit(index, "description", event.target.value)}
+                                className="h-10 rounded-xl"
+                              />
+                            </div>
+                            {!role.system && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={!canDeletePermissions}
+                                className="w-full rounded-xl border-red-200 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-45"
+                                onClick={() => handleRemoveAccessRole(role.key)}
+                              >
+                                Remover cargo
+                              </Button>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="flex justify-end">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="rounded-xl"
-                        onClick={handleAddFeatureGrant}
-                      >
-                        Nova liberação
-                      </Button>
-                    </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ))}
                   </CardContent>
                 </Card>
-              )}
+
+                <div className="space-y-4">
+                  <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
+                    <CardHeader className="app-panel-subtle border-b border-color:var(--app-panel-border)">
+                      <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                        <ShieldCheck className="h-5 w-5 text-primary" /> Quem recebe o acesso?
+                      </CardTitle>
+                      <CardDescription>
+                        Plano define o padrão. Cargo define equipe ou perfil customizado. Usuário sobrescreve tudo para uma pessoa específica.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-4 p-4 lg:grid-cols-[1fr_1.2fr]">
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {Object.entries(ACCESS_SUBJECT_LABELS).map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => handleAccessSubjectTypeChange(value as AccessSubjectType)}
+                            className={cn(
+                              "rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition-colors",
+                              accessSubjectType === value
+                                ? "border-primary/50 bg-primary/10 text-primary"
+                                : "border-color:var(--app-panel-border) bg-card/50 text-muted-foreground hover:bg-accent"
+                            )}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase text-muted-foreground">Alvo configurado</Label>
+                        {accessSubjectType === "plan" ? (
+                          <Select value={accessSubjectId} onValueChange={setAccessSubjectId}>
+                            <SelectTrigger className="h-11 rounded-xl">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="free">Free</SelectItem>
+                              <SelectItem value="premium">Premium</SelectItem>
+                              <SelectItem value="pro">Pro</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : accessSubjectType === "role" ? (
+                          <Select value={accessSubjectId} onValueChange={setAccessSubjectId}>
+                            <SelectTrigger className="h-11 rounded-xl">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {editedAccessControl.roles.map((role) => (
+                                <SelectItem key={role.key} value={role.key}>{role.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : accessSubjectType === "user" ? (
+                          <Select value={accessSubjectId || undefined} onValueChange={setAccessSubjectId}>
+                            <SelectTrigger className="h-11 rounded-xl">
+                              <SelectValue placeholder={isLoadingUsers ? "Carregando usuários..." : "Selecionar usuário"} />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-80">
+                              {users.map((user) => (
+                                <SelectItem key={user.uid} value={user.uid}>
+                                  {user.displayName || user.email || user.uid}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input value="Todos os usuários" disabled className="h-11 rounded-xl" />
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <div className="space-y-4">
+                    {ACCESS_SCREENS.map((screen) => (
+                      <Collapsible key={screen.id} className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
+                        <CollapsibleTrigger asChild>
+                          <button type="button" className="group flex w-full flex-col gap-3 app-panel-subtle px-5 py-4 text-left transition-colors hover:bg-accent/70 md:flex-row md:items-start md:justify-between">
+                            <div className="flex min-w-0 gap-3">
+                              <ChevronDown className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <CardTitle className="text-lg font-semibold text-foreground">{screen.label}</CardTitle>
+                                  <Badge variant="secondary" className="rounded-full">{screen.resources.length} funcionalidades</Badge>
+                                </div>
+                                <CardDescription className="mt-1">{screen.description}</CardDescription>
+                              </div>
+                            </div>
+                            <Badge variant="secondary" className="w-fit rounded-full font-mono text-[11px]">{screen.route}</Badge>
+                          </button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <CardContent className="divide-y divide-border p-0">
+                            {screen.resources.map((resource) => {
+                              const value = getAccessEditorLevel(resource.key);
+                              const explicitRule = getAccessRuleForSelection(resource.key);
+                              const inheritedLabel = ACCESS_RESOURCE_LABEL_BY_KEY[resource.key] || resource.label;
+                              return (
+                                <div key={resource.key} className="grid gap-3 p-4 md:grid-cols-[1fr_190px] md:items-center">
+                                  <div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="font-semibold text-foreground">{resource.label}</p>
+                                      {value === "inherit" ? (
+                                        <Badge variant="secondary" className="rounded-full">Herdando</Badge>
+                                      ) : (
+                                        <Badge className="rounded-full bg-primary/10 text-primary hover:bg-primary/10">{ACCESS_LEVEL_LABELS[value]}</Badge>
+                                      )}
+                                    </div>
+                                    <p className="mt-1 text-sm text-muted-foreground">{resource.description}</p>
+                                    {explicitRule?.label && (
+                                      <p className="mt-1 text-xs text-muted-foreground">Regra: {explicitRule.label}</p>
+                                    )}
+                                    <p className="mt-1 font-mono text-[11px] text-muted-foreground">{inheritedLabel}</p>
+                                  </div>
+                                  <Select
+                                    value={value}
+                                    disabled={!canManagePermissions}
+                                    onValueChange={(nextValue) => handleAccessLevelChange(resource.key, nextValue as AccessEditorLevel)}
+                                  >
+                                    <SelectTrigger className="h-11 rounded-xl">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="inherit">Herdar</SelectItem>
+                                      {Object.entries(ACCESS_LEVEL_LABELS).map(([level, label]) => (
+                                        <SelectItem key={level} value={level}>{label}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              );
+                            })}
+                          </CardContent>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -3471,7 +3824,7 @@ export default function AdminPage() {
 
       {/* Modal Genérico de Feedback */}
       <Dialog open={feedbackModal.isOpen} onOpenChange={(open) => !open && setFeedbackModal({ ...feedbackModal, isOpen: false })}>
-        <DialogContent className="rounded-2xl sm:max-w-[400px]">
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} sm:max-w-[400px]`}>
           <DialogHeader>
             <div className={`mx-auto p-3 rounded-full mb-2 w-fit ${feedbackModal.type === 'success' ? 'bg-emerald-100 text-emerald-600' : feedbackModal.type === 'error' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
               {feedbackModal.type === 'success' ? <CheckCircle2 className="h-6 w-6" /> : feedbackModal.type === 'error' ? <AlertTriangle className="h-6 w-6" /> : <Info className="h-6 w-6" />}
@@ -3489,7 +3842,7 @@ export default function AdminPage() {
 
       {/* Modal Confirmação Normalização */}
       <Dialog open={showNormalizeConfirm} onOpenChange={setShowNormalizeConfirm}>
-        <DialogContent className="w-[calc(100vw-1rem)] max-w-[460px] rounded-2xl">
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} max-w-[460px]`}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-600">
               <Wrench className="h-5 w-5" /> Normalizar Banco de Dados?
@@ -3509,7 +3862,7 @@ export default function AdminPage() {
 
       {/* Modal Confirmação Restauração */}
       <Dialog open={!!userToRestore} onOpenChange={(open) => !open && setUserToRestore(null)}>
-        <DialogContent className="w-[calc(100vw-1rem)] max-w-[460px] rounded-2xl">
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} max-w-[460px]`}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-orange-600">
               <ArchiveRestore className="h-5 w-5" /> Confirmar Restauração
@@ -3527,9 +3880,92 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!restoreDetailsUser} onOpenChange={(open) => !open && setRestoreDetailsUser(null)}>
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} sm:max-w-[620px]`}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-600">
+              <ArchiveRestore className="h-5 w-5" /> Detalhes da Conta Arquivada
+            </DialogTitle>
+            <DialogDescription>
+              Consulte o prazo, plano anterior e ações disponíveis antes de restaurar ou excluir definitivamente.
+            </DialogDescription>
+          </DialogHeader>
+          {restoreDetailsUser && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                <div className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Usuário</p>
+                  <p className="mt-2 wrap-break-words font-semibold text-foreground">{restoreDetailsUser.displayName}</p>
+                </div>
+                <div className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Email</p>
+                  <p className="mt-2 wrap-break-words text-muted-foreground">{restoreDetailsUser.email}</p>
+                </div>
+                <div className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Prazo de Restauração</p>
+                  <p className="mt-2 font-semibold text-foreground">
+                    {isRestoreExpired(restoreDetailsUser) ? "Prazo expirado" : getRestoreDeadlineLabel(restoreDetailsUser)}
+                  </p>
+                </div>
+                <div className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Plano Anterior</p>
+                  <p className="mt-2 font-semibold uppercase text-foreground">{restoreDetailsUser.plan}</p>
+                </div>
+                <div className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4 sm:col-span-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Registros Arquivados</p>
+                  <p className="mt-2 font-semibold text-foreground">
+                    {Number.isNaN(restoreDetailsUser.transactionCount) ? "..." : (restoreDetailsUser.transactionCount ?? "...")}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button variant="ghost" onClick={() => setRestoreDetailsUser(null)} className="rounded-xl hover:cursor-pointer">Fechar</Button>
+            {restoreDetailsUser && (
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  variant="outline"
+                  disabled={isRestoreExpired(restoreDetailsUser)}
+                  onClick={() => {
+                    handleRestoreUser(restoreDetailsUser, false);
+                    setRestoreDetailsUser(null);
+                  }}
+                  className="rounded-xl"
+                >
+                  Restaurar Conta
+                </Button>
+                <Button
+                  disabled={isRestoreExpired(restoreDetailsUser)}
+                  onClick={() => {
+                    handleRestoreUser(restoreDetailsUser, true);
+                    setRestoreDetailsUser(null);
+                  }}
+                  className="rounded-xl bg-orange-600 text-white hover:bg-orange-700"
+                >
+                  Restaurar Conta e Dados
+                </Button>
+                {canDeleteRecords && (
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      setUserToPermanentDelete(restoreDetailsUser);
+                      setRestoreDetailsUser(null);
+                    }}
+                    className="rounded-xl"
+                  >
+                    Excluir Permanentemente
+                  </Button>
+                )}
+              </div>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal Resetar Dados */}
       <Dialog open={!!userToReset} onOpenChange={(open) => !open && setUserToReset(null)}>
-        <DialogContent className="w-[calc(100vw-1rem)] max-w-[460px] rounded-2xl">
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} max-w-[460px]`}>
           <DialogHeader>
             <DialogTitle>Resetar Dados?</DialogTitle>
             <DialogDescription>Confirme para apagar todas as transações.</DialogDescription>
@@ -3543,7 +3979,7 @@ export default function AdminPage() {
 
       {/* Modal Excluir Usuário */}
       <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
-        <DialogContent className="w-[calc(100vw-1rem)] max-w-[460px] rounded-2xl">
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} max-w-[460px]`}>
           <DialogHeader>
             <DialogTitle>Excluir Conta?</DialogTitle>
             <DialogDescription>Confirme para encerrar a conta e arquivar todos os dados do cliente.</DialogDescription>
@@ -3557,7 +3993,7 @@ export default function AdminPage() {
 
       {/* Modal Sucesso Exclusão */}
       <Dialog open={!!deletedUserData} onOpenChange={(open) => !open && setDeletedUserData(null)}>
-        <DialogContent className="w-[calc(100vw-1rem)] max-w-[460px] rounded-3xl">
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} max-w-[460px]`}>
           <DialogHeader>
             <div className="mx-auto bg-emerald-100 dark:bg-emerald-900/30 p-3 rounded-full w-fit mb-2">
               <CheckCircle2 className="h-8 w-8 text-emerald-600" />
@@ -3567,7 +4003,7 @@ export default function AdminPage() {
               A conta foi encerrada, arquivada e removida da lista ativa.
             </DialogDescription>
           </DialogHeader>
-          <div className="bg-zinc-50 dark:bg-zinc-800/50 p-4 rounded-2xl space-y-2 border border-zinc-100 dark:border-zinc-800">
+          <div className="app-panel-subtle space-y-2 rounded-2xl border border-color:var(--app-panel-border) p-4">
             <p className="text-sm"><strong>Nome:</strong> {deletedUserData?.name}</p>
             <p className="text-sm"><strong>E-mail:</strong> {deletedUserData?.email}</p>
           </div>
@@ -3578,7 +4014,7 @@ export default function AdminPage() {
       </Dialog>
 
       <Dialog open={!!userToPermanentDelete} onOpenChange={(open) => !open && setUserToPermanentDelete(null)}>
-        <DialogContent className="w-[calc(100vw-1rem)] max-w-[460px] rounded-2xl">
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} max-w-[460px]`}>
           <DialogHeader>
             <DialogTitle className="text-red-600">Excluir Permanentemente?</DialogTitle>
             <DialogDescription>
@@ -3594,7 +4030,7 @@ export default function AdminPage() {
 
       {/* Modal Reativar */}
       <Dialog open={!!userToReactivate} onOpenChange={(open) => !open && cancelReactivateUser()}>
-        <DialogContent className="rounded-2xl">
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} max-w-[460px]`}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-emerald-600">
               <CheckCircle2 className="h-5 w-5 mb-2" /> Reativar Acesso?
@@ -3612,7 +4048,7 @@ export default function AdminPage() {
 
       {/* Modal Bloquear */}
       <Dialog open={!!userToBlock} onOpenChange={(open) => !open && cancelBlockUser()}>
-        <DialogContent className="rounded-2xl">
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} max-w-[520px]`}>
           <DialogHeader>
             <DialogTitle>Bloquear Usuário</DialogTitle>
             <DialogDescription>Você está suspendendo o acesso.</DialogDescription>
@@ -3641,7 +4077,7 @@ export default function AdminPage() {
 
       {/* Modal Detalhes do Chamado */}
       <Dialog open={!!viewTicket} onOpenChange={(open) => !open && setViewTicket(null)}>
-        <DialogContent className="rounded-2xl">
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} sm:max-w-[720px]`}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {viewTicket?.type === 'feature' ? (
@@ -3654,34 +4090,58 @@ export default function AdminPage() {
           </DialogHeader>
           {viewTicket && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
                 <div>
                   <span className="font-semibold block">Solicitante:</span>
-                  <span className="text-zinc-600">{viewTicket.name}</span>
+                  <span className="wrap-break-words text-muted-foreground">{viewTicket.name}</span>
                 </div>
                 <div>
                   <span className="font-semibold block">Email:</span>
-                  <span className="text-zinc-600">{viewTicket.email}</span>
+                  <span className="wrap-break-words text-muted-foreground">{viewTicket.email}</span>
                 </div>
                 <div>
                   <span className="font-semibold block">Data:</span>
-                  <span className="text-zinc-600">
+                  <span className="text-muted-foreground">
                     {formatDateSafe(viewTicket.createdAt)}
                   </span>
                 </div>
                 <div>
-                  <span className="font-semibold block">Status Atual:</span>
-                  <Badge variant="secondary" className="mt-1">{formatTicketStatus(viewTicket.status)}</Badge>
+                  <Label className="font-semibold">Status Atual:</Label>
+                  <Select
+                    value={viewTicket.status}
+                    onValueChange={(value) => void handleChangeTicketStatus(viewTicket.id, value as TicketStatus)}
+                    disabled={!canEditTicketStatus(viewTicket)}
+                  >
+                    <SelectTrigger className="mt-1 h-10 rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(viewTicket.type === "feature" ? FEATURE_STATUS_OPTIONS : SUPPORT_STATUS_OPTIONS).map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <span className="font-semibold block">Protocolo:</span>
-                  <span className="text-zinc-600">{viewTicket.protocol || `#${viewTicket.id.slice(0, 8)}`}</span>
+                  <span className="wrap-break-words text-muted-foreground">{viewTicket.protocol || `#${viewTicket.id.slice(0, 8)}`}</span>
                 </div>
                 <div>
-                  <span className="font-semibold block">Prioridade:</span>
-                  <Badge className={`mt-1 ${getTicketPriorityTone(viewTicket.priority)}`}>
-                    {getTicketPriorityLabel(viewTicket.priority)}
-                  </Badge>
+                  <Label className="font-semibold">Prioridade:</Label>
+                  <Select
+                    value={viewTicket.priority || "low"}
+                    onValueChange={(value) => void handleChangeTicketPriority(viewTicket.id, value as TicketPriority)}
+                    disabled={!canEditTicketPriority}
+                  >
+                    <SelectTrigger className="mt-1 h-10 rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TICKET_PRIORITY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 {viewTicket.supportKind === "account_restore" && (
                   <div>
@@ -3692,9 +4152,9 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
-              <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+              <div className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
                 <span className="font-semibold block text-sm mb-2">Mensagem:</span>
-                <p className="text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                <p className="whitespace-pre-wrap wrap-break-words text-sm leading-relaxed text-muted-foreground">
                   {viewTicket.message}
                 </p>
               </div>
@@ -3708,7 +4168,7 @@ export default function AdminPage() {
 
       {/* Modal Excluir Ticket */}
       <Dialog open={!!ticketToDelete} onOpenChange={(open) => !open && setTicketToDelete(null)}>
-        <DialogContent className="rounded-2xl sm:max-w-[400px]">
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} sm:max-w-[400px]`}>
           <DialogHeader>
             <DialogTitle className="text-red-600 flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" /> Excluir Chamado

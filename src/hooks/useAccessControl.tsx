@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { DEFAULT_FEATURE_ACCESS_CONFIG, FeatureAccessConfig } from "@/types/system";
+import { useCallback, useEffect, useState } from "react";
+import { AccessPermissionLevel, AccessResourceKey } from "@/types/system";
+import { ACCESS_LEVEL_RANK } from "@/lib/access-control/config";
 import { getMyAccessControl } from "@/services/systemService";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
 
@@ -12,8 +13,8 @@ function shouldPollNow() {
   return document.visibilityState === "visible";
 }
 
-export function useFeatureAccess() {
-  const [featureAccess, setFeatureAccess] = useState<FeatureAccessConfig>(DEFAULT_FEATURE_ACCESS_CONFIG);
+export function useAccessControl() {
+  const [access, setAccess] = useState<Partial<Record<AccessResourceKey, AccessPermissionLevel>>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,15 +23,9 @@ export function useFeatureAccess() {
       if (!shouldPollNow()) return;
       try {
         const data = await getMyAccessControl();
-        if (!cancelled) {
-          setFeatureAccess(data.featureAccess);
-          setLoading(false);
-        }
-      } catch {
-        if (!cancelled) {
-          setFeatureAccess(DEFAULT_FEATURE_ACCESS_CONFIG);
-          setLoading(false);
-        }
+        if (!cancelled) setAccess(data.access);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
 
@@ -48,5 +43,13 @@ export function useFeatureAccess() {
     };
   }, []);
 
-  return { featureAccess, loading };
+  const can = useCallback(
+    (resource: AccessResourceKey, minimum: AccessPermissionLevel = "read") => {
+      const level = access[resource] ?? "none";
+      return ACCESS_LEVEL_RANK[level] >= ACCESS_LEVEL_RANK[minimum];
+    },
+    [access]
+  );
+
+  return { access, can, loading };
 }

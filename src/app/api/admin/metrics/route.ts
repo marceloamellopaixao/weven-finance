@@ -1,25 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyRequestAuth } from "@/lib/auth/server";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
+import { requireAccessResource } from "@/lib/access-control/server";
 import { supabaseSelect } from "@/services/supabase/admin";
-
-type StaffRole = "admin" | "moderator" | "support" | "client";
-
-async function getAuthContext(request: NextRequest) {
-  const decoded = await verifyRequestAuth(request);
-  const rows = await supabaseSelect("profiles", { filters: { uid: decoded.uid }, limit: 1 });
-  if (rows.length === 0) throw new Error("user_not_found");
-  const row = rows[0];
-  const raw = (row.raw as Record<string, unknown> | null) ?? {};
-  const role = String(row.role || raw.role || "client") as StaffRole;
-  return { uid: decoded.uid, role };
-}
-
-function isManager(role: StaffRole) {
-  return role === "admin" || role === "moderator";
-}
 
 type MetricsAlert = {
   code: string;
@@ -40,10 +24,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const auth = await getAuthContext(request);
-    if (!isManager(auth.role)) {
-      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
-    }
+    await requireAccessResource(request, "admin.metrics.read", "read");
 
     const windowMinutes = Math.min(Math.max(Number(request.nextUrl.searchParams.get("windowMinutes") || "60"), 5), 1440);
     const cutoff = new Date(Date.now() - windowMinutes * 60_000).toISOString();

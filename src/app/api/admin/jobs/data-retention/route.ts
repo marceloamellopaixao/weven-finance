@@ -1,27 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyRequestAuth } from "@/lib/auth/server";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { runDeletedAccountGraceCleanup } from "@/lib/account-archive/server";
-import { supabaseRpc, supabaseSelect } from "@/services/supabase/admin";
-
-type StaffRole = "admin" | "moderator" | "support" | "client";
-
-async function getAuthContext(request: NextRequest) {
-  const decoded = await verifyRequestAuth(request);
-  const rows = await supabaseSelect("profiles", { filters: { uid: decoded.uid }, limit: 1 });
-  if (rows.length === 0) throw new Error("user_not_found");
-  const row = rows[0];
-  const raw = (row.raw as Record<string, unknown> | null) ?? {};
-  const role = String(row.role || raw.role || "client") as StaffRole;
-  return { uid: decoded.uid, role };
-}
-
-function isAdmin(role: StaffRole) {
-  return role === "admin";
-}
+import { requireAccessResource } from "@/lib/access-control/server";
+import { supabaseRpc } from "@/services/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,20 +28,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const auth = await getAuthContext(request);
+    const { auth } = await requireAccessResource(request, "admin.retention_jobs", "write");
     uid = auth.uid;
-    if (!isAdmin(auth.role)) {
-      await writeApiMetric({
-        route: meta.route,
-        method: meta.method,
-        status: 403,
-        durationMs: Date.now() - startedAt,
-        requestId: meta.requestId,
-        uid,
-        errorCode: "forbidden",
-      });
-      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
-    }
 
     const [result, deletedAccounts] = await Promise.all([
       supabaseRpc("run_data_retention_tasks"),

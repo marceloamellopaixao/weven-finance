@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyRequestAuth } from "@/lib/auth/server";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { isAccessAllowed, requireAccessResource } from "@/lib/access-control/server";
 import { supabaseSelect } from "@/services/supabase/admin";
-
-type StaffRole = "admin" | "moderator" | "support" | "client";
 
 function escapeCsv(value: unknown) {
   const text = String(value ?? "");
@@ -18,24 +16,6 @@ function toCsv(headers: string[], rows: Array<Array<unknown>>) {
   return [headers, ...rows]
     .map((line) => line.map((cell) => escapeCsv(cell)).join(";"))
     .join("\n");
-}
-
-async function getAuthContext(request: NextRequest) {
-  const decoded = await verifyRequestAuth(request);
-  const rows = await supabaseSelect("profiles", { filters: { uid: decoded.uid }, limit: 1 });
-  if (rows.length === 0) throw new Error("user_not_found");
-  const row = rows[0];
-  const raw = (row.raw as Record<string, unknown> | null) ?? {};
-  const role = String(row.role || raw.role || "client") as StaffRole;
-  return { uid: decoded.uid, role };
-}
-
-function isStaff(role: StaffRole) {
-  return role === "admin" || role === "moderator" || role === "support";
-}
-
-function isManager(role: StaffRole) {
-  return role === "admin" || role === "moderator";
 }
 
 function buildCsvResponse(filename: string, csv: string) {
@@ -62,22 +42,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const auth = await getAuthContext(request);
     const kind = String(request.nextUrl.searchParams.get("kind") || "").toLowerCase();
     const q = request.nextUrl.searchParams.get("q")?.trim().toLowerCase() || "";
 
     if (!kind || !["users", "support", "audit"].includes(kind)) {
       return NextResponse.json({ ok: false, error: "invalid_kind" }, { status: 400 });
     }
-    if (!isStaff(auth.role)) {
+    const { auth, profile, accessControl } = await requireAccessResource(request, "admin.export", "write");
+    const canExportKind =
+      kind === "users"
+        ? isAccessAllowed(profile, accessControl, "admin.users.read", "read")
+        : kind === "support"
+          ? isAccessAllowed(profile, accessControl, "admin.support.read", "read")
+          : isAccessAllowed(profile, accessControl, "admin.audit.read", "read");
+    if (!canExportKind) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
     if (kind === "users") {
-      if (!isManager(auth.role)) {
-        return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
-      }
-
       const role = request.nextUrl.searchParams.get("role")?.trim();
       const plan = request.nextUrl.searchParams.get("plan")?.trim();
       const status = request.nextUrl.searchParams.get("status")?.trim();

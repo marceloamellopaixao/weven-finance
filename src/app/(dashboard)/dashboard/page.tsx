@@ -1238,10 +1238,10 @@ export default function DashboardPage() {
                     : "border-emerald-200 bg-emerald-50 text-emerald-700"
                 }`}
             >
-              <p className="font-semibold">{selectedCardIndicator.label}: {formatCurrency(selectedCardIndicator.value)}</p>
+              <p className="font-semibold">{selectedCardIndicator.label}: {formatCurrencyDisplay(selectedCardIndicator.value)}</p>
               {selectedCardIndicator.kind === "credit" && (
                 <p className="mt-0.5 opacity-90">
-                  Limite: {formatCurrency(selectedCardIndicator.limit)} ⬢ Usado: {formatCurrency(selectedCardIndicator.used)}
+                  Limite: {formatCurrencyDisplay(selectedCardIndicator.limit)} ⬢ Usado: {formatCurrencyDisplay(selectedCardIndicator.used)}
                 </p>
               )}
             </div>
@@ -2146,7 +2146,7 @@ export default function DashboardPage() {
                         <div className="flex items-center justify-end">
                           <span className={`font-bold text-base tracking-tight ${tx.status === 'paid' ? 'text-zinc-400' : (tx.type === 'income' ? 'text-emerald-600' : 'text-zinc-800 dark:text-zinc-200')}`}>
                             {tx.type === 'expense' ? '- ' : '+ '}
-                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.amount)}
+                            {formatCurrencyDisplay(tx.amount)}
                           </span>
                         </div>
                       </div>
@@ -2268,7 +2268,7 @@ export default function DashboardPage() {
                               {editingTx.isRecurring ? "Ocorrência" : "Parcela"} {parcel.installmentCurrent || 1}/{parcel.installmentTotal || editingGroupTransactions.length}
                             </span>
                             <span>{formatDateDisplay(parcel.dueDate, { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
-                            <span className="font-semibold">{formatCurrency(parcel.amount)}</span>
+                            <span className="font-semibold">{formatCurrencyDisplay(parcel.amount)}</span>
                           </div>
                         ))}
                       </div>
@@ -2585,7 +2585,7 @@ export default function DashboardPage() {
                 <p className="font-semibold text-lg">{pendingCheckins[0].description}</p>
                 <p className="text-sm text-zinc-500 mb-2">Venceu em: {formatDateDisplay(pendingCheckins[0].dueDate)}</p>
                 <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendingCheckins[0].amount)}
+                  {formatCurrencyDisplay(pendingCheckins[0].amount)}
                 </div>
               </div>
             )}

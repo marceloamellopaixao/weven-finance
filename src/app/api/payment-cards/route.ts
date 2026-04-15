@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { buildPlanLimitMessage, getPlanCapabilities } from "@/lib/plans/capabilities";
 import { getUserPlanContext } from "@/lib/plans/server";
+import { hasAccess } from "@/lib/access-control/config";
 import { MAX_FINANCIAL_AMOUNT } from "@/lib/money";
 import { filterActiveJsonRows } from "@/lib/account-archive/server";
 import { readSecureCardPayload, writeSecureCardPayload } from "@/lib/secure-store/payment-cards";
@@ -159,6 +160,13 @@ export async function POST(request: NextRequest) {
     ]);
     const capabilities = getPlanCapabilities(planContext.plan, planContext.plans, planContext.featureAccess);
 
+    if (
+      !planContext.isBillingExempt &&
+      !hasAccess(planContext.accessControl, { uid: acting.actingUid, plan: planContext.plan, role: planContext.role }, "cards.write", "write")
+    ) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
+
     if (!planContext.isBillingExempt && capabilities.maxCards !== null && existingCards.length >= capabilities.maxCards) {
       return NextResponse.json(
         {
@@ -242,6 +250,14 @@ export async function PATCH(request: NextRequest) {
     const body = (await request.json()) as { cardId?: string; updates?: Partial<PaymentCard> };
     if (!body.cardId || !body.updates) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    }
+
+    const planContext = await getUserPlanContext(acting.actingUid);
+    if (
+      !planContext.isBillingExempt &&
+      !hasAccess(planContext.accessControl, { uid: acting.actingUid, plan: planContext.plan, role: planContext.role }, "cards.write", "write")
+    ) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
     const rows = await getCards(acting.actingUid);
@@ -328,6 +344,14 @@ export async function DELETE(request: NextRequest) {
     const cardId = request.nextUrl.searchParams.get("cardId")?.trim();
     if (!cardId) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    }
+
+    const planContext = await getUserPlanContext(acting.actingUid);
+    if (
+      !planContext.isBillingExempt &&
+      !hasAccess(planContext.accessControl, { uid: acting.actingUid, plan: planContext.plan, role: planContext.role }, "cards.delete", "write")
+    ) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
     await supabaseDeleteByFilters("payment_cards", { uid: acting.actingUid, source_id: cardId });

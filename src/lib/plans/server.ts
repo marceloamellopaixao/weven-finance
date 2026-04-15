@@ -1,6 +1,12 @@
 import { supabaseSelect } from "@/services/supabase/admin";
-import { normalizeFeatureAccessConfig } from "@/lib/plans/feature-access";
-import { DEFAULT_FEATURE_ACCESS_CONFIG, FeatureAccessConfig, DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
+import { buildEffectiveFeatureAccessConfig, normalizeAccessControlConfig } from "@/lib/access-control/config";
+import {
+  AccessControlConfig,
+  DEFAULT_ACCESS_CONTROL_CONFIG,
+  FeatureAccessConfig,
+  DEFAULT_PLANS_CONFIG,
+  PlansConfig,
+} from "@/types/system";
 import { UserPlan, UserRole } from "@/types/user";
 
 export function resolveUserPlan(value: unknown): UserPlan {
@@ -9,7 +15,10 @@ export function resolveUserPlan(value: unknown): UserPlan {
 }
 
 export function resolveUserRole(value: unknown): UserRole {
-  if (value === "admin" || value === "moderator" || value === "support") return value;
+  if (typeof value === "string") {
+    const role = value.trim().toLowerCase();
+    if (/^[a-z0-9_-]{2,40}$/.test(role)) return role as UserRole;
+  }
   return "client";
 }
 
@@ -21,10 +30,11 @@ export async function getUserPlanContext(uid: string): Promise<{
   plan: UserPlan;
   plans: PlansConfig;
   featureAccess: FeatureAccessConfig;
+  accessControl: AccessControlConfig;
   role: UserRole;
   isBillingExempt: boolean;
 }> {
-  const [profileRows, plansRows, featureAccessRows] = await Promise.all([
+  const [profileRows, plansRows, accessControlRows] = await Promise.all([
     supabaseSelect("profiles", {
       select: "plan,role,raw",
       filters: { uid },
@@ -37,7 +47,7 @@ export async function getUserPlanContext(uid: string): Promise<{
     }),
     supabaseSelect("system_configs", {
       select: "data",
-      filters: { key: "feature_access" },
+      filters: { key: "access_control" },
       limit: 1,
     }),
   ]);
@@ -48,14 +58,16 @@ export async function getUserPlanContext(uid: string): Promise<{
   const plan = resolveUserPlan(rawPlan);
   const role = resolveUserRole(rawRole);
   const plans = (plansRows[0]?.data as PlansConfig | undefined) ?? DEFAULT_PLANS_CONFIG;
-  const featureAccess = featureAccessRows.length > 0
-    ? normalizeFeatureAccessConfig(featureAccessRows[0]?.data)
-    : DEFAULT_FEATURE_ACCESS_CONFIG;
+  const accessControl = accessControlRows.length > 0
+    ? normalizeAccessControlConfig(accessControlRows[0]?.data)
+    : DEFAULT_ACCESS_CONTROL_CONFIG;
+  const effectiveFeatureAccess = buildEffectiveFeatureAccessConfig(accessControl, { uid, plan, role });
 
   return {
     plan,
     plans,
-    featureAccess,
+    featureAccess: effectiveFeatureAccess,
+    accessControl,
     role,
     isBillingExempt: isBillingExemptRole(role),
   };

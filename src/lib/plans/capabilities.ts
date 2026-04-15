@@ -1,6 +1,5 @@
 import { DEFAULT_FEATURE_ACCESS_CONFIG, FeatureAccessConfig, DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
 import { UserPlan } from "@/types/user";
-import { hasManagedFeatureAccess } from "@/lib/plans/feature-access";
 
 export type PlanCapabilities = {
   plan: UserPlan;
@@ -60,13 +59,22 @@ export function getPlanCapabilities(
   const freeLimitRaw = Number(plans.free.limit ?? DEFAULT_PLANS_CONFIG.free.limit ?? 20);
   const freeLimit = Number.isFinite(freeLimitRaw) && freeLimitRaw > 0 ? freeLimitRaw : 20;
   const base = STATIC_CAPABILITIES[plan] ?? STATIC_CAPABILITIES.free;
+  const installmentsOverride = featureAccess.effective?.installments;
+  const monthlyForecastOverride = featureAccess.effective?.monthlyForecast;
+  const smartDailyLimitOverride = featureAccess.effective?.smartDailyLimit;
 
   return {
     plan,
     ...base,
-    hasInstallments: base.hasInstallments || hasManagedFeatureAccess("installments", plan, featureAccess),
-    hasMonthlyForecast: base.hasMonthlyForecast || hasManagedFeatureAccess("monthlyForecast", plan, featureAccess),
-    hasSmartDailyLimit: base.hasSmartDailyLimit || hasManagedFeatureAccess("smartDailyLimit", plan, featureAccess),
+    hasInstallments: typeof installmentsOverride === "boolean"
+      ? installmentsOverride
+      : base.hasInstallments,
+    hasMonthlyForecast: typeof monthlyForecastOverride === "boolean"
+      ? monthlyForecastOverride
+      : base.hasMonthlyForecast,
+    hasSmartDailyLimit: typeof smartDailyLimitOverride === "boolean"
+      ? smartDailyLimitOverride
+      : base.hasSmartDailyLimit,
     maxTransactionsPerMonth: plan === "free" ? freeLimit : null,
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Wallet, Instagram, Linkedin } from "lucide-react";
+import { Instagram, Linkedin, Wallet } from "lucide-react";
 import Link from "next/link";
 
 export function Footer() {
@@ -45,8 +45,8 @@ export function Footer() {
           <div className="space-y-4">
             <h3 className="font-semibold text-foreground">Siga-nos</h3>
             <div className="flex gap-4">
-              <a href="https://www.instagram.com/weventech/" target="_blank" className="text-muted-foreground transition-colors hover:text-primary"><Instagram className="h-5 w-5" /></a>
-              <a href="https://www.linkedin.com/company/weventech/" target="_blank" className="text-muted-foreground transition-colors hover:text-primary"><Linkedin className="h-5 w-5" /></a>
+              <a href="https://www.instagram.com/weventech/" target="_blank" rel="noopener noreferrer" className="text-muted-foreground transition-colors hover:text-primary"><Instagram className="h-5 w-5" /></a>
+              <a href="https://www.linkedin.com/company/weventech/" target="_blank" rel="noopener noreferrer" className="text-muted-foreground transition-colors hover:text-primary"><Linkedin className="h-5 w-5" /></a>
             </div>
           </div>
         </div>

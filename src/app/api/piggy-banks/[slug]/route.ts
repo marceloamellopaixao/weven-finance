@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { MAX_FINANCIAL_AMOUNT } from "@/lib/money";
+import { getUserPlanContext } from "@/lib/plans/server";
+import { hasAccess } from "@/lib/access-control/config";
 import { PiggyBankGoalType } from "@/types/piggyBank";
 import { enforceCreditCardPolicy } from "@/lib/credit-card/limit";
 import { filterActiveJsonRows } from "@/lib/account-archive/server";
@@ -226,6 +228,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
     const safeSlug = String(slug || "").trim();
     if (!safeSlug) {
       return NextResponse.json({ ok: false, error: "invalid_slug" }, { status: 400 });
+    }
+
+    const planContext = await getUserPlanContext(acting.actingUid);
+    if (
+      !planContext.isBillingExempt &&
+      !hasAccess(planContext.accessControl, { uid: acting.actingUid, plan: planContext.plan, role: planContext.role }, "piggy_bank.write", "write")
+    ) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
     const loaded = await loadPiggyBank(acting.actingUid, safeSlug);
@@ -453,6 +463,14 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     const safeSlug = String(slug || "").trim();
     if (!safeSlug) {
       return NextResponse.json({ ok: false, error: "invalid_slug" }, { status: 400 });
+    }
+
+    const planContext = await getUserPlanContext(acting.actingUid);
+    if (
+      !planContext.isBillingExempt &&
+      !hasAccess(planContext.accessControl, { uid: acting.actingUid, plan: planContext.plan, role: planContext.role }, "piggy_bank.delete", "write")
+    ) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
     const loaded = await loadPiggyBank(acting.actingUid, safeSlug);

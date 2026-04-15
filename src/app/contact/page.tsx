@@ -24,12 +24,12 @@ const CONTACT_OPTIONS = [
 
 export default function ContactPage() {
   return (
-    <div className="min-h-screen bg-transparent px-4 py-24">
-      <div className="mx-auto max-w-4xl space-y-8">
+    <div className="bg-transparent px-4 py-16 sm:py-20 lg:py-24">
+      <div className="mx-auto max-w-5xl space-y-8">
         <div className="space-y-3 text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">Contato</p>
-          <h1 className="text-4xl font-bold tracking-tight text-zinc-900">Fale com a WevenFinance</h1>
-          <p className="mx-auto max-w-2xl text-base text-zinc-600">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">Fale com a WevenFinance</h1>
+          <p className="mx-auto max-w-2xl text-base leading-7 text-muted-foreground">
             Se você precisa de ajuda, tem uma dúvida sobre sua conta ou quer sugerir algo, estes são os canais certos.
           </p>
         </div>
@@ -38,17 +38,17 @@ export default function ContactPage() {
           {CONTACT_OPTIONS.map((item) => {
             const Icon = item.icon;
             return (
-              <Card key={item.title} className="rounded-3xl border-zinc-200 bg-white shadow-sm">
+              <Card key={item.title} className="app-panel-soft rounded-3xl border-color:var(--app-panel-border) shadow-sm transition-all duration-300 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-3 text-zinc-900">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent text-primary">
+                  <CardTitle className="flex items-center gap-3 text-foreground">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent text-primary">
                       <Icon className="h-5 w-5" />
                     </span>
                     {item.title}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <CardDescription className="text-sm leading-6 text-zinc-600">
+                  <CardDescription className="text-sm leading-6 text-muted-foreground">
                     {item.description}
                   </CardDescription>
                 </CardContent>
@@ -57,9 +57,9 @@ export default function ContactPage() {
           })}
         </div>
 
-        <Card className="rounded-3xl border-zinc-200 bg-white shadow-sm">
+        <Card className="app-panel-soft rounded-3xl border-color:var(--app-panel-border) shadow-sm">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-zinc-900">
+            <CardTitle className="flex items-center gap-2 text-foreground">
               <LifeBuoy className="h-5 w-5 text-primary" />
               Próximo passo
             </CardTitle>

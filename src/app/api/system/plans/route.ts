@@ -1,24 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
 import { resolveApiErrorStatus } from "@/lib/api/error";
-import { verifyRequestAuth } from "@/lib/auth/server";
+import { requireAccessResource } from "@/lib/access-control/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
-
-async function getUidFromBearer(request: NextRequest): Promise<string> {
-  const auth = await verifyRequestAuth(request);
-  return auth.uid;
-}
-
-async function getRole(uid: string): Promise<string> {
-  const rows = await supabaseSelect("profiles", {
-    select: "role,raw",
-    filters: { uid },
-    limit: 1,
-  });
-  if (rows.length === 0) return "client";
-  const raw = (rows[0].raw as Record<string, unknown> | null) ?? {};
-  return String(rows[0].role || raw.role || "client");
-}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,11 +49,7 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const uid = await getUidFromBearer(request);
-    const role = await getRole(uid);
-    if (role !== "admin") {
-      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
-    }
+    await requireAccessResource(request, "admin.plans.write", "write");
 
     const body = (await request.json()) as { plans?: PlansConfig };
     if (!body.plans || typeof body.plans !== "object") {

@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type TouchEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnboarding } from "@/hooks/useOnboarding";
@@ -345,6 +345,7 @@ export default function CreditCardPage() {
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [feedback, setFeedback] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const cardIdFromQuery = useMemo(() => searchParams.get("cardId"), [searchParams]);
+  const carouselTouchStartRef = useRef<{ x: number; y: number } | null>(null);
   
   const activeCard = useMemo(
     () => paymentCards.find((card) => card.id === selectedCardId) || paymentCards[0] || null,
@@ -629,6 +630,31 @@ export default function CreditCardPage() {
   const handlePrevCard = () => selectCardByIndex(carouselIndex - 1);
   const handleNextCard = () => selectCardByIndex(carouselIndex + 1);
 
+  const getCarouselCard = (offset: number) => {
+    if (paymentCards.length === 0) return null;
+    const safeIndex = ((carouselIndex + offset) % paymentCards.length + paymentCards.length) % paymentCards.length;
+    return paymentCards[safeIndex] || null;
+  };
+
+  const handleCarouselTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    if (!touch) return;
+    carouselTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleCarouselTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
+    const start = carouselTouchStartRef.current;
+    carouselTouchStartRef.current = null;
+    if (!start || paymentCards.length <= 1) return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (Math.abs(deltaX) < 45 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return;
+    if (deltaX > 0) handlePrevCard();
+    else handleNextCard();
+  };
+
   const handleDeleteCard = async (cardId: string) => {
     setIsSavingCard(true);
     setFeedback(null);
@@ -674,7 +700,7 @@ export default function CreditCardPage() {
               <div className="h-8 w-11 rounded bg-yellow-300/90 border border-yellow-200/80 shadow-sm" />
               <span className={`text-xs font-medium ${theme.muted}`}><PiContactlessPaymentFill className="h-7 w-7"/></span>
             </div>
-            <p className="text-3xl tracking-[0.22em] font-semibold drop-shadow-sm font-mono">
+            <p className="text-lg tracking-[0.22em] font-semibold drop-shadow-sm font-mono">
               **** **** **** {(input.last4 || "0000").padStart(4, "0")}
             </p>
           </div>
@@ -700,9 +726,26 @@ export default function CreditCardPage() {
     );
   };
 
+  const renderCardPeek = (input: { bankName: string; brand?: string; className?: string }) => {
+    const theme = getBankCardTheme(input.bankName, input.brand);
+
+    return (
+      <div className={`relative aspect-[1.58/1] min-h-[200px] overflow-hidden rounded-2xl border border-white/10 shadow-xl ${theme.background} ${theme.shadow} ${input.className || ""}`}>
+        <div className="absolute inset-0 bg-linear-to-tr from-white/12 to-transparent" />
+        <div className="absolute left-5 top-5 h-3 w-16 rounded-full bg-white/25" />
+        <div className="absolute left-5 top-12 h-5 w-28 rounded-xl bg-white/20" />
+        <div className="absolute bottom-8 left-5 h-7 w-36 rounded-xl bg-white/20" />
+        <div className="absolute bottom-8 right-5 h-5 w-14 rounded-xl bg-white/20" />
+      </div>
+    );
+  };
+
   if (authLoading || txLoading || isLoadingState || !user || !userProfile) {
     return <CardsPageSkeleton />;
   }
+
+  const previousCarouselCard = paymentCards.length > 1 ? getCarouselCard(-1) : null;
+  const nextCarouselCard = paymentCards.length > 1 ? getCarouselCard(1) : null;
 
   return (
     <div className="min-h-screen p-3 pb-20 font-sans sm:p-4 md:p-8">
@@ -884,14 +927,19 @@ export default function CreditCardPage() {
         {!showCardForm && paymentCards.length > 0 && activeCard && (
           <div className="grid gap-6 xl:grid-cols-[400px_minmax(0,1fr)] xl:items-start">
             <div className="space-y-5">
-              <div id="tour-cards-carousel" className="group relative mx-auto w-full max-w-[400px]">
+              <div
+                id="tour-cards-carousel"
+                className="group relative mx-auto w-full max-w-[430px] touch-pan-y select-none overflow-hidden px-3 py-3"
+                onTouchStart={handleCarouselTouchStart}
+                onTouchEnd={handleCarouselTouchEnd}
+              >
                 {paymentCards.length > 1 && (
                   <>
                     <button
                       type="button"
                       aria-label="Cartão anterior"
                       onClick={handlePrevCard}
-                      className="absolute -left-12 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-card shadow-md text-muted-foreground transition-all hover:bg-accent md:flex"
+                      className="absolute left-3 top-[35%] z-30 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-card/90 text-muted-foreground shadow-lg backdrop-blur transition-all hover:bg-accent md:left-0"
                     >
                       <ChevronLeft className="h-5 w-5" />
                     </button>
@@ -899,27 +947,47 @@ export default function CreditCardPage() {
                       type="button"
                       aria-label="Próximo cartão"
                       onClick={handleNextCard}
-                      className="absolute -right-12 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-card shadow-md text-muted-foreground transition-all hover:bg-accent md:flex"
+                      className="absolute right-3 top-[35%] z-30 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-card/90 text-muted-foreground shadow-lg backdrop-blur transition-all hover:bg-accent md:right-0"
                     >
                       <ChevronRight className="h-5 w-5" />
                     </button>
                   </>
                 )}
 
-                <button
-                  type="button"
-                  aria-label={`Editar cartão ${activeCard.bankName || "selecionado"}`}
-                  className="w-full rounded-2xl text-left transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => handleEditCard(activeCard)}
-                >
-                  {renderCardFace({
-                    bankName: activeCard.bankName,
-                    last4: activeCard.last4,
-                    type: activeCard.type,
-                    brand: activeCard.brand,
-                    dueDate: activeCard.dueDate,
-                  })}
-                </button>
+                <div className="relative min-h-[232px] sm:min-h-[252px]">
+                  {previousCarouselCard && (
+                    <div className="pointer-events-none absolute left-0 top-1/2 z-0 w-[72%] -translate-x-[36%] -translate-y-1/2 scale-[0.84] opacity-45 blur-[0.2px] transition-all duration-300 sm:w-[76%] sm:-translate-x-[32%] sm:scale-90">
+                      {renderCardPeek({
+                        bankName: previousCarouselCard.bankName,
+                        brand: previousCarouselCard.brand,
+                      })}
+                    </div>
+                  )}
+
+                  {nextCarouselCard && (
+                    <div className="pointer-events-none absolute right-0 top-1/2 z-0 w-[72%] translate-x-[36%] -translate-y-1/2 scale-[0.84] opacity-45 blur-[0.2px] transition-all duration-300 sm:w-[76%] sm:translate-x-[32%] sm:scale-90">
+                      {renderCardPeek({
+                        bankName: nextCarouselCard.bankName,
+                        brand: nextCarouselCard.brand,
+                      })}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    aria-label={`Editar cartão ${activeCard.bankName || "selecionado"}`}
+                    className={`relative z-10 mx-auto block rounded-2xl text-left transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${paymentCards.length > 1 ? "w-[88%] sm:w-[92%]" : "w-full"}`}
+                    onClick={() => handleEditCard(activeCard)}
+                  >
+                    {renderCardFace({
+                      bankName: activeCard.bankName,
+                      last4: activeCard.last4,
+                      type: activeCard.type,
+                      brand: activeCard.brand,
+                      dueDate: activeCard.dueDate,
+                    })}
+                  </button>
+                </div>
 
                 <div className="mt-5 grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-center sm:justify-center sm:gap-3">
                   <Button variant="outline" size="sm" className="rounded-full border-border/70 bg-card shadow-sm hover:bg-accent" onClick={() => handleEditCard(activeCard)}>
@@ -934,15 +1002,17 @@ export default function CreditCardPage() {
                 </div>
 
                 {paymentCards.length > 1 && (
-                  <div className="mt-6 flex items-center justify-center gap-1.5">
+                  <div className="mt-5 flex items-center justify-center gap-1">
                     {paymentCards.map((card, index) => (
                       <button
                         key={card.id}
                         type="button"
                         aria-label={`Selecionar cartão ${index + 1}`}
                         onClick={() => selectCardByIndex(index)}
-                        className={`h-2 rounded-full transition-all duration-300 ${activeCard.id === card.id ? "w-6 bg-primary" : "w-2.5 bg-muted"}`}
-                      />
+                        className="flex h-7 w-7 items-center justify-center rounded-full"
+                      >
+                        <span className={`h-2 rounded-full transition-all duration-300 ${activeCard.id === card.id ? "w-6 bg-primary" : "w-2.5 bg-muted"}`} />
+                      </button>
                     ))}
                   </div>
                 )}
@@ -1142,4 +1212,3 @@ export default function CreditCardPage() {
     </div>
   );
 }
-

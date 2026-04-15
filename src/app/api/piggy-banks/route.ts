@@ -3,6 +3,7 @@ import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/im
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { buildPlanLimitMessage, getPlanCapabilities } from "@/lib/plans/capabilities";
 import { getUserPlanContext } from "@/lib/plans/server";
+import { hasAccess } from "@/lib/access-control/config";
 import { MAX_FINANCIAL_AMOUNT } from "@/lib/money";
 import { PiggyBankGoalType } from "@/types/piggyBank";
 import { enforceCreditCardPolicy } from "@/lib/credit-card/limit";
@@ -147,6 +148,12 @@ export async function POST(request: NextRequest) {
       }),
     ]);
     const capabilities = getPlanCapabilities(planContext.plan, planContext.plans, planContext.featureAccess);
+    if (
+      !planContext.isBillingExempt &&
+      !hasAccess(planContext.accessControl, { uid, plan: planContext.plan, role: planContext.role }, "piggy_bank.write", "write")
+    ) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
     const activePiggyRows = filterActiveJsonRows(allPiggyRows);
 
     let cardLabel: string | undefined;

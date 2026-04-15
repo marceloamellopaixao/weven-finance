@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
   ArrowLeft, Save, Trash2, Calendar, CreditCard, 
-  Tag, AlignLeft, Info, ReceiptText, AlertCircle, Settings2, Repeat, Layers
+  Tag, AlignLeft, Info, ReceiptText, AlertCircle, Settings2, Repeat, Layers, Eye, EyeOff
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CategoryManagerDialog } from "@/components/categories/CategoryManagerDialog";
@@ -36,7 +36,7 @@ const formatCurrency = (value: number) =>
 export default function EditTransactionPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, privacyMode, togglePrivacyMode } = useAuth();
   const { transactions, loading: loadingTransactions } = useTransactions();
   const {
     categories,
@@ -57,6 +57,7 @@ export default function EditTransactionPage() {
   const [resolvedTransaction, setResolvedTransaction] = useState(false);
 
   const txId = String(params?.id || "");
+  const formatCurrencyDisplay = (value: number) => (privacyMode ? "R$ ******" : formatCurrency(value));
 
   useEffect(() => {
     if (!user) return;
@@ -235,12 +236,23 @@ export default function EditTransactionPage() {
           
           {/* HERO: VALOR */}
           <div className={`p-8 pb-6 border-b border-border/70 ${isIncome ? 'bg-emerald-400/30' : 'bg-red-400/30'}`}>
-            <Label className=" font-medium text-sm flex justify-start mb-2">Valor da transação</Label>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <Label className="flex justify-start text-sm font-medium">Valor da transação</Label>
+              <button
+                type="button"
+                aria-label={privacyMode ? "Mostrar valores" : "Ocultar valores"}
+                onClick={togglePrivacyMode}
+                className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
+              >
+                {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
             <div className="flex items-center justify-center gap-2">
               <span className={`text-3xl font-bold ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>R$</span>
               <Input 
-                type="number" 
-                value={editingTx.amount} 
+                type={privacyMode ? "text" : "number"}
+                value={privacyMode ? "******" : editingTx.amount}
+                readOnly={privacyMode}
                 onChange={(e) => setEditingTx({ ...editingTx, amount: Number(e.target.value || 0) })} 
                 className={`w-full max-w-full h-auto p-0 border-none shadow-none text-4xl md:text-5xl font-bold bg-transparent focus-visible:ring-0 text-start ${isIncome ? 'text-emerald-500 placeholder:text-emerald-500' : 'text-red-500 placeholder:text-red-500'}`}
               />
@@ -437,7 +449,7 @@ export default function EditTransactionPage() {
                           : "text-zinc-600"
                       }`}
                     >
-                      {formatCurrency(Number(item.amount || 0))}
+                      {formatCurrencyDisplay(Number(item.amount || 0))}
                     </span>
                   </div>
                 );

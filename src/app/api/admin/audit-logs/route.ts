@@ -1,25 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyRequestAuth } from "@/lib/auth/server";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
-import { supabaseSelect, supabaseSelectPaged } from "@/services/supabase/admin";
-
-type StaffRole = "admin" | "moderator" | "support" | "client";
-
-async function getAuthContext(request: NextRequest) {
-  const decoded = await verifyRequestAuth(request);
-  const rows = await supabaseSelect("profiles", { filters: { uid: decoded.uid }, limit: 1 });
-  if (rows.length === 0) throw new Error("user_not_found");
-  const row = rows[0];
-  const raw = (row.raw as Record<string, unknown> | null) ?? {};
-  const role = String(row.role || raw.role || "client") as StaffRole;
-  return { uid: decoded.uid, role };
-}
-
-function isStaff(role: StaffRole) {
-  return role === "admin" || role === "moderator" || role === "support";
-}
+import { requireAccessResource } from "@/lib/access-control/server";
+import { supabaseSelectPaged } from "@/services/supabase/admin";
 
 function escapeIlike(value: string) {
   return String(value || "")
@@ -41,10 +25,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const auth = await getAuthContext(request);
-    if (!isStaff(auth.role)) {
-      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
-    }
+    await requireAccessResource(request, "admin.audit.read", "read");
 
     const page = Math.max(Number(request.nextUrl.searchParams.get("page") || "1"), 1);
     const limit = Math.min(Math.max(Number(request.nextUrl.searchParams.get("limit") || "20"), 1), 100);

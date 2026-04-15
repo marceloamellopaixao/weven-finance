@@ -8,10 +8,17 @@ import { writeApiMetric } from "@/lib/observability/metrics";
 import { pushNotification, pushNotifications } from "@/lib/notifications/server";
 import { decryptServerPayload, encryptServerPayload } from "@/lib/secure-store/server";
 import { readSecureProfilePayload } from "@/lib/secure-store/profile";
+import {
+  CREATOR_SUPREME_UID,
+  getServerAccessControlConfig,
+  isAccessAllowed,
+  ServerAccessProfile,
+} from "@/lib/access-control/server";
 import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
 
 type SupportType = "support" | "feature";
 type TicketPriority = "low" | "medium" | "high" | "urgent";
+type SupportAuthContext = ServerAccessProfile & { email: string; name: string };
 
 const FINAL_STATUSES = new Set(["resolved", "implemented", "rejected"]);
 
@@ -54,7 +61,7 @@ function computeSlaDueAt(createdAtIso: string, type: SupportType, priority: Tick
   return new Date(createdAt + hours * oneHour).toISOString();
 }
 
-async function getAuthContext(request: NextRequest) {
+async function getAuthContext(request: NextRequest): Promise<SupportAuthContext> {
   const decoded = await verifyRequestAuth(request);
   const acting = await resolveActingContext(request);
   const requesterRows = await supabaseSelect("profiles", {
@@ -71,11 +78,14 @@ async function getAuthContext(request: NextRequest) {
   const requesterRoleRaw = ((requesterRows[0]?.raw as Record<string, unknown> | null) ?? {});
   const requesterRole = String(requesterRows[0]?.role || requesterRoleRaw.role || "client");
   const effectiveRole = acting.isImpersonating ? "client" : requesterRole;
+  const rawPlan = row.plan ?? raw.plan;
   return {
     uid: acting.actingUid,
     email: String(row.email || raw.email || decoded.email || ""),
     name: String(row.display_name || raw.displayName || raw.completeName || decoded.email || "Usuário"),
     role: effectiveRole,
+    plan: rawPlan === "premium" || rawPlan === "pro" ? rawPlan : "free",
+    isSupremeAdmin: !acting.isImpersonating && decoded.uid === CREATOR_SUPREME_UID,
   };
 }
 
@@ -102,6 +112,8 @@ export async function GET(request: NextRequest) {
     }
 
     const auth = await getAuthContext(request);
+    const accessControl = await getServerAccessControlConfig();
+    const canReadAdminSupport = isAccessAllowed(auth, accessControl, "admin.support.read", "read");
 
     const page = Math.max(1, Number(request.nextUrl.searchParams.get("page") || "1"));
     const limit = Math.max(1, Math.min(100, Number(request.nextUrl.searchParams.get("limit") || "20")));
@@ -113,9 +125,7 @@ export async function GET(request: NextRequest) {
     const filters: Record<string, string | undefined> = {};
     if (typeFilter && typeFilter !== "all") filters.ticket_type = typeFilter;
     if (statusFilter && statusFilter !== "all") filters.ticket_status = statusFilter;
-    if (auth.role === "support") {
-      filters.assigned_to = auth.uid;
-    } else if (auth.role !== "admin" && auth.role !== "moderator") {
+    if (!canReadAdminSupport) {
       filters.uid = auth.uid;
     }
 
@@ -139,7 +149,7 @@ export async function GET(request: NextRequest) {
       or,
     });
     const rows =
-      auth.role === "admin" || auth.role === "moderator" || auth.role === "support"
+      canReadAdminSupport
         ? paged.data
         : paged.data.filter((row) => {
             const raw = (row.raw as Record<string, unknown> | null) ?? {};
@@ -187,7 +197,7 @@ export async function GET(request: NextRequest) {
     const total = paged.total;
     const sliced = tickets;
     const unseenCount =
-      auth.role === "admin" || auth.role === "moderator" || auth.role === "support"
+      canReadAdminSupport
         ? sliced.filter((ticket) => !Array.isArray(ticket.staffSeenBy) || !ticket.staffSeenBy.includes(auth.uid)).length
         : 0;
 
@@ -202,7 +212,7 @@ export async function GET(request: NextRequest) {
       method: meta.method,
       meta: { error: message },
     });
-    const status = message === "missing_auth_token" ? 401 : 500;
+    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
@@ -219,6 +229,10 @@ export async function POST(request: NextRequest) {
     }
 
     const auth = await getAuthContext(request);
+    const accessControl = await getServerAccessControlConfig();
+    if (!isAccessAllowed(auth, accessControl, "support.write", "write")) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
     const body = (await request.json()) as {
       type?: SupportType;
       message?: string;
@@ -306,7 +320,7 @@ export async function POST(request: NextRequest) {
       method: meta.method,
       meta: { error: message },
     });
-    const status = message === "missing_auth_token" ? 401 : 500;
+    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
@@ -323,6 +337,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const auth = await getAuthContext(request);
+    const accessControl = await getServerAccessControlConfig();
     const body = (await request.json()) as {
       action?: "markSeen";
       ticketIds?: string[];
@@ -335,7 +350,7 @@ export async function PATCH(request: NextRequest) {
     });
 
     if (body.action === "markSeen") {
-      if (auth.role !== "admin" && auth.role !== "moderator" && auth.role !== "support") {
+      if (!isAccessAllowed(auth, accessControl, "admin.support.read", "read")) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
       const ids = Array.isArray(body.ticketIds)
@@ -389,13 +404,11 @@ export async function PATCH(request: NextRequest) {
       assignedTo: row.assigned_to ? String(row.assigned_to) : "",
     };
 
-    const isManager = auth.role === "admin" || auth.role === "moderator";
-    const isSupportSelfAssignment =
-      auth.role === "support" &&
-      (ticketData.assignedTo === auth.uid || body.updates.assignedTo === auth.uid);
     const isOwner = ticketData.uid === auth.uid;
+    const canWriteAdminSupport = isAccessAllowed(auth, accessControl, "admin.support.write", "write");
+    const canWriteOwnSupport = isOwner && isAccessAllowed(auth, accessControl, "support.write", "write");
 
-    if (!isManager && !isSupportSelfAssignment && !isOwner) {
+    if (!canWriteAdminSupport && !canWriteOwnSupport) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
@@ -456,7 +469,7 @@ export async function PATCH(request: NextRequest) {
       method: meta.method,
       meta: { error: message },
     });
-    const status = message === "missing_auth_token" ? 401 : 500;
+    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
@@ -473,7 +486,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     const auth = await getAuthContext(request);
-    if (auth.role !== "admin") {
+    const accessControl = await getServerAccessControlConfig();
+    if (!isAccessAllowed(auth, accessControl, "admin.support.delete", "write")) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
@@ -494,7 +508,7 @@ export async function DELETE(request: NextRequest) {
       method: meta.method,
       meta: { error: message },
     });
-    const status = message === "missing_auth_token" ? 401 : 500;
+    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
