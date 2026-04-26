@@ -22,6 +22,8 @@ import { Bell } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+const FLOW_ROUTES = new Set(["/login", "/register", "/forgot-password", "/first-access", "/verify-email", "/goodbye", "/blocked"]);
+
 export function Header() {
   const { user, userProfile, logout } = useAuth();
   const router = useRouter();
@@ -42,6 +44,7 @@ export function Header() {
   const displayPhoto = isImpersonating
     ? (userProfile?.photoURL || "")
     : (userProfile?.photoURL || user?.photoURL || "");
+  const isFlowRoute = FLOW_ROUTES.has(pathname || "") || (pathname || "").startsWith("/billing");
 
   const handleStopImpersonation = () => {
     stopImpersonation();
@@ -107,7 +110,7 @@ export function Header() {
   // Se não tiver usuário logado, mostra o header da landing page.
   if (!isAuthenticated) {
     return (
-      <nav className="fixed top-0 z-50 w-full border-b border-border/70 bg-background/80 backdrop-blur-md transition-all duration-300">
+      <nav className={`${isFlowRoute ? "sticky" : "fixed"} top-0 z-50 w-full border-b border-border/70 bg-background/80 backdrop-blur-md transition-all duration-300`}>
         <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2 group">
             <div className="rounded-xl bg-primary p-2 text-primary-foreground shadow-lg shadow-primary/20 transition-transform group-hover:scale-105">

@@ -16,7 +16,7 @@ import {
   rememberPendingUpgradePlan,
 } from "@/services/billing/checkoutIntent";
 
-type CheckoutState = "preparing" | "redirecting" | "error";
+type CheckoutState = "preparing" | "redirecting" | "error" | "exempt";
 
 const PLAN_RANK: Record<"free" | "premium" | "pro", number> = {
   free: 0,
@@ -83,6 +83,13 @@ export default function BillingCheckoutPage() {
         window.location.assign(session.checkoutUrl);
       } catch (error) {
         console.error("Falha ao iniciar checkout:", error);
+        const errorCode = error instanceof Error ? error.message : "";
+        if (errorCode === "role_billing_exempt") {
+          clearPendingUpgradePlan();
+          setState("exempt");
+          setMessage("Esta conta possui cargo interno e não precisa passar pelo checkout de assinatura.");
+          return;
+        }
         setState("error");
         setMessage("Não foi possível abrir o checkout agora. Tente novamente em alguns instantes.");
       }
@@ -116,12 +123,16 @@ export default function BillingCheckoutPage() {
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            {resolvedState === "error" ? "Não foi possível continuar" : "Continuando sua contratação"}
+            {resolvedState === "error"
+              ? "Não foi possível continuar"
+              : resolvedState === "exempt"
+                ? "Checkout dispensado"
+                : "Continuando sua contratação"}
           </h1>
 
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{resolvedMessage}</p>
 
-          {resolvedState !== "error" && (
+          {resolvedState !== "error" && resolvedState !== "exempt" && (
             <div className="mt-6 flex items-center justify-center gap-2 text-sm font-medium text-primary">
               <Loader2 className="h-4 w-4 animate-spin" />
               Abrindo checkout
@@ -136,6 +147,21 @@ export default function BillingCheckoutPage() {
               >
                 Tentar novamente
               </Button>
+              <Link href="/settings?tab=billing" className="block">
+                <Button variant="outline" className="w-full h-11 rounded-xl">
+                  Ir para assinatura
+                </Button>
+              </Link>
+            </div>
+          )}
+
+          {resolvedState === "exempt" && (
+            <div className="mt-6 space-y-3">
+              <Link href="/dashboard" className="block">
+                <Button className="h-11 w-full rounded-xl bg-primary font-medium text-primary-foreground hover:bg-primary/90">
+                  Ir para o painel
+                </Button>
+              </Link>
               <Link href="/settings?tab=billing" className="block">
                 <Button variant="outline" className="w-full h-11 rounded-xl">
                   Ir para assinatura

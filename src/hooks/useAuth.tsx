@@ -13,6 +13,7 @@ import { extractAuthProviders, hasEmailPasswordProvider, shouldRequirePasswordSe
 import { resolveUserUidFromMetadata } from "@/lib/auth/user-uid";
 import { getSupabaseClient } from "@/services/supabase/client";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { buildBrowserRedirectUrl, clearPostAuthRedirect, readPostAuthRedirect, rememberPostAuthRedirect } from "@/services/auth/postAuthRedirect";
 import { buildEmailVerificationRedirectUrl, rememberPendingVerificationEmail } from "@/services/auth/emailVerification";
 import { buildUpgradeCheckoutPath, readPendingUpgradePlan } from "@/services/billing/checkoutIntent";
 
@@ -345,6 +346,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const postAuthRedirect = readPostAuthRedirect();
+    if (postAuthRedirect) {
+      const postAuthPathname = postAuthRedirect.split("?")[0] || postAuthRedirect;
+      clearPostAuthRedirect();
+      if (pathname !== postAuthPathname) {
+        router.replace(postAuthRedirect);
+        return;
+      }
+    }
+
     if (["/login", "/register", "/goodbye", "/blocked"].includes(pathname)) {
       router.replace(resolvePostAuthPath());
       return;
@@ -438,13 +449,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = async () => {
     const pendingUpgradePlan = readPendingUpgradePlan();
-    const redirectTo = `${window.location.origin}${pendingUpgradePlan ? buildUpgradeCheckoutPath(pendingUpgradePlan) : "/dashboard"}`;
+    const postAuthPath = pendingUpgradePlan ? buildUpgradeCheckoutPath(pendingUpgradePlan) : "/dashboard";
+    rememberPostAuthRedirect(postAuthPath);
+    const redirectTo = buildBrowserRedirectUrl("/dashboard");
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo },
     });
     if (error) throw error.message || "Erro ao entrar com Google.";
-    if (data.url) window.location.assign(data.url);
+    if (data.url) {
+      const authUrl = new URL(data.url);
+      authUrl.searchParams.set("redirect_to", redirectTo);
+      window.location.assign(authUrl.toString());
+    }
   };
 
   const loginWithEmail = async (email: string, pass: string) => {
@@ -479,4 +496,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
-

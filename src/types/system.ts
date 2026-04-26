@@ -56,6 +56,7 @@ export type AccessResourceKey =
   | "billing.manage"
   | "billing.checkout"
   | "billing.cancel"
+  | "billing.exempt"
   | "apps.read"
   | "apps.quick_bar"
   | "apps.guided_tour"
@@ -234,6 +235,7 @@ export const DEFAULT_ACCESS_CONTROL_CONFIG: AccessControlConfig = {
     { id: "role-admin-impersonation", subjectType: "role", subjectId: "admin", resource: "admin.impersonation", level: "write", active: true },
     { id: "role-admin-health", subjectType: "role", subjectId: "admin", resource: "admin.health", level: "read", active: true },
     { id: "role-admin-billing-jobs", subjectType: "role", subjectId: "admin", resource: "admin.billing_jobs", level: "write", active: true },
+    { id: "role-admin-billing-exempt", subjectType: "role", subjectId: "admin", resource: "billing.exempt", level: "read", active: true },
     { id: "role-admin-retention-jobs", subjectType: "role", subjectId: "admin", resource: "admin.retention_jobs", level: "write", active: true },
     { id: "role-admin-permissions-read", subjectType: "role", subjectId: "admin", resource: "admin.permissions.read", level: "read", active: true },
     { id: "role-admin-permissions-write", subjectType: "role", subjectId: "admin", resource: "admin.permissions.write", level: "write", active: true },
@@ -249,6 +251,7 @@ export const DEFAULT_ACCESS_CONTROL_CONFIG: AccessControlConfig = {
     { id: "role-moderator-impersonation", subjectType: "role", subjectId: "moderator", resource: "admin.impersonation", level: "write", active: true },
     { id: "role-moderator-health", subjectType: "role", subjectId: "moderator", resource: "admin.health", level: "read", active: true },
     { id: "role-moderator-billing-jobs", subjectType: "role", subjectId: "moderator", resource: "admin.billing_jobs", level: "write", active: true },
+    { id: "role-moderator-billing-exempt", subjectType: "role", subjectId: "moderator", resource: "billing.exempt", level: "read", active: true },
     { id: "role-support-support-read", subjectType: "role", subjectId: "support", resource: "admin.support.read", level: "read", active: true },
     { id: "role-support-support-write", subjectType: "role", subjectId: "support", resource: "admin.support.write", level: "write", active: true },
     { id: "role-support-audit-read", subjectType: "role", subjectId: "support", resource: "admin.audit.read", level: "read", active: true },

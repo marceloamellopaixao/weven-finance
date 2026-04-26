@@ -5,21 +5,32 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { AlertTriangle, Lock, MessageCircle } from "lucide-react";
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 export default function BlockedPage() {
-  const { userProfile, logout, loading } = useAuth();
+  const { user, userProfile, logout, loading } = useAuth();
+  const router = useRouter();
 
   const isBlocked = userProfile?.status === "blocked";
+  const isInactive = userProfile?.status === "inactive";
+  const canViewBlockedPage = isBlocked || isInactive;
   const title = isBlocked ? "Acesso Bloqueado" : "Conta Inativa";
   const description = isBlocked
     ? "Sua conta foi bloqueada pela equipe administrativa."
     : "Sua conta está inativa no momento.";
 
-  if (loading) {
+  useEffect(() => {
+    if (loading) return;
+    if (canViewBlockedPage) return;
+    router.replace(user ? "/dashboard" : "/login");
+  }, [canViewBlockedPage, loading, router, user]);
+
+  if (loading || !canViewBlockedPage) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <AuthPageShell maxWidthClassName="max-w-md">
         <div className="animate-pulse text-sm text-muted-foreground">Carregando informações...</div>
-      </div>
+      </AuthPageShell>
     );
   }
 

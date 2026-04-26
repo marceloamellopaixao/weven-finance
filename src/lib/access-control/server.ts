@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifyRequestAuth } from "@/lib/auth/server";
-import { hasAccess, normalizeAccessControlConfig } from "@/lib/access-control/config";
+import { hasAccess, hasBillingExemption, normalizeAccessControlConfig } from "@/lib/access-control/config";
+import { hasIrregularGatewayBilling, hasTrustedPaidBilling } from "@/lib/billing/effective";
 import {
   AccessControlConfig,
   AccessPermissionLevel,
@@ -8,6 +9,7 @@ import {
   DEFAULT_ACCESS_CONTROL_CONFIG,
 } from "@/types/system";
 import { supabaseSelect } from "@/services/supabase/admin";
+import { BillingInfo, UserPaymentStatus } from "@/types/user";
 
 export const CREATOR_SUPREME_UID = "Z3ciyXudWuZZywhojA6iWJTurH52";
 
@@ -20,14 +22,22 @@ export type ServerAccessProfile = {
 
 export async function getAccessProfile(uid: string): Promise<ServerAccessProfile> {
   const rows = await supabaseSelect("profiles", {
-    select: "role,plan,raw",
+    select: "role,plan,payment_status,billing,raw",
     filters: { uid },
     limit: 1,
   });
   const raw = (rows[0]?.raw as Record<string, unknown> | null) ?? {};
   const role = String(rows[0]?.role || raw.role || "client");
   const rawPlan = rows[0]?.plan ?? raw.plan;
-  const plan = rawPlan === "premium" || rawPlan === "pro" ? rawPlan : "free";
+  const storedPlan = rawPlan === "premium" || rawPlan === "pro" ? rawPlan : "free";
+  const paymentStatus = (rows[0]?.payment_status ?? raw.paymentStatus ?? "pending") as UserPaymentStatus;
+  const billing = (rows[0]?.billing ?? raw.billing ?? {}) as BillingInfo;
+  const accessControl = await getServerAccessControlConfig();
+  const billingExempt = hasBillingExemption(accessControl, { uid, role });
+  const plan =
+    (billingExempt || storedPlan === "free" || hasTrustedPaidBilling(paymentStatus, billing) || !hasIrregularGatewayBilling(billing))
+      ? storedPlan
+      : "free";
   return {
     uid,
     role,

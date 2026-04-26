@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { canMatchWebhookByEmail } from "@/lib/billing/match";
+import { hasBillingExemption, normalizeAccessControlConfig } from "@/lib/access-control/config";
 import { UserPaymentStatus, UserPlan, UserRole, UserStatus } from "@/types/user";
+import { DEFAULT_ACCESS_CONTROL_CONFIG } from "@/types/system";
 import { pushNotification } from "@/lib/notifications/server";
 
 type MercadoPagoTopic = "payment" | "merchant_order" | "preapproval";
@@ -169,6 +171,18 @@ const PAYMENT_BLOCK_REASON_REGEX = /(pagamento|inadimpl|assinatura|cancelamento|
 function isPaymentRelatedBlockReason(reason: unknown): boolean {
   if (typeof reason !== "string") return false;
   return PAYMENT_BLOCK_REASON_REGEX.test(reason.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+}
+
+async function isBillingExempt(uid: string, role: UserRole) {
+  const rows = await supabaseSelect("system_configs", {
+    select: "data",
+    filters: { key: "access_control" },
+    limit: 1,
+  });
+  const accessControl = rows.length > 0
+    ? normalizeAccessControlConfig(rows[0]?.data)
+    : DEFAULT_ACCESS_CONTROL_CONFIG;
+  return hasBillingExemption(accessControl, { uid, role });
 }
 
 function getBlockReasonFromPaymentStatus(status: UserPaymentStatus): string {
@@ -597,7 +611,7 @@ export async function syncFromWebhook(input: WebhookInput) {
   const currentRole = (userMatch.userData.role as UserRole) || "client";
   const currentStatus = (userMatch.userData.status as UserStatus) || "active";
   const currentBlockReason = userMatch.userData.blockReason;
-  const isBillingExemptRole = currentRole === "admin" || currentRole === "moderator";
+  const isBillingExemptRole = await isBillingExempt(userMatch.uid, currentRole);
   const paymentStatus = mapPaymentStatus(details.gatewayStatus);
   const gatewayPlan = resolvePlan(details, currentPlan, pendingPlan);
   const targetPlan = isBillingExemptRole
@@ -738,7 +752,7 @@ export async function confirmPreapprovalForUser(params: {
   const currentRole = (userData.role as UserRole) || "client";
   const currentStatus = (userData.status as UserStatus) || "active";
   const currentBlockReason = userData.blockReason;
-  const isBillingExemptRole = currentRole === "admin" || currentRole === "moderator";
+  const isBillingExemptRole = await isBillingExempt(params.uid, currentRole);
   const paymentStatus = mapPaymentStatus(details.gatewayStatus);
   const gatewayPlan = resolvePlan(details, currentPlan);
   const targetPlan = isBillingExemptRole ? currentPlan : computeTargetPlan(currentPlan, paymentStatus, gatewayPlan);
@@ -917,7 +931,7 @@ export async function cancelSubscriptionForUser(params: {
   const currentRole = (userData.role as UserRole) || "client";
   const currentStatus = (userData.status as UserStatus) || "active";
   const currentPlan = (userData.plan as UserPlan) || "free";
-  const isBillingExemptRole = currentRole === "admin" || currentRole === "moderator";
+  const isBillingExemptRole = await isBillingExempt(params.uid, currentRole);
   if (isBillingExemptRole) {
     throw new Error("role_billing_exempt");
   }

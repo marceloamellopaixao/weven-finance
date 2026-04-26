@@ -1,6 +1,20 @@
+import type { Metadata } from "next";
 import { Database, EyeOff, Lock, ShieldCheck } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
+export const metadata: Metadata = {
+  title: "Seguranca",
+  description: "Como o WevenFinance trata acesso, privacidade e protecao dos dados da plataforma.",
+  alternates: {
+    canonical: "/security",
+  },
+  openGraph: {
+    title: "Seguranca | WevenFinance",
+    description: "Como o WevenFinance trata acesso, privacidade e protecao dos dados da plataforma.",
+    url: "/security",
+  },
+};
 
 const ITEMS = [
   {

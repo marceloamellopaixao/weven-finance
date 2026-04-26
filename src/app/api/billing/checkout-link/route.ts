@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { buildCheckoutUrl } from "@/lib/billing/mercadopago";
-import { DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
+import { DEFAULT_ACCESS_CONTROL_CONFIG, DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
 import { UserPlan, UserRole } from "@/types/user";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { resolveActingContext } from "@/lib/impersonation/server";
@@ -10,6 +10,7 @@ import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { hasBillingExemption, normalizeAccessControlConfig } from "@/lib/access-control/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,8 +48,15 @@ export async function GET(request: NextRequest) {
     const userRow = userRows[0];
     const userRaw = ((userRow?.raw as Record<string, unknown> | undefined) ?? {});
     const userRole = ((userRow?.role as UserRole | undefined) ?? (userRaw.role as UserRole | undefined) ?? "client");
-    const isBillingExemptRole = userRole === "admin" || userRole === "moderator";
-    if (isBillingExemptRole) {
+    const accessControlRows = await supabaseSelect("system_configs", {
+      select: "data",
+      filters: { key: "access_control" },
+      limit: 1,
+    });
+    const accessControl = accessControlRows.length > 0
+      ? normalizeAccessControlConfig(accessControlRows[0]?.data)
+      : DEFAULT_ACCESS_CONTROL_CONFIG;
+    if (hasBillingExemption(accessControl, { uid, role: userRole })) {
       return NextResponse.json({ ok: false, error: "role_billing_exempt" }, { status: 409 });
     }
 

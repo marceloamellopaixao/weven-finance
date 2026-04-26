@@ -17,17 +17,30 @@ import { resolvePendingUpgradePath } from "@/services/billing/checkoutIntent";
 import { AuthPageShell, authIconClassName } from "@/components/auth/AuthPageShell";
 
 export default function VerifyEmailPage() {
-  const { logout, user, userProfile } = useAuth();
+  const { logout, user, userProfile, loading } = useAuth();
   const router = useRouter();
   const [isChecking, setIsChecking] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [pendingEmailLoaded, setPendingEmailLoaded] = useState(false);
 
   useEffect(() => {
     setPendingEmail(readPendingVerificationEmail());
+    setPendingEmailLoaded(true);
   }, []);
 
   const displayEmail = useMemo(() => user?.email || pendingEmail || "", [pendingEmail, user?.email]);
+
+  useEffect(() => {
+    if (loading || !pendingEmailLoaded) return;
+    if (userProfile?.verifiedEmail) {
+      router.replace(resolvePendingUpgradePath() || "/dashboard");
+      return;
+    }
+    if (!user && !pendingEmail) {
+      router.replace("/register");
+    }
+  }, [loading, pendingEmail, pendingEmailLoaded, router, user, userProfile?.verifiedEmail]);
 
   const syncVerifiedEmail = useCallback(async (token: string) => {
     const response = await fetch("/api/profile/verify-email", {
@@ -111,6 +124,16 @@ export default function VerifyEmailPage() {
       setIsChecking(false);
     }
   };
+
+  if (loading || !pendingEmailLoaded || (!user && !pendingEmail) || userProfile?.verifiedEmail) {
+    return (
+      <AuthPageShell maxWidthClassName="max-w-md">
+        <div className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] p-6 text-center text-sm text-muted-foreground shadow-xl shadow-primary/10">
+          Carregando...
+        </div>
+      </AuthPageShell>
+    );
+  }
 
   return (
     <AuthPageShell maxWidthClassName="max-w-lg">

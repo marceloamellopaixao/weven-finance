@@ -51,6 +51,7 @@ export const ACCESS_RESOURCE_KEYS: AccessResourceKey[] = [
   "billing.manage",
   "billing.checkout",
   "billing.cancel",
+  "billing.exempt",
   "apps.read",
   "apps.quick_bar",
   "apps.guided_tour",
@@ -177,6 +178,7 @@ export const ACCESS_SCREENS: AccessScreenDefinition[] = [
       { key: "billing.manage", label: "Gerenciar assinatura", description: "Permite ações gerais de assinatura." },
       { key: "billing.checkout", label: "Contratar plano", description: "Permite iniciar checkout de upgrade." },
       { key: "billing.cancel", label: "Cancelar assinatura", description: "Permite cancelar assinatura ativa." },
+      { key: "billing.exempt", label: "Cobrança do plano", description: "Define se este cargo ou usuário segue a cobrança padrão ou não deve ser cobrado." },
     ],
   },
   {
@@ -413,6 +415,19 @@ export function hasAccess(
   now = new Date()
 ) {
   return canAccessLevel(resolveAccessLevel(config, context, resource, now), minimum);
+}
+
+export function hasBillingExemption(
+  config: AccessControlConfig,
+  context: Pick<AccessContext, "uid" | "role">,
+  now = new Date()
+) {
+  const accessContext = { uid: context.uid, role: context.role, plan: "free" as UserPlan };
+  const userLevel = resolveSubjectAccessLevel(config, accessContext, "billing.exempt", "user", now);
+  if (userLevel && canAccessLevel(userLevel, "read")) return true;
+
+  const roleLevel = resolveSubjectAccessLevel(config, accessContext, "billing.exempt", "role", now);
+  return Boolean(roleLevel && canAccessLevel(roleLevel, "read"));
 }
 
 export const MANAGED_FEATURE_ACCESS_RESOURCE: Record<ManagedFeatureKey, AccessResourceKey> = {

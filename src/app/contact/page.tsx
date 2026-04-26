@@ -1,8 +1,22 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { Headset, LifeBuoy, Mail, MessageCircle } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+
+export const metadata: Metadata = {
+  title: "Contato",
+  description: "Canais de contato, suporte e feedback do WevenFinance.",
+  alternates: {
+    canonical: "/contact",
+  },
+  openGraph: {
+    title: "Contato | WevenFinance",
+    description: "Canais de contato, suporte e feedback do WevenFinance.",
+    url: "/contact",
+  },
+};
 
 const CONTACT_OPTIONS = [
   {

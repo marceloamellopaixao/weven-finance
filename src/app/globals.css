@@ -261,6 +261,10 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    min-height: 100%;
+    overflow-x: hidden;
+  }
   button:not(:disabled) {
     cursor: pointer;
   }
@@ -269,6 +273,8 @@
   }
   body {
     @apply bg-background text-foreground;
+    min-height: 100%;
+    overflow-x: hidden;
   }
 
   .app-shell {

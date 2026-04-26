@@ -1,6 +1,20 @@
+import type { Metadata } from "next";
 import { AlertTriangle, CreditCard, FileText, ShieldCheck } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+export const metadata: Metadata = {
+  title: "Termos de uso",
+  description: "Resumo dos principais termos de uso, conta, assinatura e disponibilidade do WevenFinance.",
+  alternates: {
+    canonical: "/terms",
+  },
+  openGraph: {
+    title: "Termos de uso | WevenFinance",
+    description: "Resumo dos principais termos de uso, conta, assinatura e disponibilidade do WevenFinance.",
+    url: "/terms",
+  },
+};
 
 const SECTIONS = [
   {

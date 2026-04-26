@@ -1,5 +1,5 @@
 import { supabaseSelect } from "@/services/supabase/admin";
-import { buildEffectiveFeatureAccessConfig, normalizeAccessControlConfig } from "@/lib/access-control/config";
+import { buildEffectiveFeatureAccessConfig, hasBillingExemption, normalizeAccessControlConfig } from "@/lib/access-control/config";
 import {
   AccessControlConfig,
   DEFAULT_ACCESS_CONTROL_CONFIG,
@@ -69,6 +69,6 @@ export async function getUserPlanContext(uid: string): Promise<{
     featureAccess: effectiveFeatureAccess,
     accessControl,
     role,
-    isBillingExempt: isBillingExemptRole(role),
+    isBillingExempt: hasBillingExemption(accessControl, { uid, role }),
   };
 }

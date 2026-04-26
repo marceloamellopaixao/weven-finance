@@ -20,7 +20,7 @@ export function AuthPageShell({
   return (
     <div
       className={cn(
-        "relative flex min-h-[calc(100svh-4rem)] items-center justify-center overflow-hidden px-4 pb-12 pt-24 font-sans sm:px-6 sm:py-16",
+        "relative flex min-h-[calc(100svh-4rem)] items-center justify-center overflow-x-hidden px-4 py-8 font-sans sm:px-6 sm:py-12",
         className
       )}
     >

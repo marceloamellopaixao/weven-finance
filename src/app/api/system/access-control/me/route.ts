@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { verifyRequestAuth } from "@/lib/auth/server";
-import { buildEffectiveFeatureAccessConfig, normalizeAccessControlConfig, resolveAccessLevel } from "@/lib/access-control/config";
+import { buildEffectiveFeatureAccessConfig, hasBillingExemption, normalizeAccessControlConfig, resolveAccessLevel } from "@/lib/access-control/config";
+import { hasIrregularGatewayBilling, hasTrustedPaidBilling } from "@/lib/billing/effective";
 import {
   AccessPermissionLevel,
   AccessResourceKey,
   DEFAULT_ACCESS_CONTROL_CONFIG,
 } from "@/types/system";
-import { UserPlan } from "@/types/user";
+import { BillingInfo, UserPaymentStatus, UserPlan } from "@/types/user";
 import { supabaseSelect } from "@/services/supabase/admin";
 
 function resolvePlan(value: unknown): UserPlan {
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
     const auth = await verifyRequestAuth(request);
     const [profileRows, accessControlRows] = await Promise.all([
       supabaseSelect("profiles", {
-        select: "plan,role,raw",
+        select: "plan,role,payment_status,billing,raw",
         filters: { uid: auth.uid },
         limit: 1,
       }),
@@ -35,11 +36,18 @@ export async function GET(request: NextRequest) {
     ]);
 
     const raw = (profileRows[0]?.raw as Record<string, unknown> | null) ?? {};
-    const plan = resolvePlan(profileRows[0]?.plan ?? raw.plan);
+    const storedPlan = resolvePlan(profileRows[0]?.plan ?? raw.plan);
     const role = String(profileRows[0]?.role || raw.role || "client");
+    const paymentStatus = String(profileRows[0]?.payment_status ?? raw.paymentStatus ?? "pending") as UserPaymentStatus;
+    const billing = (profileRows[0]?.billing ?? raw.billing ?? {}) as BillingInfo;
     const accessControl = accessControlRows.length > 0
       ? normalizeAccessControlConfig(accessControlRows[0]?.data)
       : DEFAULT_ACCESS_CONTROL_CONFIG;
+    const billingExempt = hasBillingExemption(accessControl, { uid: auth.uid, role });
+    const plan =
+      billingExempt || storedPlan === "free" || hasTrustedPaidBilling(paymentStatus, billing) || !hasIrregularGatewayBilling(billing)
+        ? storedPlan
+        : "free";
     const effectiveFeatureAccess = buildEffectiveFeatureAccessConfig(accessControl, { uid: auth.uid, plan, role });
 
     const access: Partial<Record<AccessResourceKey, AccessPermissionLevel>> = {};

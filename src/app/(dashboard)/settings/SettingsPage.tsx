@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { requestOwnAccountDeletion, updateOwnProfile } from "@/services/userService";
+import { rememberAccountDeletionRequest } from "@/lib/account-deletion/client";
 import { getKeyFingerprint } from "@/lib/crypto";
 import { usePlans } from "@/hooks/usePlans";
 import { migrateCryptography } from "@/services/transactionService";
@@ -242,6 +243,7 @@ export default function SettingsPage() {
     try {
       const token = await user?.getIdToken();
       await requestOwnAccountDeletion(token);
+      rememberAccountDeletionRequest();
       await refreshProfile();
       router.push("/goodbye");
     } catch (error) {

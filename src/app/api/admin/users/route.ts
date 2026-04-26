@@ -7,6 +7,8 @@ import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { permanentlyDeleteUserData, setArchivedStateForUserData } from "@/lib/account-archive/server";
 import { computePermanentDeleteAt, isDeletionWindowExpired, resolvePermanentDeleteAt } from "@/lib/account-deletion/policy";
+import { resolveEffectiveBillingState } from "@/lib/billing/effective";
+import { hasBillingExemption } from "@/lib/access-control/config";
 import { readSecureProfilePayload, writeSecureProfilePayload } from "@/lib/secure-store/profile";
 import {
   CREATOR_SUPREME_UID,
@@ -16,6 +18,8 @@ import {
 } from "@/lib/access-control/server";
 import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
 import { deleteSupabaseAuthUser, isUuid, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
+import { BillingInfo, UserPaymentStatus, UserPlan, UserRole, UserStatus } from "@/types/user";
+import { DEFAULT_ACCESS_CONTROL_CONFIG } from "@/types/system";
 
 async function getAuthContext(request: NextRequest): Promise<ServerAccessProfile> {
   const decoded = await verifyRequestAuth(request);
@@ -59,12 +63,80 @@ function mapProfileRowToUser(row: Record<string, unknown>) {
     plan: row.plan ?? raw.plan ?? "free",
     status: row.status ?? raw.status ?? "active",
     paymentStatus: row.payment_status ?? raw.paymentStatus ?? "pending",
+    billing: row.billing ?? raw.billing ?? {},
     transactionCount: row.transaction_count ?? raw.transactionCount ?? 0,
     verifiedEmail: row.verified_email ?? raw.verifiedEmail ?? false,
     blockReason: row.block_reason ?? raw.blockReason ?? "",
     createdAt: row.created_at ?? raw.createdAt ?? "",
     deletedAt,
     permanentDeleteAt: resolvePermanentDeleteAt(typeof deletedAt === "string" ? deletedAt : null, raw) ?? undefined,
+  };
+}
+
+function asPlan(value: unknown): UserPlan {
+  return value === "premium" || value === "pro" ? value : "free";
+}
+
+function asStatus(value: unknown): UserStatus {
+  return value === "inactive" || value === "deleted" || value === "blocked" ? value : "active";
+}
+
+function asPaymentStatus(value: unknown): UserPaymentStatus {
+  if (value === "free" || value === "paid" || value === "not_paid" || value === "overdue" || value === "canceled") return value;
+  return "pending";
+}
+
+async function enforceProfileBillingState(row: Record<string, unknown>, accessControl = DEFAULT_ACCESS_CONTROL_CONFIG) {
+  const raw = readSecureProfilePayload(row.raw);
+  const role = String(row.role ?? raw.role ?? "client") as UserRole;
+  const effective = resolveEffectiveBillingState({
+    role,
+    plan: asPlan(row.plan ?? raw.plan),
+    status: asStatus(row.status ?? raw.status),
+    paymentStatus: asPaymentStatus(row.payment_status ?? raw.paymentStatus),
+    blockReason: String(row.block_reason ?? raw.blockReason ?? ""),
+    billing: (row.billing ?? raw.billing ?? {}) as BillingInfo,
+    billingExempt: hasBillingExemption(accessControl, { uid: String(row.uid || ""), role }),
+  });
+
+  if (!effective.shouldEnforce) return row;
+
+  const updatedRaw = writeSecureProfilePayload({
+    ...raw,
+    plan: effective.plan,
+    status: effective.status,
+    paymentStatus: effective.paymentStatus,
+    blockReason: effective.blockReason || "",
+    billing: effective.billing || {},
+  });
+  const updatedAt = new Date().toISOString();
+
+  await supabaseUpsertRows(
+    "profiles",
+    [
+      {
+        uid: row.uid,
+        plan: effective.plan,
+        status: effective.status,
+        payment_status: effective.paymentStatus,
+        block_reason: effective.blockReason || "",
+        billing: effective.billing || {},
+        raw: updatedRaw,
+        updated_at: updatedAt,
+      },
+    ],
+    { onConflict: "uid" }
+  );
+
+  return {
+    ...row,
+    plan: effective.plan,
+    status: effective.status,
+    payment_status: effective.paymentStatus,
+    block_reason: effective.blockReason || "",
+    billing: effective.billing || {},
+    raw: updatedRaw,
+    updated_at: updatedAt,
   };
 }
 
@@ -130,7 +202,7 @@ export async function GET(request: NextRequest) {
 
     const paged = await supabaseSelectPaged("profiles", {
       select:
-        "uid,email,display_name,complete_name,phone,role,plan,status,payment_status,transaction_count,verified_email,block_reason,created_at,deleted_at,raw",
+        "uid,email,display_name,complete_name,phone,role,plan,status,payment_status,billing,transaction_count,verified_email,block_reason,created_at,deleted_at,raw",
       order: "created_at.desc.nullslast",
       page,
       limit,
@@ -138,7 +210,8 @@ export async function GET(request: NextRequest) {
       conditions,
       or,
     });
-    const users = paged.data.map(mapProfileRowToUser);
+    const enforcedRows = await Promise.all(paged.data.map((row) => enforceProfileBillingState(row, accessControl)));
+    const users = enforcedRows.map(mapProfileRowToUser);
     const userIds = users.map((user) => user.uid).filter(Boolean);
     const transactionCountByUid = new Map<string, number>();
 
@@ -215,6 +288,38 @@ export async function PATCH(request: NextRequest) {
     const row = rows[0];
     const raw = readSecureProfilePayload(row.raw);
     const mergedRaw = { ...raw, ...body.updates };
+    const mergedBilling = { ...(((row.billing ?? raw.billing ?? {}) as Record<string, unknown>)) };
+
+    for (const [key, value] of Object.entries(body.updates)) {
+      if (key.startsWith("billing.")) {
+        mergedBilling[key.slice("billing.".length)] = value;
+        delete mergedRaw[key];
+      }
+    }
+
+    if (body.updates.billing && typeof body.updates.billing === "object") {
+      Object.assign(mergedBilling, body.updates.billing);
+    }
+    mergedRaw.billing = mergedBilling;
+
+    const nextRole = String(body.updates.role ?? row.role ?? raw.role ?? "client") as UserRole;
+    const effective = resolveEffectiveBillingState({
+      role: nextRole,
+      plan: asPlan(body.updates.plan ?? row.plan ?? raw.plan),
+      status: asStatus(body.updates.status ?? row.status ?? raw.status),
+      paymentStatus: asPaymentStatus(body.updates.paymentStatus ?? row.payment_status ?? raw.paymentStatus),
+      blockReason: String(body.updates.blockReason ?? row.block_reason ?? raw.blockReason ?? ""),
+      billing: mergedBilling as BillingInfo,
+      billingExempt: hasBillingExemption(accessControl, { uid: body.uid, role: nextRole }),
+    });
+
+    if (effective.shouldEnforce) {
+      mergedRaw.plan = effective.plan;
+      mergedRaw.status = effective.status;
+      mergedRaw.paymentStatus = effective.paymentStatus;
+      mergedRaw.blockReason = effective.blockReason || "";
+      mergedRaw.billing = effective.billing || {};
+    }
 
     await supabaseUpsertRows(
       "profiles",
@@ -222,10 +327,11 @@ export async function PATCH(request: NextRequest) {
         {
           uid: body.uid,
           ...(body.updates.role !== undefined ? { role: body.updates.role } : {}),
-          ...(body.updates.plan !== undefined ? { plan: body.updates.plan } : {}),
-          ...(body.updates.status !== undefined ? { status: body.updates.status } : {}),
-          ...(body.updates.paymentStatus !== undefined ? { payment_status: body.updates.paymentStatus } : {}),
-          ...(body.updates.blockReason !== undefined ? { block_reason: body.updates.blockReason } : {}),
+          ...(body.updates.plan !== undefined || effective.shouldEnforce ? { plan: effective.plan } : {}),
+          ...(body.updates.status !== undefined || effective.shouldEnforce ? { status: effective.status } : {}),
+          ...(body.updates.paymentStatus !== undefined || effective.shouldEnforce ? { payment_status: effective.paymentStatus } : {}),
+          ...(body.updates.blockReason !== undefined || effective.shouldEnforce ? { block_reason: effective.blockReason || "" } : {}),
+          ...(Object.keys(mergedBilling).length > 0 || effective.shouldEnforce ? { billing: effective.billing || mergedBilling } : {}),
           raw: writeSecureProfilePayload(mergedRaw),
           updated_at: new Date().toISOString(),
         },

@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { getSupabaseClient } from "@/services/supabase/client";
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
+import { hasAccountDeletionRequest } from "@/lib/account-deletion/client";
 
 function formatDate(value: string | null) {
   if (!value) return null;
@@ -26,7 +27,8 @@ function formatDate(value: string | null) {
 
 export default function GoodbyePage() {
   const router = useRouter();
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, loading } = useAuth();
+  const [hasDeletionContext, setHasDeletionContext] = useState<boolean | null>(null);
   const [isRestarting, setIsRestarting] = useState(false);
   const [error, setError] = useState("");
   const [restoreName, setRestoreName] = useState("");
@@ -34,6 +36,17 @@ export default function GoodbyePage() {
   const [restoreMessage, setRestoreMessage] = useState("");
   const [restoreProtocol, setRestoreProtocol] = useState("");
   const [isSubmittingRestore, setIsSubmittingRestore] = useState(false);
+
+  useEffect(() => {
+    setHasDeletionContext(hasAccountDeletionRequest());
+  }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    if (hasDeletionContext === null) return;
+    if (userProfile?.status === "deleted" || (!user && hasDeletionContext)) return;
+    router.replace(user ? "/dashboard" : "/");
+  }, [hasDeletionContext, loading, router, user, userProfile?.status]);
 
   useEffect(() => {
     if (!restoreEmail && user?.email) {
@@ -53,6 +66,20 @@ export default function GoodbyePage() {
   const deletionWindowExpired = Boolean(
     permanentDeleteAt && new Date(permanentDeleteAt).getTime() <= Date.now()
   );
+
+  if (
+    loading ||
+    hasDeletionContext === null ||
+    (userProfile?.status !== "deleted" && (user || !hasDeletionContext))
+  ) {
+    return (
+      <AuthPageShell maxWidthClassName="max-w-md">
+        <div className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] p-6 text-center text-sm text-muted-foreground shadow-xl shadow-primary/10">
+          Carregando...
+        </div>
+      </AuthPageShell>
+    );
+  }
 
   async function handleFreshStart() {
     setError("");

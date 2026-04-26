@@ -6,10 +6,27 @@ import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { resolveEffectiveBillingState } from "@/lib/billing/effective";
+import { hasBillingExemption } from "@/lib/access-control/config";
+import { getServerAccessControlConfig } from "@/lib/access-control/server";
 import { normalizePhone } from "@/lib/phone";
 import { assertPhoneAvailable } from "@/lib/profile/server";
 import { readSecureProfilePayload, writeSecureProfilePayload } from "@/lib/secure-store/profile";
 import { resolvePermanentDeleteAt } from "@/lib/account-deletion/policy";
+import { BillingInfo, UserPaymentStatus, UserPlan, UserRole, UserStatus } from "@/types/user";
+
+function asPlan(value: unknown): UserPlan {
+  return value === "premium" || value === "pro" ? value : "free";
+}
+
+function asStatus(value: unknown): UserStatus {
+  return value === "inactive" || value === "deleted" || value === "blocked" ? value : "active";
+}
+
+function asPaymentStatus(value: unknown): UserPaymentStatus {
+  if (value === "free" || value === "paid" || value === "not_paid" || value === "overdue" || value === "canceled") return value;
+  return "pending";
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,17 +44,69 @@ export async function GET(request: NextRequest) {
 
     const acting = await resolveActingContext(request);
     uid = acting.actingUid;
-    const rows = await supabaseSelect("profiles", {
-      filters: { uid },
-      limit: 1,
-    });
+    const [rows, accessControl] = await Promise.all([
+      supabaseSelect("profiles", {
+        filters: { uid },
+        limit: 1,
+      }),
+      getServerAccessControlConfig(),
+    ]);
     if (rows.length === 0) {
       return NextResponse.json({ ok: true, profile: null }, { status: 200 });
     }
     const row = rows[0];
     const raw = readSecureProfilePayload(row.raw);
-    const authProviders = Array.isArray(raw.authProviders)
-      ? raw.authProviders.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    const role = String(row.role ?? raw.role ?? "client") as UserRole;
+    const effective = resolveEffectiveBillingState({
+      role,
+      plan: asPlan(row.plan ?? raw.plan),
+      status: asStatus(row.status ?? raw.status),
+      paymentStatus: asPaymentStatus(row.payment_status ?? raw.paymentStatus),
+      blockReason: String(row.block_reason ?? raw.blockReason ?? ""),
+      billing: (row.billing ?? raw.billing ?? {}) as BillingInfo,
+      billingExempt: hasBillingExemption(accessControl, { uid, role }),
+    });
+    const profileRow = effective.shouldEnforce
+      ? {
+        ...row,
+        plan: effective.plan,
+        status: effective.status,
+        payment_status: effective.paymentStatus,
+        block_reason: effective.blockReason || "",
+        billing: effective.billing || {},
+      }
+      : row;
+    const profileRaw = effective.shouldEnforce
+      ? {
+        ...raw,
+        plan: effective.plan,
+        status: effective.status,
+        paymentStatus: effective.paymentStatus,
+        blockReason: effective.blockReason || "",
+        billing: effective.billing || {},
+      }
+      : raw;
+
+    if (effective.shouldEnforce) {
+      await supabaseUpsertRows(
+        "profiles",
+        [
+          {
+            uid,
+            plan: effective.plan,
+            status: effective.status,
+            payment_status: effective.paymentStatus,
+            block_reason: effective.blockReason || "",
+            billing: effective.billing || {},
+            raw: writeSecureProfilePayload(profileRaw),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+        { onConflict: "uid" }
+      );
+    }
+    const authProviders = Array.isArray(profileRaw.authProviders)
+      ? profileRaw.authProviders.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
       : [];
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json(
@@ -45,27 +114,27 @@ export async function GET(request: NextRequest) {
         ok: true,
         profile: {
           uid,
-          email: row.email ?? raw.email ?? "",
-          displayName: row.display_name ?? raw.displayName ?? raw.completeName ?? "Usuário",
-          completeName: row.complete_name ?? raw.completeName ?? "",
-          phone: normalizePhone(String(row.phone ?? raw.phone ?? "")),
-          photoURL: row.photo_url ?? raw.photoURL ?? "",
-          role: row.role ?? raw.role ?? "client",
-          plan: row.plan ?? raw.plan ?? "free",
-          status: row.status ?? raw.status ?? "active",
-          blockReason: row.block_reason ?? raw.blockReason ?? "",
-          paymentStatus: row.payment_status ?? raw.paymentStatus ?? "pending",
-          transactionCount: row.transaction_count ?? raw.transactionCount ?? 0,
-          billing: row.billing ?? raw.billing ?? {},
-          verifiedEmail: row.verified_email ?? raw.verifiedEmail ?? false,
+          email: profileRow.email ?? profileRaw.email ?? "",
+          displayName: profileRow.display_name ?? profileRaw.displayName ?? profileRaw.completeName ?? "Usuário",
+          completeName: profileRow.complete_name ?? profileRaw.completeName ?? "",
+          phone: normalizePhone(String(profileRow.phone ?? profileRaw.phone ?? "")),
+          photoURL: profileRow.photo_url ?? profileRaw.photoURL ?? "",
+          role: profileRow.role ?? profileRaw.role ?? "client",
+          plan: profileRow.plan ?? profileRaw.plan ?? "free",
+          status: profileRow.status ?? profileRaw.status ?? "active",
+          blockReason: profileRow.block_reason ?? profileRaw.blockReason ?? "",
+          paymentStatus: profileRow.payment_status ?? profileRaw.paymentStatus ?? "pending",
+          transactionCount: profileRow.transaction_count ?? profileRaw.transactionCount ?? 0,
+          billing: profileRow.billing ?? profileRaw.billing ?? {},
+          verifiedEmail: profileRow.verified_email ?? profileRaw.verifiedEmail ?? false,
           authProviders,
-          needsPasswordSetup: raw.needsPasswordSetup ?? false,
-          deletedAt: row.deleted_at ?? raw.deletedAt ?? undefined,
+          needsPasswordSetup: profileRaw.needsPasswordSetup ?? false,
+          deletedAt: profileRow.deleted_at ?? profileRaw.deletedAt ?? undefined,
           permanentDeleteAt: resolvePermanentDeleteAt(
-            typeof row.deleted_at === "string" ? row.deleted_at : typeof raw.deletedAt === "string" ? raw.deletedAt : null,
-            raw
+            typeof profileRow.deleted_at === "string" ? profileRow.deleted_at : typeof profileRaw.deletedAt === "string" ? profileRaw.deletedAt : null,
+            profileRaw
           ) ?? undefined,
-          createdAt: row.created_at ?? raw.createdAt ?? new Date().toISOString(),
+          createdAt: profileRow.created_at ?? profileRaw.createdAt ?? new Date().toISOString(),
         },
       },
       { status: 200 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import Link from "next/link";
 import { usePlans } from "@/hooks/usePlans";
 import { useAuth } from "@/hooks/useAuth";
 import { buildUpgradeCheckoutPath, rememberPendingUpgradePlan } from "@/services/billing/checkoutIntent";
+import { clearPostAuthRedirect, readPostAuthRedirect } from "@/services/auth/postAuthRedirect";
 
 export default function LandingPage() {
   const { plans, loading: plansLoading } = usePlans();
@@ -18,6 +20,14 @@ export default function LandingPage() {
   // Constantes de Animação (Padrão do Sistema)
   const fadeInUp = "animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both";
   const zoomIn = "animate-in fade-in zoom-in-50 duration-500 fill-mode-both";
+
+  useEffect(() => {
+    if (authLoading || !userProfile) return;
+    const postAuthRedirect = readPostAuthRedirect();
+    if (!postAuthRedirect) return;
+    clearPostAuthRedirect();
+    window.location.replace(postAuthRedirect);
+  }, [authLoading, userProfile]);
 
   // Estado de carregamento elegante
   if (plansLoading || authLoading) {

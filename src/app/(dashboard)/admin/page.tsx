@@ -36,7 +36,7 @@ import {
   PlansConfig,
   PlanDetails,
 } from "@/types/system";
-import { ACCESS_RESOURCE_LABEL_BY_KEY, ACCESS_SCREENS, hasAccess } from "@/lib/access-control/config";
+import { ACCESS_RESOURCE_LABEL_BY_KEY, ACCESS_SCREENS, hasAccess, hasBillingExemption } from "@/lib/access-control/config";
 import { computePermanentDeleteAt } from "@/lib/account-deletion/policy";
 import { cn } from "@/lib/utils";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -440,6 +440,7 @@ export default function AdminPage() {
   const [isSavingAccessControl, setIsSavingAccessControl] = useState(false);
   const [accessSubjectType, setAccessSubjectType] = useState<AccessSubjectType>("plan");
   const [accessSubjectId, setAccessSubjectId] = useState("free");
+  const [permissionGroupByScreen, setPermissionGroupByScreen] = useState<Record<string, string>>({});
 
   // --- Permissões ---
   const isSupremeAdmin = userProfile?.uid === CREATOR_SUPREME;
@@ -1640,6 +1641,7 @@ export default function AdminPage() {
 
   const handleAccessLevelChange = (resource: AccessResourceKey, level: AccessEditorLevel) => {
     if (!editedAccessControl || !canManagePermissions) return;
+    if (resource === "billing.exempt" && accessSubjectType !== "role" && accessSubjectType !== "user") return;
     const subjectId = accessSubjectType === "global" ? "all" : accessSubjectId;
     if (!subjectId) return;
     const existing = getAccessRuleForSelection(resource);
@@ -1671,6 +1673,50 @@ export default function AdminPage() {
             },
           ],
     });
+  };
+
+  const handleBillingExemptionChange = (value: "inherit" | "exempt") => {
+    handleAccessLevelChange("billing.exempt", value === "exempt" ? "read" : "inherit");
+  };
+
+  const getPermissionGroupLabel = (screenId: string, resource: AccessResourceKey, label: string) => {
+    if (resource === "billing.exempt") return "Cobrança";
+    if (screenId !== "admin") return "Geral";
+    if (resource.startsWith("admin.users.")) return "Usuários";
+    if (resource.startsWith("admin.support.")) return "Suporte";
+    if (resource.startsWith("admin.restore.")) return "Restauração";
+    if (resource.startsWith("admin.plans.")) return "Planos";
+    if (resource.startsWith("admin.permissions.")) return "Permissões";
+    if (resource === "admin.billing_jobs" || resource === "admin.retention_jobs" || resource === "admin.health") return "Jobs e saúde";
+    if (resource === "admin.metrics.read") return "Métricas";
+    if (resource === "admin.audit.read") return "Auditoria";
+    if (resource === "admin.export") return "Exportações";
+    if (resource === "admin.impersonation") return "Impersonação";
+    return label.split("·")[0].trim() || "Geral";
+  };
+
+  const getVisiblePermissionResources = (screen: (typeof ACCESS_SCREENS)[number]) => {
+    const subjectResources = screen.resources.filter((resource) => {
+      if (resource.key !== "billing.exempt") return true;
+      return accessSubjectType === "role" || accessSubjectType === "user";
+    });
+    const groups = subjectResources.reduce((acc, resource) => {
+      const group = getPermissionGroupLabel(screen.id, resource.key, resource.label);
+      if (!acc[group]) acc[group] = [];
+      acc[group].push(resource);
+      return acc;
+    }, {} as Record<string, typeof subjectResources>);
+    const groupNames = Object.keys(groups);
+    const selectedGroup = permissionGroupByScreen[screen.id] && groups[permissionGroupByScreen[screen.id]]
+      ? permissionGroupByScreen[screen.id]
+      : groupNames[0] || "Geral";
+    return {
+      groups,
+      groupNames,
+      selectedGroup,
+      resources: groups[selectedGroup] || [],
+      total: subjectResources.length,
+    };
   };
 
   const saveAccessControl = async () => {
@@ -2905,7 +2951,7 @@ export default function AdminPage() {
                       </div>
                     ) : (
                       paginatedUsers.map((u) => {
-                        const isTargetAdminOrMod = u.role === "admin" || u.role === "moderator";
+                        const isTargetAdminOrMod = hasBillingExemption(accessControlConfig, { uid: u.uid, role: u.role });
                         const canChangeRole = canEditRole(u);
                         const canChangePlan = canEditPlan(u);
                         const canEditThisUser = canEditUser(u);
@@ -3068,7 +3114,7 @@ export default function AdminPage() {
                             </TableCell>
                           </TableRow>
                         ) : paginatedUsers.map((u) => {
-                          const isTargetAdminOrMod = u.role === 'admin' || u.role === 'moderator';
+                          const isTargetAdminOrMod = hasBillingExemption(accessControlConfig, { uid: u.uid, role: u.role });
                           const canChangeRole = canEditRole(u);
                           const canChangePlan = canEditPlan(u);
                           const canEditThisUser = canEditUser(u);
@@ -3164,7 +3210,15 @@ export default function AdminPage() {
                                       </SelectContent>
                                     </Select>
                                     <p className="text-[10px] text-zinc-500 leading-none">
-                                      {u.billing?.source === "mercadopago_webhook" ? "Fonte: Webhook MP" : "Fonte: Manual"}
+                                      {u.billing?.source === "mercadopago_webhook"
+                                        ? "Fonte: Webhook MP"
+                                        : u.billing?.source === "mercadopago_confirm"
+                                          ? "Fonte: Confirmação MP"
+                                          : u.billing?.source === "mercadopago_cancel"
+                                            ? "Fonte: Cancelamento MP"
+                                            : u.billing?.source === "system"
+                                              ? "Fonte: Sistema"
+                                              : "Fonte: Manual"}
                                     </p>
                                     {u.billing?.lastSyncAt && (
                                       <p className="text-[10px] text-zinc-400 leading-none">
@@ -3685,7 +3739,7 @@ export default function AdminPage() {
                         <ShieldCheck className="h-5 w-5 text-primary" /> Quem recebe o acesso?
                       </CardTitle>
                       <CardDescription>
-                        Plano define o padrão. Cargo define equipe ou perfil customizado. Usuário sobrescreve tudo para uma pessoa específica.
+                        Plano define recursos. Cargo ou usuário podem liberar exceções como isenção de cobrança.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="grid gap-4 p-4 lg:grid-cols-[1fr_1.2fr]">
@@ -3752,7 +3806,9 @@ export default function AdminPage() {
                   </Card>
 
                   <div className="space-y-4">
-                    {ACCESS_SCREENS.map((screen) => (
+                    {ACCESS_SCREENS.map((screen) => {
+                      const permissionView = getVisiblePermissionResources(screen);
+                      return (
                       <Collapsible key={screen.id} className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                         <CollapsibleTrigger asChild>
                           <button type="button" className="group flex w-full flex-col gap-3 app-panel-subtle px-5 py-4 text-left transition-colors hover:bg-accent/70 md:flex-row md:items-start md:justify-between">
@@ -3761,7 +3817,7 @@ export default function AdminPage() {
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <CardTitle className="text-lg font-semibold text-foreground">{screen.label}</CardTitle>
-                                  <Badge variant="secondary" className="rounded-full">{screen.resources.length} funcionalidades</Badge>
+                                  <Badge variant="secondary" className="rounded-full">{permissionView.total} funcionalidades</Badge>
                                 </div>
                                 <CardDescription className="mt-1">{screen.description}</CardDescription>
                               </div>
@@ -3770,17 +3826,47 @@ export default function AdminPage() {
                           </button>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
+                          {permissionView.groupNames.length > 1 && (
+                            <div className="border-t border-color:var(--app-panel-border) app-panel-subtle px-4 py-3">
+                              <div className="max-w-sm space-y-2">
+                                <Label className="text-xs font-bold uppercase text-muted-foreground">Grupo de funcionalidades</Label>
+                                <Select
+                                  value={permissionView.selectedGroup}
+                                  onValueChange={(value) => setPermissionGroupByScreen((prev) => ({ ...prev, [screen.id]: value }))}
+                                >
+                                  <SelectTrigger className="h-10 rounded-xl">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {permissionView.groupNames.map((groupName) => (
+                                      <SelectItem key={groupName} value={groupName}>
+                                        {groupName} ({permissionView.groups[groupName].length})
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                          )}
                           <CardContent className="divide-y divide-border p-0">
-                            {screen.resources.map((resource) => {
+                            {permissionView.resources.map((resource) => {
                               const value = getAccessEditorLevel(resource.key);
                               const explicitRule = getAccessRuleForSelection(resource.key);
                               const inheritedLabel = ACCESS_RESOURCE_LABEL_BY_KEY[resource.key] || resource.label;
+                              const isBillingExemption = resource.key === "billing.exempt";
+                              const billingExemptionValue = value === "inherit" ? "inherit" : "exempt";
                               return (
                                 <div key={resource.key} className="grid gap-3 p-4 md:grid-cols-[1fr_190px] md:items-center">
                                   <div>
                                     <div className="flex flex-wrap items-center gap-2">
                                       <p className="font-semibold text-foreground">{resource.label}</p>
-                                      {value === "inherit" ? (
+                                      {isBillingExemption ? (
+                                        billingExemptionValue === "inherit" ? (
+                                          <Badge variant="secondary" className="rounded-full">Padrão</Badge>
+                                        ) : (
+                                          <Badge className="rounded-full bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/10">Não cobrar</Badge>
+                                        )
+                                      ) : value === "inherit" ? (
                                         <Badge variant="secondary" className="rounded-full">Herdando</Badge>
                                       ) : (
                                         <Badge className="rounded-full bg-primary/10 text-primary hover:bg-primary/10">{ACCESS_LEVEL_LABELS[value]}</Badge>
@@ -3792,28 +3878,45 @@ export default function AdminPage() {
                                     )}
                                     <p className="mt-1 font-mono text-[11px] text-muted-foreground">{inheritedLabel}</p>
                                   </div>
-                                  <Select
-                                    value={value}
-                                    disabled={!canManagePermissions}
-                                    onValueChange={(nextValue) => handleAccessLevelChange(resource.key, nextValue as AccessEditorLevel)}
-                                  >
-                                    <SelectTrigger className="h-11 rounded-xl">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="inherit">Herdar</SelectItem>
-                                      {Object.entries(ACCESS_LEVEL_LABELS).map(([level, label]) => (
-                                        <SelectItem key={level} value={level}>{label}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                  {isBillingExemption ? (
+                                    <Select
+                                      value={billingExemptionValue}
+                                      disabled={!canManagePermissions}
+                                      onValueChange={(nextValue) => handleBillingExemptionChange(nextValue as "inherit" | "exempt")}
+                                    >
+                                      <SelectTrigger className="h-11 rounded-xl">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="inherit">Padrão</SelectItem>
+                                        <SelectItem value="exempt">Não cobrar</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <Select
+                                      value={value}
+                                      disabled={!canManagePermissions}
+                                      onValueChange={(nextValue) => handleAccessLevelChange(resource.key, nextValue as AccessEditorLevel)}
+                                    >
+                                      <SelectTrigger className="h-11 rounded-xl">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="inherit">Herdar</SelectItem>
+                                        {Object.entries(ACCESS_LEVEL_LABELS).map(([level, label]) => (
+                                          <SelectItem key={level} value={level}>{label}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
                                 </div>
                               );
                             })}
                           </CardContent>
                         </CollapsibleContent>
                       </Collapsible>
-                    ))}
+                    );
+                    })}
                   </div>
                 </div>
               </div>
