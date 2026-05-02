@@ -1075,15 +1075,15 @@ export default function CreditCardPage() {
                       <div className="grid gap-4 md:grid-cols-3">
                         <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
                           <p className="text-sm font-medium text-muted-foreground">Limite do cartão</p>
-                          <p className="mt-2 text-2xl font-bold text-foreground">{formatCurrency(activeCardCreditSummary?.limit || 0)}</p>
+                          <p className="financial-value mt-2 text-xl font-bold text-foreground sm:text-2xl">{formatCurrency(activeCardCreditSummary?.limit || 0)}</p>
                         </div>
                         <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
                           <p className="text-sm font-medium text-muted-foreground">Usado na fatura</p>
-                          <p className="mt-2 text-2xl font-bold text-foreground">{formatCurrency(activeCardCreditSummary?.used || 0)}</p>
+                          <p className="financial-value mt-2 text-xl font-bold text-foreground sm:text-2xl">{formatCurrency(activeCardCreditSummary?.used || 0)}</p>
                         </div>
                         <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
                           <p className="text-sm font-medium text-muted-foreground">Disponível</p>
-                          <p className={`mt-2 text-2xl font-bold ${(activeCardCreditSummary?.available || 0) < 0 ? "text-red-600" : "text-emerald-600"}`}>
+                          <p className={`financial-value mt-2 text-xl font-bold sm:text-2xl ${(activeCardCreditSummary?.available || 0) < 0 ? "text-red-600" : "text-emerald-600"}`}>
                             {formatCurrency(activeCardCreditSummary?.available || 0)}
                           </p>
                         </div>
