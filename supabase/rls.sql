@@ -66,6 +66,8 @@ alter table public.piggy_banks enable row level security;
 alter table public.piggy_bank_history enable row level security;
 alter table public.support_requests enable row level security;
 alter table public.billing_events enable row level security;
+alter table public.processed_events enable row level security;
+alter table public.subscriptions enable row level security;
 alter table public.support_access_requests enable row level security;
 alter table public.impersonation_action_requests enable row level security;
 alter table public.log_acesso_suporte enable row level security;
@@ -194,6 +196,11 @@ begin
 
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'billing_events' and policyname = 'billing_events_select_own_or_staff') then
     create policy billing_events_select_own_or_staff on public.billing_events
+      for select using (public.current_user_uid() = uid or public.is_staff_role());
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'subscriptions' and policyname = 'subscriptions_select_own_or_staff') then
+    create policy subscriptions_select_own_or_staff on public.subscriptions
       for select using (public.current_user_uid() = uid or public.is_staff_role());
   end if;
 
