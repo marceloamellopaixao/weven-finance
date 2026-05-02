@@ -418,7 +418,6 @@ export default function SettingsPage() {
     checkoutAttemptId?: string
   ) => {
     if (!user) return;
-    if (!preapprovalId?.trim() && !pendingPreapprovalId && !checkoutAttemptId) return;
 
     setIsConfirmingPreapproval(true);
     try {
@@ -445,7 +444,12 @@ export default function SettingsPage() {
     process.env.NODE_ENV === "development" &&
     (userProfile?.role === "admin" || userProfile?.role === "moderator");
   const effectivePlan = isBillingExemptRole ? "pro" : currentPlan;
-  const effectivePaymentStatus = isBillingExemptRole ? "free" : (userProfile?.paymentStatus || "pending");
+  const billingPaymentStatus = userProfile?.billing?.paymentStatus;
+  const effectivePaymentStatus = isBillingExemptRole
+    ? "free"
+    : billingPaymentStatus === "failed"
+      ? "not_paid"
+      : (userProfile?.paymentStatus || billingPaymentStatus || "pending");
   const canUpgrade = !isBillingExemptRole && effectivePlan !== "pro";
   const planRoleLabel = effectivePlan === "free"
     ? "Registrar"
@@ -527,33 +531,12 @@ export default function SettingsPage() {
   }, [activeTab]);
 
   useEffect(() => {
-    const preapprovalId = searchParams.get("preapproval_id") || searchParams.get("preapprovalId");
-    const billingReturn = searchParams.get("billing_return");
-    const planParam = searchParams.get("plan");
-    const attemptParam = searchParams.get("attempt");
-    const expectedPlan = planParam === "premium" || planParam === "pro" ? planParam : undefined;
-
-    if (!user || isConfirmingPreapproval) return;
-    if (!preapprovalId && !billingReturn) return;
-
-    void handleConfirmPreapproval(preapprovalId || undefined, expectedPlan, attemptParam || undefined).finally(() => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.delete("preapproval_id");
-      params.delete("preapprovalId");
-      params.delete("billing_return");
-      params.delete("plan");
-      params.delete("attempt");
-      params.set("tab", "billing");
-      router.replace(`${pathname}?${params.toString()}`);
-    });
-  }, [searchParams, user]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
     if (!user) return;
     if (activeTab !== "billing") return;
     if (isBillingExemptRole) return;
     if (!shouldShowRecoveryCTA) return;
     if (isConfirmingPreapproval || isAutoReconcilingBilling) return;
+    if (!pendingPreapprovalId && !pendingCheckoutAttemptId) return;
 
     const autoAttemptKey = [
       effectiveProfileUid,
@@ -957,6 +940,13 @@ export default function SettingsPage() {
                           <>
                             <AlertTriangle className="h-4 w-4 text-red-300" />
                             Pagamento Atrasado
+                          </>
+                        )}
+
+                        {!isBillingExemptRole && (effectivePaymentStatus === 'not_paid' || effectivePaymentStatus === 'canceled') && (
+                          <>
+                            <AlertTriangle className="h-4 w-4 text-red-300" />
+                            Pagamento com Falha
                           </>
                         )}
                       </Badge>
