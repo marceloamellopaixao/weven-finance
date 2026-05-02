@@ -226,7 +226,7 @@ export default function PiggyBankDetailPage() {
             </CardHeader>
             <CardContent className="space-y-5">
               <div>
-                <p className="text-3xl font-bold text-emerald-600">{formatCurrency(detail.totalSaved)}</p>
+                <p className="financial-value text-2xl font-bold text-emerald-600 sm:text-3xl">{formatCurrency(detail.totalSaved)}</p>
               </div>
 
               <div className="grid gap-3">
@@ -271,7 +271,7 @@ export default function PiggyBankDetailPage() {
                 detail.history.map((entry) => (
                   <div key={entry.id} className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="font-semibold text-foreground">{formatCurrency(entry.amount)}</p>
+                      <p className="financial-value font-semibold text-foreground">{formatCurrency(entry.amount)}</p>
                       <p className="text-xs text-muted-foreground">{formatDateTime(entry.createdAt)}</p>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
