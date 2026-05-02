@@ -2,6 +2,7 @@ import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { CreditCardSettings, CreditCardSummary } from "@/types/creditCard";
 import { readSecureSettingData, writeSecureSettingData } from "@/lib/secure-store/user-settings";
 import { readSecureCardPayload } from "@/lib/secure-store/payment-cards";
+import { getCurrentMonthKey, getMonthKey } from "@/lib/transactions/recurring";
 
 export const defaultCreditCardSettings: CreditCardSettings = {
   enabled: false,
@@ -146,15 +147,26 @@ function mapTxToCard(tx: Record<string, unknown>, cards: PaymentCardPolicyDoc[])
 
 async function getPendingCreditTransactions(uid: string) {
   const rows = await supabaseSelect("transactions", {
-    select: "source_id,tx_type,tx_status,payment_method,raw",
+    select: "source_id,tx_type,tx_status,payment_method,due_date,tx_date,raw",
     filters: { uid },
   });
+  const currentMonthKey = getCurrentMonthKey();
 
   return rows
-    .map((row) => ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>)
+    .map((row) => ({
+      raw: ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>,
+      monthKey: getMonthKey(String(row.due_date || row.tx_date || "")),
+    }))
     .filter(
-      (tx) => tx.paymentMethod === "credit_card" && tx.type === "expense" && tx.status === "pending"
-    );
+      ({ raw, monthKey }) =>
+        raw.paymentMethod === "credit_card" &&
+        raw.type === "expense" &&
+        raw.status === "pending" &&
+        raw.isArchived !== true &&
+        raw.recurringRole !== "template" &&
+        monthKey === currentMonthKey
+    )
+    .map(({ raw }) => raw);
 }
 
 export async function computeCreditCardSummary(uid: string, limit: number): Promise<CreditCardSummary> {
