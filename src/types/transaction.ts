@@ -2,6 +2,7 @@ export type TransactionType = "income" | "expense";
 export type TransactionStatus = "paid" | "pending";
 export type PaymentMethod = "credit_card" | "debit_card" | "pix" | "cash" | "boleto" | "transfer";
 export type InstallmentValueMode = "split_total" | "repeat_value";
+export type RecurringTransactionRole = "template" | "occurrence";
 
 export type TransactionCreatedAt =
   | Date
@@ -32,8 +33,19 @@ export interface Transaction {
   groupId?: string;
   isRecurring?: boolean;
   recurrenceEnded?: boolean;
+  recurringId?: string;
+  recurringMonth?: string;
+  recurringRole?: RecurringTransactionRole;
+  nextOccurrenceDate?: string;
   installmentCurrent?: number;
   installmentTotal?: number;
+}
+
+export interface RecurringTransaction extends Omit<Transaction, "id" | "status" | "createdAt" | "userId"> {
+  recurringId: string;
+  recurringRole: "template";
+  recurrenceEnded?: boolean;
+  nextOccurrenceDate?: string;
 }
 
 export type CreateTransactionDTO = Omit<Transaction, "id" | "createdAt" | "userId" | "status"> & {
