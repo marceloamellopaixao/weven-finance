@@ -10,6 +10,13 @@ import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import {
+  buildRecurringOccurrenceSourceId,
+  getCurrentMonthKey,
+  getMonthKey,
+  getRecurringOccurrenceDateForMonth,
+  shouldSyncRecurringTemplate,
+} from "@/lib/transactions/recurring";
+import {
   supabaseDeleteByFilters,
   supabaseSelect,
   supabaseSelectPaged,
@@ -83,11 +90,32 @@ function toClientTx(uid: string, row: Record<string, unknown>) {
     installmentTotal: row.installment_total ?? raw.installmentTotal ?? undefined,
     isRecurring: typeof raw.isRecurring === "boolean" ? raw.isRecurring : false,
     recurrenceEnded: typeof raw.recurrenceEnded === "boolean" ? raw.recurrenceEnded : false,
+    recurringId: typeof raw.recurringId === "string" ? raw.recurringId : undefined,
+    recurringMonth: typeof raw.recurringMonth === "string" ? raw.recurringMonth : undefined,
+    recurringRole: raw.recurringRole === "template" || raw.recurringRole === "occurrence" ? raw.recurringRole : undefined,
+    nextOccurrenceDate: typeof raw.nextOccurrenceDate === "string" ? raw.nextOccurrenceDate : undefined,
     createdAt: typeof row.created_at === "string" ? row.created_at : null,
     isEncrypted: typeof raw.isEncrypted === "boolean" ? raw.isEncrypted : false,
     isArchived: typeof raw.isArchived === "boolean" ? raw.isArchived : false,
     userId: uid,
   };
+}
+
+function getRaw(row: Record<string, unknown>) {
+  return ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+}
+
+function isArchivedRow(row: Record<string, unknown>) {
+  return Boolean(getRaw(row).isArchived);
+}
+
+function isRecurringTemplateRaw(raw: Record<string, unknown>) {
+  return raw.isRecurring === true && raw.recurringRole === "template" && raw.recurrenceEnded !== true;
+}
+
+function getRowMonth(row: Record<string, unknown>) {
+  const raw = getRaw(row);
+  return getMonthKey(String(row.due_date || raw.dueDate || row.tx_date || raw.date || ""));
 }
 
 async function fetchUserTransactions(uid: string) {
@@ -103,6 +131,141 @@ function getTransactionMonthKey(value: unknown) {
   if (typeof value !== "string" || value.length < 7) return null;
   const monthKey = value.slice(0, 7);
   return /^\d{4}-\d{2}$/.test(monthKey) ? monthKey : null;
+}
+
+async function migrateLegacyRecurringRows(uid: string, rows: Record<string, unknown>[], currentMonthKey: string) {
+  const groups = new Map<string, Record<string, unknown>[]>();
+
+  for (const row of rows) {
+    const raw = getRaw(row);
+    const groupId = String(row.group_id || raw.groupId || "");
+    if (!groupId || raw.isRecurring !== true || raw.recurringRole) continue;
+    const group = groups.get(groupId) || [];
+    group.push(row);
+    groups.set(groupId, group);
+  }
+
+  const upserts: Record<string, unknown>[] = [];
+
+  for (const [groupId, groupRows] of groups) {
+    const sorted = [...groupRows].sort((a, b) =>
+      String(a.due_date || getRaw(a).dueDate || "").localeCompare(String(b.due_date || getRaw(b).dueDate || ""))
+    );
+    const first = sorted[0];
+    if (!first) continue;
+    const firstRaw = getRaw(first);
+
+    upserts.push(
+      toTxRow(uid, groupId, {
+        ...firstRaw,
+        amountForLimit: null,
+        isArchived: true,
+        isRecurring: true,
+        recurrenceEnded: false,
+        groupId,
+        recurringId: groupId,
+        recurringRole: "template",
+        installmentCurrent: undefined,
+        installmentTotal: undefined,
+      })
+    );
+
+    for (const row of sorted) {
+      const raw = getRaw(row);
+      const sourceId = String(row.source_id || "");
+      if (!sourceId) continue;
+      const monthKey = getRowMonth(row);
+      const shouldArchiveFuture = Boolean(monthKey && monthKey > currentMonthKey);
+      upserts.push(
+        toTxRow(uid, sourceId, {
+          ...raw,
+          amountForLimit: shouldArchiveFuture ? null : raw.amountForLimit,
+          isArchived: shouldArchiveFuture ? true : raw.isArchived,
+          isRecurring: true,
+          recurrenceEnded: raw.recurrenceEnded === true,
+          groupId,
+          recurringId: groupId,
+          recurringMonth: monthKey,
+          recurringRole: "occurrence",
+          installmentCurrent: undefined,
+          installmentTotal: undefined,
+        })
+      );
+    }
+  }
+
+  if (upserts.length > 0) {
+    await supabaseUpsertRows("transactions", upserts, { onConflict: "id" });
+  }
+
+  return upserts.length;
+}
+
+async function syncRecurringRows(uid: string) {
+  const currentMonthKey = getCurrentMonthKey();
+  const rows = await fetchUserTransactions(uid);
+  const migrated = await migrateLegacyRecurringRows(uid, rows, currentMonthKey);
+  const freshRows = migrated > 0 ? await fetchUserTransactions(uid) : rows;
+
+  const existingOccurrenceKeys = new Set<string>();
+  for (const row of freshRows) {
+    const raw = getRaw(row);
+    const recurringId = typeof raw.recurringId === "string" ? raw.recurringId : "";
+    const recurringMonth = typeof raw.recurringMonth === "string" ? raw.recurringMonth : getRowMonth(row);
+    if (!recurringId || !recurringMonth || raw.recurringRole === "template") continue;
+    existingOccurrenceKeys.add(`${recurringId}__${recurringMonth}`);
+  }
+
+  const upserts: Record<string, unknown>[] = [];
+  for (const row of freshRows) {
+    const raw = getRaw(row);
+    if (!isRecurringTemplateRaw(raw)) continue;
+    const recurringId = String(raw.recurringId || row.group_id || row.source_id || "");
+    if (!recurringId) continue;
+    if (!shouldSyncRecurringTemplate(
+      {
+        date: String(raw.date || row.tx_date || ""),
+        dueDate: String(raw.dueDate || row.due_date || ""),
+        recurrenceEnded: raw.recurrenceEnded === true,
+      },
+      currentMonthKey
+    )) {
+      continue;
+    }
+
+    const occurrenceKey = `${recurringId}__${currentMonthKey}`;
+    if (existingOccurrenceKeys.has(occurrenceKey)) continue;
+
+    const occurrenceDate = getRecurringOccurrenceDateForMonth(String(raw.date || row.tx_date || ""), currentMonthKey);
+    const occurrenceDueDate = getRecurringOccurrenceDateForMonth(String(raw.dueDate || row.due_date || ""), currentMonthKey);
+    if (!occurrenceDate || !occurrenceDueDate) continue;
+
+    upserts.push(
+      toTxRow(uid, buildRecurringOccurrenceSourceId(recurringId, currentMonthKey), {
+        ...raw,
+        amountForLimit: asNumber(raw.recurringAmountForLimit) ?? asNumber(raw.amountForLimit),
+        isArchived: false,
+        isRecurring: true,
+        recurrenceEnded: false,
+        groupId: recurringId,
+        recurringId,
+        recurringMonth: currentMonthKey,
+        recurringRole: "occurrence",
+        date: occurrenceDate,
+        dueDate: occurrenceDueDate,
+        installmentCurrent: undefined,
+        installmentTotal: undefined,
+        createdAt: new Date().toISOString(),
+      })
+    );
+    existingOccurrenceKeys.add(occurrenceKey);
+  }
+
+  if (upserts.length > 0) {
+    await supabaseUpsertRows("transactions", upserts, { onConflict: "id" });
+  }
+
+  return { created: upserts.length, migrated };
 }
 
 export async function GET(request: NextRequest) {
@@ -212,7 +375,17 @@ export async function POST(request: NextRequest) {
       | { action: "createMany"; transactions: Record<string, unknown>[] }
       | { action: "updateMany"; updates: Array<{ id: string; updates: Record<string, unknown> }> }
       | { action: "toggleStatus"; transactionId: string; currentStatus: "paid" | "pending" }
-      | { action: "cancelFuture"; groupId: string; lastInstallmentDate: string };
+      | { action: "cancelFuture"; groupId: string; lastInstallmentDate: string }
+      | { action: "syncRecurring" };
+
+    if (body.action === "syncRecurring") {
+      const result = await syncRecurringRows(uid);
+      if (result.created > 0 || result.migrated > 0) {
+        await enforceCreditCardPolicy(uid);
+      }
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+      return NextResponse.json({ ok: true, ...result }, { status: 200 });
+    }
 
     if (body.action === "createMany") {
       const approval = await ensureImpersonationWriteApproval({
@@ -259,12 +432,14 @@ export async function POST(request: NextRequest) {
         const monthlyCounts = new Map<string, number>();
 
         for (const row of current) {
+          if (isArchivedRow(row)) continue;
           const monthKey = getTransactionMonthKey(row.due_date ?? row.tx_date);
           if (!monthKey) continue;
           monthlyCounts.set(monthKey, (monthlyCounts.get(monthKey) ?? 0) + 1);
         }
 
         for (const tx of txs) {
+          if (Boolean(tx.isArchived)) continue;
           const monthKey = getTransactionMonthKey(tx.dueDate ?? tx.date);
           if (!monthKey) continue;
 
@@ -288,7 +463,7 @@ export async function POST(request: NextRequest) {
 
       const nowIso = new Date().toISOString();
       const rows = txs.map((tx) => {
-        const id = crypto.randomUUID();
+        const id = typeof tx.sourceId === "string" && tx.sourceId.trim() ? tx.sourceId.trim() : crypto.randomUUID();
         return toTxRow(uid, id, { ...tx, userId: uid, createdAt: nowIso });
       });
 
