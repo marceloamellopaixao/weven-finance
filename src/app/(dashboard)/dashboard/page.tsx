@@ -43,6 +43,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { getPlanCapabilities } from "@/lib/plans/capabilities";
 import { getOnboardingStepHref } from "@/lib/onboarding/flow";
 import { buildInstallmentPlan } from "@/lib/transactions/installments";
+import { getCurrentMonthKey, getMonthKey } from "@/lib/transactions/recurring";
 import { buildUpgradeCheckoutPath } from "@/services/billing/checkoutIntent";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
@@ -51,7 +52,7 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolea
   { value: "cash", label: "Dinheiro", hasDueDate: false },
   { value: "transfer", label: "Transferência", hasDueDate: false },
   { value: "debit_card", label: "Cartão de Débito", hasDueDate: false },
-  { value: "credit_card", label: "Cartão de Crédito", hasDueDate: true },
+  { value: "credit_card", label: "Cartão de Crédito", hasDueDate: false },
 ];
 
 const formatDateDisplay = (dateString: string, options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' }) => {
@@ -450,7 +451,10 @@ export default function DashboardPage() {
       };
     }
 
-    const pendingCredit = linkedTransactions.filter((tx) => tx.paymentMethod === "credit_card" && tx.status === "pending");
+    const currentMonthKey = getCurrentMonthKey();
+    const pendingCredit = linkedTransactions
+      .filter((tx) => tx.paymentMethod === "credit_card" && tx.status === "pending")
+      .filter((tx) => getMonthKey(tx.dueDate || tx.date) === currentMonthKey);
     const used = pendingCredit.reduce((acc, tx) => acc + Number(tx.amountForLimit ?? tx.amount ?? 0), 0);
     const limit = Number(selectedPaymentCard.creditLimit || 0);
     const remaining = limit - used;
@@ -540,8 +544,10 @@ export default function DashboardPage() {
 
     if (method !== "credit_card") return { ok: true as const };
     const linked = getLinkedCardTransactions(card);
+    const currentMonthKey = getCurrentMonthKey();
     const usedPending = linked
       .filter((tx) => tx.status === "pending" && !excludeIds.includes(String(tx.id || "")))
+      .filter((tx) => getMonthKey(tx.dueDate || tx.date) === currentMonthKey)
       .reduce((acc, tx) => acc + Number(tx.amountForLimit ?? tx.amount ?? 0), 0);
     const limit = Number(card.creditLimit || 0);
     const remaining = limit - usedPending;
@@ -1144,7 +1150,7 @@ export default function DashboardPage() {
                 ? "O sistema vai dividir este total pelas parcelas."
                 : "O valor digitado sera repetido em cada parcela."
               : isRecurring
-                ? "Este valor sera repetido nos próximos 12 meses."
+                ? "Este valor sera usado como modelo mensal."
                 : "Valor único"}
           </p>
         </div>
@@ -1277,7 +1283,7 @@ export default function DashboardPage() {
         </div>
         {isRecurring && (
           <div className="rounded-xl border border-primary/20 bg-accent px-3 py-3 text-xs text-accent-foreground animate-in fade-in">
-            Este lançamento será criado para o mês atual e para os próximos 11 meses.
+            Este lançamento será mantido como recorrência mensal. Apenas a cobrança necessária do mês será criada. Próxima cobrança: {showDueDateInput ? dueDate : date}.
           </div>
         )}
         <div className="flex items-center justify-between border-t border-border/60 pt-1">
@@ -2136,8 +2142,8 @@ export default function DashboardPage() {
                               {tx.isRecurring ? <Repeat className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
                               {tx.isRecurring
                                 ? tx.recurrenceEnded
-                                  ? `Recorrência encerrada ${(tx.installmentCurrent || 0)}/${(tx.installmentTotal || 0)}`
-                                  : `Recorrência ${(tx.installmentCurrent || 0)}/${(tx.installmentTotal || 0)}`
+                                  ? "Recorrência encerrada"
+                                  : "Recorrência mensal"
                                 : `Parcela ${(tx.installmentCurrent || 0)}/${(tx.installmentTotal || 0)}`}
                             </span>
                           )}
@@ -2265,7 +2271,9 @@ export default function DashboardPage() {
                               }`}
                           >
                             <span className="font-medium">
-                              {editingTx.isRecurring ? "Ocorrência" : "Parcela"} {parcel.installmentCurrent || 1}/{parcel.installmentTotal || editingGroupTransactions.length}
+                              {editingTx.isRecurring
+                                ? `Ocorrência ${parcel.recurringMonth || String(parcel.dueDate || "").slice(0, 7)}`
+                                : `Parcela ${parcel.installmentCurrent || 1}/${parcel.installmentTotal || editingGroupTransactions.length}`}
                             </span>
                             <span>{formatDateDisplay(parcel.dueDate, { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
                             <span className="font-semibold">{formatCurrencyDisplay(parcel.amount)}</span>
