@@ -467,14 +467,14 @@ export default function NewTransactionPage() {
               {isInstallment && installmentValueMode === "repeat_value" ? "Valor de cada parcela" : "Valor do lancamento"}
             </Label>
             <div id="tour-transactions-amount" className="flex items-center justify-center gap-2">
-              <span className={`text-3xl font-bold transition-colors ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>R$</span>
+              <span className={`text-2xl font-bold transition-colors sm:text-3xl ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>R$</span>
               <Input 
                 type="text"
                 inputMode="decimal"
                 value={amountInput}
                 onChange={(e) => setAmountInput(formatCurrencyInput(e.target.value))}
                 placeholder="0,00"
-                className={`w-full max-w-full h-auto p-0 border-none shadow-none text-4xl md:text-5xl font-bold bg-transparent focus-visible:ring-0 text-start ${isIncome ? 'text-emerald-500 placeholder:text-emerald-500' : 'text-red-500 placeholder:text-red-500'}`}
+                className={`financial-value w-full max-w-full h-auto p-0 border-none shadow-none text-3xl sm:text-4xl md:text-5xl font-bold bg-transparent focus-visible:ring-0 text-start ${isIncome ? 'text-emerald-500 placeholder:text-emerald-500' : 'text-red-500 placeholder:text-red-500'}`}
               />
             </div>
             <p className="mt-3 text-sm text-zinc-500">
