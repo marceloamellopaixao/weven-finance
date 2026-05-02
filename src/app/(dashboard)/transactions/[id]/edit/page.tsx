@@ -20,6 +20,7 @@ import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
 import { deleteTransaction, updateTransaction } from "@/services/transactionService";
 import { getCreditCardDueDateFromSelectedCard, isCreditCapableCard } from "@/lib/credit-card/due-date";
+import { addMonthsUTC } from "@/lib/transactions/recurring";
 import { formatCategoryLabel, orderCategoryNames } from "@/lib/category-utils";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; hasDueDate: boolean }[] = [
@@ -33,6 +34,15 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string; hasDueDate: boolea
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value || 0);
+
+const formatDateDisplay = (dateString: string) => {
+  if (!dateString) return "-";
+  return new Date(`${dateString}T12:00:00`).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+};
 
 export default function EditTransactionPage() {
   const router = useRouter();
@@ -233,10 +243,11 @@ export default function EditTransactionPage() {
   const groupLabel = editingTx.groupId
     ? isRecurringGroup
       ? isEndedRecurring
-        ? `Recorrência encerrada ${editingTx.installmentCurrent || 1}/${editingTx.installmentTotal || groupedItems.length || 1}`
-        : `Recorrência ${editingTx.installmentCurrent || 1}/${editingTx.installmentTotal || groupedItems.length || 1}`
+        ? "Recorrência encerrada"
+        : "Recorrência mensal"
       : `Parcela ${editingTx.installmentCurrent || 1}/${editingTx.installmentTotal || groupedItems.length || 1}`
     : null;
+  const nextRecurringDueDate = isRecurringGroup && !isEndedRecurring ? addMonthsUTC(editingTx.dueDate, 1) : null;
 
   return (
     <div className="min-h-screen bg-transparent p-4 pb-32 font-sans md:p-8">
@@ -275,7 +286,10 @@ export default function EditTransactionPage() {
             }`}
           >
             {isRecurringGroup ? <Repeat className="h-4 w-4" /> : <Layers className="h-4 w-4" />}
-            <span>{groupLabel}</span>
+            <span>
+              {groupLabel}
+              {nextRecurringDueDate ? ` · Próxima cobrança: ${formatDateDisplay(nextRecurringDueDate)}` : ""}
+            </span>
           </div>
         )}
 
@@ -502,7 +516,7 @@ export default function EditTransactionPage() {
                             : "text-zinc-500"
                         }`}
                       >
-                        {String(item.installmentCurrent).padStart(2, '0')}/{String(item.installmentTotal).padStart(2, '0')}
+                        {isRecurringGroup ? "Mensal" : `${String(item.installmentCurrent).padStart(2, '0')}/${String(item.installmentTotal).padStart(2, '0')}`}
                       </span>
                       <span className={isCurrent ? "font-semibold text-zinc-900 dark:text-zinc-100" : "text-zinc-600"}>
                         {item.dueDate || item.date}
