@@ -67,6 +67,15 @@ create index if not exists idx_billing_events_provider_created
 create index if not exists idx_billing_events_provider_event_type_created
   on public.billing_events(provider, event_type, created_at desc);
 
+create index if not exists idx_processed_events_provider_created
+  on public.processed_events(provider, created_at desc);
+
+create index if not exists idx_subscriptions_uid_updated
+  on public.subscriptions(uid, updated_at desc);
+
+create index if not exists idx_subscriptions_provider_status
+  on public.subscriptions(provider, status);
+
 create index if not exists idx_notifications_uid_created_at
   on public.notifications(uid, created_at desc);
 
