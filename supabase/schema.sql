@@ -170,6 +170,25 @@ create table if not exists public.billing_events (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.processed_events (
+  id text not null,
+  provider text not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  primary key (id, provider)
+);
+
+create table if not exists public.subscriptions (
+  uid text primary key references public.profiles(uid) on delete cascade,
+  provider text not null default 'mercadopago',
+  provider_subscription_id text not null unique,
+  plan text not null default 'free',
+  status text not null default 'pending',
+  current_period_end timestamptz,
+  raw jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
 create table if not exists public.support_access_requests (
   id text primary key,
   requester_uid text,
@@ -384,6 +403,20 @@ alter table if exists public.billing_events add column if not exists raw jsonb d
 alter table if exists public.billing_events add column if not exists created_at timestamptz default timezone('utc', now());
 alter table if exists public.billing_events add column if not exists updated_at timestamptz default timezone('utc', now());
 
+alter table if exists public.processed_events add column if not exists id text;
+alter table if exists public.processed_events add column if not exists provider text;
+alter table if exists public.processed_events add column if not exists created_at timestamptz default timezone('utc', now());
+
+alter table if exists public.subscriptions add column if not exists uid text;
+alter table if exists public.subscriptions add column if not exists provider text default 'mercadopago';
+alter table if exists public.subscriptions add column if not exists provider_subscription_id text;
+alter table if exists public.subscriptions add column if not exists plan text default 'free';
+alter table if exists public.subscriptions add column if not exists status text default 'pending';
+alter table if exists public.subscriptions add column if not exists current_period_end timestamptz;
+alter table if exists public.subscriptions add column if not exists raw jsonb default '{}'::jsonb;
+alter table if exists public.subscriptions add column if not exists created_at timestamptz default timezone('utc', now());
+alter table if exists public.subscriptions add column if not exists updated_at timestamptz default timezone('utc', now());
+
 alter table if exists public.support_access_requests add column if not exists requester_uid text;
 alter table if exists public.support_access_requests add column if not exists target_uid text;
 alter table if exists public.support_access_requests add column if not exists request_status text;
@@ -474,6 +507,10 @@ for each row execute function public.set_updated_at();
 
 drop trigger if exists trg_billing_events_set_updated_at on public.billing_events;
 create trigger trg_billing_events_set_updated_at before update on public.billing_events
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_subscriptions_set_updated_at on public.subscriptions;
+create trigger trg_subscriptions_set_updated_at before update on public.subscriptions
 for each row execute function public.set_updated_at();
 
 drop trigger if exists trg_support_access_requests_set_updated_at on public.support_access_requests;
