@@ -1244,9 +1244,9 @@ export default function DashboardPage() {
                     : "border-emerald-200 bg-emerald-50 text-emerald-700"
                 }`}
             >
-              <p className="font-semibold">{selectedCardIndicator.label}: {formatCurrencyDisplay(selectedCardIndicator.value)}</p>
+              <p className="financial-value font-semibold">{selectedCardIndicator.label}: {formatCurrencyDisplay(selectedCardIndicator.value)}</p>
               {selectedCardIndicator.kind === "credit" && (
-                <p className="mt-0.5 opacity-90">
+                <p className="financial-value mt-0.5 opacity-90">
                   Limite: {formatCurrencyDisplay(selectedCardIndicator.limit)} ⬢ Usado: {formatCurrencyDisplay(selectedCardIndicator.used)}
                 </p>
               )}
@@ -1255,7 +1255,7 @@ export default function DashboardPage() {
         </div>
       )}
       <div className="app-panel-subtle space-y-4 rounded-xl border p-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {type === 'expense' && (
             <div className="space-y-1.5">
               <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Data do Gasto</Label>
@@ -1263,7 +1263,7 @@ export default function DashboardPage() {
             </div>
           )}
           {(showDueDateInput || type === 'income') && (
-            <div className={`space-y-1.5 ${type === 'income' ? 'col-span-2' : ''}`}>
+            <div className={`space-y-1.5 ${type === 'income' ? 'sm:col-span-2' : ''}`}>
               <Label className={`text-[10px] font-bold uppercase tracking-wider ${type === 'expense' ? 'text-red-500' : 'text-emerald-600'}`}>{type === 'expense' ? 'Vencimento' : 'Data Crédito'}</Label>
               <Input type="date" className="h-10 rounded-lg text-xs" value={dueDate} onChange={e => setDueDate(e.target.value)} />
             </div>
@@ -1763,7 +1763,7 @@ export default function DashboardPage() {
                   {overduePendingCount > 0 ? ` Você também tem ${overduePendingCount} lançamento(s) vencido(s).` : ""}
                 </p>
               </div>
-              <div className="flex flex-col sm:flex-row gap-2 min-w-fit">
+              <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row">
                 {upgradePrompt.kind === "billing" ? (
                   <Button
                     className="h-9 bg-card text-amber-700 hover:bg-accent"
@@ -1806,7 +1806,7 @@ export default function DashboardPage() {
                 <p className="text-lg md:text-xl font-bold">{smartDailyHeadline}</p>
                 <p className="text-sm text-muted-foreground max-w-2xl">{smartDailyDescription}</p>
               </div>
-              <div className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) px-4 py-3 min-w-[220px]">
+              <div className="app-panel-subtle w-full min-w-0 rounded-2xl border border-color:var(--app-panel-border) px-4 py-3 md:w-auto md:min-w-[220px]">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Base do cálculo</p>
                 <p className="mt-2 text-2xl font-bold">
                   {remainingDaysInSelectedMonth > 0 ? `${remainingDaysInSelectedMonth} dia(s)` : "Mês encerrado"}
@@ -1852,7 +1852,7 @@ export default function DashboardPage() {
               <div className="rounded-xl bg-primary/10 p-2 text-primary"><DollarSign className="h-5 w-5" /></div>
             </CardHeader>
             <CardContent className="relative h-full flex flex-col justify-center">
-              <div className={`text-3xl font-bold tracking-tight ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (realCurrentBalance < 0 ? 'text-red-500' : 'text-primary')}`}>
+              <div className={`financial-value text-2xl font-bold tracking-tight sm:text-3xl ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (realCurrentBalance < 0 ? 'text-red-500' : 'text-primary')}`}>
                 {formatCurrencyDisplay(realCurrentBalance)}
               </div>
               <p className="text-xs text-zinc-400 mt-2 font-medium">O que você tem hoje (Realizado).</p>
@@ -1894,8 +1894,8 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="relative h-full flex flex-col justify-center">
               <div className="flex flex-col items-start font-bold gap-2 text-xs md:flex-col md:items-start sm:flex-row sm:items-start">
-                <span className="text-3xl flex items-center text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-md"><ArrowUpCircle className="w-6 h-6 mr-1" />{formatCurrencyDisplay(monthIncome)}</span>
-                <span className="text-3xl font-bold flex items-center text-red-600 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-md"><ArrowDownCircle className="w-6 h-6 mr-1" />{formatCurrencyDisplay(monthExpense)}</span>
+                <span className="financial-value flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-2xl text-emerald-600 sm:text-3xl dark:bg-emerald-900/20"><ArrowUpCircle className="mr-1 h-5 w-5 shrink-0 sm:h-6 sm:w-6" />{formatCurrencyDisplay(monthIncome)}</span>
+                <span className="financial-value flex items-center rounded-md bg-red-50 px-2 py-0.5 text-2xl font-bold text-red-600 sm:text-3xl dark:bg-red-900/20"><ArrowDownCircle className="mr-1 h-5 w-5 shrink-0 sm:h-6 sm:w-6" />{formatCurrencyDisplay(monthExpense)}</span>
               </div>
               <p className="text-xs text-zinc-400 mt-2 font-medium">Total de entradas e saídas do mês.</p>
             </CardContent>
@@ -1933,7 +1933,7 @@ export default function DashboardPage() {
                 <div className="rounded-xl bg-primary/10 p-2 text-primary"><Calculator className="h-5 w-5" /></div>
               </CardHeader>
               <CardContent className="relative h-full flex flex-col justify-center">
-                <div className={`text-3xl font-bold tracking-tight ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (projectedAccumulatedBalance >= 0 ? 'text-emerald-600' : 'text-red-600')}`}>
+                <div className={`financial-value text-2xl font-bold tracking-tight sm:text-3xl ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (projectedAccumulatedBalance >= 0 ? 'text-emerald-600' : 'text-red-600')}`}>
                   {formatCurrencyDisplay(projectedAccumulatedBalance)}
                 </div>
                 <p className="text-xs text-zinc-400 mt-2 font-medium">Estimativa para o fim do mês.</p>
@@ -2598,7 +2598,7 @@ export default function DashboardPage() {
               </div>
             )}
 
-            <DialogFooter className="grid grid-cols-2 gap-3 mt-2">
+            <DialogFooter className="grid grid-cols-1 gap-3 mt-2 sm:grid-cols-2">
               <Button
                 variant="outline"
                 className="rounded-xl h-12 hover:cursor-pointer duration-200"
@@ -2646,7 +2646,7 @@ export default function DashboardPage() {
             </DialogHeader>
 
             <DialogFooter className="mt-6 w-full">
-              <div className="grid grid-cols-2 gap-3 w-full">
+              <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
                 <Button
                   onClick={() => handleStartCheckout("premium")}
                   disabled={isOpeningCheckout === "premium"}
