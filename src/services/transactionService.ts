@@ -479,7 +479,12 @@ export const updateTransaction = async (
 
     if (!isTarget) {
       delete batchUpdates.date;
-      delete batchUpdates.dueDate;
+      if (data.paymentMethod === "credit_card" && data.dueDate) {
+        const installmentOffset = Number(tx.installmentCurrent || 1) - Number(currentTx.installmentCurrent || 1);
+        batchUpdates.dueDate = addMonthsUTC(data.dueDate, installmentOffset);
+      } else {
+        delete batchUpdates.dueDate;
+      }
       delete batchUpdates.status;
     }
 
