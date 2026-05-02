@@ -45,13 +45,13 @@ export function AppDock() {
   return (
     <>
       {shouldRenderMobileDock && (
-        <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-3 md:hidden">
+        <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-40 flex justify-center px-3 md:hidden">
           <NavigationDockBar
             preferences={effectivePreferences}
             activeItemId={activeItemId}
             mobile
             interactive
-            className="w-[min(92vw,380px)] max-w-[380px]"
+            className="w-[min(94vw,380px)] max-w-[380px]"
           />
         </div>
       )}
