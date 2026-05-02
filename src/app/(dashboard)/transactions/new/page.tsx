@@ -21,6 +21,7 @@ import { useCategories } from "@/hooks/useCategories";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePlatformExperience } from "@/hooks/usePlatformExperience";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
+import { getCreditCardDueDateFromSelectedCard, isCreditCapableCard } from "@/lib/credit-card/due-date";
 import { formatCurrencyInput, parseCurrencyInput } from "@/lib/money";
 import { getPlanCapabilities } from "@/lib/plans/capabilities";
 import { buildInstallmentPlan } from "@/lib/transactions/installments";
@@ -36,7 +37,7 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string; hasDueDate: boolea
   { value: "cash", label: "Dinheiro", hasDueDate: false },
   { value: "transfer", label: "Transferência", hasDueDate: false },
   { value: "debit_card", label: "Cartão de Débito", hasDueDate: false },
-  { value: "credit_card", label: "Cartão de Crédito", hasDueDate: true },
+  { value: "credit_card", label: "Cartão de Crédito", hasDueDate: false },
 ];
 
 const formatCurrency = (value: number) =>
@@ -202,10 +203,41 @@ export default function NewTransactionPage() {
     return Boolean(method?.hasDueDate);
   }, [paymentMethod]);
 
+  const isCreditCardPayment = paymentMethod === "credit_card";
+
   const selectedCard = useMemo(
     () => paymentCards.find((card) => card.id === selectedCardId),
     [paymentCards, selectedCardId]
   );
+
+  const availablePaymentCards = useMemo(
+    () =>
+      paymentCards.filter((card) => {
+        if (paymentMethod === "credit_card") return isCreditCapableCard(card);
+        if (paymentMethod === "debit_card") return card.type === "debit_card" || card.type === "credit_and_debit";
+        return false;
+      }),
+    [paymentCards, paymentMethod]
+  );
+
+  const creditCardDueDate = useMemo(
+    () =>
+      isCreditCardPayment
+        ? getCreditCardDueDateFromSelectedCard(selectedCard, date)
+        : null,
+    [date, isCreditCardPayment, selectedCard]
+  );
+
+  useEffect(() => {
+    if (paymentMethod !== "credit_card" && paymentMethod !== "debit_card") {
+      setSelectedCardId("");
+      return;
+    }
+    if (!selectedCardId) return;
+    if (paymentCards.length === 0) return;
+    if (availablePaymentCards.some((card) => card.id === selectedCardId)) return;
+    setSelectedCardId("");
+  }, [availablePaymentCards, paymentCards.length, paymentMethod, selectedCardId]);
 
   const currentBalance = useMemo(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -296,6 +328,14 @@ export default function NewTransactionPage() {
     }
 
     const isCardPayment = paymentMethod === "credit_card" || paymentMethod === "debit_card";
+    if (paymentMethod === "credit_card" && !selectedCard) {
+      setError("Selecione um cartão de crédito para definir o vencimento da fatura.");
+      return;
+    }
+    if (paymentMethod === "credit_card" && !creditCardDueDate) {
+      setError("O cartão de crédito selecionado não tem vencimento de fatura configurado.");
+      return;
+    }
     if (isCardPayment && !selectedCard) {
       setError("Selecione um cartão para continuar.");
       return;
@@ -335,7 +375,7 @@ export default function NewTransactionPage() {
         cardLabel: selectedCard ? `${selectedCard.bankName} •••• ${selectedCard.last4}` : undefined,
         cardType: paymentMethod === "credit_card" || paymentMethod === "debit_card" ? paymentMethod : undefined,
         date,
-        dueDate: showDueDateInput ? dueDate : date,
+        dueDate: paymentMethod === "credit_card" ? creditCardDueDate! : showDueDateInput ? dueDate : date,
         isInstallment,
         installmentsCount: count,
         installmentValueMode,
@@ -538,6 +578,19 @@ export default function NewTransactionPage() {
                 </div>
               )}
 
+              {isCreditCardPayment && (
+                <div className="space-y-2 animate-in fade-in zoom-in-95">
+                  <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
+                    <Calendar className="h-4 w-4 text-zinc-400" /> Vencimento da Fatura
+                  </Label>
+                  <div className="flex min-h-12 items-center rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm font-medium text-muted-foreground">
+                    {selectedCard?.dueDate
+                      ? `Esta compra será considerada na fatura com vencimento dia ${String(selectedCard.dueDate).padStart(2, "0")}.`
+                      : "Selecione um cartão de crédito para definir o vencimento da fatura."}
+                  </div>
+                </div>
+              )}
+
               {/* CARTÃO VINCULADO (Condicional) */}
               {(paymentMethod === "credit_card" || paymentMethod === "debit_card") && (
                 <div className="space-y-2 md:col-span-2 animate-in fade-in slide-in-from-top-2">
@@ -552,10 +605,10 @@ export default function NewTransactionPage() {
                       <SelectValue placeholder="Selecione um cartão para vincular" />
                     </SelectTrigger>
                     <SelectContent>
-                      {paymentCards.length === 0 ? (
+                      {availablePaymentCards.length === 0 ? (
                         <SelectItem value="__none" disabled>Nenhum cartão cadastrado</SelectItem>
                       ) : (
-                        paymentCards.map((card) => (
+                        availablePaymentCards.map((card) => (
                           <SelectItem key={card.id} value={card.id}>{card.bankName} •••• {card.last4}</SelectItem>
                         ))
                       )}
