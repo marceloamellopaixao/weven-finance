@@ -25,6 +25,7 @@ import { getCreditCardDueDateFromSelectedCard, isCreditCapableCard } from "@/lib
 import { formatCurrencyInput, parseCurrencyInput } from "@/lib/money";
 import { getPlanCapabilities } from "@/lib/plans/capabilities";
 import { buildInstallmentPlan } from "@/lib/transactions/installments";
+import { getCurrentMonthKey, getMonthKey } from "@/lib/transactions/recurring";
 import { addTransaction } from "@/services/transactionService";
 import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
@@ -281,8 +282,10 @@ export default function NewTransactionPage() {
     if (amountTotal <= 0) return true;
     if (method === "debit_card") return amountTotal <= currentBalance;
     if (method !== "credit_card") return true;
+    const currentMonthKey = getCurrentMonthKey();
     const used = linkedCardTransactions(card)
       .filter((tx) => tx.paymentMethod === "credit_card" && tx.status === "pending")
+      .filter((tx) => getMonthKey(tx.dueDate || tx.date) === currentMonthKey)
       .reduce((acc, tx) => acc + Number(tx.amountForLimit ?? tx.amount ?? 0), 0);
     return amountTotal <= Math.max(0, Number(card.creditLimit || 0) - used);
   };
@@ -480,7 +483,7 @@ export default function NewTransactionPage() {
                   ? "Você informa o valor total e o sistema divide automaticamente entre as parcelas."
                   : "Você informa o valor de cada parcela e o sistema repete esse valor nas próximas parcelas."
                 : isRecurring
-                  ? "Esse valor será repetido nos próximos 12 meses."
+                  ? "Esse valor será usado como modelo mensal. O sistema cria apenas a cobrança necessária do mês."
                   : "Esse valor será salvo exatamente como você digitou."}
             </p>
           </div>
@@ -633,7 +636,7 @@ export default function NewTransactionPage() {
                 </div>
                 {isRecurring && (
                   <p className="mt-2 ml-6 animate-in fade-in text-xs text-primary">
-                    Este lançamento será repetido automaticamente todos os meses.
+                    Este lançamento será repetido automaticamente, criando apenas a cobrança necessária do mês. Próxima cobrança: {showDueDateInput ? dueDate : date}.
                   </p>
                 )}
               </div>
