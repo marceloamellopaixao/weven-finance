@@ -277,6 +277,19 @@
     overflow-x: hidden;
   }
 
+  body,
+  button,
+  input,
+  textarea,
+  select {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
   .app-shell {
     background-color: var(--background);
     background-image:
@@ -303,5 +316,18 @@
 
   .app-field-surface:hover {
     background-color: var(--app-field-bg-hover);
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .financial-value {
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
   }
 }
