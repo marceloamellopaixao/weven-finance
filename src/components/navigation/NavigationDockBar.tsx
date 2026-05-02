@@ -136,8 +136,8 @@ export function NavigationDockBar({
           "flex items-center rounded-[30px]",
           mobile
             ? compact
-              ? "w-[220px] gap-1 px-2 py-2"
-              : "w-[238px] gap-1.5 px-2 py-2"
+              ? "w-full min-w-0 gap-1 px-2 py-2"
+              : "w-full min-w-0 gap-1.5 px-2 py-2"
             : compact
               ? "w-full max-w-[344px] gap-1 px-2 py-2"
               : "w-full max-w-[388px] gap-1.5 px-2 py-2"
