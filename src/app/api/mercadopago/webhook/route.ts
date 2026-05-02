@@ -92,14 +92,16 @@ export async function POST(request: NextRequest) {
     });
 
     const result = await syncFromWebhook(input);
-    await saveEvent(eventDocId, {
-      topic: input.topic,
-      resourceId: input.resourceId,
-      action: input.action ?? null,
-      eventId: input.eventId ?? null,
-      status: "processed",
-      processedAt: new Date().toISOString(),
-    });
+    if (!("duplicate" in result && result.duplicate)) {
+      await saveEvent(eventDocId, {
+        topic: input.topic,
+        resourceId: input.resourceId,
+        action: input.action ?? null,
+        eventId: input.eventId ?? null,
+        status: "processed",
+        processedAt: new Date().toISOString(),
+      });
+    }
     await writeApiMetric({
       route: meta.route,
       method: meta.method,
