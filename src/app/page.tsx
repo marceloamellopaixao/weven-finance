@@ -64,14 +64,14 @@ export default function LandingPage() {
     <div className="flex min-h-screen flex-col bg-transparent font-sans text-foreground selection:bg-primary/15 selection:text-foreground transition-colors duration-300">
 
       {/* Hero Section */}
-      <section className="relative flex-1 overflow-hidden px-4 pb-20 pt-32 sm:px-6 sm:pb-24 sm:pt-40">
+      <section className="relative overflow-hidden px-4 pb-12 pt-24 sm:px-6 sm:pb-20 sm:pt-32 lg:pb-24 lg:pt-40">
         {/* Glow Effects */}
         <div className="absolute top-20 left-1/2 -z-10 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-primary/10 blur-[120px]" />
         <div className="absolute bottom-0 right-0 -z-10 h-[360px] w-[360px] rounded-full bg-primary/5 blur-[100px]" />
 
-        <div className="container mx-auto text-center max-w-4xl space-y-8">
+        <div className="container mx-auto max-w-4xl space-y-6 text-center sm:space-y-8">
           <div className={`${zoomIn}`}>
-            <Badge variant="outline" className="rounded-full border-primary/20 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary shadow-sm backdrop-blur-md">
+            <Badge variant="outline" className="max-w-full whitespace-normal rounded-full border-primary/20 bg-primary/10 px-4 py-1.5 text-center text-xs font-medium leading-relaxed text-primary shadow-sm backdrop-blur-md sm:text-sm">
               Feito para quem quer sair do caos financeiro com clareza.
             </Badge>
           </div>
@@ -81,29 +81,29 @@ export default function LandingPage() {
             <span className="bg-linear-to-r from-primary to-primary/60 bg-clip-text text-transparent">sem saber para onde o dinheiro foi.</span>
           </h1>
 
-          <p className={`${fadeInUp} delay-200 mx-auto max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl`}>
+          <p className={`${fadeInUp} delay-200 mx-auto max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg md:text-xl`}>
             O WevenFinance organiza gastos, cartões, parcelamentos, vencimentos e metas em um lugar simples, para você entender o mês sem planilha e sem ansiedade.
           </p>
 
-          <div className={`${fadeInUp} delay-300 flex flex-col sm:flex-row items-center justify-center gap-4 pt-6`}>
+          <div className={`${fadeInUp} delay-300 flex flex-col items-center justify-center gap-3 pt-2 sm:flex-row sm:gap-4 sm:pt-4`}>
             <Link href={primaryHref} className="w-full sm:w-auto">
-              <Button size="lg" className="h-14 w-full rounded-full bg-primary px-8 text-lg text-primary-foreground shadow-xl shadow-primary/20 transition-transform duration-200 hover:-translate-y-1 hover:scale-105 hover:bg-primary/90 hover:cursor-pointer sm:w-auto">
+              <Button size="lg" className="h-12 w-full rounded-full bg-primary px-8 text-base text-primary-foreground shadow-xl shadow-primary/20 transition-transform duration-200 hover:-translate-y-1 hover:scale-105 hover:bg-primary/90 hover:cursor-pointer sm:h-14 sm:w-auto sm:text-lg">
                 {primaryLabel} <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
-            <Button size="lg" variant="outline" className="h-14 w-full rounded-full border-color:var(--app-panel-border) px-8 text-lg text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-foreground hover:cursor-pointer sm:w-auto" asChild>
+            <Button size="lg" variant="outline" className="h-12 w-full rounded-full border-color:var(--app-panel-border) px-8 text-base text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-foreground hover:cursor-pointer sm:h-14 sm:w-auto sm:text-lg" asChild>
               <a href="#pricing">Ver Preços</a>
             </Button>
           </div>
 
-          <div className={`${fadeInUp} delay-400 flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground sm:flex-row`}>
+          <div className={`${fadeInUp} delay-400 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground sm:flex-row sm:gap-3`}>
             <span className="rounded-full border border-color:var(--app-panel-border) bg-card/70 px-4 py-2 backdrop-blur">Entenda o que vence</span>
             <span className="rounded-full border border-color:var(--app-panel-border) bg-card/70 px-4 py-2 backdrop-blur">Controle cartões e parcelas</span>
             <span className="rounded-full border border-color:var(--app-panel-border) bg-card/70 px-4 py-2 backdrop-blur">Saiba quanto ainda pode gastar</span>
           </div>
 
           {/* Dashboard Preview Mockup */}
-          <div className={`${fadeInUp} delay-500 group relative mx-auto mt-12 aspect-4/3 max-w-5xl overflow-hidden rounded-2xl border border-color:var(--app-panel-border) bg-card/50 shadow-2xl shadow-primary/10 backdrop-blur-sm sm:mt-16 sm:aspect-video`}>
+          <div className={`${fadeInUp} delay-500 group relative mx-auto mt-8 aspect-[1.45/1] max-w-5xl overflow-hidden rounded-2xl border border-color:var(--app-panel-border) bg-card/50 shadow-2xl shadow-primary/10 backdrop-blur-sm sm:mt-12 sm:aspect-video`}>
             <div className="absolute inset-0 z-10 bg-linear-to-t from-background via-transparent to-transparent" />
             {/* Abstract UI representation */}
             <div className="absolute inset-4 grid grid-cols-[0.85fr_1.15fr] gap-3 opacity-60 transition-opacity duration-700 group-hover:opacity-100 sm:inset-6 sm:grid-cols-3 sm:gap-6">
