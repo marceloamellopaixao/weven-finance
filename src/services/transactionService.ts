@@ -5,6 +5,7 @@ import { getImpersonationActionStatus } from "@/services/impersonationService";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
 import { buildInstallmentPlan } from "@/lib/transactions/installments";
+import { buildRecurringOccurrenceSourceId, getMonthKey } from "@/lib/transactions/recurring";
 
 const TRANSACTIONS_CHANGED_EVENT = "wevenfinance:transactions:changed";
 const USER_SETTINGS_CHANGED_EVENT = "wevenfinance:user-settings:changed";
@@ -169,6 +170,7 @@ export async function fetchTransactionsPage(
     q?: string;
   }
 ): Promise<TransactionsPage> {
+  await syncRecurringTransactions(uid);
   const cryptoUid = resolveCryptoUid(uid);
   const page = Math.max(1, Number(params?.page || 1));
   const limit = Math.max(1, Math.min(200, Number(params?.limit || 50)));
@@ -295,6 +297,7 @@ export const subscribeToTransactions = (
 
   const run = async () => {
     try {
+      await syncRecurringTransactions(uid);
       const data = await fetchTransactions(uid);
       if (!cancelled) onChange(data);
     } catch (error) {
@@ -318,22 +321,31 @@ export const subscribeToTransactions = (
   };
 };
 
+export const syncRecurringTransactions = async (_uid: string) => {
+  void _uid;
+  const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
+    method: "POST",
+    body: JSON.stringify({ action: "syncRecurring" }),
+  });
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "NÃ£o foi possÃ­vel sincronizar recorrÃªncias");
+  }
+  return Number((payload as { created?: number }).created || 0);
+};
+
 export const addTransaction = async (uid: string, tx: CreateTransactionDTO & { isRecurring?: boolean }) => {
   const cryptoUid = resolveCryptoUid(uid);
   const installmentPlan = tx.isInstallment
     ? buildInstallmentPlan(tx.amount, tx.installmentsCount, tx.installmentValueMode || "split_total")
     : null;
-  const count = installmentPlan
-    ? installmentPlan.count
-    : tx.isRecurring
-      ? 12
-      : 1;
+  const count = installmentPlan ? installmentPlan.count : 1;
   const groupId = count > 1 ? crypto.randomUUID() : null;
   const transactions: Record<string, unknown>[] = [];
+  const recurringId = tx.isRecurring ? crypto.randomUUID() : null;
 
   for (let i = 0; i < count; i++) {
-    const currentDate = tx.isRecurring ? addMonthsUTC(tx.date, i) : tx.date;
-    const currentDueDate = tx.isRecurring || tx.isInstallment ? addMonthsUTC(tx.dueDate, i) : tx.dueDate;
+    const currentDate = tx.isInstallment ? addMonthsUTC(tx.date, i) : tx.date;
+    const currentDueDate = tx.isInstallment ? addMonthsUTC(tx.dueDate, i) : tx.dueDate;
     const descText = tx.isInstallment ? `${tx.description} (${i + 1}/${count})` : tx.description;
     const encryptedDesc = await encryptData(descText, cryptoUid);
     const currentAmount = installmentPlan
@@ -357,12 +369,47 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO & { i
       isEncrypted: true,
       isArchived: false,
       isRecurring: tx.isRecurring || false,
+      ...(recurringId && {
+        sourceId: buildRecurringOccurrenceSourceId(recurringId, getMonthKey(currentDueDate) || currentDueDate.slice(0, 7)),
+        groupId: recurringId,
+        recurringId,
+        recurringMonth: getMonthKey(currentDueDate),
+        recurringRole: "occurrence",
+      }),
       ...(groupId && {
         groupId,
         installmentCurrent: i + 1,
         installmentTotal: count,
       }),
       ...(tx.isRecurring ? { recurrenceEnded: false } : {}),
+    });
+  }
+
+  if (recurringId) {
+    const encryptedDesc = await encryptData(tx.description, cryptoUid);
+    const encryptedAmount = await encryptData(tx.amount, cryptoUid);
+    transactions.push({
+      sourceId: recurringId,
+      description: encryptedDesc,
+      amount: encryptedAmount,
+      amountForLimit: null,
+      recurringAmountForLimit: Number(tx.amount),
+      type: tx.type,
+      category: tx.category,
+      paymentMethod: tx.paymentMethod,
+      ...(tx.cardId ? { cardId: tx.cardId } : {}),
+      ...(tx.cardLabel ? { cardLabel: tx.cardLabel } : {}),
+      ...(tx.cardType ? { cardType: tx.cardType } : {}),
+      status: "pending",
+      date: tx.date,
+      dueDate: tx.dueDate,
+      isEncrypted: true,
+      isArchived: true,
+      isRecurring: true,
+      recurrenceEnded: false,
+      groupId: recurringId,
+      recurringId,
+      recurringRole: "template",
     });
   }
 
@@ -472,8 +519,8 @@ export const updateTransaction = async (
     const isTarget = tx.id === transactionId;
 
     if (data.description) {
-      const descWithSuffix = `${data.description} (${tx.installmentCurrent}/${tx.installmentTotal})`;
-      batchUpdates.description = await encryptData(descWithSuffix, cryptoUid);
+      const descText = currentTx.isRecurring ? data.description : `${data.description} (${tx.installmentCurrent}/${tx.installmentTotal})`;
+      batchUpdates.description = await encryptData(descText, cryptoUid);
       batchUpdates.isEncrypted = true;
     }
 
@@ -489,6 +536,31 @@ export const updateTransaction = async (
     }
 
     bulkUpdates.push({ id: tx.id, updates: batchUpdates });
+  }
+
+  const recurringTemplateId = currentTx.isRecurring ? currentTx.recurringId || currentTx.groupId : null;
+  if (recurringTemplateId) {
+    const templateUpdates: Record<string, unknown> = {
+      ...updates,
+      amountForLimit: null,
+      isArchived: true,
+      isRecurring: true,
+      recurrenceEnded: data.recurrenceEnded ?? false,
+      groupId: recurringTemplateId,
+      recurringId: recurringTemplateId,
+      recurringRole: "template",
+      installmentCurrent: undefined,
+      installmentTotal: undefined,
+    };
+    if (data.amount !== undefined) {
+      templateUpdates.recurringAmountForLimit = Number(data.amount);
+    }
+    delete templateUpdates.status;
+    if (data.description) {
+      templateUpdates.description = await encryptData(data.description, cryptoUid);
+      templateUpdates.isEncrypted = true;
+    }
+    bulkUpdates.push({ id: recurringTemplateId, updates: templateUpdates });
   }
 
   const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
