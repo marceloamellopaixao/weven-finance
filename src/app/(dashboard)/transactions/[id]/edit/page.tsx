@@ -19,6 +19,7 @@ import { PaymentMethod, Transaction } from "@/types/transaction";
 import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
 import { deleteTransaction, updateTransaction } from "@/services/transactionService";
+import { getCreditCardDueDateFromSelectedCard, isCreditCapableCard } from "@/lib/credit-card/due-date";
 import { formatCategoryLabel, orderCategoryNames } from "@/lib/category-utils";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; hasDueDate: boolean }[] = [
@@ -27,7 +28,7 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string; hasDueDate: boolea
   { value: "cash", label: "Dinheiro", hasDueDate: false },
   { value: "transfer", label: "Transferência", hasDueDate: false },
   { value: "debit_card", label: "Cartão de Débito", hasDueDate: false },
-  { value: "credit_card", label: "Cartão de Crédito", hasDueDate: true },
+  { value: "credit_card", label: "Cartão de Crédito", hasDueDate: false },
 ];
 
 const formatCurrency = (value: number) =>
@@ -106,11 +107,58 @@ export default function EditTransactionPage() {
     return Boolean(method?.hasDueDate);
   }, [editingTx]);
 
+  const isCreditCardPayment = editingTx?.paymentMethod === "credit_card";
+  const selectedCard = useMemo(
+    () => paymentCards.find((card) => card.id === editingTx?.cardId),
+    [editingTx?.cardId, paymentCards]
+  );
+  const availablePaymentCards = useMemo(() => {
+    if (!editingTx) return [];
+    return paymentCards.filter((card) => {
+      if (editingTx.paymentMethod === "credit_card") return isCreditCapableCard(card);
+      if (editingTx.paymentMethod === "debit_card") return card.type === "debit_card" || card.type === "credit_and_debit";
+      return false;
+    });
+  }, [editingTx, paymentCards]);
+  const creditCardDueDate = useMemo(
+    () =>
+      isCreditCardPayment && editingTx
+        ? getCreditCardDueDateFromSelectedCard(selectedCard, editingTx.date)
+        : null,
+    [editingTx, isCreditCardPayment, selectedCard]
+  );
+
+  useEffect(() => {
+    if (!editingTx) return;
+    if (editingTx.paymentMethod !== "credit_card" && editingTx.paymentMethod !== "debit_card") return;
+    if (!editingTx.cardId) return;
+    if (paymentCards.length === 0) return;
+    if (availablePaymentCards.some((card) => card.id === editingTx.cardId)) return;
+    setEditingTx((prev) =>
+      prev ? { ...prev, cardId: undefined, cardLabel: undefined, cardType: undefined } : prev
+    );
+  }, [availablePaymentCards, editingTx, paymentCards.length]);
+
+  useEffect(() => {
+    if (!editingTx || editingTx.paymentMethod !== "credit_card" || !creditCardDueDate) return;
+    if (editingTx.dueDate === creditCardDueDate) return;
+    setEditingTx((prev) => (prev ? { ...prev, dueDate: creditCardDueDate } : prev));
+  }, [creditCardDueDate, editingTx]);
+
   const save = async (updateGroup: boolean) => {
     if (!user || !editingTx?.id) return;
     setError("");
+    if (editingTx.paymentMethod === "credit_card" && !selectedCard) {
+      setError("Selecione um cartão de crédito para definir o vencimento da fatura.");
+      return;
+    }
+    if (editingTx.paymentMethod === "credit_card" && !creditCardDueDate) {
+      setError("O cartão de crédito selecionado não tem vencimento de fatura configurado.");
+      return;
+    }
     setSaving(true);
     try {
+      const finalDueDate = editingTx.paymentMethod === "credit_card" ? creditCardDueDate! : editingTx.dueDate;
       await updateTransaction(
         user.uid,
         editingTx.id,
@@ -123,7 +171,7 @@ export default function EditTransactionPage() {
           cardLabel: editingTx.cardLabel,
           cardType: editingTx.cardType,
           date: editingTx.date,
-          dueDate: editingTx.dueDate,
+          dueDate: finalDueDate,
         },
         updateGroup
       );
@@ -319,7 +367,16 @@ export default function EditTransactionPage() {
                 </Label>
                 <Select
                   value={editingTx.paymentMethod}
-                  onValueChange={(v) => setEditingTx({ ...editingTx, paymentMethod: v as PaymentMethod })}
+                  onValueChange={(v) => {
+                    const paymentMethod = v as PaymentMethod;
+                    setEditingTx({
+                      ...editingTx,
+                      paymentMethod,
+                      ...(paymentMethod === "credit_card" || paymentMethod === "debit_card"
+                        ? {}
+                        : { cardId: undefined, cardLabel: undefined, cardType: undefined }),
+                    });
+                  }}
                 >
                   <SelectTrigger className="h-12 rounded-xl">
                     <SelectValue />
@@ -342,6 +399,19 @@ export default function EditTransactionPage() {
                     onChange={(e) => setEditingTx({ ...editingTx, dueDate: e.target.value })} 
                     className="h-12 rounded-xl"
                   />
+                </div>
+              )}
+
+              {isCreditCardPayment && (
+                <div className="space-y-2 animate-in fade-in zoom-in-95">
+                  <Label className="flex items-center gap-2 text-sm text-foreground/85">
+                    <Calendar className="h-4 w-4 text-zinc-400" /> Vencimento da Fatura
+                  </Label>
+                  <div className="flex min-h-12 items-center rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm font-medium text-muted-foreground">
+                    {selectedCard?.dueDate
+                      ? `Esta compra será considerada na fatura com vencimento dia ${String(selectedCard.dueDate).padStart(2, "0")}.`
+                      : "Selecione um cartão de crédito para definir o vencimento da fatura."}
+                  </div>
                 </div>
               )}
 
@@ -368,10 +438,10 @@ export default function EditTransactionPage() {
                       <SelectValue placeholder="Selecione um cartão" />
                     </SelectTrigger>
                     <SelectContent>
-                      {paymentCards.length === 0 ? (
+                      {availablePaymentCards.length === 0 ? (
                         <SelectItem value="__none" disabled>Nenhum cartão cadastrado</SelectItem>
                       ) : (
-                        paymentCards.map((card) => (
+                        availablePaymentCards.map((card) => (
                           <SelectItem key={card.id} value={card.id}>{card.bankName} •••• {card.last4}</SelectItem>
                         ))
                       )}
