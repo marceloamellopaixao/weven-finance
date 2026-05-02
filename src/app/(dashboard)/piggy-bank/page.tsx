@@ -199,7 +199,7 @@ export default function PiggyBankPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-foreground">{piggy.name}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Total guardado: {formatCurrency(piggy.totalSaved)}</p>
+                        <p className="financial-value mt-1 text-xs text-muted-foreground">Total guardado: {formatCurrency(piggy.totalSaved)}</p>
                       </div>
                       <PiggyBankIcon className="h-5 w-5 shrink-0 text-primary" />
                     </div>
@@ -224,7 +224,7 @@ export default function PiggyBankPage() {
                     className="flex w-full items-center gap-3 rounded-2xl border border-border/70 bg-background/80 p-4 text-left transition-colors hover:cursor-pointer hover:border-primary/35 hover:bg-accent"
                   >
                     <Icon className="h-5 w-5 text-primary" />
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold text-foreground">{goal.label}</p>
                       <p className="text-xs text-muted-foreground">{goal.description}</p>
                     </div>
