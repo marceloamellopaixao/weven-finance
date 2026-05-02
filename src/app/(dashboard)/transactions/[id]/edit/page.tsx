@@ -310,13 +310,13 @@ export default function EditTransactionPage() {
               </button>
             </div>
             <div className="flex items-center justify-center gap-2">
-              <span className={`text-3xl font-bold ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>R$</span>
+              <span className={`text-2xl font-bold sm:text-3xl ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>R$</span>
               <Input 
                 type={privacyMode ? "text" : "number"}
                 value={privacyMode ? "******" : editingTx.amount}
                 readOnly={privacyMode}
                 onChange={(e) => setEditingTx({ ...editingTx, amount: Number(e.target.value || 0) })} 
-                className={`w-full max-w-full h-auto p-0 border-none shadow-none text-4xl md:text-5xl font-bold bg-transparent focus-visible:ring-0 text-start ${isIncome ? 'text-emerald-500 placeholder:text-emerald-500' : 'text-red-500 placeholder:text-red-500'}`}
+                className={`financial-value w-full max-w-full h-auto p-0 border-none shadow-none text-3xl sm:text-4xl md:text-5xl font-bold bg-transparent focus-visible:ring-0 text-start ${isIncome ? 'text-emerald-500 placeholder:text-emerald-500' : 'text-red-500 placeholder:text-red-500'}`}
               />
             </div>
           </div>
