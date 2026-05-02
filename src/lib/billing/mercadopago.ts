@@ -2,7 +2,15 @@ import crypto from "node:crypto";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { canMatchWebhookByEmail } from "@/lib/billing/match";
 import { hasBillingExemption, normalizeAccessControlConfig } from "@/lib/access-control/config";
-import { UserPaymentStatus, UserPlan, UserRole, UserStatus } from "@/types/user";
+import {
+  BillingPaymentStatus,
+  BillingState,
+  BillingSubscriptionStatus,
+  UserPaymentStatus,
+  UserPlan,
+  UserRole,
+  UserStatus,
+} from "@/types/user";
 import { DEFAULT_ACCESS_CONTROL_CONFIG } from "@/types/system";
 import { pushNotification } from "@/lib/notifications/server";
 
@@ -29,6 +37,8 @@ type GatewayDetails = {
   payerEmail?: string;
   plan?: UserPlan;
   preapprovalPlanId?: string;
+  currentPeriodEnd?: string | null;
+  lastPaymentAt?: string;
 };
 
 type UserMatch = {
@@ -127,6 +137,56 @@ async function writeBillingEvent(eventId: string, payload: Record<string, unknow
   );
 }
 
+async function hasProcessedEvent(eventId: string) {
+  const rows = await supabaseSelect("processed_events", {
+    filters: { id: eventId, provider: "mercadopago" },
+    limit: 1,
+  });
+  return rows.length > 0;
+}
+
+async function markProcessedEvent(eventId: string) {
+  await supabaseUpsertRows(
+    "processed_events",
+    [
+      {
+        id: eventId,
+        provider: "mercadopago",
+        created_at: new Date().toISOString(),
+      },
+    ],
+    { onConflict: "id,provider" }
+  );
+}
+
+async function upsertSubscription(params: {
+  uid: string;
+  providerSubscriptionId?: string | null;
+  plan: UserPlan;
+  status: BillingSubscriptionStatus;
+  currentPeriodEnd?: string | null;
+  raw?: Record<string, unknown>;
+}) {
+  if (!params.providerSubscriptionId) return;
+
+  await supabaseUpsertRows(
+    "subscriptions",
+    [
+      {
+        uid: params.uid,
+        provider: "mercadopago",
+        provider_subscription_id: params.providerSubscriptionId,
+        plan: params.plan,
+        status: params.status,
+        current_period_end: params.currentPeriodEnd ?? null,
+        raw: params.raw ?? {},
+        updated_at: new Date().toISOString(),
+      },
+    ],
+    { onConflict: "uid" }
+  );
+}
+
 function assertToken() {
   if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {
     throw new Error("Missing MERCADOPAGO_ACCESS_TOKEN");
@@ -164,6 +224,49 @@ function mapPaymentStatus(gatewayStatus: string): UserPaymentStatus {
   if (status === "rejected" || status === "refunded") return "not_paid";
   if (status === "paused") return "overdue";
   return "pending";
+}
+
+function mapBillingPaymentStatus(gatewayStatus: string): BillingPaymentStatus {
+  const status = gatewayStatus.toLowerCase();
+  if (status === "approved" || status === "authorized") return "paid";
+  if (status === "pending" || status === "in_process" || status === "in_mediation") return "pending";
+  if (status === "paused") return "overdue";
+  return "failed";
+}
+
+function mapSubscriptionStatus(gatewayStatus: string): BillingSubscriptionStatus {
+  const status = gatewayStatus.toLowerCase();
+  if (status === "authorized" || status === "approved") return "active";
+  if (status === "pending" || status === "in_process") return "pending";
+  if (status === "cancelled" || status === "cancelled_by_user" || status === "cancelled_by_collector") return "canceled";
+  return "expired";
+}
+
+function getStringField(payload: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return undefined;
+}
+
+function normalizeBillingState(params: {
+  plan: UserPlan;
+  subscriptionStatus: BillingSubscriptionStatus;
+  paymentStatus: BillingPaymentStatus;
+  currentPeriodEnd?: string | null;
+  lastPaymentAt?: string;
+  providerSubscriptionId?: string | null;
+}): BillingState {
+  return {
+    plan: params.plan,
+    subscriptionStatus: params.subscriptionStatus,
+    paymentStatus: params.paymentStatus,
+    currentPeriodEnd: params.currentPeriodEnd ?? null,
+    ...(params.lastPaymentAt ? { lastPaymentAt: params.lastPaymentAt } : {}),
+    provider: "mercadopago",
+    ...(params.providerSubscriptionId ? { providerSubscriptionId: params.providerSubscriptionId } : {}),
+  };
 }
 
 const PAYMENT_BLOCK_REASON_REGEX = /(pagamento|inadimpl|assinatura|cancelamento|cobranca)/i;
@@ -345,8 +448,10 @@ async function fetchGatewayDetails(topic: MercadoPagoTopic, resourceId: string):
         : undefined;
     let paymentExternalReference = externalReference;
     let gatewayStatusDetail = typeof payload.status_detail === "string" ? payload.status_detail : undefined;
+    let currentPeriodEnd = getStringField(payload, ["date_of_expiration", "next_payment_date"]) ?? null;
+    let lastPaymentAt = getStringField(payload, ["date_approved", "money_release_date", "date_created"]);
 
-    if (preapprovalId && (!paymentPlan || !paymentPayerEmail || !paymentExternalReference)) {
+    if (preapprovalId && (!paymentPlan || !paymentPayerEmail || !paymentExternalReference || !currentPeriodEnd)) {
       try {
         const preapprovalPayload = await mpRequest(`/preapproval/${preapprovalId}`);
         const preapprovalPlanId =
@@ -364,6 +469,9 @@ async function fetchGatewayDetails(topic: MercadoPagoTopic, resourceId: string):
         gatewayStatusDetail =
           gatewayStatusDetail ??
           (typeof preapprovalPayload.reason === "string" ? preapprovalPayload.reason : undefined);
+        currentPeriodEnd =
+          currentPeriodEnd ?? getStringField(preapprovalPayload, ["next_payment_date", "end_date"]) ?? null;
+        lastPaymentAt = lastPaymentAt ?? getStringField(preapprovalPayload, ["last_modified", "date_created"]);
       } catch {
         // Best effort: keep processing with payment payload only.
       }
@@ -378,6 +486,8 @@ async function fetchGatewayDetails(topic: MercadoPagoTopic, resourceId: string):
       externalReference: paymentExternalReference,
       payerEmail: paymentPayerEmail,
       plan: paymentPlan,
+      currentPeriodEnd,
+      lastPaymentAt,
     };
   }
 
@@ -397,6 +507,8 @@ async function fetchGatewayDetails(topic: MercadoPagoTopic, resourceId: string):
       externalReference,
       payerEmail: typeof payload.payer_email === "string" ? payload.payer_email : undefined,
       plan: parsedReference.plan ?? mappedPlan,
+      currentPeriodEnd: getStringField(payload, ["next_payment_date", "end_date"]) ?? null,
+      lastPaymentAt: getStringField(payload, ["last_modified", "date_created"]),
     };
   }
 
@@ -415,6 +527,7 @@ async function fetchGatewayDetails(topic: MercadoPagoTopic, resourceId: string):
         ? ((payload.payer as { email: string }).email ?? undefined)
         : undefined,
     plan: parsedReference.plan,
+    currentPeriodEnd: getStringField(payload, ["expiration_date"]) ?? null,
   };
 }
 
@@ -566,10 +679,22 @@ export async function syncFromWebhook(input: WebhookInput) {
     throw new Error("Webhook payload missing topic/resource");
   }
 
+  const eventDocId = getBillingEventDocId(input);
+  if (await hasProcessedEvent(eventDocId)) {
+    await writeBillingEvent(eventDocId, {
+      topic: input.topic,
+      action: input.action ?? null,
+      eventId: input.eventId,
+      resourceId: input.resourceId,
+      status: "duplicate_ignored",
+      ignoredAt: new Date().toISOString(),
+    });
+    return { ok: true, duplicate: true, matched: false };
+  }
+
   const details = await fetchGatewayDetails(input.topic, input.resourceId);
   const userMatch = await findUserByWebhook(details);
 
-  const eventDocId = getBillingEventDocId(input);
   const baseEvent = {
     topic: input.topic,
     action: input.action ?? null,
@@ -592,6 +717,7 @@ export async function syncFromWebhook(input: WebhookInput) {
       status: "ignored_no_user_match",
       reason: unmatchedReason,
     });
+    await markProcessedEvent(eventDocId);
 
     return {
       ok: true,
@@ -613,6 +739,8 @@ export async function syncFromWebhook(input: WebhookInput) {
   const currentBlockReason = userMatch.userData.blockReason;
   const isBillingExemptRole = await isBillingExempt(userMatch.uid, currentRole);
   const paymentStatus = mapPaymentStatus(details.gatewayStatus);
+  const billingPaymentStatus = mapBillingPaymentStatus(details.gatewayStatus);
+  const subscriptionStatus = mapSubscriptionStatus(details.gatewayStatus);
   const gatewayPlan = resolvePlan(details, currentPlan, pendingPlan);
   const targetPlan = isBillingExemptRole
     ? currentPlan
@@ -620,6 +748,14 @@ export async function syncFromWebhook(input: WebhookInput) {
   const targetPaymentStatus: UserPaymentStatus = isBillingExemptRole ? "free" : paymentStatus;
   const nowIso = new Date().toISOString();
   const statusPatch: Partial<{ status: UserStatus; blockReason: string }> = {};
+  const billingState = normalizeBillingState({
+    plan: targetPlan,
+    subscriptionStatus,
+    paymentStatus: billingPaymentStatus,
+    currentPeriodEnd: details.currentPeriodEnd,
+    lastPaymentAt: details.lastPaymentAt,
+    providerSubscriptionId: details.preapprovalId,
+  });
 
   if (!isBillingExemptRole && currentStatus !== "deleted") {
     if (targetPaymentStatus === "paid") {
@@ -645,6 +781,7 @@ export async function syncFromWebhook(input: WebhookInput) {
     paymentStatus: targetPaymentStatus,
     ...statusPatch,
     billing: {
+      ...billingState,
       source: "mercadopago_webhook",
       provider: "mercadopago",
       gatewayStatus: details.gatewayStatus,
@@ -654,6 +791,9 @@ export async function syncFromWebhook(input: WebhookInput) {
       paymentId: details.paymentId ?? null,
       preapprovalId: details.preapprovalId ?? null,
       merchantOrderId: details.merchantOrderId ?? null,
+      currentPeriodEnd: billingState.currentPeriodEnd,
+      lastPaymentAt: billingState.lastPaymentAt ?? null,
+      providerSubscriptionId: billingState.providerSubscriptionId ?? null,
       pendingPreapprovalId: null,
       pendingPlan: null,
       pendingCheckoutAt: null,
@@ -667,6 +807,15 @@ export async function syncFromWebhook(input: WebhookInput) {
     },
   });
 
+  await upsertSubscription({
+    uid: userMatch.uid,
+    providerSubscriptionId: details.preapprovalId,
+    plan: targetPlan,
+    status: subscriptionStatus,
+    currentPeriodEnd: details.currentPeriodEnd,
+    raw: { details, source: "webhook", eventId: input.eventId ?? null },
+  });
+
   await writeBillingEvent(eventDocId, {
     ...baseEvent,
     status: "processed",
@@ -676,6 +825,8 @@ export async function syncFromWebhook(input: WebhookInput) {
     targetPaymentStatus,
     statusPatch,
   });
+
+  await markProcessedEvent(eventDocId);
 
   await pushBillingStatusNotification({
     uid: userMatch.uid,
@@ -722,6 +873,8 @@ function normalizeGatewayDetailsFromPreapproval(payload: Record<string, unknown>
     externalReference,
     payerEmail: typeof payload.payer_email === "string" ? payload.payer_email : undefined,
     plan: parsedReference.plan ?? mappedPlan,
+    currentPeriodEnd: getStringField(payload, ["next_payment_date", "end_date"]) ?? null,
+    lastPaymentAt: getStringField(payload, ["last_modified", "date_created"]),
   };
 }
 
@@ -754,11 +907,21 @@ export async function confirmPreapprovalForUser(params: {
   const currentBlockReason = userData.blockReason;
   const isBillingExemptRole = await isBillingExempt(params.uid, currentRole);
   const paymentStatus = mapPaymentStatus(details.gatewayStatus);
+  const billingPaymentStatus = mapBillingPaymentStatus(details.gatewayStatus);
+  const subscriptionStatus = mapSubscriptionStatus(details.gatewayStatus);
   const gatewayPlan = resolvePlan(details, currentPlan);
   const targetPlan = isBillingExemptRole ? currentPlan : computeTargetPlan(currentPlan, paymentStatus, gatewayPlan);
   const targetPaymentStatus: UserPaymentStatus = isBillingExemptRole ? "free" : paymentStatus;
   const nowIso = new Date().toISOString();
   const statusPatch: Partial<{ status: UserStatus; blockReason: string }> = {};
+  const billingState = normalizeBillingState({
+    plan: targetPlan,
+    subscriptionStatus,
+    paymentStatus: billingPaymentStatus,
+    currentPeriodEnd: details.currentPeriodEnd,
+    lastPaymentAt: details.lastPaymentAt,
+    providerSubscriptionId: details.preapprovalId,
+  });
 
   if (!isBillingExemptRole && currentStatus !== "deleted") {
     if (targetPaymentStatus === "paid") {
@@ -784,6 +947,7 @@ export async function confirmPreapprovalForUser(params: {
     paymentStatus: targetPaymentStatus,
     ...statusPatch,
     billing: {
+      ...billingState,
       source: "mercadopago_confirm",
       provider: "mercadopago",
       gatewayStatus: details.gatewayStatus,
@@ -791,6 +955,9 @@ export async function confirmPreapprovalForUser(params: {
       gatewayPlan,
       externalReference: details.externalReference ?? null,
       preapprovalId: details.preapprovalId ?? null,
+      currentPeriodEnd: billingState.currentPeriodEnd,
+      lastPaymentAt: billingState.lastPaymentAt ?? null,
+      providerSubscriptionId: billingState.providerSubscriptionId ?? null,
       lastEventType: "preapproval_confirm",
       lastEventAction: "manual_confirm",
       lastEventId: details.preapprovalId ?? null,
@@ -802,6 +969,15 @@ export async function confirmPreapprovalForUser(params: {
       pendingCheckoutAt: null,
       pendingCheckoutAttemptId: null,
     },
+  });
+
+  await upsertSubscription({
+    uid: params.uid,
+    providerSubscriptionId: details.preapprovalId,
+    plan: targetPlan,
+    status: subscriptionStatus,
+    currentPeriodEnd: details.currentPeriodEnd,
+    raw: { details, source: "manual_confirm" },
   });
 
   await writeBillingEvent(`confirm_preapproval_${params.preapprovalId}_${params.uid}`, {
@@ -918,6 +1094,40 @@ export async function confirmLatestPreapprovalForUser(params: {
   });
 }
 
+export async function syncSubscriptionStatus(userId: string) {
+  const userRow = await getProfileRow(userId);
+  if (!userRow) {
+    throw new Error("user_not_found");
+  }
+
+  const userData = profileToUserData(userRow);
+  const billing = ((userData.billing as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const userEmail = String(userData.email || "").trim();
+  const storedPreapprovalId =
+    typeof billing.providerSubscriptionId === "string"
+      ? billing.providerSubscriptionId
+      : typeof billing.preapprovalId === "string"
+        ? billing.preapprovalId
+        : "";
+
+  if (storedPreapprovalId) {
+    return confirmPreapprovalForUser({
+      uid: userId,
+      preapprovalId: storedPreapprovalId,
+      userEmail: userEmail || undefined,
+    });
+  }
+
+  if (!userEmail) {
+    throw new Error("missing_user_email");
+  }
+
+  return confirmLatestPreapprovalForUser({
+    uid: userId,
+    userEmail,
+  });
+}
+
 export async function cancelSubscriptionForUser(params: {
   uid: string;
   userEmail: string;
@@ -977,6 +1187,15 @@ export async function cancelSubscriptionForUser(params: {
   const payload = await mpPut(`/preapproval/${preapprovalId}`, { status: "cancelled" });
   const details = normalizeGatewayDetailsFromPreapproval(payload, preapprovalId);
   const nowIso = new Date().toISOString();
+  const subscriptionStatus = mapSubscriptionStatus(details.gatewayStatus);
+  const billingState = normalizeBillingState({
+    plan: "free",
+    subscriptionStatus,
+    paymentStatus: mapBillingPaymentStatus(details.gatewayStatus),
+    currentPeriodEnd: details.currentPeriodEnd,
+    lastPaymentAt: details.lastPaymentAt,
+    providerSubscriptionId: preapprovalId,
+  });
 
   await updateUserProfile(params.uid, {
     plan: "free" as UserPlan,
@@ -984,12 +1203,16 @@ export async function cancelSubscriptionForUser(params: {
     status: currentStatus === "deleted" ? "deleted" : "active",
     blockReason: "",
     billing: {
+      ...billingState,
       source: "mercadopago_cancel",
       provider: "mercadopago",
       gatewayStatus: details.gatewayStatus,
       gatewayStatusDetail: details.gatewayStatusDetail ?? null,
       gatewayPlan: "free",
       preapprovalId,
+      currentPeriodEnd: billingState.currentPeriodEnd,
+      lastPaymentAt: billingState.lastPaymentAt ?? null,
+      providerSubscriptionId: preapprovalId,
       lastEventType: "preapproval_cancel",
       lastEventAction: "manual_cancel",
       lastEventId: preapprovalId,
@@ -1001,6 +1224,15 @@ export async function cancelSubscriptionForUser(params: {
       pendingCheckoutAt: null,
       pendingCheckoutAttemptId: null,
     },
+  });
+
+  await upsertSubscription({
+    uid: params.uid,
+    providerSubscriptionId: preapprovalId,
+    plan: "free",
+    status: subscriptionStatus,
+    currentPeriodEnd: details.currentPeriodEnd,
+    raw: { details, source: "manual_cancel" },
   });
 
   await writeBillingEvent(`cancel_preapproval_${preapprovalId}_${params.uid}`, {
