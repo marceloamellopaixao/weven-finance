@@ -23,6 +23,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const FLOW_ROUTES = new Set(["/login", "/register", "/forgot-password", "/first-access", "/verify-email", "/goodbye", "/blocked"]);
+const PUBLIC_FIXED_HEADER_ROUTES = new Set(["/", "/contact", "/security", "/terms"]);
 
 export function Header() {
   const { user, userProfile, logout } = useAuth();
@@ -45,6 +46,7 @@ export function Header() {
     ? (userProfile?.photoURL || "")
     : (userProfile?.photoURL || user?.photoURL || "");
   const isFlowRoute = FLOW_ROUTES.has(pathname || "") || (pathname || "").startsWith("/billing");
+  const hasFixedPublicHeader = PUBLIC_FIXED_HEADER_ROUTES.has(pathname || "");
 
   const handleStopImpersonation = () => {
     stopImpersonation();
@@ -110,7 +112,7 @@ export function Header() {
   // Se não tiver usuário logado, mostra o header da landing page.
   if (!isAuthenticated) {
     return (
-      <nav className={`${isFlowRoute ? "sticky" : "fixed"} top-0 z-50 w-full border-b border-border/70 bg-background/80 backdrop-blur-md transition-all duration-300`}>
+      <nav className={`${isFlowRoute || !hasFixedPublicHeader ? "sticky" : "fixed"} top-0 z-50 w-full border-b border-border/70 bg-background/80 backdrop-blur-md transition-all duration-300`}>
         <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2 group">
             <div className="rounded-xl bg-primary p-2 text-primary-foreground shadow-lg shadow-primary/20 transition-transform group-hover:scale-105">
@@ -183,7 +185,7 @@ export function Header() {
           }}
         >
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon" className="relative h-9 w-9 rounded-full border-[color:var(--app-panel-border)] bg-card/50" disabled={isPlatformTourActive}>
+            <Button variant="outline" size="icon" className="relative h-9 w-9 rounded-full border-color:var(--app-panel-border) bg-card/50" disabled={isPlatformTourActive}>
               <Bell className="h-4 w-4" />
               {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] px-1 flex items-center justify-center">
@@ -193,7 +195,7 @@ export function Header() {
             </Button>
           </DropdownMenuTrigger>
 
-          <DropdownMenuContent align="end" className="app-panel-soft w-[calc(100vw-2rem)] max-w-80 rounded-xl border-[color:var(--app-panel-border)] p-2 shadow-xl shadow-primary/10">
+          <DropdownMenuContent align="end" className="app-panel-soft w-[calc(100vw-2rem)] max-w-80 rounded-xl border-color:var(--app-panel-border) p-2 shadow-xl shadow-primary/10">
             <div className="flex items-center justify-between px-2 py-1">
               <DropdownMenuLabel className="p-0">Notificações</DropdownMenuLabel>
               <button
@@ -267,7 +269,7 @@ export function Header() {
               </Avatar>
             </div>
           </DropdownMenuTrigger>
-          <DropdownMenuContent id="tour-account-menu-panel" align="end" className="app-panel-soft w-[calc(100vw-2rem)] max-w-56 rounded-xl border-[color:var(--app-panel-border)] p-2 shadow-xl shadow-primary/10">
+          <DropdownMenuContent id="tour-account-menu-panel" align="end" className="app-panel-soft w-[calc(100vw-2rem)] max-w-56 rounded-xl border-color:var(--app-panel-border) p-2 shadow-xl shadow-primary/10">
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium leading-none truncate">{displayName || "Minha Conta"}</p>
