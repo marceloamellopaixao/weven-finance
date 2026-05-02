@@ -78,6 +78,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -118,7 +121,6 @@ import {
 } from "lucide-react";
 import { deleteTicket, FeatureRequestStatus, fetchSupportTicketsPage, markSupportTicketsAsSeen, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
-import { DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@radix-ui/react-dropdown-menu";
 import {
   activateImpersonation,
   getMyImpersonationStatus,
@@ -1308,11 +1310,14 @@ export default function AdminPage() {
 
   const handleAssignTicket = async (ticketId: string, staffUid: string) => {
     const staff = staffMembers.find(s => s.uid === staffUid);
+    const assignment = {
+      assignedTo: staffUid,
+      assignedToName: staff?.displayName || "Staff",
+    };
     try {
-      await updateTicket(ticketId, {
-        assignedTo: staffUid,
-        assignedToName: staff?.displayName || "Staff"
-      });
+      await updateTicket(ticketId, assignment);
+      setTickets((prev) => prev.map((ticket) => (ticket.id === ticketId ? { ...ticket, ...assignment } : ticket)));
+      setViewTicket((ticket) => (ticket?.id === ticketId ? { ...ticket, ...assignment } : ticket));
       showFeedback('success', 'Atribuído', 'Chamado atribuído com sucesso.');
     } catch {
       showFeedback('error', 'Erro', 'Falha ao atribuir chamado.');
@@ -1351,6 +1356,8 @@ export default function AdminPage() {
     }
     try {
       await deleteTicket(ticketToDelete.id);
+      setTickets((prev) => prev.filter((ticket) => ticket.id !== ticketToDelete.id));
+      setViewTicket((ticket) => (ticket?.id === ticketToDelete.id ? null : ticket));
       showFeedback('success', 'Excluído', 'O chamado foi removido permanentemente.');
     } catch {
       showFeedback('error', 'Erro', 'Falha ao excluir chamado.');
@@ -2078,14 +2085,24 @@ export default function AdminPage() {
                       </div>
                     ) : (
                       supportTicketsOrdered.map((ticket) => {
-                        const isFinished = ticket.status === 'resolved' || ticket.status === 'implemented' || ticket.status === 'rejected';
-                        const canEditStatus = userProfile?.role === 'admin' || !isFinished;
                         const tone = getTicketStatusTone(ticket.status);
                         const dateStr = formatDateSafe(ticket.createdAt);
                         const isUnseen = !Array.isArray(ticket.staffSeenBy) || (userProfile ? !ticket.staffSeenBy.includes(userProfile.uid) : false);
 
                         return (
-                          <div key={ticket.id} className={`app-panel-subtle rounded-2xl border ${tone.border} p-4 space-y-3`}>
+                          <div
+                            key={ticket.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setViewTicket(ticket)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                setViewTicket(ticket);
+                              }
+                            }}
+                            className={`app-panel-subtle cursor-pointer rounded-2xl border ${tone.border} p-4 space-y-3 transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40`}
+                          >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <p className="text-xs text-zinc-500">{dateStr}</p>
@@ -2134,7 +2151,7 @@ export default function AdminPage() {
                             </button>
 
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                              <div className="text-xs text-zinc-600">
+                              <div className="text-xs text-zinc-600" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
                                 {userProfile?.role === 'admin' ? (
                                   <Select
                                     value={ticket.assignedTo || "unassigned"}
@@ -2157,74 +2174,19 @@ export default function AdminPage() {
                                 )}
                               </div>
 
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg">
-                                    <MoreVertical className="h-4 w-4 text-zinc-500" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48 rounded-xl border border-color:var(--app-menu-border) bg-var(--app-menu-bg) p-1 shadow-xl">
-                                  <DropdownMenuItem onClick={() => setViewTicket(ticket)}>
-                                    <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
-                                  </DropdownMenuItem>
-
-                                  {canEditStatus && (
-                                    <DropdownMenuSub>
-                                      <DropdownMenuSubTrigger className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-foreground focus:bg-var(--app-menu-hover) data-state=open:bg-var(--app-menu-hover)">
-                                        <span className="flex items-center">
-                                          <RefreshCcw className="mr-2 h-4 w-4 text-zinc-500" />
-                                          Alterar Status
-                                        </span>
-                                      </DropdownMenuSubTrigger>
-                                      <DropdownMenuSubContent className="w-56 rounded-xl border border-color:var(--app-menu-border) bg-var(--app-menu-bg) p-1 shadow-xl">
-                                        {ticket.type === 'support' && (
-                                          <>
-                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'pending')}>Pendente</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'in_progress')}>Em Progresso</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'resolved')}>Resolvido</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'rejected')}>Rejeitado</DropdownMenuItem>
-                                          </>
-                                        )}
-                                        {ticket.type === 'feature' && (
-                                          <>
-                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'pending')}>Pendente</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'under_review')}>Em Análise</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'approved')}>Aprovado</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'rejected')}>Rejeitado</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleChangeTicketStatus(ticket.id, 'implemented')}>Implementado</DropdownMenuItem>
-                                          </>
-                                        )}
-                                      </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                  )}
-
-                                  {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
-                                    <DropdownMenuSub>
-                                      <DropdownMenuSubTrigger className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-foreground focus:bg-var(--app-menu-hover) data-state=open:bg-var(--app-menu-hover)">
-                                        Prioridade
-                                      </DropdownMenuSubTrigger>
-                                      <DropdownMenuSubContent className="w-44 rounded-xl border border-color:var(--app-menu-border) bg-var(--app-menu-bg) p-1 shadow-xl">
-                                        <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "low")}>Baixa</DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "medium")}>Média</DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "high")}>Alta</DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "urgent")}>Urgente</DropdownMenuItem>
-                                      </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                  )}
-
-                                  {canDeleteRecords && (
-                                    <>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem
-                                        onClick={() => setTicketToDelete(ticket)}
-                                        className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950 hover:cursor-pointer"
-                                      >
-                                        <Trash2 className="mr-2 h-4 w-4" /> Excluir
-                                      </DropdownMenuItem>
-                                    </>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 rounded-lg px-2 text-xs"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setViewTicket(ticket);
+                                }}
+                              >
+                                <Eye className="mr-1.5 h-4 w-4" />
+                                Detalhes
+                              </Button>
                             </div>
                           </div>
                         );
@@ -2340,7 +2302,12 @@ export default function AdminPage() {
                                         <MoreVertical className="h-4 w-4 text-zinc-500" />
                                       </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="w-48 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 shadow-xl">
+                                    <DropdownMenuContent
+                                      align="end"
+                                      side="top"
+                                      sideOffset={8}
+                                      className="w-48 max-h-[min(70vh,24rem)] rounded-xl border border-zinc-200/70 bg-white p-1 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+                                    >
                                       <DropdownMenuItem onClick={() => setViewTicket(ticket)}>
                                         <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
                                       </DropdownMenuItem>
@@ -2348,14 +2315,14 @@ export default function AdminPage() {
                                       {canEditStatus && (
                                         <DropdownMenuSub>
                                           <DropdownMenuSubTrigger
-                                            className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200 focus:bg-zinc-100 dark:focus:bg-zinc-800 data-[state=open]:bg-zinc-100 dark:data-[state=open]:bg-zinc-800"
+                                            className="rounded-lg font-medium text-zinc-700 dark:text-zinc-200"
                                           >
                                             <span className="flex items-center">
                                               <RefreshCcw className="mr-2 h-4 w-4 text-zinc-500" />
                                               Alterar Status
                                             </span>
                                           </DropdownMenuSubTrigger>
-                                          <DropdownMenuSubContent className="w-56 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 shadow-xl">
+                                          <DropdownMenuSubContent className="w-56 max-h-[min(70vh,22rem)] rounded-xl border border-zinc-200/70 bg-white p-1 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
                                             {ticket.type === 'support' && (
                                               <>
                                                 <DropdownMenuItem
@@ -2433,11 +2400,11 @@ export default function AdminPage() {
                                       {(userProfile?.role === "admin" || userProfile?.role === "moderator") && (
                                         <DropdownMenuSub>
                                           <DropdownMenuSubTrigger
-                                            className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200 focus:bg-zinc-100 dark:focus:bg-zinc-800 data-[state=open]:bg-zinc-100 dark:data-[state=open]:bg-zinc-800"
+                                            className="rounded-lg font-medium text-zinc-700 dark:text-zinc-200"
                                           >
                                             Prioridade
                                           </DropdownMenuSubTrigger>
-                                          <DropdownMenuSubContent className="w-44 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 shadow-xl">
+                                          <DropdownMenuSubContent className="w-44 rounded-xl border border-zinc-200/70 bg-white p-1 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
                                             <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "low")}>Baixa</DropdownMenuItem>
                                             <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "medium")}>Média</DropdownMenuItem>
                                             <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "high")}>Alta</DropdownMenuItem>
@@ -4215,7 +4182,7 @@ export default function AdminPage() {
                     onValueChange={(value) => void handleChangeTicketStatus(viewTicket.id, value as TicketStatus)}
                     disabled={!canEditTicketStatus(viewTicket)}
                   >
-                    <SelectTrigger className="mt-1 h-10 rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
+                    <SelectTrigger className="mt-1 h-10 rounded-xl border-[color:var(--app-field-border)] bg-[var(--app-field-bg)]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -4236,7 +4203,7 @@ export default function AdminPage() {
                     onValueChange={(value) => void handleChangeTicketPriority(viewTicket.id, value as TicketPriority)}
                     disabled={!canEditTicketPriority}
                   >
-                    <SelectTrigger className="mt-1 h-10 rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
+                    <SelectTrigger className="mt-1 h-10 rounded-xl border-[color:var(--app-field-border)] bg-[var(--app-field-bg)]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -4245,6 +4212,31 @@ export default function AdminPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <Label className="font-semibold">Responsável:</Label>
+                  {userProfile?.role === "admin" ? (
+                    <Select
+                      value={viewTicket.assignedTo || "unassigned"}
+                      onValueChange={(value) => void handleAssignTicket(viewTicket.id, value)}
+                    >
+                      <SelectTrigger className="mt-1 h-10 rounded-xl border-[color:var(--app-field-border)] bg-[var(--app-field-bg)]">
+                        <SelectValue placeholder="Atribuir" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">-- Ninguém --</SelectItem>
+                        {staffMembers.map((staff) => (
+                          <SelectItem key={staff.uid} value={staff.uid}>
+                            {staff.displayName || staff.email} ({staff.role})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="mt-1 text-muted-foreground">
+                      {viewTicket.assignedToName || (viewTicket.assignedTo ? "Staff" : "Ninguém")}
+                    </p>
+                  )}
                 </div>
                 {viewTicket.supportKind === "account_restore" && (
                   <div>
@@ -4264,7 +4256,17 @@ export default function AdminPage() {
             </div>
           )}
           <DialogFooter>
-            <Button onClick={() => setViewTicket(null)} className="w-full rounded-xl hover:cursor-pointer">Fechar</Button>
+            {viewTicket && canDeleteRecords && (
+              <Button
+                variant="destructive"
+                onClick={() => setTicketToDelete(viewTicket)}
+                className="w-full rounded-xl hover:cursor-pointer sm:w-auto"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Excluir
+              </Button>
+            )}
+            <Button onClick={() => setViewTicket(null)} className="w-full rounded-xl hover:cursor-pointer sm:w-auto">Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
