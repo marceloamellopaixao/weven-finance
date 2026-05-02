@@ -40,7 +40,7 @@ export function AppChrome({ children }: AppChromeProps) {
   return (
     <div className="app-shell flex min-h-[100svh] flex-col overflow-x-hidden bg-background font-sans transition-all duration-800">
       <Header />
-      <main className="min-w-0 flex-1">
+      <main className={showDock ? "min-w-0 flex-1 pb-[calc(env(safe-area-inset-bottom)+6.75rem)] md:pb-28" : "min-w-0 flex-1"}>
         {children}
       </main>
       {showFooter ? <Footer /> : null}
