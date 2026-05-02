@@ -14,6 +14,7 @@ import { assertPhoneAvailable } from "@/lib/profile/server";
 import { readSecureProfilePayload, writeSecureProfilePayload } from "@/lib/secure-store/profile";
 import { resolvePermanentDeleteAt } from "@/lib/account-deletion/policy";
 import { BillingInfo, UserPaymentStatus, UserPlan, UserRole, UserStatus } from "@/types/user";
+import { syncSubscriptionStatus } from "@/lib/billing/mercadopago";
 
 function asPlan(value: unknown): UserPlan {
   return value === "premium" || value === "pro" ? value : "free";
@@ -26,6 +27,13 @@ function asStatus(value: unknown): UserStatus {
 function asPaymentStatus(value: unknown): UserPaymentStatus {
   if (value === "free" || value === "paid" || value === "not_paid" || value === "overdue" || value === "canceled") return value;
   return "pending";
+}
+
+function shouldSyncBillingOnRead(billing: BillingInfo) {
+  if (billing.provider !== "mercadopago") return false;
+  const lastSyncAt = typeof billing.lastSyncAt === "string" ? new Date(billing.lastSyncAt).getTime() : 0;
+  if (!lastSyncAt) return true;
+  return Date.now() - lastSyncAt > 15 * 60 * 1000;
 }
 
 export const runtime = "nodejs";
@@ -44,15 +52,34 @@ export async function GET(request: NextRequest) {
 
     const acting = await resolveActingContext(request);
     uid = acting.actingUid;
-    const [rows, accessControl] = await Promise.all([
+    const [initialRows, accessControl] = await Promise.all([
       supabaseSelect("profiles", {
         filters: { uid },
         limit: 1,
       }),
       getServerAccessControlConfig(),
     ]);
+    let rows = initialRows;
     if (rows.length === 0) {
       return NextResponse.json({ ok: true, profile: null }, { status: 200 });
+    }
+    const currentBilling = (rows[0].billing ?? ((rows[0].raw as Record<string, unknown> | null) ?? {}).billing ?? {}) as BillingInfo;
+    if (shouldSyncBillingOnRead(currentBilling)) {
+      try {
+        await syncSubscriptionStatus(uid);
+        rows = await supabaseSelect("profiles", {
+          filters: { uid },
+          limit: 1,
+        });
+      } catch (error) {
+        apiLogger.warn({
+          message: "profile_me_billing_sync_failed",
+          requestId: meta.requestId,
+          route: meta.route,
+          method: meta.method,
+          meta: { uid, error: error instanceof Error ? error.message : String(error) },
+        });
+      }
     }
     const row = rows[0];
     const raw = readSecureProfilePayload(row.raw);
