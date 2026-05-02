@@ -4,8 +4,20 @@ export type UserRole = BuiltInUserRole | (string & {});
 export type UserStatus = 'active' | 'inactive' | 'deleted' | 'blocked';
 export type UserPaymentStatus = 'free' | 'paid' | 'not_paid' | 'pending' | 'overdue' | 'canceled' ;
 export type BillingSource = 'manual' | 'mercadopago_webhook' | 'mercadopago_confirm' | 'mercadopago_cancel' | 'system';
+export type BillingSubscriptionStatus = 'active' | 'pending' | 'canceled' | 'expired';
+export type BillingPaymentStatus = 'paid' | 'pending' | 'failed' | 'overdue';
 
-export interface BillingInfo {
+export interface BillingState {
+  plan: UserPlan;
+  subscriptionStatus: BillingSubscriptionStatus;
+  paymentStatus: BillingPaymentStatus;
+  currentPeriodEnd: string | null;
+  lastPaymentAt?: string;
+  provider: 'mercadopago';
+  providerSubscriptionId?: string;
+}
+
+export interface BillingInfo extends Partial<BillingState> {
   source?: BillingSource;
   provider?: 'mercadopago';
   gatewayStatus?: string;
