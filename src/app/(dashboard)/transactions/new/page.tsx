@@ -31,6 +31,7 @@ import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
 import { InstallmentValueMode, PaymentMethod, TransactionType } from "@/types/transaction";
 import { formatCategoryLabel, orderCategoryNames } from "@/lib/category-utils";
+import { calculateDailyLimit } from "@/lib/finance/daily-limit";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -82,6 +83,7 @@ export default function NewTransactionPage() {
   const [installmentsCount, setInstallmentsCount] = useState("2");
   const [installmentValueMode, setInstallmentValueMode] = useState<InstallmentValueMode>("split_total");
   const [isRecurring, setIsRecurring] = useState(false);
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
   const [selectedCardId, setSelectedCardId] = useState("");
@@ -248,6 +250,29 @@ export default function NewTransactionPage() {
       .reduce((acc, t) => (t.type === "income" ? acc + t.amount : acc - t.amount), 0);
     return paid + overdue;
   }, [transactions]);
+
+  const dailyLimitAfterTransaction = useMemo(() => {
+    if (type !== "expense" || parsedAmount <= 0) return null;
+    const simulatedDueDate = paymentMethod === "credit_card" ? creditCardDueDate || date : showDueDateInput ? dueDate : date;
+    const result = calculateDailyLimit({
+      transactions: [
+        ...transactions,
+        {
+          type: "expense",
+          amount: parsedAmount,
+          amountForLimit: parsedAmount,
+          status: "pending",
+          dueDate: simulatedDueDate,
+          date,
+          paymentMethod,
+          cardId: selectedCard?.id,
+        },
+      ],
+      cards: paymentCards,
+      today: new Date().toISOString().slice(0, 10),
+    });
+    return result.amount;
+  }, [creditCardDueDate, date, dueDate, parsedAmount, paymentCards, paymentMethod, selectedCard?.id, showDueDateInput, transactions, type]);
 
   const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
   const effectivePlan = userProfile?.plan || "free";
@@ -488,6 +513,14 @@ export default function NewTransactionPage() {
             </p>
           </div>
 
+          {dailyLimitAfterTransaction !== null && !isInstallment && !isRecurring && (
+            <div className="border-b border-border/70 px-6 py-3 md:px-8">
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+                Esse gasto reduz seu limite diário estimado para {formatCurrency(dailyLimitAfterTransaction)}.
+              </p>
+            </div>
+          )}
+
           {/* FORMULÁRIO GERAL */}
           <div className="p-6 md:p-8 space-y-6">
             
@@ -623,7 +656,19 @@ export default function NewTransactionPage() {
 
             {/* OPÇÕES AVANÇADAS: RECORRÊNCIA E PARCELAMENTO */}
             <div className="pt-6 mt-6 space-y-4 border-t border-border/70">
-              <Label className="text-zinc-500 font-semibold text-xs tracking-wider uppercase">Opções Avançadas</Label>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded-2xl border border-border/70 bg-muted/30 px-4 py-3 text-left"
+                onClick={() => setShowAdvancedOptions((value) => !value)}
+              >
+                <span>
+                  <span className="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Opções avançadas</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">Parcelamento e lançamento fixo ficam aqui para manter o modo simples rápido.</span>
+                </span>
+                <Settings2 className={`h-4 w-4 text-muted-foreground transition-transform ${showAdvancedOptions ? "rotate-45" : ""}`} />
+              </button>
+              {showAdvancedOptions && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
               
               {/* ASSINATURA / FIXA (Disponível para Receita e Despesa) */}
               <div id="tour-transactions-recurring" className={`cursor-pointer rounded-2xl border p-4 transition-all duration-300 ${isRecurring ? 'border-primary/25 bg-accent text-accent-foreground ring-1 ring-primary/10' : 'app-panel-subtle hover:border-primary/20'}`} onClick={() => handleToggleRecurring(!isRecurring)}>
@@ -716,6 +761,8 @@ export default function NewTransactionPage() {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
                 </div>
               )}
             </div>
