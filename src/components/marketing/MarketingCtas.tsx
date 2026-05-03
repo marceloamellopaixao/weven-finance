@@ -43,7 +43,7 @@ export function MarketingCtas({ variant }: MarketingCtasProps) {
             {primaryLabel} <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
         </Link>
-        <Button size="lg" variant="outline" className="h-12 w-full rounded-full border-[color:var(--app-panel-border)] px-8 text-base text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-foreground hover:cursor-pointer sm:h-14 sm:w-auto sm:text-lg" asChild>
+        <Button size="lg" variant="outline" className="h-12 w-full rounded-full border-color:var(--app-panel-border) px-8 text-base text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-foreground hover:cursor-pointer sm:h-14 sm:w-auto sm:text-lg" asChild>
           <a href="#pricing">Ver planos</a>
         </Button>
       </div>
@@ -53,7 +53,7 @@ export function MarketingCtas({ variant }: MarketingCtasProps) {
   if (variant === "free") {
     return (
       <Link href={primaryHref} className="w-full">
-        <Button className="h-12 w-full rounded-2xl border border-[color:var(--app-panel-border)] bg-card text-foreground shadow-sm transition-all duration-200 hover:scale-105 hover:bg-accent active:scale-95">
+        <Button className="h-12 w-full rounded-2xl border border-color:var(--app-panel-border) bg-card text-foreground shadow-sm transition-all duration-200 hover:scale-105 hover:bg-accent active:scale-95">
           {hasSession ? "Abrir painel" : "Começar no Free"}
         </Button>
       </Link>
@@ -65,7 +65,7 @@ export function MarketingCtas({ variant }: MarketingCtasProps) {
     <Button
       className={plan === "premium"
         ? "h-12 w-full rounded-2xl bg-primary font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all duration-200 hover:scale-105 hover:bg-primary/90 active:scale-95"
-        : "h-12 w-full rounded-2xl border border-[color:var(--app-panel-border)] bg-card text-foreground shadow-sm transition-all duration-200 hover:scale-105 hover:bg-accent active:scale-95"}
+        : "h-12 w-full rounded-2xl border border-color:var(--app-panel-border) bg-card text-foreground shadow-sm transition-all duration-200 hover:scale-105 hover:bg-accent active:scale-95"}
       variant={plan === "pro" ? "outline" : "default"}
       disabled={isOpeningCheckout !== null}
       onClick={() => void handlePlanCheckout(plan)}
