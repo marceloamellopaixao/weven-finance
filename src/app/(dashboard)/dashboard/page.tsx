@@ -45,6 +45,7 @@ import { getOnboardingStepHref } from "@/lib/onboarding/flow";
 import { buildInstallmentPlan } from "@/lib/transactions/installments";
 import { getCurrentMonthKey, getMonthKey } from "@/lib/transactions/recurring";
 import { buildUpgradeCheckoutPath } from "@/services/billing/checkoutIntent";
+import { calculateDailyLimit } from "@/lib/finance/daily-limit";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -1367,22 +1368,14 @@ export default function DashboardPage() {
     pendingPlan === "pro" || effectivePlan === "pro" ? "pro" : "premium";
   const selectedMonthLabel =
     availableMonths.find((month) => month.value === selectedMonth)?.label.toLowerCase() ?? selectedMonth;
-  const currentMonthKey = new Date().toISOString().slice(0, 7);
-  const [selectedYear, selectedMonthNumber] = selectedMonth.split("-").map(Number);
-  const daysInSelectedMonth =
-    Number.isInteger(selectedYear) && Number.isInteger(selectedMonthNumber)
-      ? new Date(selectedYear, selectedMonthNumber, 0).getDate()
-      : 0;
-  const remainingDaysInSelectedMonth =
-    selectedMonth < currentMonthKey
-      ? 0
-      : selectedMonth === currentMonthKey
-        ? Math.max(1, daysInSelectedMonth - new Date().getDate() + 1)
-        : daysInSelectedMonth;
-  const smartDailyLimit =
-    effectivePlanCapabilities.hasSmartDailyLimit && remainingDaysInSelectedMonth > 0
-      ? projectedAccumulatedBalance / remainingDaysInSelectedMonth
-      : null;
+  const dailyLimit = calculateDailyLimit({
+    transactions,
+    cards: paymentCards,
+    today: todayStr,
+    month: selectedMonth,
+  });
+  const remainingDaysInSelectedMonth = dailyLimit.daysRemaining;
+  const smartDailyLimit = effectivePlanCapabilities.hasSmartDailyLimit ? dailyLimit.amount : null;
   const smartDailyHeadline =
     !effectivePlanCapabilities.hasSmartDailyLimit
       ? ""
@@ -1811,7 +1804,11 @@ export default function DashboardPage() {
                 <p className="mt-2 text-2xl font-bold">
                   {remainingDaysInSelectedMonth > 0 ? `${remainingDaysInSelectedMonth} dia(s)` : "Mês encerrado"}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">Restantes para distribuir sua folga prevista.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {dailyLimit.currentMonthCardImpact > 0
+                    ? `Inclui ${formatCurrencyDisplay(dailyLimit.currentMonthCardImpact)} de impacto do cartÃ£o no mÃªs.`
+                    : "Restantes para distribuir sua folga prevista."}
+                </p>
               </div>
             </CardContent>
           </Card>
