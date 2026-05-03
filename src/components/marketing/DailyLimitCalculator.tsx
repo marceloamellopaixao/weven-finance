@@ -39,7 +39,7 @@ export function DailyLimitCalculator() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
-      <div className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] p-5 shadow-xl shadow-primary/10 sm:p-6">
+      <div className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) p-5 shadow-xl shadow-primary/10 sm:p-6">
         <div className="grid gap-4 sm:grid-cols-2">
           {[
             ["Saldo atual", balance, setBalance],
@@ -56,7 +56,7 @@ export function DailyLimitCalculator() {
         </div>
       </div>
 
-      <div className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] p-6 shadow-xl shadow-primary/10">
+      <div className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) p-6 shadow-xl shadow-primary/10">
         <Calculator className="h-8 w-8 text-primary" />
         <p className="mt-4 text-sm font-semibold uppercase tracking-[0.18em] text-primary">Resultado estimado</p>
         <h2 className="mt-2 text-4xl font-bold">{money(result.amount)}</h2>
