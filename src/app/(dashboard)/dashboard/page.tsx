@@ -1806,7 +1806,7 @@ export default function DashboardPage() {
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {dailyLimit.currentMonthCardImpact > 0
-                    ? `Inclui ${formatCurrencyDisplay(dailyLimit.currentMonthCardImpact)} de impacto do cartÃ£o no mÃªs.`
+                    ? `Inclui ${formatCurrencyDisplay(dailyLimit.currentMonthCardImpact)} de impacto do cartão no mês.`
                     : "Restantes para distribuir sua folga prevista."}
                 </p>
               </div>
