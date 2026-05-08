@@ -97,6 +97,7 @@ create table if not exists public.payment_cards (
   brand text,
   bin text,
   due_date integer,
+  closing_day integer,
   limit_enabled boolean,
   credit_limit numeric(17,2),
   alert_threshold_pct numeric(6,2),
@@ -340,6 +341,7 @@ alter table if exists public.payment_cards add column if not exists card_type te
 alter table if exists public.payment_cards add column if not exists brand text;
 alter table if exists public.payment_cards add column if not exists bin text;
 alter table if exists public.payment_cards add column if not exists due_date integer;
+alter table if exists public.payment_cards add column if not exists closing_day integer;
 alter table if exists public.payment_cards add column if not exists limit_enabled boolean;
 alter table if exists public.payment_cards add column if not exists credit_limit numeric(17,2);
 alter table if exists public.payment_cards add column if not exists alert_threshold_pct numeric(6,2);
