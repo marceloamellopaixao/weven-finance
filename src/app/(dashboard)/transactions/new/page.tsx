@@ -72,6 +72,7 @@ export default function NewTransactionPage() {
 
   const [type, setType] = useState<TransactionType>("expense");
   const [description, setDescription] = useState("");
+  const [transactionNotes, setTransactionNotes] = useState("");
   const [amountInput, setAmountInput] = useState("");
   const [category, setCategory] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
@@ -123,6 +124,7 @@ export default function NewTransactionPage() {
         const draft = JSON.parse(storedDraft) as Partial<{
           type: TransactionType;
           description: string;
+          transactionNotes: string;
           amountInput: string;
           category: string;
           paymentMethod: PaymentMethod;
@@ -137,6 +139,7 @@ export default function NewTransactionPage() {
 
         if (draft.type === "income" || draft.type === "expense") setType(draft.type);
         if (typeof draft.description === "string") setDescription(draft.description);
+        if (typeof draft.transactionNotes === "string") setTransactionNotes(draft.transactionNotes);
         if (typeof draft.amountInput === "string") setAmountInput(formatCurrencyInput(draft.amountInput));
         if (typeof draft.category === "string") setCategory(draft.category);
         if (draft.paymentMethod) setPaymentMethod(draft.paymentMethod);
@@ -165,6 +168,7 @@ export default function NewTransactionPage() {
       JSON.stringify({
         type,
         description,
+        transactionNotes,
         amountInput,
         category,
         paymentMethod,
@@ -182,6 +186,7 @@ export default function NewTransactionPage() {
     category,
     date,
     description,
+    transactionNotes,
     draftReady,
     draftStorageKey,
     dueDate,
@@ -351,7 +356,7 @@ export default function NewTransactionPage() {
     if (!user) return;
     setError("");
     if (!description.trim() || parsedAmount <= 0 || !category) {
-      setError("Preencha descrição, valor e categoria.");
+      setError("Preencha título, valor e categoria.");
       return;
     }
 
@@ -394,7 +399,8 @@ export default function NewTransactionPage() {
     try {
       // Passando as propriedades exatamente como nas suas correções
       await addTransaction(user.uid, {
-        description: description.trim(),
+        title: description.trim(),
+        description: transactionNotes.trim(),
         amount: value,
         type,
         category,
@@ -527,13 +533,25 @@ export default function NewTransactionPage() {
             {/* DESCRIÇÃO */}
             <div id="tour-transactions-description" className="space-y-2">
               <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
-                <AlignLeft className="h-4 w-4 text-zinc-400" /> Descrição
+                <AlignLeft className="h-4 w-4 text-zinc-400" /> Título
               </Label>
               <Input 
                 value={description} 
                 onChange={(e) => setDescription(e.target.value)} 
                 className="h-12 rounded-xl text-base font-medium"
-                placeholder="Ex: Supermercado"
+                placeholder="Ex: Valorant Points"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
+                <ReceiptText className="h-4 w-4 text-zinc-400" /> Descrição
+              </Label>
+              <textarea
+                value={transactionNotes}
+                onChange={(e) => setTransactionNotes(e.target.value)}
+                className="min-h-[96px] w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                placeholder="Ex: pacote comprado na promoção, lembrar de conferir na fatura."
               />
             </div>
 
