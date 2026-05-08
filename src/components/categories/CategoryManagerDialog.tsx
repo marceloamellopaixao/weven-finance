@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Pencil, Trash2, Plus, EyeOff, Eye, FolderTree, Tag, Check, X, FolderOpen } from "lucide-react";
 import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
+import { CategoryLabel } from "@/components/categories/CategoryLabel";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CATEGORY_PATH_SEPARATOR, Category, CategoryType } from "@/hooks/useCategories";
 import {
-  formatCategoryLabel,
   getCategoryRoot,
   getSubcategoryName,
   isLinkedSubcategory,
@@ -265,7 +265,9 @@ export function CategoryManagerDialog({
                       </SelectTrigger>
                       <SelectContent>
                         {allRootCategories.map((cat) => (
-                          <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
+                          <SelectItem key={cat.name} value={cat.name}>
+                            <CategoryLabel value={cat.name} />
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -310,7 +312,9 @@ export function CategoryManagerDialog({
                 <SelectContent>
                   <SelectItem value="all">Todas principais</SelectItem>
                   {allRootCategories.map((root) => (
-                    <SelectItem key={`filter-${root.name}`} value={root.name}>{root.name}</SelectItem>
+                    <SelectItem key={`filter-${root.name}`} value={root.name}>
+                      <CategoryLabel value={root.name} />
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -340,7 +344,9 @@ export function CategoryManagerDialog({
                               </SelectTrigger>
                               <SelectContent>
                                 {allRootCategories.map((root) => (
-                                  <SelectItem key={root.name} value={root.name}>{root.name}</SelectItem>
+                                  <SelectItem key={root.name} value={root.name}>
+                                    <CategoryLabel value={root.name} />
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -370,9 +376,9 @@ export function CategoryManagerDialog({
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex flex-col min-w-0">
                             <div className="flex items-center gap-2">
-                              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                                {formatCategoryLabel(cat.name)}
-                              </p>
+                              <div className="min-w-0 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                                <CategoryLabel value={cat.name} />
+                              </div>
                               {sub && (
                                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 text-zinc-500 font-normal">
                                   Subcategoria
