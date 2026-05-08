@@ -65,6 +65,7 @@ create table if not exists public.transactions (
   id text primary key,
   uid text not null references public.profiles(uid) on delete cascade,
   source_id text not null,
+  title text,
   description text,
   amount numeric(17,2),
   amount_text text,
@@ -313,6 +314,7 @@ alter table if exists public.categories add column if not exists updated_at time
 
 alter table if exists public.transactions add column if not exists uid text;
 alter table if exists public.transactions add column if not exists source_id text;
+alter table if exists public.transactions add column if not exists title text;
 alter table if exists public.transactions add column if not exists description text;
 alter table if exists public.transactions add column if not exists amount numeric(17,2);
 alter table if exists public.transactions add column if not exists amount_text text;
