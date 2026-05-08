@@ -120,12 +120,13 @@ export async function GET(request: NextRequest) {
     const typeFilter = request.nextUrl.searchParams.get("type")?.trim();
     const statusFilter = request.nextUrl.searchParams.get("status")?.trim();
     const priorityFilter = request.nextUrl.searchParams.get("priority")?.trim();
+    const scope = request.nextUrl.searchParams.get("scope")?.trim();
     const q = request.nextUrl.searchParams.get("q")?.trim().toLowerCase() || "";
 
     const filters: Record<string, string | undefined> = {};
     if (typeFilter && typeFilter !== "all") filters.ticket_type = typeFilter;
     if (statusFilter && statusFilter !== "all") filters.ticket_status = statusFilter;
-    if (!canReadAdminSupport) {
+    if (scope === "mine" || !canReadAdminSupport) {
       filters.uid = auth.uid;
     }
 
