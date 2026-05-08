@@ -52,6 +52,8 @@ function sanitizeCurrency(value: unknown): number | null {
   return Math.min(num, MAX_FINANCIAL_AMOUNT);
 }
 
+const sanitizeClosingDay = sanitizeDueDate;
+
 function sanitizePercent(value: unknown): number | null {
   if (value === undefined || value === null) return null;
   const num = Number(value);
@@ -70,6 +72,7 @@ function toCardRow(uid: string, sourceId: string, data: Record<string, unknown>)
     brand: data.brand ?? null,
     bin: data.bin ?? null,
     due_date: sanitizeDueDate(data.dueDate),
+    closing_day: sanitizeClosingDay(data.closingDay),
     limit_enabled: data.limitEnabled == null ? null : Boolean(data.limitEnabled),
     credit_limit: sanitizeCurrency(data.creditLimit),
     alert_threshold_pct: sanitizePercent(data.alertThresholdPct),
@@ -91,6 +94,7 @@ function toClientCard(row: Record<string, unknown>): PaymentCard {
     brand: sanitizeBrand(row.brand ?? raw?.brand) || undefined,
     bin: sanitizeBin(row.bin ?? raw?.bin) || undefined,
     dueDate: sanitizeDueDate(row.due_date ?? raw?.dueDate) || undefined,
+    closingDay: sanitizeClosingDay(row.closing_day ?? raw?.closingDay) || undefined,
     limitEnabled:
       row.limit_enabled === undefined || row.limit_enabled === null
         ? undefined
@@ -113,7 +117,7 @@ function toClientCard(row: Record<string, unknown>): PaymentCard {
 async function getCards(uid: string) {
   const rows = await supabaseSelect("payment_cards", {
     select:
-      "source_id,bank_name,last4,card_type,brand,bin,due_date,limit_enabled,credit_limit,alert_threshold_pct,block_on_limit_exceeded,created_at,updated_at,raw",
+      "source_id,bank_name,last4,card_type,brand,bin,due_date,closing_day,limit_enabled,credit_limit,alert_threshold_pct,block_on_limit_exceeded,created_at,updated_at,raw",
     filters: { uid },
     order: "updated_at.desc.nullslast",
   });
@@ -188,6 +192,7 @@ export async function POST(request: NextRequest) {
     const brand = sanitizeBrand(body.brand);
     const bin = sanitizeBin(body.bin);
     const dueDate = sanitizeDueDate(body.dueDate);
+    const closingDay = sanitizeClosingDay(body.closingDay);
     const creditLimit = sanitizeCurrency(body.creditLimit);
     const alertThresholdPct = sanitizePercent(body.alertThresholdPct);
     const limitEnabled = body.limitEnabled === undefined ? undefined : Boolean(body.limitEnabled);
@@ -205,7 +210,12 @@ export async function POST(request: NextRequest) {
       type,
       ...(brand ? { brand } : {}),
       ...(bin.length >= 6 ? { bin } : {}),
-      ...(type === "credit_card" && dueDate ? { dueDate } : {}),
+      ...(type === "credit_card" || type === "credit_and_debit"
+        ? {
+            ...(dueDate ? { dueDate } : {}),
+            ...(closingDay ? { closingDay } : {}),
+          }
+        : {}),
       ...(type === "credit_card" || type === "credit_and_debit"
         ? {
             ...(creditLimit !== null ? { creditLimit } : {}),
@@ -298,6 +308,11 @@ export async function PATCH(request: NextRequest) {
       if (value) merged.dueDate = value;
       else delete merged.dueDate;
     }
+    if (body.updates.closingDay !== undefined) {
+      const value = sanitizeClosingDay(body.updates.closingDay);
+      if (value) merged.closingDay = value;
+      else delete merged.closingDay;
+    }
     if (body.updates.creditLimit !== undefined) {
       const value = sanitizeCurrency(body.updates.creditLimit);
       if (value !== null) merged.creditLimit = value;
@@ -345,7 +360,6 @@ export async function DELETE(request: NextRequest) {
     if (!cardId) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
-
     const planContext = await getUserPlanContext(acting.actingUid);
     if (
       !planContext.isBillingExempt &&
