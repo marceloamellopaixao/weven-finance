@@ -339,6 +339,7 @@ export default function CreditCardPage() {
   const [cardBrand, setCardBrand] = useState("");
   const [cardType, setCardType] = useState<PaymentCardType>("credit_card");
   const [cardDueDate, setCardDueDate] = useState<string>("");
+  const [cardClosingDay, setCardClosingDay] = useState<string>("");
   const [isIdentifyingCard, setIsIdentifyingCard] = useState(false);
   
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -524,6 +525,7 @@ export default function CreditCardPage() {
     setCardBrand("");
     setCardType("credit_card");
     setCardDueDate("");
+    setCardClosingDay("");
     setShowCardForm(false);
   };
 
@@ -574,6 +576,13 @@ export default function CreditCardPage() {
         return;
       }
     }
+    if (isCreditFunction && cardClosingDay) {
+      const day = Number(cardClosingDay);
+      if (day < 1 || day > 31) {
+        setFeedback({ type: "error", message: "O dia de fechamento deve ser entre 1 e 31." });
+        return;
+      }
+    }
 
     setIsSavingCard(true);
     setFeedback(null);
@@ -585,6 +594,7 @@ export default function CreditCardPage() {
         brand: cardBrand ? cardBrand.toUpperCase() : undefined,
         bin: cardBin.replace(/\D/g, "").slice(0, 8) || undefined,
         dueDate: isCreditFunction && cardDueDate ? Number(cardDueDate) : undefined,
+        closingDay: isCreditFunction && cardClosingDay ? Number(cardClosingDay) : undefined,
         limitEnabled: isCreditFunction ? true : undefined,
         creditLimit: isCreditFunction ? 0 : undefined,
         alertThresholdPct: isCreditFunction ? 80 : undefined,
@@ -615,6 +625,7 @@ export default function CreditCardPage() {
     setCardBrand(card.brand || "");
     setCardType(card.type);
     setCardDueDate(card.dueDate ? String(card.dueDate) : "");
+    setCardClosingDay(card.closingDay ? String(card.closingDay) : "");
     setShowCardForm(true);
   };
 
@@ -902,9 +913,15 @@ export default function CreditCardPage() {
                     </div>
 
                     {(cardType === "credit_card" || cardType === "credit_and_debit") && (
-                      <div className="space-y-2 sm:col-span-2">
+                      <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Dia de fechamento da fatura</Label>
+                          <Input value={cardClosingDay} inputMode="numeric" placeholder="Ex: 30" className="w-full" onChange={(e) => setCardClosingDay(e.target.value.replace(/\D/g, "").slice(0, 2))} />
+                        </div>
+                        <div className="space-y-2">
                         <Label>Dia de vencimento da fatura</Label>
-                        <Input value={cardDueDate} inputMode="numeric" placeholder="Ex: 10" className="w-full sm:max-w-xs" onChange={(e) => setCardDueDate(e.target.value.replace(/\D/g, "").slice(0, 2))} />
+                          <Input value={cardDueDate} inputMode="numeric" placeholder="Ex: 10" className="w-full" onChange={(e) => setCardDueDate(e.target.value.replace(/\D/g, "").slice(0, 2))} />
+                        </div>
                       </div>
                     )}
                   </div>
