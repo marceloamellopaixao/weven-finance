@@ -8,6 +8,7 @@ export interface PaymentCard {
   brand?: string;
   bin?: string;
   dueDate?: number;
+  closingDay?: number;
   limitEnabled?: boolean;
   creditLimit?: number;
   alertThresholdPct?: number;
