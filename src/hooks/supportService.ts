@@ -99,6 +99,7 @@ type SupportTicketsPage = {
 async function getTickets(params?: {
   page?: number;
   limit?: number;
+  scope?: "mine" | "all";
   type?: "support" | "feature" | "all";
   status?: string;
   priority?: "low" | "medium" | "high" | "urgent" | "all";
@@ -107,6 +108,7 @@ async function getTickets(params?: {
   const query = new URLSearchParams();
   query.set("page", String(Math.max(1, Number(params?.page || 1))));
   query.set("limit", String(Math.max(1, Math.min(100, Number(params?.limit || 20)))));
+  if (params?.scope === "mine") query.set("scope", "mine");
   if (params?.type && params.type !== "all") query.set("type", params.type);
   if (params?.status && params.status !== "all") query.set("status", params.status);
   if (params?.priority && params.priority !== "all") query.set("priority", params.priority);
@@ -146,6 +148,7 @@ async function getTickets(params?: {
 export async function fetchSupportTicketsPage(params?: {
   page?: number;
   limit?: number;
+  scope?: "mine" | "all";
   type?: "support" | "feature" | "all";
   status?: string;
   priority?: "low" | "medium" | "high" | "urgent" | "all";
@@ -154,6 +157,7 @@ export async function fetchSupportTicketsPage(params?: {
   const query = new URLSearchParams();
   query.set("page", String(Math.max(1, Number(params?.page || 1))));
   query.set("limit", String(Math.max(1, Math.min(100, Number(params?.limit || 20)))));
+  if (params?.scope === "mine") query.set("scope", "mine");
   if (params?.type && params.type !== "all") query.set("type", params.type);
   if (params?.status && params.status !== "all") query.set("status", params.status);
   if (params?.priority && params.priority !== "all") query.set("priority", params.priority);
@@ -194,6 +198,7 @@ export const subscribeToSupportTickets = (
   options?: {
     page?: number;
     limit?: number;
+    scope?: "mine" | "all";
     type?: "support" | "feature" | "all";
     status?: string;
     priority?: "low" | "medium" | "high" | "urgent" | "all";
