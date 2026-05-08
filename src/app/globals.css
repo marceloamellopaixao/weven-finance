@@ -291,10 +291,29 @@
   }
 
   .app-shell {
+    position: relative;
+    isolation: isolate;
     background-color: var(--background);
+    overflow-x: clip;
+  }
+
+  .app-shell::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
     background-image:
-      radial-gradient(circle at top right, var(--app-shell-spot-a), transparent 34%),
-      radial-gradient(circle at bottom left, var(--app-shell-spot-b), transparent 38%);
+      radial-gradient(circle at 100% 0%, var(--app-shell-spot-a), transparent 42%),
+      radial-gradient(circle at 0% 100%, var(--app-shell-spot-b), transparent 44%);
+    background-color: var(--background);
+    background-repeat: no-repeat;
+    background-size: 100vw 100svh;
+  }
+
+  .app-shell > * {
+    position: relative;
+    z-index: 1;
   }
 }
 
