@@ -1205,7 +1205,7 @@ export default function CreditCardPage() {
                               <ReceiptText className="h-5 w-5" />
                             </div>
                             <div className="min-w-0">
-                              <p className="truncate font-semibold text-foreground">{tx.description}</p>
+                              <p className="truncate font-semibold text-foreground">{tx.title || tx.description}</p>
                               <p className="mt-0.5 text-xs text-muted-foreground">{tx.category} • Vence {tx.dueDate}</p>
                             </div>
                           </div>
