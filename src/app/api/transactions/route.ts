@@ -46,6 +46,7 @@ function toTxRow(uid: string, sourceId: string, data: Record<string, unknown>) {
     id: `${uid}__${sourceId}`,
     uid,
     source_id: sourceId,
+    title: data.title ?? null,
     description: data.description ?? null,
     amount: asNumber(data.amount),
     amount_text: data.amount == null ? null : String(data.amount),
@@ -71,9 +72,11 @@ function toTxRow(uid: string, sourceId: string, data: Record<string, unknown>) {
 
 function toClientTx(uid: string, row: Record<string, unknown>) {
   const raw = (row.raw as Record<string, unknown> | null) ?? {};
+  const hasExplicitTitle = Boolean(row.title ?? raw.title);
   return {
     id: String(row.source_id || ""),
-    description: row.description ?? raw.description ?? "",
+    title: row.title ?? raw.title ?? row.description ?? raw.description ?? "",
+    description: hasExplicitTitle ? row.description ?? raw.description ?? "" : "",
     amount: row.amount_text ?? row.amount ?? raw.amount ?? 0,
     amountForLimit: row.amount_for_limit ?? raw.amountForLimit ?? null,
     type: row.tx_type ?? raw.type ?? "expense",
@@ -121,7 +124,7 @@ function getRowMonth(row: Record<string, unknown>) {
 async function fetchUserTransactions(uid: string) {
   return supabaseSelect("transactions", {
     select:
-      "source_id,description,amount,amount_text,amount_for_limit,tx_type,category,tx_status,payment_method,card_id,card_label,card_type,tx_date,due_date,group_id,installment_current,installment_total,created_at,raw",
+      "source_id,title,description,amount,amount_text,amount_for_limit,tx_type,category,tx_status,payment_method,card_id,card_label,card_type,tx_date,due_date,group_id,installment_current,installment_total,created_at,raw",
     filters: { uid },
     order: "due_date.desc.nullslast",
   });
@@ -308,11 +311,11 @@ export async function GET(request: NextRequest) {
       }
     }
     const safeQ = escapeIlike(q);
-    const or = safeQ ? `description.ilike.*${safeQ}*,amount_text.ilike.*${safeQ}*` : undefined;
+    const or = safeQ ? `title.ilike.*${safeQ}*,description.ilike.*${safeQ}*,amount_text.ilike.*${safeQ}*` : undefined;
     const paged = usePaged
       ? await supabaseSelectPaged("transactions", {
           select:
-            "source_id,description,amount,amount_text,amount_for_limit,tx_type,category,tx_status,payment_method,card_id,card_label,card_type,tx_date,due_date,group_id,installment_current,installment_total,created_at,raw",
+            "source_id,title,description,amount,amount_text,amount_for_limit,tx_type,category,tx_status,payment_method,card_id,card_label,card_type,tx_date,due_date,group_id,installment_current,installment_total,created_at,raw",
           filters: baseFilters,
           conditions,
           or,
@@ -332,7 +335,7 @@ export async function GET(request: NextRequest) {
         if (!due.startsWith(month)) return false;
       }
       if (!paged && q) {
-        const desc = String(row.description || "").toLowerCase();
+        const desc = `${String(row.title || "")} ${String(row.description || "")}`.toLowerCase();
         const amountTxt = String(row.amount_text || row.amount || "").toLowerCase();
         if (!desc.includes(q) && !amountTxt.includes(q)) return false;
       }
