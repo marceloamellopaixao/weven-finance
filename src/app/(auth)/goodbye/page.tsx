@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, CheckCircle2, Home, Loader2, Mail, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
+import { CalendarClock, CheckCircle2, Home, Loader2, Mail, MessageCircle, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
 import { ACCOUNT_DELETION_GRACE_DAYS, computePermanentDeleteAt } from "@/lib/account-deletion/policy";
@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { getSupabaseClient } from "@/services/supabase/client";
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
 import { hasAccountDeletionRequest } from "@/lib/account-deletion/client";
+
+const WHATSAPP_SUPPORT_URL = "https://wa.me/5511992348613";
 
 function formatDate(value: string | null) {
   if (!value) return null;
@@ -277,6 +279,13 @@ export default function GoodbyePage() {
             <Button variant="outline" className="w-full rounded-xl">
               <Home className="mr-2 h-4 w-4" />
               Ir para o inicio
+            </Button>
+          </Link>
+
+          <Link href={WHATSAPP_SUPPORT_URL} target="_blank" className="w-full sm:w-auto">
+            <Button variant="outline" className="w-full rounded-xl border-green-600/30 text-green-700 hover:bg-green-50">
+              <MessageCircle className="mr-2 h-4 w-4" />
+              Falar no WhatsApp
             </Button>
           </Link>
 
