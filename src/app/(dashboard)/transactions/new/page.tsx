@@ -621,7 +621,9 @@ export default function NewTransactionPage() {
                   </Label>
                   <div className="flex min-h-12 items-center rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm font-medium text-muted-foreground">
                     {selectedCard?.dueDate
-                      ? `Esta compra será considerada na fatura com vencimento dia ${String(selectedCard.dueDate).padStart(2, "0")}.`
+                      ? selectedCard.closingDay
+                        ? `Compras até o dia ${String(selectedCard.closingDay).padStart(2, "0")} entram na próxima fatura com vencimento dia ${String(selectedCard.dueDate).padStart(2, "0")}.`
+                        : `Esta compra será considerada na fatura com vencimento dia ${String(selectedCard.dueDate).padStart(2, "0")}.`
                       : "Selecione um cartão de crédito para definir o vencimento da fatura."}
                   </div>
                 </div>
