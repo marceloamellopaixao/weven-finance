@@ -37,7 +37,7 @@ export async function getPaymentCards() {
 }
 
 export async function createPaymentCard(
-  input: Pick<PaymentCard, "bankName" | "last4" | "type" | "brand" | "bin" | "dueDate" | "limitEnabled" | "creditLimit" | "alertThresholdPct" | "blockOnLimitExceeded">
+  input: Pick<PaymentCard, "bankName" | "last4" | "type" | "brand" | "bin" | "dueDate" | "closingDay" | "limitEnabled" | "creditLimit" | "alertThresholdPct" | "blockOnLimitExceeded">
 ) {
   const response = await fetchWithAuth("/api/payment-cards", {
     method: "POST",
@@ -53,7 +53,7 @@ export async function createPaymentCard(
 
 export async function updatePaymentCard(
   cardId: string,
-  updates: Partial<Pick<PaymentCard, "bankName" | "last4" | "type" | "brand" | "bin" | "dueDate" | "limitEnabled" | "creditLimit" | "alertThresholdPct" | "blockOnLimitExceeded">>
+  updates: Partial<Pick<PaymentCard, "bankName" | "last4" | "type" | "brand" | "bin" | "dueDate" | "closingDay" | "limitEnabled" | "creditLimit" | "alertThresholdPct" | "blockOnLimitExceeded">>
 ) {
   const response = await fetchWithAuth("/api/payment-cards", {
     method: "PATCH",
