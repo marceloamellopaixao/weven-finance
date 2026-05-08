@@ -7,6 +7,7 @@ import {
   Tag, AlignLeft, Info, ReceiptText, AlertCircle, Settings2, Repeat, Layers, Eye, EyeOff
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CategoryLabel } from "@/components/categories/CategoryLabel";
 import { CategoryManagerDialog } from "@/components/categories/CategoryManagerDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +22,7 @@ import { PaymentCard } from "@/types/paymentCard";
 import { deleteTransaction, updateTransaction } from "@/services/transactionService";
 import { getCreditCardDueDateFromSelectedCard, isCreditCapableCard } from "@/lib/credit-card/due-date";
 import { addMonthsUTC } from "@/lib/transactions/recurring";
-import { formatCategoryLabel, orderCategoryNames } from "@/lib/category-utils";
+import { orderCategoryNames } from "@/lib/category-utils";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -367,7 +368,7 @@ export default function EditTransactionPage() {
                   <SelectContent>
                     {monthCategories.map((cat) => (
                       <SelectItem key={cat.name} value={cat.name}>
-                        {formatCategoryLabel(cat.name)}
+                        <CategoryLabel value={cat.name} />
                       </SelectItem>
                     ))}
                   </SelectContent>
