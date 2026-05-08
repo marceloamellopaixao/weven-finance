@@ -1,16 +1,23 @@
 "use client";
 
-import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { AlertTriangle, Lock, MessageCircle } from "lucide-react";
-import { AuthPageShell } from "@/components/auth/AuthPageShell";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { AlertTriangle, DollarSign, Loader2, Lock, Mail, MessageCircle } from "lucide-react";
+
+import { AuthPageShell } from "@/components/auth/AuthPageShell";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/hooks/useAuth";
+import { sendSupportRequest } from "@/hooks/supportService";
+
+const WHATSAPP_SUPPORT_URL = "https://wa.me/5511992348613";
 
 export default function BlockedPage() {
   const { user, userProfile, logout, loading } = useAuth();
   const router = useRouter();
+  const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
+  const [supportFeedback, setSupportFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const isBlocked = userProfile?.status === "blocked";
   const isInactive = userProfile?.status === "inactive";
@@ -25,6 +32,37 @@ export default function BlockedPage() {
     if (canViewBlockedPage) return;
     router.replace(user ? "/dashboard" : "/login");
   }, [canViewBlockedPage, loading, router, user]);
+
+  async function handleSupportRequest() {
+    if (!user || !userProfile) return;
+    setIsSubmittingSupport(true);
+    setSupportFeedback(null);
+    try {
+      const result = await sendSupportRequest(
+        user.uid,
+        user.email || userProfile.email || "",
+        userProfile.completeName || userProfile.displayName || user.email || "Usuário",
+        [
+          isBlocked ? "Solicitação de suporte para conta bloqueada." : "Solicitação de suporte para conta inativa.",
+          userProfile.blockReason ? `Motivo exibido: ${userProfile.blockReason}` : "Nenhum motivo foi exibido ao usuário.",
+          "O usuário pediu análise para regularizar o acesso.",
+        ].join("\n")
+      );
+      setSupportFeedback({
+        type: "success",
+        message: result.protocol
+          ? `Solicitação enviada. Protocolo: ${result.protocol}.`
+          : "Solicitação enviada. O suporte vai analisar seu acesso.",
+      });
+    } catch (error) {
+      setSupportFeedback({
+        type: "error",
+        message: error instanceof Error ? error.message : "Não foi possível enviar a solicitação agora.",
+      });
+    } finally {
+      setIsSubmittingSupport(false);
+    }
+  }
 
   if (loading || !canViewBlockedPage) {
     return (
@@ -41,11 +79,7 @@ export default function BlockedPage() {
 
         <CardHeader className="pb-2 pt-6 text-center">
           <div className="mx-auto mb-4 w-fit rounded-full border border-destructive/20 bg-destructive/10 p-4 text-destructive">
-            {isBlocked ? (
-              <Lock className="h-10 w-10" />
-            ) : (
-              <AlertTriangle className="h-10 w-10" />
-            )}
+            {isBlocked ? <Lock className="h-10 w-10" /> : <AlertTriangle className="h-10 w-10" />}
           </div>
           <CardTitle className="text-2xl font-bold text-destructive">{title}</CardTitle>
         </CardHeader>
@@ -67,18 +101,52 @@ export default function BlockedPage() {
           )}
 
           <p className="px-2 text-xs leading-relaxed text-muted-foreground">
-            Entre em contato com o suporte para regularizar seu acesso.
+            Solicite suporte técnico para que a equipe administrativa analise seu acesso.
           </p>
+
+          {supportFeedback ? (
+            <div
+              role={supportFeedback.type === "error" ? "alert" : "status"}
+              className={`rounded-xl border px-4 py-3 text-sm ${
+                supportFeedback.type === "success"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-destructive/20 bg-destructive/10 text-destructive"
+              }`}
+            >
+              {supportFeedback.message}
+            </div>
+          ) : null}
         </CardContent>
 
         <CardFooter className="flex flex-col gap-3 px-6 pb-8 pt-2 md:px-8">
           <Button
-            className="h-12 w-full gap-2 rounded-xl bg-green-600 text-base font-semibold text-white shadow-lg shadow-green-600/20 transition-transform duration-200 hover:scale-[1.02] hover:bg-green-700 hover:cursor-pointer"
-            onClick={() => window.open("https://wa.me/5511992348613", "_blank")}
+            type="button"
+            className="h-12 w-full gap-2 rounded-xl text-base font-semibold"
+            onClick={handleSupportRequest}
+            disabled={isSubmittingSupport}
+          >
+            {isSubmittingSupport ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mail className="h-5 w-5" />}
+            Solicitar suporte técnico
+          </Button>
+
+          {userProfile.blockReason === "Falta de Pagamento" ? (
+            <Link
+              href="/settings?tab=billing"
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-green-600 text-base font-semibold text-white shadow-lg shadow-green-600/20 transition-transform duration-200 hover:scale-[1.02] hover:bg-green-700 hover:cursor-pointer"
+            >
+              <DollarSign className="h-5 w-5" />
+              Regularizar Pagamento
+            </Link>
+          ) : null}
+
+          <Link
+            href={WHATSAPP_SUPPORT_URL}
+            target="_blank"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-green-600/30 bg-green-50 text-base font-semibold text-green-700 shadow-sm transition-transform duration-200 hover:scale-[1.02] hover:bg-green-100 hover:cursor-pointer"
           >
             <MessageCircle className="h-5 w-5" />
             Falar no WhatsApp
-          </Button>
+          </Link>
 
           <Button
             variant="ghost"
