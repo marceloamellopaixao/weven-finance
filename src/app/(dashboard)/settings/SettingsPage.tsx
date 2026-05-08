@@ -23,6 +23,7 @@ import {
   MessageCircle,
   LifeBuoy,
   Lightbulb,
+  UserCheck,
   Sparkles,
   Copy,
   KeyRound,
@@ -207,6 +208,12 @@ export default function SettingsPage() {
       return "bg-blue-100 text-blue-700 border-blue-200";
     }
     return "bg-amber-100 text-amber-700 border-amber-200";
+  };
+
+  const formatTicketType = (ticket: SupportTicket) => {
+    if (ticket.type === "feature") return "Ideia / sugestão";
+    if (ticket.supportKind === "account_restore") return "Recuperação de conta";
+    return "Suporte técnico";
   };
 
   const handleTabChange = (tab: "account" | "billing" | "security" | "help") => {
@@ -517,6 +524,7 @@ export default function SettingsPage() {
       {
         page: mySupportPage,
         limit: mySupportPerPage,
+        scope: "mine",
       },
       () => {
         setIsLoadingMySupportTickets(false);
@@ -1415,7 +1423,7 @@ export default function SettingsPage() {
                     <HelpCircle className="h-5 w-5" /> Meus chamados
                   </CardTitle>
                   <CardDescription>
-                    Acompanhe o protocolo e o status do atendimento em tempo real.
+                    Acompanhe apenas as solicitações abertas por você neste perfil.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
@@ -1429,19 +1437,39 @@ export default function SettingsPage() {
                     </div>
                   ) : (
                     mySupportTickets.map((ticket) => (
-                      <div key={ticket.id} className="app-panel-subtle rounded-xl border border-color:var(--app-panel-border) px-3 py-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-sm font-semibold text-foreground">
-                            Protocolo {ticket.protocol || `#${ticket.id.slice(0, 8)}`}
-                          </p>
-                          <Badge variant="outline" className={getSupportStatusBadgeClass(ticket.status)}>
-                            {formatSupportStatus(ticket.status)}
-                          </Badge>
+                      <div key={ticket.id} className="app-panel-subtle rounded-xl border border-color:var(--app-panel-border) px-3 py-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-foreground">
+                              Protocolo {ticket.protocol || `#${ticket.id.slice(0, 8)}`}
+                            </p>
+                            <p className="mt-0.5 text-[11px] font-medium text-primary">
+                              {formatTicketType(ticket)}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            {ticket.assignedTo || ticket.assignedToName ? (
+                              <Badge variant="outline" className="gap-1 border-primary/25 bg-primary/10 text-primary">
+                                <UserCheck className="h-3 w-3" />
+                                Responsável: {ticket.assignedToName || "Equipe de suporte"}
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="gap-1 border-border/70 bg-background/60 text-muted-foreground">
+                                <Clock className="h-3 w-3" />
+                                Aguardando responsável
+                              </Badge>
+                            )}
+                            <Badge variant="outline" className={getSupportStatusBadgeClass(ticket.status)}>
+                              {formatSupportStatus(ticket.status)}
+                            </Badge>
+                          </div>
                         </div>
                         <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{ticket.message}</p>
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          {ticket.createdAt.toLocaleString("pt-BR")}
-                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                          <span>Aberto em {ticket.createdAt.toLocaleString("pt-BR")}</span>
+                          {ticket.firstResponseAt ? <span>Primeira resposta registrada</span> : null}
+                          {ticket.resolvedAt ? <span>Resolvido em {new Date(ticket.resolvedAt).toLocaleString("pt-BR")}</span> : null}
+                        </div>
                       </div>
                     ))
                   )}
