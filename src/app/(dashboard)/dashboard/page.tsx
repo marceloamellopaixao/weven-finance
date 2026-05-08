@@ -46,6 +46,7 @@ import { buildInstallmentPlan } from "@/lib/transactions/installments";
 import { getCurrentMonthKey, getMonthKey } from "@/lib/transactions/recurring";
 import { buildUpgradeCheckoutPath } from "@/services/billing/checkoutIntent";
 import { calculateDailyLimit } from "@/lib/finance/daily-limit";
+import { getCreditCardDueDateFromSelectedCard } from "@/lib/credit-card/due-date";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
   { value: "pix", label: "Pix", hasDueDate: false },
@@ -794,7 +795,20 @@ export default function DashboardPage() {
         transactionDueDate = dueDate;
       } else {
         // Gasto
-        if (showDueDateInput) {
+        if (paymentMethod === "credit_card") {
+          const cardDueDate = getCreditCardDueDateFromSelectedCard(selectedPaymentCard, date);
+          if (!cardDueDate) {
+            setFeedbackModal({
+              isOpen: true,
+              type: "error",
+              title: "Configure a fatura",
+              message: "O cartão de crédito selecionado precisa ter vencimento de fatura configurado.",
+            });
+            return;
+          }
+          transactionDate = date;
+          transactionDueDate = cardDueDate;
+        } else if (showDueDateInput) {
           // Cartão de Crédito/Boleto: Data da Compra (date) != Data de Vencimento (dueDate)
           transactionDate = date;
           transactionDueDate = dueDate;
@@ -1063,6 +1077,19 @@ export default function DashboardPage() {
 
     if (editingTx.type === 'income') {
       finalDueDate = finalDate;
+    } else if (editingTx.paymentMethod === "credit_card") {
+      const selectedCard = paymentCards.find((card) => card.id === editingTx.cardId);
+      const cardDueDate = getCreditCardDueDateFromSelectedCard(selectedCard, finalDate);
+      if (!cardDueDate) {
+        setFeedbackModal({
+          isOpen: true,
+          type: "error",
+          title: "Configure a fatura",
+          message: "O cartão de crédito selecionado precisa ter vencimento de fatura configurado.",
+        });
+        return;
+      }
+      finalDueDate = cardDueDate;
     } else {
       if (!hasDueDate) {
         finalDueDate = finalDate
