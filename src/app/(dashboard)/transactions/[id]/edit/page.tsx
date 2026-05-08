@@ -173,6 +173,7 @@ export default function EditTransactionPage() {
         user.uid,
         editingTx.id,
         {
+          title: editingTx.title || editingTx.description,
           description: editingTx.description,
           amount: Number(editingTx.amount || 0),
           category: editingTx.category,
@@ -326,13 +327,25 @@ export default function EditTransactionPage() {
             
             <div className="space-y-2">
               <Label className="flex items-center gap-2 text-sm text-foreground/85">
-                <AlignLeft className="h-4 w-4 text-zinc-400" /> Descrição
+                <AlignLeft className="h-4 w-4 text-zinc-400" /> Título
               </Label>
               <Input 
-                value={editingTx.description} 
-                onChange={(e) => setEditingTx({ ...editingTx, description: e.target.value })} 
+                value={editingTx.title || ""} 
+                onChange={(e) => setEditingTx({ ...editingTx, title: e.target.value })} 
                 className="h-12 rounded-xl text-base"
-                placeholder="Ex: Supermercado"
+                placeholder="Ex: Valorant Points"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-sm text-foreground/85">
+                <ReceiptText className="h-4 w-4 text-zinc-400" /> Descrição
+              </Label>
+              <textarea
+                value={editingTx.description || ""}
+                onChange={(e) => setEditingTx({ ...editingTx, description: e.target.value })}
+                className="min-h-[96px] w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                placeholder="Ex: lembrar por que esse lançamento foi feito."
               />
             </div>
 
@@ -472,17 +485,11 @@ export default function EditTransactionPage() {
         {/* GRUPO (Se houver) */}
         {groupedItems.length > 0 && (
           <div
-            className={`rounded-3xl p-5 md:p-6 mb-6 border ${
-              isRecurringGroup
-                ? isEndedRecurring
-                  ? "bg-slate-50/70 dark:bg-slate-950/20 border-slate-200 dark:border-slate-800/40"
-                  : "bg-accent/70 border-primary/20"
-                : "bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/30"
-            }`}
+            className="mb-6 rounded-3xl border border-border/70 bg-card p-5 shadow-sm md:p-6"
           >
             <div className="flex items-center gap-2 mb-4">
-              <Info className={`h-6 w-5 ${isRecurringGroup ? (isEndedRecurring ? "text-slate-600 dark:text-slate-300" : "text-primary") : "text-amber-600"}`} />
-              <h3 className={`font-semibold ${isRecurringGroup ? (isEndedRecurring ? "text-slate-900 dark:text-slate-100" : "text-primary") : "text-amber-900 dark:text-amber-100"}`}>
+              <Info className="h-6 w-5 text-primary" />
+              <h3 className="font-semibold text-foreground">
                 {isRecurringGroup ? "Visão da recorrência" : "Visão do parcelamento"}
               </h3>
             </div>
@@ -490,54 +497,36 @@ export default function EditTransactionPage() {
               {groupedItems.map((item) => {
                 const isCurrent = item.id === editingTx.id;
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={item.id}
-                    className={`flex items-center justify-between p-3 rounded-xl text-sm transition-colors ${
+                    onClick={() => item.id && router.push(`/transactions/${item.id}/edit`)}
+                    className={`flex w-full items-center justify-between rounded-xl border p-3 text-left text-sm transition-colors hover:bg-accent/60 ${
                       isCurrent
-                        ? isRecurringGroup
-                          ? isEndedRecurring
-                            ? "bg-card shadow-sm border border-slate-300 ring-1 ring-slate-400"
-                            : "bg-card shadow-sm border border-primary/20 ring-1 ring-ring/35"
-                          : "bg-card shadow-sm border border-amber-200 ring-1 ring-amber-500"
-                        : isRecurringGroup
-                          ? isEndedRecurring
-                            ? "hover:bg-slate-100/70 dark:hover:bg-slate-900/40"
-                            : "hover:bg-accent/80"
-                          : "hover:bg-amber-100/50"
+                        ? "border-primary/35 bg-primary/10 text-primary ring-1 ring-primary/20"
+                        : "border-border/70 bg-muted/20 text-muted-foreground"
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <span
                         className={`font-mono font-medium ${
-                          isCurrent
-                            ? isRecurringGroup
-                              ? isEndedRecurring
-                                ? "text-slate-700 dark:text-slate-200"
-                                : "text-primary"
-                              : "text-amber-700"
-                            : "text-zinc-500"
+                          isCurrent ? "text-primary" : "text-zinc-500"
                         }`}
                       >
                         {isRecurringGroup ? "Mensal" : `${String(item.installmentCurrent).padStart(2, '0')}/${String(item.installmentTotal).padStart(2, '0')}`}
                       </span>
-                      <span className={isCurrent ? "font-semibold text-zinc-900 dark:text-zinc-100" : "text-zinc-600"}>
+                      <span className={isCurrent ? "font-semibold text-foreground" : "text-muted-foreground"}>
                         {item.dueDate || item.date}
                       </span>
                     </div>
                     <span
                       className={`font-medium ${
-                        isCurrent
-                          ? isRecurringGroup
-                            ? isEndedRecurring
-                              ? "text-slate-700 dark:text-slate-200"
-                              : "text-primary"
-                            : "text-amber-700"
-                          : "text-zinc-600"
+                        isCurrent ? "text-primary" : "text-muted-foreground"
                       }`}
                     >
                       {formatCurrencyDisplay(Number(item.amount || 0))}
                     </span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
