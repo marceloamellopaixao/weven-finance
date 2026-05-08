@@ -34,10 +34,10 @@ export const getCategoryRoot = (value: unknown) => {
 export const formatCategoryLabel = (value: unknown) => {
   const safe = toSafeCategory(value);
   if (isLinkedSubcategory(value)) {
-    return `${getCategoryRoot(value)} > ${getSubcategoryName(value)}`;
+    return `${getCategoryRoot(value)} / ${getSubcategoryName(value)}`;
   }
   if (isLegacySubcategory(value)) {
-    return `• ${getSubcategoryName(value)}`;
+    return getSubcategoryName(value);
   }
   return safe;
 };
