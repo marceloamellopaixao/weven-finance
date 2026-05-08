@@ -16,7 +16,7 @@ export function isCreditCapableCard(card?: Pick<PaymentCard, "type"> | null) {
 }
 
 export function getCreditCardDueDateFromSelectedCard(
-  card: Pick<PaymentCard, "dueDate"> | null | undefined,
+  card: Pick<PaymentCard, "dueDate" | "closingDay"> | null | undefined,
   purchaseDate: string
 ) {
   const dueDay = Number(card?.dueDate);
@@ -26,6 +26,24 @@ export function getCreditCardDueDateFromSelectedCard(
 
   const [year, month, purchaseDay] = purchaseDate.split("-").map(Number);
   const monthIndex = month - 1;
+  const closingDay = Number(card?.closingDay);
+
+  if (Number.isInteger(closingDay) && closingDay >= 1 && closingDay <= 31) {
+    const currentMonthClosingDay = clampDayToMonth(year, monthIndex, closingDay);
+    const dueAfterClosingInSameMonth = dueDay > closingDay;
+    const invoiceMonthOffset = purchaseDay <= currentMonthClosingDay
+      ? dueAfterClosingInSameMonth ? 0 : 1
+      : dueAfterClosingInSameMonth ? 1 : 2;
+    const invoiceMonth = new Date(Date.UTC(year, monthIndex + invoiceMonthOffset, 1));
+    const invoiceYear = invoiceMonth.getUTCFullYear();
+    const invoiceMonthIndex = invoiceMonth.getUTCMonth();
+    return toIsoDateUTC(
+      invoiceYear,
+      invoiceMonthIndex,
+      clampDayToMonth(invoiceYear, invoiceMonthIndex, dueDay)
+    );
+  }
+
   const currentMonthDueDay = clampDayToMonth(year, monthIndex, dueDay);
 
   if (purchaseDay <= currentMonthDueDay) {
