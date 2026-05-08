@@ -102,9 +102,43 @@ function resolveCryptoUid(uid: string) {
   return getImpersonationTargetUid() || uid;
 }
 
-type ApiTransaction = Omit<Transaction, "createdAt" | "amount" | "description"> & {
+function stripInstallmentSuffix(value: string) {
+  return String(value || "").replace(/(?:\s+\(\d+\/\d+\))+\s*$/g, "").trim();
+}
+
+async function parseApiTransaction(tx: ApiTransaction, cryptoUid: string): Promise<Transaction> {
+  let decryptedTitle = tx.title || tx.description;
+  let decryptedDesc = tx.title ? tx.description || "" : "";
+  let decryptedAmount = String(tx.amount);
+
+  if (tx.isEncrypted) {
+    decryptedTitle = await decryptData(tx.title || tx.description, cryptoUid);
+    decryptedDesc = tx.title ? await decryptData(tx.description || "", cryptoUid) : "";
+    decryptedAmount = await decryptData(String(tx.amount), cryptoUid);
+  }
+
+  const parsedAmount = Number(decryptedAmount);
+  const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
+  const protectedText = tx.title || tx.description;
+  const isDecryptionFailed =
+    tx.isEncrypted &&
+    decryptedTitle === protectedText &&
+    typeof protectedText === "string" &&
+    protectedText.length > 50;
+
+  return {
+    ...tx,
+    title: isDecryptionFailed ? "Dados protegidos no momento" : decryptedTitle,
+    description: isDecryptionFailed ? "" : decryptedDesc,
+    amount: safeAmount,
+    createdAt: tx.createdAt ? new Date(tx.createdAt) : new Date(),
+  } as Transaction;
+}
+
+type ApiTransaction = Omit<Transaction, "createdAt" | "amount" | "title" | "description"> & {
   createdAt?: string | null;
   amount: number | string;
+  title?: string;
   description: string;
   isEncrypted?: boolean;
 };
@@ -127,32 +161,7 @@ async function fetchTransactions(uid: string, groupId?: string): Promise<Transac
 
   const transactions = payload.transactions || [];
   const parsed = await Promise.all(
-    transactions.map(async (tx) => {
-      let decryptedDesc = tx.description;
-      let decryptedAmount = String(tx.amount);
-
-      if (tx.isEncrypted) {
-        decryptedDesc = await decryptData(tx.description, cryptoUid);
-        decryptedAmount = await decryptData(String(tx.amount), cryptoUid);
-      }
-
-      const parsedAmount = Number(decryptedAmount);
-      const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
-      const isDecryptionFailed =
-        tx.isEncrypted &&
-        decryptedDesc === tx.description &&
-        typeof tx.description === "string" &&
-        tx.description.length > 50;
-
-      return {
-        ...tx,
-        description: isDecryptionFailed
-          ? "Dados protegidos no momento"
-          : decryptedDesc,
-        amount: safeAmount,
-        createdAt: tx.createdAt ? new Date(tx.createdAt) : new Date(),
-      } as Transaction;
-    })
+    transactions.map((tx) => parseApiTransaction(tx, cryptoUid))
   );
 
   return parsed.filter((t) => !t.isArchived);
@@ -198,32 +207,7 @@ export async function fetchTransactionsPage(
 
   const transactions = payload.transactions || [];
   const parsed = await Promise.all(
-    transactions.map(async (tx) => {
-      let decryptedDesc = tx.description;
-      let decryptedAmount = String(tx.amount);
-
-      if (tx.isEncrypted) {
-        decryptedDesc = await decryptData(tx.description, cryptoUid);
-        decryptedAmount = await decryptData(String(tx.amount), cryptoUid);
-      }
-
-      const parsedAmount = Number(decryptedAmount);
-      const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
-      const isDecryptionFailed =
-        tx.isEncrypted &&
-        decryptedDesc === tx.description &&
-        typeof tx.description === "string" &&
-        tx.description.length > 50;
-
-      return {
-        ...tx,
-        description: isDecryptionFailed
-          ? "Dados protegidos no momento"
-          : decryptedDesc,
-        amount: safeAmount,
-        createdAt: tx.createdAt ? new Date(tx.createdAt) : new Date(),
-      } as Transaction;
-    })
+    transactions.map((tx) => parseApiTransaction(tx, cryptoUid))
   );
 
   const visible = parsed.filter((t) => !t.isArchived);
@@ -346,14 +330,17 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO & { i
   for (let i = 0; i < count; i++) {
     const currentDate = tx.isInstallment ? addMonthsUTC(tx.date, i) : tx.date;
     const currentDueDate = tx.isInstallment ? addMonthsUTC(tx.dueDate, i) : tx.dueDate;
-    const descText = tx.isInstallment ? `${tx.description} (${i + 1}/${count})` : tx.description;
-    const encryptedDesc = await encryptData(descText, cryptoUid);
+    const baseTitle = stripInstallmentSuffix(tx.title || tx.description);
+    const titleText = tx.isInstallment ? `${baseTitle} (${i + 1}/${count})` : baseTitle;
+    const encryptedTitle = await encryptData(titleText, cryptoUid);
+    const encryptedDesc = await encryptData(tx.description || "", cryptoUid);
     const currentAmount = installmentPlan
       ? installmentPlan.installmentAmounts[i] ?? installmentPlan.installmentAmounts[0] ?? 0
       : tx.amount;
     const encryptedAmount = await encryptData(currentAmount, cryptoUid);
 
     transactions.push({
+      title: encryptedTitle,
       description: encryptedDesc,
       amount: encryptedAmount,
       amountForLimit: Number(currentAmount),
@@ -386,10 +373,12 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO & { i
   }
 
   if (recurringId) {
-    const encryptedDesc = await encryptData(tx.description, cryptoUid);
+    const encryptedTitle = await encryptData(stripInstallmentSuffix(tx.title || tx.description), cryptoUid);
+    const encryptedDesc = await encryptData(tx.description || "", cryptoUid);
     const encryptedAmount = await encryptData(tx.amount, cryptoUid);
     transactions.push({
       sourceId: recurringId,
+      title: encryptedTitle,
       description: encryptedDesc,
       amount: encryptedAmount,
       amountForLimit: null,
@@ -490,8 +479,12 @@ export const updateTransaction = async (
   }
 
   if (!updateGroup) {
-    if (data.description) {
-      updates.description = await encryptData(data.description, cryptoUid);
+    if (data.title !== undefined) {
+      updates.title = await encryptData(stripInstallmentSuffix(data.title || ""), cryptoUid);
+      updates.isEncrypted = true;
+    }
+    if (data.description !== undefined) {
+      updates.description = await encryptData(data.description || "", cryptoUid);
       updates.isEncrypted = true;
     }
     const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
@@ -518,9 +511,14 @@ export const updateTransaction = async (
     const batchUpdates: Record<string, unknown> = { ...updates };
     const isTarget = tx.id === transactionId;
 
-    if (data.description) {
-      const descText = currentTx.isRecurring ? data.description : `${data.description} (${tx.installmentCurrent}/${tx.installmentTotal})`;
-      batchUpdates.description = await encryptData(descText, cryptoUid);
+    if (data.title !== undefined) {
+      const baseTitle = stripInstallmentSuffix(data.title || "");
+      const titleText = currentTx.isRecurring ? baseTitle : `${baseTitle} (${tx.installmentCurrent}/${tx.installmentTotal})`;
+      batchUpdates.title = await encryptData(titleText, cryptoUid);
+      batchUpdates.isEncrypted = true;
+    }
+    if (data.description !== undefined) {
+      batchUpdates.description = await encryptData(data.description || "", cryptoUid);
       batchUpdates.isEncrypted = true;
     }
 
@@ -556,8 +554,12 @@ export const updateTransaction = async (
       templateUpdates.recurringAmountForLimit = Number(data.amount);
     }
     delete templateUpdates.status;
-    if (data.description) {
-      templateUpdates.description = await encryptData(data.description, cryptoUid);
+    if (data.title !== undefined) {
+      templateUpdates.title = await encryptData(stripInstallmentSuffix(data.title || ""), cryptoUid);
+      templateUpdates.isEncrypted = true;
+    }
+    if (data.description !== undefined) {
+      templateUpdates.description = await encryptData(data.description || "", cryptoUid);
       templateUpdates.isEncrypted = true;
     }
     bulkUpdates.push({ id: recurringTemplateId, updates: templateUpdates });
