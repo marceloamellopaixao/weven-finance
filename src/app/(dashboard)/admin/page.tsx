@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
@@ -273,12 +273,12 @@ const ADMIN_RESOURCE_ACCESS: Record<AdminPermissionArea, { read: AccessResourceK
   permissions: { read: "admin.permissions.read", write: "admin.permissions.write", delete: "admin.permissions.delete" },
 };
 
-function getAdminTabButtonClass(active: boolean) {
+function getAdminNavButtonClass(active: boolean) {
   return cn(
-    "flex w-full items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    "group flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
     active
-      ? "app-panel-soft border border-color:var(--app-panel-border) text-foreground shadow-sm"
-      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+      ? "border-primary/35 bg-primary/10 text-foreground shadow-sm"
+      : "border-transparent text-muted-foreground hover:border-color:var(--app-panel-border) hover:bg-accent hover:text-foreground"
   );
 }
 
@@ -494,6 +494,79 @@ export default function AdminPage() {
   }, [tickets, userProfile]);
 
   const unseenSupportCount = supportUnseenCount || unseenSupportTickets.length;
+
+  const adminNavItems = useMemo(() => {
+    const items: Array<{
+      id: string;
+      label: string;
+      description: string;
+      icon: typeof UserIcon;
+      badge?: number;
+    }> = [];
+
+    if (hasAdminPermission("users", "read")) {
+      items.push({
+        id: "users",
+        label: "Usuários",
+        description: "Contas, planos e bloqueios",
+        icon: UserIcon,
+      });
+    }
+    if (hasAdminPermission("support", "read")) {
+      items.push({
+        id: "support",
+        label: "Suporte & Ideias",
+        description: "Fila, responsáveis e status",
+        icon: HeadphonesIcon,
+        badge: unseenSupportCount,
+      });
+    }
+    if (canRestore) {
+      items.push({
+        id: "restore",
+        label: "Restaurar Dados",
+        description: "Contas arquivadas e prazos",
+        icon: History,
+      });
+    }
+    if (hasAdminPermission("plans", "read")) {
+      items.push({
+        id: "plans",
+        label: "Planos",
+        description: "Ofertas e regras comerciais",
+        icon: CreditCard,
+      });
+    }
+    if (canViewPermissions) {
+      items.push({
+        id: "permissions",
+        label: "Permissões",
+        description: "Acessos por cargo e plano",
+        icon: Lock,
+      });
+    }
+    if (hasAdminPermission("audit", "read")) {
+      items.push({
+        id: "audit",
+        label: "Auditoria",
+        description: "Ações e rastreabilidade",
+        icon: ShieldCheck,
+      });
+    }
+    if (hasAdminPermission("metrics", "read")) {
+      items.push({
+        id: "metrics",
+        label: "Métricas",
+        description: "Saúde da API e alertas",
+        icon: Calculator,
+        badge: criticalMetricsAlerts.length,
+      });
+    }
+
+    return items;
+  }, [canRestore, canViewPermissions, criticalMetricsAlerts.length, hasAdminPermission, unseenSupportCount]);
+
+  const activeAdminNavItem = adminNavItems.find((item) => item.id === activeTab) ?? adminNavItems[0];
 
   const allowedTabs = useMemo(() => {
     if (!userProfile) return ["users", "support", "audit"];
@@ -1936,68 +2009,93 @@ export default function AdminPage() {
           </div>
         )}
 
-        <div className={`${fadeInUp} delay-150 space-y-6`}>
-          {/* Navegação de Abas Moderna */}
-          <div className="app-panel-subtle grid min-w-full grid-cols-1 gap-1 rounded-2xl border border-color:var(--app-panel-border) p-1.5 shadow-sm sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-            {/* Aba Usuários: Apenas Admin e Moderator */}
-            {hasAdminPermission("users", "read") && (
-              <button type="button" aria-pressed={activeTab === "users"} onClick={() => setActiveTabAndPersist("users")} className={getAdminTabButtonClass(activeTab === "users")}>
-                <UserIcon className="h-4 w-4" /> Gerenciar Usuários
-              </button>
-            )}
+        <div className={`${fadeInUp} delay-150 grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start`}>
+          <aside className="hidden lg:block">
+            <div className="app-panel-subtle sticky top-24 rounded-3xl border border-color:var(--app-panel-border) p-3 shadow-xl shadow-primary/10">
+              <div className="px-3 py-3">
+                <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary">Weven Admin</p>
+                <h2 className="mt-1 text-lg font-bold text-foreground">Painel Operacional</h2>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">Governança, suporte e controle da plataforma em um só lugar.</p>
+              </div>
+              <nav className="mt-2 space-y-1" aria-label="Navegação administrativa">
+                {adminNavItems.map((item) => {
+                  const Icon = item.icon;
+                  const active = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-current={active ? "page" : undefined}
+                      onClick={() => setActiveTabAndPersist(item.id)}
+                      className={getAdminNavButtonClass(active)}
+                    >
+                      <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border transition-colors", active ? "border-primary/30 bg-primary text-primary-foreground" : "border-color:var(--app-panel-border) bg-background/70 text-muted-foreground group-hover:text-foreground")}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate text-sm font-semibold">{item.label}</span>
+                          {item.badge ? (
+                            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">
+                              {item.badge > 99 ? "99+" : item.badge}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">{item.description}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+          </aside>
 
-            {/* Aba Suporte: Todos da Equipe */}
-            {hasAdminPermission("support", "read") && (
-              <button type="button"
-                aria-pressed={activeTab === "support"}
-                onClick={() => setActiveTabAndPersist("support")}
-                className={getAdminTabButtonClass(activeTab === "support")}
-              >
-                <HeadphonesIcon className="h-4 w-4" /> Suporte & Ideias
-                {unseenSupportCount > 0 && (
-                  <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">
-                    {unseenSupportCount > 99 ? "99+" : unseenSupportCount}
-                  </span>
-                )}
-              </button>
-            )}
+          <section className="min-w-0 space-y-6">
+            <div className="lg:hidden">
+              <div className="app-panel-subtle flex gap-2 overflow-x-auto rounded-2xl border border-color:var(--app-panel-border) p-1.5 shadow-sm no-scrollbar" aria-label="Navegação administrativa">
+                {adminNavItems.map((item) => {
+                  const Icon = item.icon;
+                  const active = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-current={active ? "page" : undefined}
+                      onClick={() => setActiveTabAndPersist(item.id)}
+                      className={cn(
+                        "flex min-w-max items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+                        active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {item.label}
+                      {item.badge ? (
+                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">
+                          {item.badge > 99 ? "99+" : item.badge}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-            {canRestore && (
-              <button type="button" aria-pressed={activeTab === "restore"} onClick={() => setActiveTabAndPersist("restore")} className={getAdminTabButtonClass(activeTab === "restore")}>
-                <History className="h-4 w-4" /> Restaurar Dados
-              </button>
-            )}
-
-
-            {hasAdminPermission("plans", "read") && (
-              <button type="button" aria-pressed={activeTab === "plans"} onClick={() => setActiveTabAndPersist("plans")} className={getAdminTabButtonClass(activeTab === "plans")}>
-                <CreditCard className="h-4 w-4" /> Gerenciar Planos
-              </button>
-            )}
-
-            {canManagePermissions && (
-              <button type="button" aria-pressed={activeTab === "permissions"} onClick={() => setActiveTabAndPersist("permissions")} className={getAdminTabButtonClass(activeTab === "permissions")}>
-                <Lock className="h-4 w-4" /> Permissões
-              </button>
-            )}
-
-            {hasAdminPermission("audit", "read") && (
-                <button type="button" aria-pressed={activeTab === "audit"} onClick={() => setActiveTabAndPersist("audit")} className={getAdminTabButtonClass(activeTab === "audit")}>
-                  <ShieldCheck className="h-4 w-4" /> Auditoria
-                </button>
-            )}
-            {hasAdminPermission("metrics", "read") && (
-                <button type="button" aria-pressed={activeTab === "metrics"} onClick={() => setActiveTabAndPersist("metrics")} className={getAdminTabButtonClass(activeTab === "metrics")}>
-                  <Calculator className="h-4 w-4" /> Métricas
-                  {criticalMetricsAlerts.length > 0 && (
-                    <span className="ml-1 inline-flex min-w-5 h-5 px-1.5 items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-bold">
-                      {criticalMetricsAlerts.length > 99 ? "99+" : criticalMetricsAlerts.length}
-                    </span>
-                  )}
-                </button>
-            )}
-          </div>
-
+            {activeAdminNavItem ? (
+              <div className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) px-5 py-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    {(() => {
+                      const ActiveIcon = activeAdminNavItem.icon;
+                      return <ActiveIcon className="h-5 w-5" />;
+                    })()}
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-bold text-foreground">{activeAdminNavItem.label}</h2>
+                    <p className="text-sm text-muted-foreground">{activeAdminNavItem.description}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           {/* --- SUPPORT TAB --- */}
           {activeTab === "support" && hasAdminPermission("support", "read") && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
@@ -3903,6 +4001,7 @@ export default function AdminPage() {
               </div>
             </div>
           )}
+          </section>
         </div>
       </div>
 
