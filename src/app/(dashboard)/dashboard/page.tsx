@@ -63,6 +63,9 @@ const formatDateDisplay = (dateString: string, options: Intl.DateTimeFormatOptio
   return date.toLocaleDateString('pt-BR', options);
 };
 
+const getTransactionTitle = (tx?: Pick<Transaction, "title" | "description"> | null) =>
+  String(tx?.title || tx?.description || "");
+
 const ITEMS_PER_PAGE = 12;
 const FREE_PLAN_LIMIT = 20;
 const CHECKIN_MODAL_COOLDOWN_MS = 60 * 60 * 1000; // 1 hora
@@ -236,6 +239,11 @@ export default function DashboardPage() {
   const [bulkDeleteTargetIds, setBulkDeleteTargetIds] = useState<string[] | null>(null);
   const [optimisticallyDeletedIds, setOptimisticallyDeletedIds] = useState<string[]>([]);
   const [txToCancelSubscription, setTxToCancelSubscription] = useState<Transaction | null>(null);
+  const [deleteAction, setDeleteAction] = useState<"single" | "group" | null>(null);
+  const [bulkDeleteAction, setBulkDeleteAction] = useState<"selected" | "groups" | null>(null);
+  const [isCancelingSubscription, setIsCancelingSubscription] = useState(false);
+  const [editAction, setEditAction] = useState<"single" | "group" | null>(null);
+  const [checkinAction, setCheckinAction] = useState<"paid" | "pending" | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState<"transactions" | "installments">("transactions");
   const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
@@ -481,11 +489,13 @@ export default function DashboardPage() {
       .filter((tx) => filterCategory === "all" || tx.category === filterCategory)
       .filter((tx) => {
         if (!normalizedSearch) return true;
-        const description = String(tx.description || "").toLowerCase();
+        const description = `${getTransactionTitle(tx)} ${tx.description || ""}`.toLowerCase();
         const amount = String(tx.amount || "").toLowerCase();
         return description.includes(normalizedSearch) || amount.includes(normalizedSearch);
       })
       .sort((a, b) => {
+        const statusCompare = Number(a.status === "paid") - Number(b.status === "paid");
+        if (statusCompare !== 0) return statusCompare;
         const dueCompare = String(b.dueDate || "").localeCompare(String(a.dueDate || ""));
         if (dueCompare !== 0) return dueCompare;
         const createdCompare = String(b.date || "").localeCompare(String(a.date || ""));
@@ -819,7 +829,8 @@ export default function DashboardPage() {
       }
 
       await addTransaction(user!.uid, {
-        description: desc, // Descrição
+        title: desc,
+        description: "",
         amount: typedAmount,
         type: type, // Tipo (Despesa ou Renda)
         category: category, // Categoria
@@ -945,208 +956,237 @@ export default function DashboardPage() {
 
   const handleConfirmDelete = async (deleteGroup: boolean) => {
     if (!user || !txToDelete || !txToDelete.id) return;
+    if (deleteAction) return;
+    setDeleteAction(deleteGroup ? "group" : "single");
     const deletedIds = deleteGroup && txToDelete.groupId
       ? transactions
         .filter((tx) => tx.groupId === txToDelete.groupId)
         .map((tx) => String(tx.id || ""))
         .filter(Boolean)
       : [String(txToDelete.id)];
-    setOptimisticallyDeletedIds((prev) => Array.from(new Set([...prev, ...deletedIds])));
-    await deleteTransaction(user.uid, txToDelete.id, deleteGroup);
-    setSelectedTransactionIds((prev) => prev.filter((id) => id !== String(txToDelete.id)));
-    setTxToDelete(null);
+    try {
+      setOptimisticallyDeletedIds((prev) => Array.from(new Set([...prev, ...deletedIds])));
+      await deleteTransaction(user.uid, txToDelete.id, deleteGroup);
+      setSelectedTransactionIds((prev) => prev.filter((id) => id !== String(txToDelete.id)));
+      setTxToDelete(null);
+    } finally {
+      setDeleteAction(null);
+    }
   };
 
   const handleConfirmBulkDelete = async (deleteGroup: boolean) => {
     if (!user || !bulkDeleteTargetIds || bulkDeleteTargetIds.length === 0) return;
+    if (bulkDeleteAction) return;
+    setBulkDeleteAction(deleteGroup ? "groups" : "selected");
 
-    const selectedIdSet = new Set(bulkDeleteTargetIds);
-    const selected = transactions.filter((tx) => {
-      const id = String(tx.id || "");
-      return id && selectedIdSet.has(id);
-    });
+    try {
+      const selectedIdSet = new Set(bulkDeleteTargetIds);
+      const selected = transactions.filter((tx) => {
+        const id = String(tx.id || "");
+        return id && selectedIdSet.has(id);
+      });
 
-    if (selected.length === 0) {
-      setBulkDeleteTargetIds(null);
+      if (selected.length === 0) {
+        setBulkDeleteTargetIds(null);
+        setSelectedTransactionIds([]);
+        return;
+      }
+
+      if (deleteGroup) {
+        const processedGroupIds = new Set<string>();
+        const optimisticIds: string[] = [];
+        for (const tx of selected) {
+          if (!tx.id) continue;
+          if (tx.groupId) {
+            if (processedGroupIds.has(tx.groupId)) continue;
+            processedGroupIds.add(tx.groupId);
+            optimisticIds.push(
+              ...transactions
+                .filter((item) => item.groupId === tx.groupId)
+                .map((item) => String(item.id || ""))
+                .filter(Boolean)
+            );
+            continue;
+          }
+          optimisticIds.push(String(tx.id));
+        }
+        setOptimisticallyDeletedIds((prev) => Array.from(new Set([...prev, ...optimisticIds])));
+        processedGroupIds.clear();
+        for (const tx of selected) {
+          if (!tx.id) continue;
+          if (tx.groupId) {
+            if (processedGroupIds.has(tx.groupId)) continue;
+            processedGroupIds.add(tx.groupId);
+            await deleteTransaction(user.uid, tx.id, true);
+            continue;
+          }
+          await deleteTransaction(user.uid, tx.id, false);
+        }
+      } else {
+        const optimisticIds = selected.map((tx) => String(tx.id || "")).filter(Boolean);
+        setOptimisticallyDeletedIds((prev) => Array.from(new Set([...prev, ...optimisticIds])));
+        for (const tx of selected) {
+          if (!tx.id) continue;
+          await deleteTransaction(user.uid, tx.id, false);
+        }
+      }
+
       setSelectedTransactionIds([]);
-      return;
+      setBulkDeleteTargetIds(null);
+    } finally {
+      setBulkDeleteAction(null);
     }
-
-    if (deleteGroup) {
-      const processedGroupIds = new Set<string>();
-      const optimisticIds: string[] = [];
-      for (const tx of selected) {
-        if (!tx.id) continue;
-        if (tx.groupId) {
-          if (processedGroupIds.has(tx.groupId)) continue;
-          processedGroupIds.add(tx.groupId);
-          optimisticIds.push(
-            ...transactions
-              .filter((item) => item.groupId === tx.groupId)
-              .map((item) => String(item.id || ""))
-              .filter(Boolean)
-          );
-          continue;
-        }
-        optimisticIds.push(String(tx.id));
-      }
-      setOptimisticallyDeletedIds((prev) => Array.from(new Set([...prev, ...optimisticIds])));
-      processedGroupIds.clear();
-      for (const tx of selected) {
-        if (!tx.id) continue;
-        if (tx.groupId) {
-          if (processedGroupIds.has(tx.groupId)) continue;
-          processedGroupIds.add(tx.groupId);
-          await deleteTransaction(user.uid, tx.id, true);
-          continue;
-        }
-        await deleteTransaction(user.uid, tx.id, false);
-      }
-    } else {
-      const optimisticIds = selected.map((tx) => String(tx.id || "")).filter(Boolean);
-      setOptimisticallyDeletedIds((prev) => Array.from(new Set([...prev, ...optimisticIds])));
-      for (const tx of selected) {
-        if (!tx.id) continue;
-        await deleteTransaction(user.uid, tx.id, false);
-      }
-    }
-
-    setSelectedTransactionIds([]);
-    setBulkDeleteTargetIds(null);
   };
 
   const handleConfirmCancelSubscription = async () => {
     if (!user || !txToCancelSubscription || !txToCancelSubscription.groupId || !txToCancelSubscription.dueDate) return;
-    const description = txToCancelSubscription.description;
-    await cancelFutureInstallments(user.uid, txToCancelSubscription.groupId, txToCancelSubscription.dueDate);
-    setTxToCancelSubscription(null);
-    setFeedbackModal({
-      isOpen: true,
-      type: "success",
-      title: "Recorrência encerrada",
-      message: `As próximas cobranças de "${description}" foram removidas.`,
-    });
+    if (isCancelingSubscription) return;
+
+    setIsCancelingSubscription(true);
+    try {
+      const description = getTransactionTitle(txToCancelSubscription);
+      await cancelFutureInstallments(user.uid, txToCancelSubscription.groupId, txToCancelSubscription.dueDate);
+      setTxToCancelSubscription(null);
+      setFeedbackModal({
+        isOpen: true,
+        type: "success",
+        title: "Recorrência encerrada",
+        message: `As próximas cobranças de "${description}" foram removidas.`,
+      });
+    } finally {
+      setIsCancelingSubscription(false);
+    }
   };
 
   const handleConfirmEdit = async (updateGroup: boolean) => {
     if (!editingTx || !user || !editingTx.id) return;
-    const isCardPayment = editingTx.paymentMethod === "credit_card" || editingTx.paymentMethod === "debit_card";
-    if (isCardPayment && !editingTx.cardId) {
-      setFeedbackModal({
-        isOpen: true,
-        type: "error",
-        title: "Selecione um cartão",
-        message: "Cadastre um cartão em /cards e selecione antes de salvar.",
-      });
-      return;
-    }
+    if (editAction) return;
 
-    if (isCardPayment && editingTx.cardId) {
-      const selectedCard = paymentCards.find((card) => card.id === editingTx.cardId);
-      if (selectedCard) {
-        const groupItems = updateGroup && editingTx.groupId
-          ? transactions.filter((tx) => tx.groupId === editingTx.groupId)
-          : [editingTx];
-        const affectedIds = groupItems.map((tx) => String(tx.id || "")).filter(Boolean);
-        const totalAmountToReserve = Math.round(Number(editingTx.amount || 0) * groupItems.length * 100) / 100;
-
-        const validation = validateCardLimitBeforeSave({
-          card: selectedCard,
-          method: editingTx.paymentMethod,
-          amountTotal: totalAmountToReserve,
-          excludeIds: affectedIds,
+    setEditAction(updateGroup ? "group" : "single");
+    try {
+      const isCardPayment = editingTx.paymentMethod === "credit_card" || editingTx.paymentMethod === "debit_card";
+      if (isCardPayment && !editingTx.cardId) {
+        setFeedbackModal({
+          isOpen: true,
+          type: "error",
+          title: "Selecione um cartão",
+          message: "Cadastre um cartão em /cards e selecione antes de salvar.",
         });
-        if (!validation.ok) {
+        return;
+      }
+
+      if (isCardPayment && editingTx.cardId) {
+        const selectedCard = paymentCards.find((card) => card.id === editingTx.cardId);
+        if (selectedCard) {
+          const groupItems = updateGroup && editingTx.groupId
+            ? transactions.filter((tx) => tx.groupId === editingTx.groupId)
+            : [editingTx];
+          const affectedIds = groupItems.map((tx) => String(tx.id || "")).filter(Boolean);
+          const totalAmountToReserve = Math.round(Number(editingTx.amount || 0) * groupItems.length * 100) / 100;
+
+          const validation = validateCardLimitBeforeSave({
+            card: selectedCard,
+            method: editingTx.paymentMethod,
+            amountTotal: totalAmountToReserve,
+            excludeIds: affectedIds,
+          });
+          if (!validation.ok) {
+            setFeedbackModal({
+              isOpen: true,
+              type: "error",
+              title: validation.title,
+              message: validation.message,
+            });
+            return;
+          }
+        }
+      }
+
+      // Normalizacao das datas na edicao para manter consistencia.
+      const finalDate = editingTx.date;
+      let finalDueDate = editingTx.dueDate;
+
+      const method = PAYMENT_METHODS.find(pm => pm.value === editingTx.paymentMethod);
+      const hasDueDate = method ? method.hasDueDate : false;
+
+      if (editingTx.type === "income") {
+        finalDueDate = finalDate;
+      } else if (editingTx.paymentMethod === "credit_card") {
+        const selectedCard = paymentCards.find((card) => card.id === editingTx.cardId);
+        const cardDueDate = getCreditCardDueDateFromSelectedCard(selectedCard, finalDate);
+        if (!cardDueDate) {
           setFeedbackModal({
             isOpen: true,
             type: "error",
-            title: validation.title,
-            message: validation.message,
+            title: "Configure a fatura",
+            message: "O cartão de crédito selecionado precisa ter vencimento de fatura configurado.",
+          });
+          return;
+        }
+        finalDueDate = cardDueDate;
+      } else if (!hasDueDate) {
+        finalDueDate = finalDate;
+      }
+
+      await updateTransaction(user.uid, editingTx.id, {
+        title: editingTx.title || editingTx.description,
+        description: editingTx.description,
+        amount: Number(editingTx.amount),
+        category: editingTx.category,
+        paymentMethod: editingTx.paymentMethod,
+        cardId: editingTx.cardId || undefined,
+        cardLabel: editingTx.cardLabel || undefined,
+        cardType: editingTx.cardType || undefined,
+        dueDate: finalDueDate,
+        date: finalDate
+      }, updateGroup);
+
+      setIsEditOpen(false);
+      setEditingTx(null);
+    } finally {
+      setEditAction(null);
+    }
+  };
+  const handleCheckinAction = async (tx: Transaction, markAsPaid: boolean) => {
+    if (!user || !tx.id) return;
+    if (checkinAction) return;
+
+    setCheckinAction(markAsPaid ? "paid" : "pending");
+    try {
+      if (markAsPaid && tx.type === 'expense') {
+        if (realCurrentBalance < tx.amount) {
+          setFeedbackModal({
+            isOpen: true,
+            type: 'error',
+            title: 'Saldo Insuficiente',
+            message: `Você possui ${formatCurrency(realCurrentBalance)} em caixa, mas a conta é de ${formatCurrency(tx.amount)}. A operação foi cancelada.`
           });
           return;
         }
       }
-    }
 
-    // Normalização das datas na edição para manter consistência
-    const finalDate = editingTx.date;
-    let finalDueDate = editingTx.dueDate;
+      const currentStatus = markAsPaid ? 'pending' : 'paid';
+      await toggleTransactionStatus(user.uid, tx.id, currentStatus);
 
-    const method = PAYMENT_METHODS.find(pm => pm.value === editingTx.paymentMethod);
-    const hasDueDate = method ? method.hasDueDate : false;
+      setFeedbackModal({
+        isOpen: true,
+        type: 'success',
+        title: markAsPaid ? (tx.type === 'income' ? 'Recebido!' : 'Pago!') : (tx.type === 'income' ? 'Cancelado Recebimento' : 'Pagamento Cancelado'),
+        message: markAsPaid
+          ? `A transação "${getTransactionTitle(tx)}" foi confirmada com sucesso.`
+          : `A transação "${getTransactionTitle(tx)}" voltou para pendente.`
+      });
 
-    if (editingTx.type === 'income') {
-      finalDueDate = finalDate;
-    } else if (editingTx.paymentMethod === "credit_card") {
-      const selectedCard = paymentCards.find((card) => card.id === editingTx.cardId);
-      const cardDueDate = getCreditCardDueDateFromSelectedCard(selectedCard, finalDate);
-      if (!cardDueDate) {
-        setFeedbackModal({
-          isOpen: true,
-          type: "error",
-          title: "Configure a fatura",
-          message: "O cartão de crédito selecionado precisa ter vencimento de fatura configurado.",
-        });
-        return;
+      const newList = pendingCheckins.filter(p => p.id !== tx.id);
+      setPendingCheckins(newList);
+
+      if (newList.length === 0) {
+        setShowCheckinModal(false);
       }
-      finalDueDate = cardDueDate;
-    } else {
-      if (!hasDueDate) {
-        finalDueDate = finalDate
-      }
-    }
-
-    await updateTransaction(user.uid, editingTx.id, {
-      description: editingTx.description,
-      amount: Number(editingTx.amount),
-      category: editingTx.category,
-      paymentMethod: editingTx.paymentMethod,
-      cardId: editingTx.cardId || undefined,
-      cardLabel: editingTx.cardLabel || undefined,
-      cardType: editingTx.cardType || undefined,
-      dueDate: finalDueDate,
-      date: finalDate
-    }, updateGroup);
-
-    setIsEditOpen(false);
-    setEditingTx(null);
-  };
-
-  const handleCheckinAction = async (tx: Transaction, markAsPaid: boolean) => {
-    if (!user || !tx.id) return;
-
-    if (markAsPaid && tx.type === 'expense') {
-      if (realCurrentBalance < tx.amount) {
-        setFeedbackModal({
-          isOpen: true,
-          type: 'error',
-          title: 'Saldo Insuficiente',
-          message: `Você possui ${formatCurrency(realCurrentBalance)} em caixa, mas a conta é de ${formatCurrency(tx.amount)}. A operação foi cancelada.`
-        });
-        return;
-      }
-    }
-
-    const currentStatus = markAsPaid ? 'pending' : 'paid';
-    await toggleTransactionStatus(user.uid, tx.id, currentStatus);
-
-    setFeedbackModal({
-      isOpen: true,
-      type: 'success',
-      title: markAsPaid ? (tx.type === 'income' ? 'Recebido!' : 'Pago!') : (tx.type === 'income' ? 'Cancelado Recebimento' : 'Pagamento Cancelado'),
-      message: markAsPaid
-        ? `A transação "${tx.description}" foi confirmada com sucesso.`
-        : `A transação "${tx.description}" voltou para pendente.`
-    });
-
-    const newList = pendingCheckins.filter(p => p.id !== tx.id);
-    setPendingCheckins(newList);
-
-    if (newList.length === 0) {
-      setShowCheckinModal(false);
+    } finally {
+      setCheckinAction(null);
     }
   };
-
   const openEditModal = (tx: Transaction) => {
     if (!tx.id) return;
     router.push(`/transactions/${encodeURIComponent(tx.id)}/edit`);
@@ -1266,10 +1306,10 @@ export default function DashboardPage() {
           {selectedPaymentCard && selectedCardIndicator && (
             <div
               className={`rounded-xl border px-3 py-2 text-xs ${selectedCardIndicator.kind === "debit"
-                  ? "border-primary/20 bg-accent text-primary"
-                  : selectedCardIndicator.value < 0
-                    ? "border-red-200 bg-red-50 text-red-700"
-                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                ? "border-primary/20 bg-accent text-primary"
+                : selectedCardIndicator.value < 0
+                  ? "border-red-200 bg-red-50 text-red-700"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
                 }`}
             >
               <p className="financial-value font-semibold">{selectedCardIndicator.label}: {formatCurrencyDisplay(selectedCardIndicator.value)}</p>
@@ -1596,8 +1636,8 @@ export default function DashboardPage() {
         size="sm"
         variant={isPending ? "default" : "outline"}
         className={`h-8 rounded-lg px-2 text-[11px] font-semibold ${isPending
-            ? "bg-emerald-600 text-white hover:bg-emerald-700"
-            : "border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground"
+          ? "bg-emerald-600 text-white hover:bg-emerald-700"
+          : "border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground"
           }`}
         onClick={() => handleCheckinAction(tx, isPending)}
       >
@@ -1680,10 +1720,10 @@ export default function DashboardPage() {
                   type="button"
                   onClick={() => handleGoToOnboardingStep("firstTransaction")}
                   className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstTransaction
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : onboardingActiveStep === "firstTransaction"
-                        ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
-                        : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : onboardingActiveStep === "firstTransaction"
+                      ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
+                      : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
                   {onboardingStatus.steps.firstTransaction ? "✓ " : onboardingActiveStep === "firstTransaction" ? "• " : ""}Primeira transação
@@ -1692,10 +1732,10 @@ export default function DashboardPage() {
                   type="button"
                   onClick={() => handleGoToOnboardingStep("firstCard")}
                   className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstCard
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : onboardingActiveStep === "firstCard"
-                        ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
-                        : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : onboardingActiveStep === "firstCard"
+                      ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
+                      : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
                   {onboardingStatus.steps.firstCard ? "✓ " : onboardingActiveStep === "firstCard" ? "• " : ""}Primeiro cartão
@@ -1704,10 +1744,10 @@ export default function DashboardPage() {
                   type="button"
                   onClick={() => handleGoToOnboardingStep("firstGoal")}
                   className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstGoal
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : onboardingActiveStep === "firstGoal"
-                        ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
-                        : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : onboardingActiveStep === "firstGoal"
+                      ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
+                      : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
                   {onboardingStatus.steps.firstGoal ? "✓ " : onboardingActiveStep === "firstGoal" ? "• " : ""}Primeira meta
@@ -1718,10 +1758,10 @@ export default function DashboardPage() {
                   type="button"
                   onClick={() => handleGoToOnboardingStep("profileMenu")}
                   className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.profileMenu
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : onboardingActiveStep === "profileMenu"
-                        ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
-                        : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : onboardingActiveStep === "profileMenu"
+                      ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
+                      : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
                   {onboardingStatus.steps.profileMenu ? "✓ " : onboardingActiveStep === "profileMenu" ? "• " : ""}Abrir menu da conta (foto no topo)
@@ -1747,7 +1787,7 @@ export default function DashboardPage() {
                 <p className="text-xs text-zinc-500">Maior gasto do mês</p>
                 {monthlyInsights.biggestExpense ? (
                   <p className="text-sm font-semibold text-zinc-900 mt-1">
-                    {monthlyInsights.biggestExpense.description} • {formatCurrencyDisplay(monthlyInsights.biggestExpense.amount)}
+                    {getTransactionTitle(monthlyInsights.biggestExpense)} • {formatCurrencyDisplay(monthlyInsights.biggestExpense.amount)}
                   </p>
                 ) : (
                   <p className="text-sm font-semibold text-zinc-600 mt-1">Sem despesas no período.</p>
@@ -1772,8 +1812,8 @@ export default function DashboardPage() {
 
         {upgradePrompt && (
           <Card className={`${fadeInUp} delay-130 border-none shadow-lg rounded-2xl ${upgradePrompt.kind === "billing"
-              ? "bg-linear-to-r from-amber-600 to-orange-600 text-white"
-              : "bg-primary text-primary-foreground"
+            ? "bg-linear-to-r from-amber-600 to-orange-600 text-white"
+            : "bg-primary text-primary-foreground"
             }`}>
             <CardContent className="p-4 md:p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div className="space-y-1">
@@ -2120,7 +2160,7 @@ export default function DashboardPage() {
                             />
                             <div className="min-w-0">
                               <p className={`text-sm font-semibold truncate ${tx.status === "paid" ? "line-through text-zinc-400" : "text-zinc-800 dark:text-zinc-100"}`}>
-                                {tx.description}
+                                {getTransactionTitle(tx)}
                               </p>
                               <p className={`text-xs mt-1 flex items-center gap-1 ${overdue ? "text-red-500" : "text-zinc-500 dark:text-zinc-400"}`}>
                                 <CalendarDays className="h-3.5 w-3.5" />
@@ -2157,10 +2197,10 @@ export default function DashboardPage() {
                           {tx.groupId && (
                             <span
                               className={`flex items-center text-[10px] px-2 py-0.5 rounded-full border ${tx.isRecurring
-                                  ? tx.recurrenceEnded
+                                ? tx.recurrenceEnded
                                   ? "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/20 dark:text-slate-300"
-                                    : "border-primary/20 bg-accent text-primary dark:border-primary/20 dark:bg-accent dark:text-primary"
-                                  : "border-zinc-200 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700"
+                                  : "border-primary/20 bg-accent text-primary dark:border-primary/20 dark:bg-accent dark:text-primary"
+                                : "border-zinc-200 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700"
                                 }`}
                             >
                               {tx.isRecurring ? <Repeat className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
@@ -2218,272 +2258,8 @@ export default function DashboardPage() {
 
         {/* --- DIALOGS (MODAIS) --- */}
 
-        {/* MODAL FORMULÁRIO (UNIFICADO) */}
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogContent className="w-[calc(100vw-1rem)] max-w-[680px] max-h-[95vh] rounded-2xl sm:rounded-3xl p-0 gap-0 overflow-hidden">
-            <div className={`h-2 w-full ${type === 'expense' ? 'bg-red-500' : 'bg-emerald-500'}`} />
-            <div className="p-4 sm:p-6 overflow-y-auto overscroll-contain max-h-[calc(95vh-8px)]">
-              <DialogHeader className="flex flex-row items-center justify-between">
-                <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                  {type === 'expense' ? 'Novo Gasto' : 'Nova Renda'}
-                </DialogTitle>
-              </DialogHeader>
-
-              <div className="mt-4">
-                {TransactionFormContent}
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Modal de Edição */}
-        <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent className="w-[calc(100vw-1rem)] max-w-[680px] max-h-[92vh] overflow-y-auto overscroll-contain rounded-2xl sm:rounded-3xl p-0 gap-0">
-            {editingTx && (
-              <>
-                <div className={`h-2 w-full ${editingTx.type === 'expense' ? 'bg-red-500' : 'bg-emerald-500'}`} />
-                <div className="p-4 sm:p-6">
-                  <DialogHeader className="mb-6">
-                    <div className="flex items-center justify-between">
-                      <DialogTitle className="text-xl flex items-center gap-2">
-                        {editingTx.type === 'expense' ? (
-                          <div className="p-2 bg-red-100 text-red-600 rounded-full"><TrendingDown className="h-5 w-5" /></div>
-                        ) : (
-                          <div className="p-2 bg-emerald-100 text-emerald-600 rounded-full"><TrendingUp className="h-5 w-5" /></div>
-                        )}
-                        <span>Editar {editingTx.type === 'expense' ? 'Despesa' : 'Receita'}</span>
-                      </DialogTitle>
-                      {editingTx.groupId && (
-                        <span className={`flex items-center text-[10px] px-2 py-1 rounded-full border font-medium ${editingTx.isRecurring
-                            ? editingTx.recurrenceEnded
-                              ? "bg-slate-50 text-slate-700 border-slate-200"
-                              : "border-primary/20 bg-accent text-primary"
-                            : "bg-amber-50 text-amber-700 border-amber-200"
-                          }`}>
-                          {editingTx.isRecurring ? <Repeat className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
-                          {editingTx.isRecurring ? (editingTx.recurrenceEnded ? "Encerrada" : "Recorrente") : "Parcelado"}
-                        </span>
-                      )}
-                    </div>
-                    <DialogDescription className="mt-1 ml-1">
-                      {editingTx.groupId
-                        ? editingTx.isRecurring
-                          ? "Este item faz parte de uma recorrência mensal."
-                          : "Este item faz parte de um parcelamento."
-                        : "detalhes da transação única."}
-                    </DialogDescription>
-                  </DialogHeader>
-
-                  {editingTx.groupId && editingGroupTransactions.length > 0 && (
-                    <div className={`mb-5 rounded-xl border p-3 ${editingTx.isRecurring
-                        ? "border-primary/20 bg-accent/70"
-                        : "border-amber-200 bg-amber-50/70"
-                      }`}>
-                      <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${editingTx.isRecurring ? "text-primary" : "text-amber-700"
-                        }`}>
-                        {editingTx.isRecurring ? "Ocorrências desta recorrência" : "Parcelas deste grupo"}
-                      </p>
-                      <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                        {editingGroupTransactions.map((parcel) => (
-                          <div
-                            key={parcel.id}
-                            className={`text-xs rounded-lg border px-2 py-1.5 flex items-center justify-between ${parcel.id === editingTx.id
-                                ? "border-primary/35 bg-accent text-primary"
-                                : editingTx.isRecurring
-                                  ? "border-primary/20 bg-card text-zinc-600 dark:text-zinc-300"
-                                  : "border-amber-200 bg-white text-zinc-600"
-                              }`}
-                          >
-                            <span className="font-medium">
-                              {editingTx.isRecurring
-                                ? `Ocorrência ${parcel.recurringMonth || String(parcel.dueDate || "").slice(0, 7)}`
-                                : `Parcela ${parcel.installmentCurrent || 1}/${parcel.installmentTotal || editingGroupTransactions.length}`}
-                            </span>
-                            <span>{formatDateDisplay(parcel.dueDate, { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
-                            <span className="font-semibold">{formatCurrencyDisplay(parcel.amount)}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <p className={`text-[11px] mt-2 ${editingTx.isRecurring ? "text-primary" : "text-amber-700"}`}>
-                        {editingTx.isRecurring
-                          ? "Você pode salvar só esta ocorrência ou aplicar a edição para toda a recorrência."
-                          : "Você pode salvar só esta parcela ou aplicar a edição para todas."}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="space-y-5">
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Descrição</Label>
-                      <Input
-                        className="h-11 rounded-xl"
-                        value={editingTx.description}
-                        onChange={e => setEditingTx({ ...editingTx, description: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Valor</Label>
-                        <div className="relative">
-                          <span className="absolute left-3.5 top-2.5 text-zinc-400 font-semibold">R$</span>
-                          <Input
-                            type="number"
-                            className="h-11 rounded-xl pl-10 text-lg font-semibold"
-                            placeholder="0,00"
-                            value={editingTx.amount}
-                            onChange={e => setEditingTx({ ...editingTx, amount: Number(e.target.value) })}
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Categoria</Label>
-                        <div className="flex gap-2">
-                          <Select value={editingTx.category} onValueChange={(v) => setEditingTx({ ...editingTx, category: v })}>
-                            <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {(() => {
-                                const availableForEdit = categories.filter(cat => cat.type === editingTx.type || cat.type === 'both');
-                                const byName = new Map(availableForEdit.map((cat) => [cat.name, cat]));
-                                return orderCategoryNames(availableForEdit.map((cat) => cat.name))
-                                  .map((name) => byName.get(name))
-                                  .filter((cat): cat is NonNullable<typeof cat> => Boolean(cat))
-                                  .map((cat) => (
-                                    <SelectItem key={cat.name} value={cat.name}>
-                                      {isSubcategory(cat.name) ? `* ${getSubcategoryName(cat.name)}` : cat.name}
-                                    </SelectItem>
-                                  ));
-                              })()}
-                            </SelectContent>
-                          </Select>
-                          <TooltipProvider delayDuration={0}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  onClick={() => setIsNewCategoryOpen(true)}
-                                  variant="outline"
-                                  className="h-11 w-11 rounded-xl shrink-0 p-0"
-                                >
-                                  <Settings className="h-4 w-4 text-primary" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="border-primary/40 bg-primary text-primary-foreground font-bold shadow-xl">
-                                <p>Gerenciar Categorias</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Método de Pagamento</Label>
-                      <Select
-                        value={editingTx.paymentMethod}
-                        onValueChange={(v) => {
-                          const nextMethod = v as PaymentMethod;
-                          if (nextMethod !== "credit_card" && nextMethod !== "debit_card") {
-                            setEditingTx({ ...editingTx, paymentMethod: nextMethod, cardId: undefined, cardLabel: undefined, cardType: undefined });
-                            return;
-                          }
-                          const fallbackCard = paymentCards.find((card) => card.type === nextMethod || card.type === "credit_and_debit") || paymentCards[0];
-                          setEditingTx({
-                            ...editingTx,
-                            paymentMethod: fallbackCard.type === "credit_card" || fallbackCard.type === "debit_card" ? fallbackCard.type : nextMethod,
-                            cardId: fallbackCard.id,
-                            cardLabel: fallbackCard ? `${fallbackCard.bankName} **** ${fallbackCard.last4}` : undefined,
-                            cardType: normalizeCardTypeForTransaction(fallbackCard.type, nextMethod),
-                          });
-                        }}
-                      >
-                        <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
-                        <SelectContent>{PAYMENT_METHODS.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-
-                    {(editingTx.paymentMethod === "credit_card" || editingTx.paymentMethod === "debit_card") && (
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Cartão Vinculado</Label>
-                        <Select
-                          value={editingTx.cardId || ""}
-                          onValueChange={(value) => {
-                            const card = paymentCards.find((item) => item.id === value);
-                            if (!card) return;
-                            setEditingTx({
-                              ...editingTx,
-                              paymentMethod: card.type === "credit_and_debit" ? editingTx.paymentMethod : card.type,
-                              cardId: card.id,
-                              cardLabel: `${card.bankName} **** ${card.last4}`,
-                              cardType: normalizeCardTypeForTransaction(card.type, editingTx.paymentMethod),
-                            });
-                          }}
-                        >
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue placeholder="Selecione um cartão cadastrado em /cards" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {paymentCards.length === 0 ? (
-                              <SelectItem value="__none" disabled>Nenhum cartão cadastrado</SelectItem>
-                            ) : (
-                              paymentCards.map((card) => (
-                                <SelectItem key={card.id} value={card.id}>
-                                  {card.bankName} **** {card.last4} ({card.type === "credit_card" ? "Crédito" : card.type === "debit_card" ? "Débito" : "Crédito e Débito"})
-                                </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-
-                    <div className="app-panel-subtle rounded-xl border p-4">
-                      {editingTx.type === 'income' ? (
-                        <div className="w-full space-y-2">
-                          <Label className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Data de Crédito</Label>
-                          <Input type="date" className="h-10 rounded-lg text-xs" value={editingTx.date} onChange={e => setEditingTx({ ...editingTx, date: e.target.value })} />
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="space-y-2">
-                            <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Data Compra</Label>
-                            <Input type="date" className="h-10 rounded-lg text-xs" value={editingTx.date} onChange={e => setEditingTx({ ...editingTx, date: e.target.value })} />
-                          </div>
-                          {(editingTx.paymentMethod === 'boleto' || editingTx.paymentMethod === 'credit_card') && (
-                            <div className="space-y-2">
-                              <Label className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Vencimento</Label>
-                              <Input type="date" className="h-10 rounded-lg border-red-200 text-xs" value={editingTx.dueDate} onChange={e => setEditingTx({ ...editingTx, dueDate: e.target.value })} />
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <DialogFooter className="mt-6 flex flex-col sm:flex-row gap-3 pb-2">
-                    <Button
-                      variant="ghost"
-                      className="w-full sm:w-auto h-11 bg-red-500 text-white hover:bg-red-600 hover:text-white rounded-xl font-medium"
-                      onClick={() => setIsEditOpen(false)}
-                    >
-                      Cancelar
-                    </Button>
-                    {editingTx.groupId ? (
-                      <>
-                        <Button variant="outline" className="w-full sm:w-auto h-11 rounded-xl font-medium border-zinc-200" onClick={() => handleConfirmEdit(false)}>Salvar Apenas Esta</Button>
-                        <Button className="h-11 w-full rounded-xl bg-primary font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto" onClick={() => handleConfirmEdit(true)}>Salvar Todas</Button>
-                      </>
-                    ) : (
-                      <Button className="h-11 w-full rounded-xl bg-primary font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto" onClick={() => handleConfirmEdit(false)}>Salvar Alterações</Button>
-                    )}
-                  </DialogFooter>
-                </div>
-              </>
-            )}
-          </DialogContent>
-        </Dialog>
-
         {/* Modal de Exclusão */}
-        <Dialog open={!!txToDelete} onOpenChange={(open) => !open && setTxToDelete(null)}>
+        <Dialog open={!!txToDelete} onOpenChange={(open) => !open && !deleteAction && setTxToDelete(null)}>
           <DialogContent className="sm:max-w-[425px] rounded-2xl p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-600">
@@ -2493,34 +2269,35 @@ export default function DashboardPage() {
                 Excluir Transação
               </DialogTitle>
               <DialogDescription className="pt-3 text-base">
-                Tem certeza Você vai apagar: <br /> <span className="font-bold text-zinc-900 dark:text-white mt-1 block">{txToDelete?.description}</span>
+                Tem certeza que você vai apagar: <br /> <span className="font-bold text-zinc-900 dark:text-white mt-1 block">{getTransactionTitle(txToDelete)}</span>
               </DialogDescription>
             </DialogHeader>
 
             <DialogFooter className="flex-col sm:flex-row gap-3 mt-4">
-              <Button className="w-full sm:w-auto rounded-xl h-10 hover:cursor-pointer duration-200" variant="ghost" onClick={() => setTxToDelete(null)}>
+              <Button className="w-full sm:w-auto rounded-xl h-10 hover:cursor-pointer duration-200" variant="ghost" disabled={Boolean(deleteAction)} onClick={() => setTxToDelete(null)}>
                 Cancelar
               </Button>
 
               {txToDelete?.groupId ? (
                 <>
-                  <Button className="w-full sm:w-auto rounded-xl h-10 hover:cursor-pointer duration-200" variant="outline" onClick={() => handleConfirmDelete(false)}>
-                    Apenas Esta
+                  <Button className="w-full sm:w-auto rounded-xl h-10 hover:cursor-pointer duration-200" variant="outline" disabled={Boolean(deleteAction)} onClick={() => handleConfirmDelete(false)}>
+                    {deleteAction === "single" ? "Excluindo..." : "Apenas Esta"}
                   </Button>
-                  <Button className="w-full sm:w-auto rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200" onClick={() => handleConfirmDelete(true)}>
-                    Todas as Parcelas
+                  <Button className="w-full sm:w-auto rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200" disabled={Boolean(deleteAction)} onClick={() => handleConfirmDelete(true)}>
+                    {deleteAction === "group" ? "Excluindo..." : "Todas as Parcelas"}
                   </Button>
                 </>
               ) : (
-                <Button className="w-full sm:w-auto rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200" onClick={() => handleConfirmDelete(false)}>
-                  Confirmar Exclusão
+                <Button className="w-full sm:w-auto rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200" disabled={Boolean(deleteAction)} onClick={() => handleConfirmDelete(false)}>
+                  {deleteAction === "single" ? "Excluindo..." : "Confirmar Exclusão"}
                 </Button>
               )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        <Dialog open={!!bulkDeleteTargetIds} onOpenChange={(open) => !open && setBulkDeleteTargetIds(null)}>
+        {/* Bulk Delete Dialog */}
+        <Dialog open={!!bulkDeleteTargetIds} onOpenChange={(open) => !open && !bulkDeleteAction && setBulkDeleteTargetIds(null)}>
           <DialogContent className="sm:max-w-[425px] rounded-2xl p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-600">
@@ -2540,28 +2317,32 @@ export default function DashboardPage() {
                   <Button
                     className="w-full rounded-xl h-10 hover:cursor-pointer duration-200"
                     variant="outline"
+                    disabled={Boolean(bulkDeleteAction)}
                     onClick={() => void handleConfirmBulkDelete(false)}
                   >
-                    Excluir apenas os itens selecionados
+                    {bulkDeleteAction === "selected" ? "Excluindo..." : "Excluir apenas os itens selecionados"}
                   </Button>
                   <Button
                     className="w-full rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200"
+                    disabled={Boolean(bulkDeleteAction)}
                     onClick={() => void handleConfirmBulkDelete(true)}
                   >
-                    Excluir também todas as parcelas dos grupos
+                    {bulkDeleteAction === "groups" ? "Excluindo..." : "Excluir também todas as parcelas dos grupos"}
                   </Button>
                 </>
               ) : (
                 <Button
                   className="w-full rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200"
+                  disabled={Boolean(bulkDeleteAction)}
                   onClick={() => void handleConfirmBulkDelete(false)}
                 >
-                  Confirmar exclusao
+                  {bulkDeleteAction === "selected" ? "Excluindo..." : "Confirmar exclusão"}
                 </Button>
               )}
               <Button
                 className="w-full rounded-xl h-10 hover:cursor-pointer duration-200"
                 variant="ghost"
+                disabled={Boolean(bulkDeleteAction)}
                 onClick={() => setBulkDeleteTargetIds(null)}
               >
                 Cancelar
@@ -2570,8 +2351,8 @@ export default function DashboardPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Modal de Encerrar Recorrência */}
-        <Dialog open={!!txToCancelSubscription} onOpenChange={(open) => !open && setTxToCancelSubscription(null)}>
+        {/* Cancel Subscription Dialog */}
+        <Dialog open={!!txToCancelSubscription} onOpenChange={(open) => !open && !isCancelingSubscription && setTxToCancelSubscription(null)}>
           <DialogContent className="sm:max-w-[425px] rounded-2xl p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-amber-600">
@@ -2581,7 +2362,7 @@ export default function DashboardPage() {
                 Encerrar recorrência
               </DialogTitle>
               <DialogDescription className="pt-3 text-base">
-                Você vai encerrar a recorrência de <strong>{txToCancelSubscription?.description}</strong>.
+                Você vai encerrar a recorrência de <strong>{getTransactionTitle(txToCancelSubscription)}</strong>.
                 <br /><br />
                 A ocorrência de <strong>{formatDateDisplay(txToCancelSubscription?.dueDate || "")}</strong> será a última mantida.
                 <br />
@@ -2590,18 +2371,18 @@ export default function DashboardPage() {
             </DialogHeader>
 
             <DialogFooter className="flex-col sm:flex-row gap-3 mt-4">
-              <Button className="w-full sm:w-auto rounded-xl h-10 hover:cursor-pointer duration-200" variant="ghost" onClick={() => setTxToCancelSubscription(null)}>
+              <Button className="w-full sm:w-auto rounded-xl h-10 hover:cursor-pointer duration-200" variant="ghost" disabled={isCancelingSubscription} onClick={() => setTxToCancelSubscription(null)}>
                 Voltar
               </Button>
-              <Button className="w-full sm:w-auto rounded-xl h-10 bg-amber-600 hover:bg-amber-700 text-white hover:cursor-pointer duration-200" onClick={handleConfirmCancelSubscription}>
-                Confirmar Encerramento
+              <Button className="w-full sm:w-auto rounded-xl h-10 bg-amber-600 hover:bg-amber-700 text-white hover:cursor-pointer duration-200" disabled={isCancelingSubscription} onClick={handleConfirmCancelSubscription}>
+                {isCancelingSubscription ? "Encerrando..." : "Confirmar Encerramento"}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Modal de Check-in Diário */}
-        <Dialog open={showCheckinModal} onOpenChange={setShowCheckinModal}>
+        {/* Check-in Modal */}
+        <Dialog open={showCheckinModal} onOpenChange={(open) => !checkinAction && setShowCheckinModal(open)}>
           <DialogContent className="sm:max-w-[425px] rounded-3xl p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-primary">
@@ -2614,7 +2395,7 @@ export default function DashboardPage() {
 
             {pendingCheckins.length > 0 && (
               <div className="app-panel-subtle my-2 rounded-xl border p-4">
-                <p className="font-semibold text-lg">{pendingCheckins[0].description}</p>
+                <p className="font-semibold text-lg">{getTransactionTitle(pendingCheckins[0])}</p>
                 <p className="text-sm text-zinc-500 mb-2">Venceu em: {formatDateDisplay(pendingCheckins[0].dueDate)}</p>
                 <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                   {formatCurrencyDisplay(pendingCheckins[0].amount)}
@@ -2626,21 +2407,23 @@ export default function DashboardPage() {
               <Button
                 variant="outline"
                 className="rounded-xl h-12 hover:cursor-pointer duration-200"
+                disabled={Boolean(checkinAction) || pendingCheckins.length === 0}
                 onClick={() => handleCheckinAction(pendingCheckins[0], false)}
               >
-                Ainda Não
+                {checkinAction === "pending" ? "Atualizando..." : "Ainda Não"}
               </Button>
               <Button
                 className="rounded-xl h-12 bg-green-600 hover:bg-green-700 text-white hover:cursor-pointer duration-200"
+                disabled={Boolean(checkinAction) || pendingCheckins.length === 0}
                 onClick={() => handleCheckinAction(pendingCheckins[0], true)}
               >
-                Já Paguei/Recebi
+                {checkinAction === "paid" ? "Atualizando..." : "Já Paguei/Recebi"}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Modal de UPGRADE */}
+        {/* Upgrade Modal */}
         <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
           <DialogContent className="max-h-[85vh] w-[calc(100vw-2rem)] max-w-[520px] rounded-2xl border-2 border-primary/35 p-6 sm:max-w-md sm:p-8 overflow-y-auto">
             <DialogHeader className="text-center items-center">
@@ -2685,7 +2468,7 @@ export default function DashboardPage() {
                   disabled={isOpeningCheckout === "pro"}
                   className="h-12 w-full rounded-xl bg-primary font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all duration-400 hover:cursor-pointer hover:bg-primary/90 sm:text-lg"
                 >
-                  <Medal className="inline-block h-6 w-6 text-zinc-100 dark:text-zinc-200" /> {isOpeningCheckout === "pro" ? "Abrindo..." : "Pro"}
+                  <Medal className="inline-block h-6 w-6 text-zinc-400 dark:text-zinc-800" /> {isOpeningCheckout === "pro" ? "Abrindo..." : "Pro"}
                 </Button>
 
                 <Button
@@ -2696,170 +2479,6 @@ export default function DashboardPage() {
                   Continuar no Grátis
                 </Button>
               </div>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Modal de Nova Categoria */}
-        <Dialog open={isNewCategoryOpen} onOpenChange={setIsNewCategoryOpen}>
-          <DialogContent className="rounded-2xl w-[calc(100vw-1rem)] max-w-[680px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <div className="mx-auto mb-2 w-fit rounded-full bg-primary/10 p-3">
-                <Tag className="h-6 w-6 text-primary" />
-              </div>
-              <DialogTitle className="text-center">Gerenciar Categorias</DialogTitle>
-              <DialogDescription className="text-center pt-2">
-                Adicione uma nova categoria personalizada para seus lançamentos.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label>Tipo</Label>
-                <Select value={newCategoryMode} onValueChange={(v) => setNewCategoryMode(v as "root" | "sub")}>
-                  <SelectTrigger className="rounded-xl h-11">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="root">Categoria principal</SelectItem>
-                    <SelectItem value="sub">Subcategoria</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {newCategoryMode === "sub" && (
-                <div className="space-y-2">
-                  <Label>Categoria pai</Label>
-                  <Select value={newCategoryParent} onValueChange={setNewCategoryParent}>
-                    <SelectTrigger className="rounded-xl h-11">
-                      <SelectValue placeholder="Selecione a categoria pai" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {allRootCategories.map((cat) => (
-                        <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label>{newCategoryMode === "sub" ? "Nome da Subcategoria" : "Nome da Categoria"}</Label>
-                <Input
-                  placeholder={newCategoryMode === "sub" ? "Ex: Reforma" : "Ex: Casa"}
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                  className="rounded-xl h-11"
-                />
-              </div>
-              <div className="space-y-2 border-t border-border/70 pt-2">
-                <Label>Categorias padrão</Label>
-                <p className="text-xs text-zinc-500">Você pode ocultar as categorias padrão sem apagar.</p>
-                <div className="max-h-32 overflow-y-auto space-y-2 pr-1">
-                  {defaultCategories
-                    .slice()
-                    .sort((a, b) => {
-                      if (a.name === "Outros") return 1;
-                      if (b.name === "Outros") return -1;
-                      return a.name.localeCompare(b.name, "pt-BR");
-                    })
-                    .map((cat) => {
-                      const hidden = cat.name !== "Outros" && !categories.some((c) => c.name === cat.name);
-                      return (
-                        <div key={`default-${cat.name}`} className="app-panel-subtle flex flex-col gap-2 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                          <p className="text-sm font-medium truncate">{cat.name}</p>
-                          <Button
-                            type="button"
-                            size="sm"
-                            className={`h-8 px-2 shrink-0 w-full sm:w-auto text-white ${cat.name === "Outros"
-                                ? "bg-primary/75 hover:bg-primary/90"
-                                : hidden
-                                  ? "bg-emerald-600 hover:bg-emerald-700"
-                                  : "bg-amber-500 hover:bg-amber-600"
-                              }`}
-                            disabled={cat.name === "Outros"}
-                            onClick={() => toggleDefaultCategoryVisibility(cat.name, !hidden)}
-                          >
-                            {cat.name === "Outros" ? "Sempre visível" : hidden ? "Mostrar" : "Ocultar"}
-                          </Button>
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-              <div className="space-y-2 border-t border-border/70 pt-2">
-                <Label>Gerenciar categorias personalizadas</Label>
-                <p className="text-xs text-zinc-500">Ao excluir, lançamentos vinculados são movidos para <strong>Outros</strong>.</p>
-                <Select value={customParentFilter} onValueChange={setCustomParentFilter}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Filtrar por categoria pai" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    {allRootCategories.map((root) => (
-                      <SelectItem key={`filter-${root.name}`} value={root.name}>{root.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
-                  {filteredCustomCategories.length === 0 && (
-                    <p className="text-sm text-zinc-400 py-2">Nenhuma categoria personalizada criada ainda.</p>
-                  )}
-                  {filteredCustomCategories.map((cat) => {
-                    const isEditing = editingCategoryName === cat.name;
-                    const sub = isSubcategory(cat.name);
-                    const linked = isLinkedSubcategory(cat.name);
-                    return (
-                      <div key={cat.name} className="app-panel-subtle space-y-2 rounded-lg border px-3 py-2">
-                        {isEditing ? (
-                          <>
-                            <div className="grid grid-cols-1 gap-2">
-                              {sub && (
-                                <Select value={editingCategoryParent} onValueChange={setEditingCategoryParent}>
-                                  <SelectTrigger className="h-9">
-                                    <SelectValue placeholder="Escolha o pai" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {allRootCategories.map((root) => (
-                                      <SelectItem key={root.name} value={root.name}>{root.name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              )}
-                              <Input value={editingCategoryInput} onChange={(e) => setEditingCategoryInput(e.target.value)} className="h-9" />
-                            </div>
-                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
-                              <Button type="button" size="sm" className="h-8 w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white" onClick={handleCancelEditCategory}>Cancelar</Button>
-                              <Button type="button" size="sm" className="h-8 w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white" disabled={renamingCategoryName === cat.name || (sub && !editingCategoryParent)} onClick={() => handleSaveEditCategory(cat.name)}>
-                                {renamingCategoryName === cat.name ? "Salvando..." : "Salvar"}
-                              </Button>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium truncate">{formatCategoryLabel(cat.name)}</p>
-                              {sub && !linked && (
-                                <p className="text-[11px] text-amber-600">Sem pai vinculado</p>
-                              )}
-                            </div>
-                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1 shrink-0 sm:justify-end">
-                              <Button type="button" size="sm" className="h-8 px-2 w-full sm:w-auto justify-center bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => handleStartEditCategory(cat.name)}>
-                                <Pencil className="h-3.5 w-3.5 mr-1" />Editar
-                              </Button>
-                              <Button type="button" size="sm" className="h-8 px-2 w-full sm:w-auto justify-center bg-red-600 hover:bg-red-700 text-white" disabled={deletingCategoryName === cat.name} onClick={() => handleDeleteCategory(cat.name)}>
-                                <Trash2 className="h-3.5 w-3.5 mr-1" />
-                                {deletingCategoryName === cat.name ? "Excluindo..." : "Excluir"}
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-            <DialogFooter className="flex-col sm:flex-row gap-2">
-              <Button onClick={() => setIsNewCategoryOpen(false)} className="rounded-xl w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white">Cancelar</Button>
-              <Button onClick={handleCreateCategory} disabled={!newCategoryName.trim() || (newCategoryMode === "sub" && !newCategoryParent)} className="rounded-xl w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white">Criar</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
