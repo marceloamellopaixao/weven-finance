@@ -288,7 +288,7 @@ function AdminPulse({ className = "" }: { className?: string }) {
 
 function AdminPageLoadingShell() {
   return (
-    <div className="relative min-h-screen overflow-hidden p-4 pb-20 font-sans md:p-8">
+    <div className="relative min-h-screen overflow-x-hidden p-3 pb-20 font-sans sm:p-4 md:p-6 xl:p-8">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute right-[-10%] top-[-10%] h-[500px] w-[500px] rounded-full bg-primary/6 blur-[100px]" />
         <div className="absolute bottom-[-12%] left-[-12%] h-[500px] w-[500px] rounded-full bg-primary/4 blur-[110px]" />
@@ -1974,7 +1974,7 @@ export default function AdminPage() {
         <div className="absolute bottom-[-10%] left-[-10%] h-[500px] w-[500px] rounded-full bg-primary/4 blur-[100px]" />
       </div>
 
-      <div className="container mx-auto max-w-7xl relative z-10">
+      <div className="container relative z-10 mx-auto max-w-screen-2xl">
         <div className={`${fadeInUp} flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8`}>
           <div>
             <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight text-foreground">
@@ -1989,7 +1989,7 @@ export default function AdminPage() {
               onClick={() => setShowNormalizeConfirm(true)}
               disabled={isNormalizing}
               variant="outline"
-              className="gap-2 rounded-xl border-amber-200 bg-amber-50/80 text-amber-700 shadow-sm transition-all hover:scale-105 hover:cursor-pointer hover:bg-amber-100 dark:bg-amber-950/20 dark:text-amber-300 dark:hover:bg-amber-950/30"
+              className="w-full gap-2 rounded-xl border-amber-200 bg-amber-50/80 text-amber-700 shadow-sm transition-all hover:cursor-pointer hover:bg-amber-100 dark:bg-amber-950/20 dark:text-amber-300 dark:hover:bg-amber-950/30 sm:w-auto sm:hover:scale-105"
             >
               {isNormalizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
               Corrigir/Normalizar Dados Antigos
@@ -2009,7 +2009,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        <div className={`${fadeInUp} delay-150 grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start`}>
+        <div className={`${fadeInUp} delay-150 grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start xl:grid-cols-[280px_minmax(0,1fr)]`}>
           <aside className="hidden lg:block">
             <div className="app-panel-subtle sticky top-24 rounded-3xl border border-color:var(--app-panel-border) p-3 shadow-xl shadow-primary/10">
               <div className="px-3 py-3">
@@ -2100,7 +2100,7 @@ export default function AdminPage() {
           {activeTab === "support" && hasAdminPermission("support", "read") && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
-                <CardHeader className="app-panel-subtle border-b border-border/70 px-6 py-4">
+                <CardHeader className="app-panel-subtle border-b border-border/70 px-4 py-4 sm:px-6">
                   <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
                     <HeadphonesIcon className="h-5 w-5 text-primary" /> Central de Atendimento
                   </CardTitle>
@@ -2111,7 +2111,7 @@ export default function AdminPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="grid grid-cols-2 gap-3 border-b border-color:var(--app-panel-border) p-4 md:p-5 lg:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-3 border-b border-color:var(--app-panel-border) p-4 sm:grid-cols-2 md:p-5 lg:grid-cols-4">
                     <div className="app-panel-subtle rounded-xl border border-color:var(--app-panel-border) p-3">
                       <p className="text-xs text-muted-foreground">Fila aberta</p>
                       <p className="text-lg font-bold">{supportQueueMetrics.open}</p>
@@ -2130,7 +2130,7 @@ export default function AdminPage() {
                     </div>
                   </div>
                   <div className="space-y-3 border-b border-color:var(--app-panel-border) p-4 md:p-5">
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
                       <Input
                         value={supportSearch}
                         onChange={(e) => setSupportSearch(e.target.value)}
@@ -2175,13 +2175,13 @@ export default function AdminPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" className="h-10 rounded-xl" onClick={clearSupportFilters}>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                      <Button variant="outline" className="h-10 w-full rounded-xl sm:w-auto" onClick={clearSupportFilters}>
                         <FilterX className="mr-2 h-4 w-4" /> Limpar filtros
                       </Button>
                       <Button
                         variant="outline"
-                        className="h-10 rounded-xl"
+                        className="h-10 w-full rounded-xl sm:w-auto"
                         onClick={() => void handleExportSupportCsv()}
                         disabled={isExportingCsv === "support"}
                       >
@@ -2190,7 +2190,7 @@ export default function AdminPage() {
                       </Button>
                     </div>
                   </div>
-                  <div className="p-4 md:p-5 grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 p-4 md:p-5 2xl:grid-cols-2">
                     {supportTicketsOrdered.length === 0 ? (
                       <div className="app-panel-subtle col-span-full flex h-32 items-center justify-center rounded-2xl border border-color:var(--app-panel-border) text-muted-foreground">
                         Nenhum chamado encontrado.
@@ -2546,11 +2546,11 @@ export default function AdminPage() {
                       </TableBody>
                     </Table>
                   </div>
-                  <div className="flex items-center justify-between gap-2 border-t border-color:var(--app-panel-border) px-4 pb-4 md:px-6">
+                  <div className="flex flex-col gap-3 border-t border-color:var(--app-panel-border) px-4 pb-4 sm:flex-row sm:items-center sm:justify-between md:px-6">
                     <p className="text-xs font-medium text-muted-foreground">
                       Página {supportPage} de {supportTotalPages || 1} • {ticketsTotal} chamado(s)
                     </p>
-                    <div className="flex gap-2">
+                    <div className="flex justify-end gap-2">
                       <Button
                         variant="outline"
                         size="sm"
@@ -2580,7 +2580,7 @@ export default function AdminPage() {
           {activeTab === "audit" && hasAdminPermission("audit", "read") && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
-                <CardHeader className="app-panel-subtle border-b border-border/70 px-6 py-4">
+                <CardHeader className="app-panel-subtle border-b border-border/70 px-4 py-4 sm:px-6">
                   <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
                     <ShieldCheck className="h-5 w-5 text-emerald-600" /> Auditoria Operacional
                   </CardTitle>
@@ -2589,7 +2589,7 @@ export default function AdminPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-4 md:p-5 space-y-4">
-                  <div className="flex flex-col md:flex-row md:items-center gap-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center">
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 h-4 w-4" />
                       <Input
@@ -2607,7 +2607,7 @@ export default function AdminPage() {
                     </Badge>
                     <Button
                       variant="outline"
-                      className="h-10 rounded-xl"
+                      className="h-10 w-full rounded-xl md:w-auto"
                       onClick={() => void handleExportAuditCsv()}
                       disabled={isExportingCsv === "audit"}
                     >
@@ -2616,7 +2616,7 @@ export default function AdminPage() {
                     </Button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
                     <Select
                       value={auditActionFilter}
                       onValueChange={(value) => {
@@ -2707,7 +2707,7 @@ export default function AdminPage() {
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between pt-1">
+                  <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-xs text-zinc-500">
                       Página {auditPage} de {Math.max(1, Math.ceil(auditTotal / auditPerPage))}
                     </p>
@@ -2745,7 +2745,7 @@ export default function AdminPage() {
           {activeTab === "metrics" && hasAdminPermission("metrics", "read") && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
-                <CardHeader className="app-panel-subtle border-b border-border/70 px-6 py-4">
+                <CardHeader className="app-panel-subtle border-b border-border/70 px-4 py-4 sm:px-6">
                   <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
                     <Calculator className="h-5 w-5 text-primary" /> Métricas Operacionais
                   </CardTitle>
@@ -2754,7 +2754,7 @@ export default function AdminPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-4 md:p-5 space-y-4">
-                  <div className="flex flex-col md:flex-row md:items-center gap-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center">
                     <Select value={metricsWindowMinutes} onValueChange={setMetricsWindowMinutes}>
                       <SelectTrigger className="rounded-xl h-10 w-full md:w-56">
                         <SelectValue placeholder="Janela" />
@@ -2769,7 +2769,7 @@ export default function AdminPage() {
                   </div>
 
                   {healthData && (
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
                       <Card className={`rounded-2xl border ${healthData.dbHealthy ? "border-emerald-200" : "border-red-300"}`}>
                         <CardContent className="p-3">
                           <p className="text-xs text-zinc-500">Banco</p>
@@ -2830,7 +2830,7 @@ export default function AdminPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="grid grid-cols-2 lg:grid-cols-8 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
                         <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
                           <CardContent className="p-3">
                             <p className="text-xs text-zinc-500">Total Requests</p>
@@ -2883,8 +2883,8 @@ export default function AdminPage() {
                         </Card>
                       </div>
 
-                      <div className="overflow-hidden rounded-2xl border border-color:var(--app-panel-border)">
-                        <Table>
+                      <div className="overflow-x-auto rounded-2xl border border-color:var(--app-panel-border)">
+                        <Table className="min-w-[720px]">
                           <TableHeader>
                             <TableRow>
                               <TableHead>Rota</TableHead>
@@ -2904,7 +2904,9 @@ export default function AdminPage() {
                             ) : (
                               metricsByRoute.map((row) => (
                                 <TableRow key={row.route}>
-                                  <TableCell className="font-medium">{row.route}</TableCell>
+                                  <TableCell className="max-w-[360px] font-medium">
+                                    <span className="block truncate" title={row.route}>{row.route}</span>
+                                  </TableCell>
                                   <TableCell>{row.total}</TableCell>
                                   <TableCell className="text-red-600">{row.errors}</TableCell>
                                   <TableCell className="text-amber-700">{row.rateLimited}</TableCell>
@@ -2937,7 +2939,7 @@ export default function AdminPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   {/* Filtro: Plano */}
                   <Select value={planFilter} onValueChange={(val) => setPlanFilter(val as UserPlan | "all")}>
                     <SelectTrigger className="h-11 w-full rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
@@ -2994,17 +2996,17 @@ export default function AdminPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                   <Button
                     variant="outline"
-                    className="h-10 rounded-xl"
+                    className="h-10 w-full rounded-xl sm:w-auto"
                     onClick={clearUsersFilters}
                   >
                     <FilterX className="mr-2 h-4 w-4" /> Limpar filtros
                   </Button>
                   <Button
                     variant="outline"
-                    className="h-10 rounded-xl"
+                    className="h-10 w-full rounded-xl sm:w-auto"
                     onClick={() => void handleExportUsersCsv()}
                     disabled={isExportingCsv === "users"}
                   >
@@ -3015,7 +3017,7 @@ export default function AdminPage() {
               </div>
 
               <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
-                <CardHeader className="border-b border-color:var(--app-panel-border) bg-accent/70 px-6 py-4 dark:bg-accent/20">
+                <CardHeader className="border-b border-color:var(--app-panel-border) bg-accent/70 px-4 py-4 dark:bg-accent/20 sm:px-6">
                   <CardTitle className="text-lg font-semibold text-primary">Base de Usuários</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -3038,7 +3040,7 @@ export default function AdminPage() {
                         const canDeleteThisUser = canDeleteUser(u);
                         const canChangePayment = canEditThisUser || (userProfile?.role === "admin" && u.uid === userProfile.uid);
                         return (
-                          <div key={u.uid} className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-3 space-y-3">
+                          <div key={u.uid} className="app-panel-subtle space-y-3 rounded-2xl border border-color:var(--app-panel-border) p-3">
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <p className="font-semibold text-zinc-900 truncate">{u.displayName}</p>
@@ -3088,7 +3090,7 @@ export default function AdminPage() {
                               </DropdownMenu>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                               <div>
                                 <p className="text-[10px] text-zinc-400 uppercase">Plano</p>
                                 {canChangePlan ? (
@@ -3123,7 +3125,7 @@ export default function AdminPage() {
                               </div>
                             </div>
 
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                               <Badge variant="secondary" className="bg-zinc-100 text-zinc-600 border-zinc-200">
                                 Registros: {Number.isNaN(u.transactionCount) ? "..." : (u.transactionCount ?? "...")}
                               </Badge>
@@ -3162,8 +3164,8 @@ export default function AdminPage() {
                     )}
                   </div>
 
-                  <div className="hidden md:block overflow-x-auto">
-                    <Table>
+                  <div className="hidden overflow-x-auto md:block">
+                    <Table className="min-w-[1040px]">
                       <TableHeader className="bg-accent/70 dark:bg-accent/20">
                         <TableRow className="border-border hover:bg-transparent">
                           <TableHead className="pl-6 font-semibold">Usuário</TableHead>
@@ -3205,11 +3207,11 @@ export default function AdminPage() {
                           return (
                               <TableRow key={u.uid} className="border-color:var(--app-panel-border) transition-colors hover:bg-accent/60">
                               <TableCell className="pl-6">
-                                <div>
-                                  <p className="font-semibold text-zinc-900 dark:text-zinc-100">
+                                <div className="max-w-[260px]">
+                                  <p className="truncate font-semibold text-zinc-900 dark:text-zinc-100" title={u.displayName}>
                                     {u.displayName}
                                   </p>
-                                  <p className="text-xs text-zinc-500">{u.email}</p>
+                                  <p className="truncate text-xs text-zinc-500" title={u.email}>{u.email}</p>
                                 </div>
                               </TableCell>
 
@@ -3392,7 +3394,7 @@ export default function AdminPage() {
                         })}
                       </TableBody>
                     </Table>
-                    <div className="app-panel-subtle flex items-center justify-between border-t border-border/70 p-4">
+                    <div className="app-panel-subtle flex flex-col gap-3 border-t border-border/70 p-4 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-xs text-zinc-500 font-medium">Página {currentPage} de {totalPages || 1}</p>
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" className="h-8 w-8 p-0 rounded-lg" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
@@ -3413,7 +3415,7 @@ export default function AdminPage() {
           {activeTab === "restore" && canRestore && (
             <div className={`${fadeInUp} delay-200`}>
               <Card className="app-panel-soft overflow-hidden rounded-3xl border border-orange-200/70 shadow-lg shadow-orange-500/10 dark:border-orange-900/30">
-                <CardHeader className="py-4 px-6 border-b border-orange-100 dark:border-orange-900/30 bg-orange-50/50 dark:bg-orange-900/10">
+                <CardHeader className="border-b border-orange-100 bg-orange-50/50 px-4 py-4 dark:border-orange-900/30 dark:bg-orange-900/10 sm:px-6">
                   <CardTitle className="text-lg font-semibold text-orange-600 flex items-center gap-2">
                     <ArchiveRestore className="h-5 w-5" /> Usuários Excluídos & Arquivados
                   </CardTitle>
@@ -3463,7 +3465,7 @@ export default function AdminPage() {
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
-                          <div className="flex items-center justify-between">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <Badge variant="outline" className="border-orange-200 text-orange-700 bg-orange-50">
                               {u.transactionCount} Transações
                             </Badge>
@@ -3477,8 +3479,8 @@ export default function AdminPage() {
                     )}
                   </div>
 
-                  <div className="hidden md:block overflow-x-auto">
-                    <Table>
+                  <div className="hidden overflow-x-auto md:block">
+                    <Table className="min-w-[820px]">
                       <TableHeader>
                         <TableRow className="border-orange-100 dark:border-orange-900/30 hover:bg-transparent">
                           <TableHead className="pl-6 font-semibold">Usuário</TableHead>
@@ -3498,10 +3500,12 @@ export default function AdminPage() {
                         ) : (
                           deletedUsers.map((u) => (
                             <TableRow key={u.uid} className="bg-orange-50/10 border-orange-100/50 dark:border-orange-900/20 hover:bg-orange-50/30 dark:hover:bg-orange-900/20 transition-colors">
-                              <TableCell className="pl-6 font-medium text-zinc-800 dark:text-zinc-200">{u.displayName}</TableCell>
+                              <TableCell className="pl-6 font-medium text-zinc-800 dark:text-zinc-200">
+                                <span className="block max-w-[220px] truncate" title={u.displayName}>{u.displayName}</span>
+                              </TableCell>
                               <TableCell className="text-zinc-500">
                                 <div className="space-y-1">
-                                  <p>{u.email}</p>
+                                  <p className="max-w-[260px] truncate" title={u.email}>{u.email}</p>
                                   <p className="text-[11px] text-zinc-500/80">
                                     Registros arquivados: {Number.isNaN(u.transactionCount) ? "..." : (u.transactionCount ?? "...")}
                                   </p>
@@ -3558,21 +3562,21 @@ export default function AdminPage() {
           {/* --- PLANS TAB --- */}
           {activeTab === "plans" && canManageSensitive && editedPlans && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
-              <div className="flex justify-end mb-4">
+              <div className="mb-4 flex justify-end">
                 <Button
                   onClick={savePlans}
                   disabled={isSavingPlans}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 rounded-xl shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all"
+                  className="w-full gap-2 rounded-xl bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-700 sm:w-auto sm:hover:scale-105"
                 >
                   {isSavingPlans ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Salvar Alterações
                 </Button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
                 {/* FREE */}
                 <Card className="app-panel-soft rounded-3xl border-2 border-amber-700/30 shadow-xl shadow-amber-700/5 transition-shadow hover:shadow-amber-700/10">
-                  <CardHeader className="bg-amber-50 dark:bg-amber-900/10 rounded-t-3xl p-6 flex flex-row items-center justify-between border-b border-amber-100/50 dark:border-amber-900/20">
+                  <CardHeader className="flex flex-col gap-3 rounded-t-3xl border-b border-amber-100/50 bg-amber-50 p-4 dark:bg-amber-900/10 dark:border-amber-900/20 sm:flex-row sm:items-center sm:justify-between sm:p-6">
                     <div className="flex flex-col justify-center">
                       <CardTitle className="text-amber-700 font-bold text-lg">
                         Plano {plans.free.name} · Bronze
@@ -3582,7 +3586,7 @@ export default function AdminPage() {
                     <Switch checked={editedPlans.free.active} onCheckedChange={(c) => handlePlanEdit("free", "active", c)} className="data-[state=checked]:bg-amber-600" />
                   </CardHeader>
 
-                  <CardContent className={`p-6 space-y-4 ${!editedPlans.free.active ? "opacity-50 pointer-events-none" : ""}`}>
+                  <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.free.active ? "opacity-50 pointer-events-none" : ""}`}>
                     <div className="space-y-2">
                       <Label className="text-xs font-bold uppercase text-zinc-400">Nome</Label>
                       <Input className="rounded-xl h-10" value={editedPlans.free.name ?? ""} onChange={(e) => handlePlanEdit("free", "name", e.target.value)} />
@@ -3608,7 +3612,7 @@ export default function AdminPage() {
 
                 {/* PREMIUM */}
                 <Card className="app-panel-soft rounded-3xl border-2 border-slate-400/40 shadow-xl shadow-slate-400/5 transition-shadow hover:shadow-slate-400/10">
-                  <CardHeader className="bg-slate-50 dark:bg-slate-900/20 rounded-t-3xl p-6 flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800">
+                  <CardHeader className="flex flex-col gap-3 rounded-t-3xl border-b border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/20 sm:flex-row sm:items-center sm:justify-between sm:p-6">
                     <div className="flex flex-col justify-center">
                       <CardTitle className="text-slate-600 dark:text-slate-400 font-bold text-lg">
                         Plano {plans.premium.name} · Prata
@@ -3618,8 +3622,8 @@ export default function AdminPage() {
                     <Switch checked={editedPlans.premium.active} onCheckedChange={(c) => handlePlanEdit("premium", "active", c)} className="data-[state=checked]:bg-slate-600" />
                   </CardHeader>
 
-                  <CardContent className={`p-6 space-y-4 ${!editedPlans.premium.active ? "opacity-50 pointer-events-none" : ""}`}>
-                    <div className="grid grid-cols-2 gap-4">
+                  <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.premium.active ? "opacity-50 pointer-events-none" : ""}`}>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
                         <Label className="text-xs font-bold uppercase text-zinc-400">Nome</Label>
                         <Input className="rounded-xl h-10" value={editedPlans.premium.name ?? ""} onChange={(e) => handlePlanEdit("premium", "name", e.target.value)} />
@@ -3653,7 +3657,7 @@ export default function AdminPage() {
 
                 {/* PRO */}
                 <Card className="app-panel-soft rounded-3xl border-2 border-yellow-500/40 shadow-xl shadow-yellow-500/10 transition-shadow hover:shadow-yellow-500/20">
-                  <CardHeader className="bg-yellow-100 dark:bg-yellow-900/20 rounded-t-3xl p-6 flex flex-row items-center justify-between border-b border-yellow-200 dark:border-yellow-900/30">
+                  <CardHeader className="flex flex-col gap-3 rounded-t-3xl border-b border-yellow-200 bg-yellow-100 p-4 dark:border-yellow-900/30 dark:bg-yellow-900/20 sm:flex-row sm:items-center sm:justify-between sm:p-6">
                     <div className="flex flex-col justify-center">
                       <CardTitle className="text-yellow-600 font-bold text-lg">
                         Plano {editedPlans.pro.name} · Ouro
@@ -3663,8 +3667,8 @@ export default function AdminPage() {
                     <Switch checked={editedPlans.pro.active} onCheckedChange={(c) => handlePlanEdit("pro", "active", c)} className="data-[state=checked]:bg-yellow-500" />
                   </CardHeader>
 
-                  <CardContent className={`p-6 space-y-4 ${!editedPlans.pro.active ? "opacity-50 pointer-events-none" : ""}`}>
-                    <div className="grid grid-cols-2 gap-4">
+                  <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.pro.active ? "opacity-50 pointer-events-none" : ""}`}>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
                         <Label className="text-xs font-bold uppercase text-zinc-400">Nome</Label>
                         <Input className="rounded-xl h-10" value={editedPlans.pro.name ?? ""} onChange={(e) => handlePlanEdit("pro", "name", e.target.value)} />
@@ -3697,7 +3701,7 @@ export default function AdminPage() {
                 </Card>
 
                 {plans && plans.pro.active && (
-                  <div className="col-span-1 md:col-span-3 text-xs text-zinc-500 italic text-center">
+                  <div className="col-span-1 text-center text-xs italic text-zinc-500 xl:col-span-3">
                     O Plano Pro oferece benefícios exclusivos. Certifique-se de configurar corretamente o link de pagamento.
                   </div>
                 )}
@@ -3716,14 +3720,14 @@ export default function AdminPage() {
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <Button type="button" variant="outline" className="rounded-xl" onClick={handleAddAccessRole} disabled={!canManagePermissions}>
+                  <Button type="button" variant="outline" className="w-full rounded-xl sm:w-auto" onClick={handleAddAccessRole} disabled={!canManagePermissions}>
                     Novo cargo
                   </Button>
                   <Button
                     type="button"
                     onClick={saveAccessControl}
                     disabled={!canManagePermissions || isSavingAccessControl}
-                    className="rounded-xl"
+                    className="w-full rounded-xl sm:w-auto"
                   >
                     {isSavingAccessControl ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                     Salvar Permissões
@@ -3731,7 +3735,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-[380px_1fr]">
+              <div className="grid gap-4 2xl:grid-cols-[360px_minmax(0,1fr)]">
                 <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                   <CardHeader className="app-panel-subtle border-b border-color:var(--app-panel-border)">
                     <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
@@ -3744,7 +3748,7 @@ export default function AdminPage() {
                   <CardContent className="space-y-3 p-4">
                     {editedAccessControl.roles.map((role, index) => (
                       <Collapsible key={role.id} className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
-                        <div className="flex items-center justify-between gap-3 p-4">
+                        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                           <CollapsibleTrigger asChild>
                             <button type="button" className="group flex min-w-0 flex-1 items-center gap-3 text-left">
                               <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
@@ -3754,7 +3758,7 @@ export default function AdminPage() {
                               </div>
                             </button>
                           </CollapsibleTrigger>
-                          <div className="flex shrink-0 items-center gap-2">
+                          <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
                             <Badge variant="secondary" className="rounded-full">{role.system ? "Sistema" : "Custom"}</Badge>
                             <Switch
                               checked={role.active}
@@ -3821,8 +3825,8 @@ export default function AdminPage() {
                         Plano define recursos. Cargo ou usuário podem liberar exceções como isenção de cobrança.
                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="grid gap-4 p-4 lg:grid-cols-[1fr_1.2fr]">
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <CardContent className="grid gap-4 p-4 xl:grid-cols-[1fr_1.2fr]">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
                         {Object.entries(ACCESS_SUBJECT_LABELS).map(([value, label]) => (
                           <button
                             key={value}
@@ -3907,7 +3911,7 @@ export default function AdminPage() {
                         <CollapsibleContent>
                           {permissionView.groupNames.length > 1 && (
                             <div className="border-t border-color:var(--app-panel-border) app-panel-subtle px-4 py-3">
-                              <div className="max-w-sm space-y-2">
+                            <div className="w-full max-w-sm space-y-2">
                                 <Label className="text-xs font-bold uppercase text-muted-foreground">Grupo de funcionalidades</Label>
                                 <Select
                                   value={permissionView.selectedGroup}
@@ -3935,7 +3939,7 @@ export default function AdminPage() {
                               const isBillingExemption = resource.key === "billing.exempt";
                               const billingExemptionValue = value === "inherit" ? "inherit" : "exempt";
                               return (
-                                <div key={resource.key} className="grid gap-3 p-4 md:grid-cols-[1fr_190px] md:items-center">
+                                <div key={resource.key} className="grid gap-3 p-4 xl:grid-cols-[1fr_190px] xl:items-center">
                                   <div>
                                     <div className="flex flex-wrap items-center gap-2">
                                       <p className="font-semibold text-foreground">{resource.label}</p>
