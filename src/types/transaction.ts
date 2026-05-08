@@ -15,6 +15,7 @@ export type TransactionCreatedAt =
 export interface Transaction {
   id?: string;
   userId: string;
+  title?: string;
   description: string;
   amount: number;
   amountForLimit?: number;
