@@ -9,6 +9,7 @@ import { useTransactions } from "@/hooks/useTransactions";
 import { syncCreditCardAmountForLimit } from "@/services/transactionService";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CategoryLabel } from "@/components/categories/CategoryLabel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1206,7 +1207,10 @@ export default function CreditCardPage() {
                             </div>
                             <div className="min-w-0">
                               <p className="truncate font-semibold text-foreground">{tx.title || tx.description}</p>
-                              <p className="mt-0.5 text-xs text-muted-foreground">{tx.category} • Vence {tx.dueDate}</p>
+                              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                                <CategoryLabel value={tx.category} className="max-w-[16rem] gap-1.5" iconClassName="h-3 w-3" inheritColors />
+                                <span className="shrink-0">Vence {tx.dueDate}</span>
+                              </div>
                             </div>
                           </div>
                           <div className="text-left sm:text-right">
