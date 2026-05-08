@@ -14,6 +14,7 @@ import {
   cancelFutureInstallments,
 } from "@/services/transactionService";
 import AreaChart from "@/components/charts/AreaChart";
+import { CategoryLabel } from "@/components/categories/CategoryLabel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,7 +29,7 @@ import {
   AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, XCircle, Crown, Search, HelpCircle, CheckCircle2,
   Medal, Info, AlertTriangle,
   Calculator,
-  Tag, Settings, Repeat
+  Settings, Repeat
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { InstallmentValueMode, PaymentMethod, Transaction, TransactionType } from "@/types/transaction";
@@ -102,17 +103,6 @@ const getCategoryRoot = (value: unknown) => {
   const safe = toSafeCategory(value);
   if (isLinkedSubcategory(safe)) return safe.split(CATEGORY_PATH_SEPARATOR)[0];
   if (isLegacySubcategory(value)) return "";
-  return safe;
-};
-
-const formatCategoryLabel = (value: unknown) => {
-  const safe = toSafeCategory(value);
-  if (isLinkedSubcategory(value)) {
-    return `${getCategoryRoot(value)} > ${getSubcategoryName(value)}`;
-  }
-  if (isLegacySubcategory(value)) {
-    return `⬢ ${getSubcategoryName(value)}`;
-  }
   return safe;
 };
 
@@ -1233,7 +1223,7 @@ export default function DashboardPage() {
               <SelectContent>
                 {orderedAvailableCategories.map((cat) => (
                   <SelectItem key={cat.name} value={cat.name}>
-                    {isSubcategory(cat.name) ? `* ${getSubcategoryName(cat.name)}` : cat.name}
+                    <CategoryLabel value={cat.name} />
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -2068,7 +2058,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
                     <Select value={filterType} onValueChange={(v) => setFilterType(v as "all" | "income" | "expense")}>
-                      <SelectTrigger className="w-[100px] h-9 text-xs rounded-lg"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-[150px] h-9 text-xs rounded-lg"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todos</SelectItem>
                         <SelectItem value="expense">Despesas</SelectItem>
@@ -2076,7 +2066,7 @@ export default function DashboardPage() {
                       </SelectContent>
                     </Select>
                     <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as "all" | "paid" | "pending")}>
-                      <SelectTrigger className="w-[200px] h-9 text-xs rounded-lg"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-[250px] h-9 text-xs rounded-lg"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todos Status</SelectItem>
                         <SelectItem value="pending">Pendente</SelectItem>
@@ -2084,10 +2074,14 @@ export default function DashboardPage() {
                       </SelectContent>
                     </Select>
                     <Select value={filterCategory} onValueChange={setFilterCategory}>
-                      <SelectTrigger className="w-full h-9 text-xs rounded-lg"><SelectValue placeholder="Categoria" /></SelectTrigger>
+                      <SelectTrigger className="w-[250px] h-9 text-xs rounded-lg"><SelectValue placeholder="Categoria" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todas Categ.</SelectItem>
-                        {uniqueCategories.map(c => <SelectItem key={c} value={c}>{isSubcategory(c) ? `* ${getSubcategoryName(c)}` : c}</SelectItem>)}
+                        <SelectItem value="all">Todas Categorias</SelectItem>
+                        {uniqueCategories.map(c => (
+                          <SelectItem key={c} value={c}>
+                            <CategoryLabel value={c} />
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -2177,7 +2171,7 @@ export default function DashboardPage() {
 
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getCategoryStyle(tx.category)}`}>
-                            {formatCategoryLabel(tx.category)}
+                            <CategoryLabel value={tx.category} className="max-w-[13rem] gap-1.5" iconClassName="h-3 w-3" inheritColors />
                           </span>
                           {tx.cardLabel && (
                             tx.cardId ? (
