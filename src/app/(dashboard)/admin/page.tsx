@@ -142,6 +142,14 @@ type AccessEditorLevel = AccessPermissionLevel | "inherit";
 type AdminPermissionArea = "users" | "support" | "restore" | "metrics" | "plans" | "audit" | "permissions";
 type AdminPermissionMinimum = "read" | "write" | "full";
 
+const ADMIN_REALTIME_FALLBACK_INTERVAL_MS = 60000;
+const ADMIN_MONITORING_INTERVAL_MS = 60000;
+
+function shouldRefreshAdminNow() {
+  if (typeof document === "undefined") return true;
+  return document.visibilityState === "visible";
+}
+
 type AdminAuditLog = {
   id: string;
   actorUid: string;
@@ -802,6 +810,7 @@ export default function AdminPage() {
 
     let cancelled = false;
     const loadUsers = async () => {
+      if (!shouldRefreshAdminNow()) return;
       try {
         setIsLoadingUsers(true);
         const effectiveStatus = activeTab === "restore" ? "deleted" : statusFilter;
@@ -828,7 +837,7 @@ export default function AdminPage() {
     };
 
     void loadUsers();
-    const interval = setInterval(() => void loadUsers(), 15000);
+    const interval = setInterval(() => void loadUsers(), ADMIN_REALTIME_FALLBACK_INTERVAL_MS);
     const stopRealtime = subscribeToTableChanges({
       table: "profiles",
       onChange: () => void loadUsers(),
@@ -846,6 +855,7 @@ export default function AdminPage() {
 
     let cancelled = false;
     const loadTickets = async () => {
+      if (!shouldRefreshAdminNow()) return;
       try {
         const payload = await fetchSupportTicketsPage({
           page: supportPage,
@@ -869,7 +879,7 @@ export default function AdminPage() {
     };
 
     void loadTickets();
-    const interval = setInterval(() => void loadTickets(), 10000);
+    const interval = setInterval(() => void loadTickets(), ADMIN_REALTIME_FALLBACK_INTERVAL_MS);
     const stopRealtime = subscribeToTableChanges({
       table: "support_requests",
       onChange: () => void loadTickets(),
@@ -1128,6 +1138,7 @@ export default function AdminPage() {
     let cancelled = false;
 
     const loadAuditLogs = async () => {
+      if (!shouldRefreshAdminNow()) return;
       try {
         setIsLoadingAuditLogs(true);
         const token = await user.getIdToken();
@@ -1174,7 +1185,7 @@ export default function AdminPage() {
     };
 
     void loadAuditLogs();
-    const interval = setInterval(() => void loadAuditLogs(), 10000);
+    const interval = setInterval(() => void loadAuditLogs(), ADMIN_REALTIME_FALLBACK_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -1188,6 +1199,7 @@ export default function AdminPage() {
     let cancelled = false;
 
     const loadMetrics = async () => {
+      if (!shouldRefreshAdminNow()) return;
       try {
         setIsLoadingMetrics(true);
         const token = await user.getIdToken();
@@ -1230,7 +1242,7 @@ export default function AdminPage() {
     };
 
     void loadMetrics();
-    const interval = setInterval(() => void loadMetrics(), 10000);
+    const interval = setInterval(() => void loadMetrics(), ADMIN_MONITORING_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -1244,6 +1256,7 @@ export default function AdminPage() {
     let cancelled = false;
 
     const loadCriticalAlerts = async () => {
+      if (!shouldRefreshAdminNow()) return;
       try {
         const token = await user.getIdToken();
         const response = await fetch("/api/admin/metrics?windowMinutes=60", {
@@ -1264,7 +1277,7 @@ export default function AdminPage() {
     };
 
     void loadCriticalAlerts();
-    const timer = setInterval(() => void loadCriticalAlerts(), 30000);
+    const timer = setInterval(() => void loadCriticalAlerts(), ADMIN_MONITORING_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -1278,6 +1291,7 @@ export default function AdminPage() {
     let cancelled = false;
 
     const loadHealth = async () => {
+      if (!shouldRefreshAdminNow()) return;
       try {
         const token = await user.getIdToken();
         const response = await fetch("/api/admin/health", {
@@ -1301,7 +1315,7 @@ export default function AdminPage() {
     };
 
     void loadHealth();
-    const timer = setInterval(() => void loadHealth(), 30000);
+    const timer = setInterval(() => void loadHealth(), ADMIN_MONITORING_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
