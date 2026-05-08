@@ -8,6 +8,7 @@ import {
   Layers, TrendingDown, TrendingUp, Info, Repeat, Crown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CategoryLabel } from "@/components/categories/CategoryLabel";
 import { CategoryManagerDialog } from "@/components/categories/CategoryManagerDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,7 +31,7 @@ import { addTransaction } from "@/services/transactionService";
 import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
 import { InstallmentValueMode, PaymentMethod, TransactionType } from "@/types/transaction";
-import { formatCategoryLabel, orderCategoryNames } from "@/lib/category-utils";
+import { orderCategoryNames } from "@/lib/category-utils";
 import { calculateDailyLimit } from "@/lib/finance/daily-limit";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; hasDueDate: boolean }[] = [
@@ -579,7 +580,7 @@ export default function NewTransactionPage() {
                   <SelectContent>
                     {monthCategories.map((cat) => (
                       <SelectItem key={cat.name} value={cat.name}>
-                        {formatCategoryLabel(cat.name)}
+                        <CategoryLabel value={cat.name} />
                       </SelectItem>
                     ))}
                   </SelectContent>
