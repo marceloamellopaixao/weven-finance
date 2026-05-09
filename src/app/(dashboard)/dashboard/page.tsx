@@ -1,15 +1,13 @@
-"use client";
+﻿"use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTransactions } from "@/hooks/useTransactions";
 import { usePlans } from "@/hooks/usePlans";
 import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import { CATEGORY_PATH_SEPARATOR, useCategories } from "@/hooks/useCategories";
 import {
-  addTransaction,
   deleteTransaction,
-  updateTransaction,
   toggleTransactionStatus,
   cancelFutureInstallments,
 } from "@/services/transactionService";
@@ -18,21 +16,19 @@ import { CategoryLabel } from "@/components/categories/CategoryLabel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Plus, TrendingDown, TrendingUp, Eye, EyeOff,
   DollarSign, CalendarDays, MoreHorizontal, Pencil, Trash2,
   AlertCircle, Layers, Calendar, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, XCircle, Crown, Search, HelpCircle, CheckCircle2,
   Medal, Info, AlertTriangle,
-  Calculator,
-  Settings, Repeat
+  Calculator, FileBarChart2,
+  Repeat,
 } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { InstallmentValueMode, PaymentMethod, Transaction, TransactionType } from "@/types/transaction";
+import { Transaction } from "@/types/transaction";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { confirmPreapproval } from "@/services/billingService";
@@ -43,20 +39,9 @@ import { useOnboarding } from "@/hooks/useOnboarding";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getPlanCapabilities } from "@/lib/plans/capabilities";
 import { getOnboardingStepHref } from "@/lib/onboarding/flow";
-import { buildInstallmentPlan } from "@/lib/transactions/installments";
-import { getCurrentMonthKey, getMonthKey } from "@/lib/transactions/recurring";
 import { buildUpgradeCheckoutPath } from "@/services/billing/checkoutIntent";
 import { calculateDailyLimit } from "@/lib/finance/daily-limit";
-import { getCreditCardDueDateFromSelectedCard } from "@/lib/credit-card/due-date";
 
-const PAYMENT_METHODS: { value: PaymentMethod; label: string, hasDueDate: boolean }[] = [
-  { value: "pix", label: "Pix", hasDueDate: false },
-  { value: "boleto", label: "Boleto", hasDueDate: true },
-  { value: "cash", label: "Dinheiro", hasDueDate: false },
-  { value: "transfer", label: "Transferência", hasDueDate: false },
-  { value: "debit_card", label: "Cartão de Débito", hasDueDate: false },
-  { value: "credit_card", label: "Cartão de Crédito", hasDueDate: false },
-];
 
 const formatDateDisplay = (dateString: string, options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' }) => {
   if (!dateString) return "-";
@@ -79,7 +64,7 @@ type FeedbackData = {
   message: string;
 };
 
-const LEGACY_SUB_PREFIX = /^\s*[\*\-⬢]\s*/;
+const LEGACY_SUB_PREFIX = /^\s*[\*\-?]\s*/;
 
 const toSafeCategory = (value: unknown) => (typeof value === "string" ? value : "");
 const isLegacySubcategory = (value: unknown) => {
@@ -104,15 +89,6 @@ const getCategoryRoot = (value: unknown) => {
   if (isLinkedSubcategory(safe)) return safe.split(CATEGORY_PATH_SEPARATOR)[0];
   if (isLegacySubcategory(value)) return "";
   return safe;
-};
-
-const normalizeCardTypeForTransaction = (
-  cardType: PaymentCard["type"] | undefined,
-  method: PaymentMethod
-): "credit_card" | "debit_card" | undefined => {
-  if (cardType === "credit_card" || cardType === "debit_card") return cardType;
-  if (method === "credit_card" || method === "debit_card") return method;
-  return undefined;
 };
 
 const orderCategoryNames = (names: unknown[]) => {
@@ -160,14 +136,7 @@ export default function DashboardPage() {
   const { transactions, loading } = useTransactions();
   const { plans } = usePlans();
   const { featureAccess } = useFeatureAccess();
-  const {
-    categories,
-    defaultCategories,
-    addNewCategory,
-    deleteCategory,
-    renameCategory,
-    toggleDefaultCategoryVisibility,
-  } = useCategories();
+  const { categories } = useCategories();
   const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
   const effectivePlan = userProfile?.plan || "free";
   const effectivePlanCapabilities = getPlanCapabilities(effectivePlan, plans, featureAccess);
@@ -205,25 +174,9 @@ export default function DashboardPage() {
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Form States
-  const [desc, setDesc] = useState("");
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("");
-  const [type, setType] = useState<TransactionType>("expense");
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("debit_card");
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
-  const [selectedPaymentCardId, setSelectedPaymentCardId] = useState("");
-  const [dueDate, setDueDate] = useState(new Date().toISOString().split('T')[0]);
-  const [isInstallment, setIsInstallment] = useState(false);
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [installmentsCount, setInstallmentsCount] = useState("2");
-  const [installmentValueMode, setInstallmentValueMode] = useState<InstallmentValueMode>("split_total");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Modais
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
   const [bulkDeleteTargetIds, setBulkDeleteTargetIds] = useState<string[] | null>(null);
@@ -232,27 +185,15 @@ export default function DashboardPage() {
   const [deleteAction, setDeleteAction] = useState<"single" | "group" | null>(null);
   const [bulkDeleteAction, setBulkDeleteAction] = useState<"selected" | "groups" | null>(null);
   const [isCancelingSubscription, setIsCancelingSubscription] = useState(false);
-  const [editAction, setEditAction] = useState<"single" | "group" | null>(null);
   const [checkinAction, setCheckinAction] = useState<"paid" | "pending" | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [upgradeReason, setUpgradeReason] = useState<"transactions" | "installments">("transactions");
+  const [upgradeReason] = useState<"transactions" | "installments">("transactions");
   const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
   const [isRecoveringBilling, setIsRecoveringBilling] = useState(false);
-  const [isFormOpen, setIsFormOpen] = useState(false);
   const [pendingCheckins, setPendingCheckins] = useState<Transaction[]>([]);
   const [showCheckinModal, setShowCheckinModal] = useState(false);
   const [hasRunCheckin, setHasRunCheckin] = useState(false);
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
-  const [isNewCategoryOpen, setIsNewCategoryOpen] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [newCategoryMode, setNewCategoryMode] = useState<"root" | "sub">("root");
-  const [newCategoryParent, setNewCategoryParent] = useState("");
-  const [deletingCategoryName, setDeletingCategoryName] = useState<string | null>(null);
-  const [editingCategoryName, setEditingCategoryName] = useState<string | null>(null);
-  const [editingCategoryInput, setEditingCategoryInput] = useState("");
-  const [editingCategoryParent, setEditingCategoryParent] = useState("");
-  const [renamingCategoryName, setRenamingCategoryName] = useState<string | null>(null);
-  const [customParentFilter, setCustomParentFilter] = useState<string>("all");
 
   const checkinStorageKey = useMemo(() => (
     user ? `wevenfinance:last-checkin-modal:${user.uid}` : "wevenfinance:last-checkin-modal:anonymous"
@@ -290,7 +231,7 @@ export default function DashboardPage() {
     }
   }, [pathname, router, searchParams, shouldForceTour]);
 
-  // --- 3. CHECK-IN DIÁRIO (Pop-up Inteligente) ---
+  // --- 3. CHECK-IN DI?RIO (Pop-up Inteligente) ---
   useEffect(() => {
     if (loading || !user || hasRunCheckin || isOnboardingActive) return;
 
@@ -363,7 +304,7 @@ export default function DashboardPage() {
     const pendingTransactions = transactions.filter(t => {
       if (t.status === 'paid') return false;
       if (typeof t.dueDate !== "string") return false;
-      if (t.dueDate < todayStr) return false; // Já considerado no Saldo Atual
+      if (t.dueDate < todayStr) return false;
       return t.dueDate <= selectedMonthEnd;
     });
     const pendingNet = pendingTransactions.reduce((acc, t) => {
@@ -372,101 +313,10 @@ export default function DashboardPage() {
     return realCurrentBalance + pendingNet;
   }, [transactions, realCurrentBalance, selectedMonthEnd, todayStr]);
 
-  // Filtra categorias baseado no estado (lista dinâmica do Hook)
-  const availableCategories = useMemo(() => {
-    return categories.filter(c => c.type === type || c.type === 'both');
-  }, [type, categories]);
-
-  const orderedAvailableCategories = useMemo(() => {
-    const byName = new Map(availableCategories.map((cat) => [cat.name, cat]));
-    return orderCategoryNames(availableCategories.map((cat) => cat.name))
-      .map((name) => byName.get(name))
-      .filter((cat): cat is NonNullable<typeof cat> => Boolean(cat));
-  }, [availableCategories]);
-
-  const allRootCategories = useMemo(() => {
-    return categories
-      .filter((cat) => !isSubcategory(cat.name))
-      .sort((a, b) => {
-        if (isOthersCategory(a.name)) return 1;
-        if (isOthersCategory(b.name)) return -1;
-        return a.name.localeCompare(b.name, "pt-BR");
-      });
-  }, [categories]);
-
-  const customCategories = useMemo(() => {
-    const custom = categories.filter((cat) => cat.isCustom);
-    const byName = new Map(custom.map((cat) => [cat.name, cat]));
-    return orderCategoryNames(custom.map((cat) => cat.name))
-      .map((name) => byName.get(name))
-      .filter((cat): cat is NonNullable<typeof cat> => Boolean(cat));
-  }, [categories]);
-
-  const filteredCustomCategories = useMemo(() => {
-    if (customParentFilter === "all") return customCategories;
-    return customCategories.filter((cat) => {
-      if (!isSubcategory(cat.name)) return cat.name === customParentFilter;
-      return getCategoryRoot(cat.name) === customParentFilter;
-    });
-  }, [customCategories, customParentFilter]);
-
+  // Filtra categorias baseado no estado (lista dinámica do Hook)
   const transactionsThisMonthCount = useMemo(() => {
     return transactions.filter((t) => typeof t.dueDate === "string" && t.dueDate.startsWith(selectedMonth)).length;
   }, [transactions, selectedMonth]);
-
-  const showDueDateInput = useMemo(() => {
-    const method = PAYMENT_METHODS.find(pm => pm.value === paymentMethod);
-    return method ? method.hasDueDate : false;
-  }, [paymentMethod]);
-
-  const availablePaymentCards = useMemo(() => {
-    if (paymentMethod !== "credit_card" && paymentMethod !== "debit_card") return [];
-    return paymentCards;
-  }, [paymentCards, paymentMethod]);
-
-  const selectedPaymentCard = useMemo(
-    () => paymentCards.find((card) => card.id === selectedPaymentCardId),
-    [paymentCards, selectedPaymentCardId]
-  );
-
-  const getLinkedCardTransactions = useCallback((card: PaymentCard) => {
-    return transactions.filter((tx) => {
-      if (tx.type !== "expense") return false;
-      if (tx.cardId && tx.cardId === card.id) return true;
-      const label = String(tx.cardLabel || "").toLowerCase();
-      return label.includes(card.last4) && label.includes(card.bankName.toLowerCase());
-    });
-  }, [transactions]);
-
-  const selectedCardIndicator = useMemo(() => {
-    if (!selectedPaymentCard) return null;
-
-    const linkedTransactions = getLinkedCardTransactions(selectedPaymentCard);
-
-    if (paymentMethod === "debit_card") {
-      return {
-        kind: "debit" as const,
-        label: "Saldo disponível para débito",
-        value: realCurrentBalance,
-      };
-    }
-
-    const currentMonthKey = getCurrentMonthKey();
-    const pendingCredit = linkedTransactions
-      .filter((tx) => tx.paymentMethod === "credit_card" && tx.status === "pending")
-      .filter((tx) => getMonthKey(tx.dueDate || tx.date) === currentMonthKey);
-    const used = pendingCredit.reduce((acc, tx) => acc + Number(tx.amountForLimit ?? tx.amount ?? 0), 0);
-    const limit = Number(selectedPaymentCard.creditLimit || 0);
-    const remaining = limit - used;
-
-    return {
-      kind: "credit" as const,
-      label: "Limite restante deste cartão",
-      value: remaining,
-      used,
-      limit,
-    };
-  }, [selectedPaymentCard, paymentMethod, realCurrentBalance, getLinkedCardTransactions]);
 
   const filteredStatementTransactions = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -521,48 +371,6 @@ export default function DashboardPage() {
     topRisk: null,
   };
 
-  const validateCardLimitBeforeSave = ({
-    card,
-    method,
-    amountTotal,
-    excludeIds = [],
-  }: {
-    card: PaymentCard;
-    method: PaymentMethod;
-    amountTotal: number;
-    excludeIds?: string[];
-  }) => {
-    if (amountTotal <= 0) return { ok: true as const };
-    if (method === "debit_card") {
-      if (amountTotal > realCurrentBalance) {
-        return {
-          ok: false as const,
-          title: "Saldo insuficiente no débito",
-          message: `Saldo disponível: ${formatCurrency(realCurrentBalance)}. Valor informado: ${formatCurrency(amountTotal)}.`,
-        };
-      }
-      return { ok: true as const };
-    }
-
-    if (method !== "credit_card") return { ok: true as const };
-    const linked = getLinkedCardTransactions(card);
-    const currentMonthKey = getCurrentMonthKey();
-    const usedPending = linked
-      .filter((tx) => tx.status === "pending" && !excludeIds.includes(String(tx.id || "")))
-      .filter((tx) => getMonthKey(tx.dueDate || tx.date) === currentMonthKey)
-      .reduce((acc, tx) => acc + Number(tx.amountForLimit ?? tx.amount ?? 0), 0);
-    const limit = Number(card.creditLimit || 0);
-    const remaining = limit - usedPending;
-    if (amountTotal > remaining) {
-      return {
-        ok: false as const,
-        title: "Limite insuficiente no cartão",
-        message: `Limite restante em ${card.bankName} **** ${card.last4}: ${formatCurrency(remaining)}. Valor informado: ${formatCurrency(amountTotal)}.`,
-      };
-    }
-    return { ok: true as const };
-  };
-
   const chartData = useMemo(() => {
     const monthlyGroups: Record<string, number> = {};
 
@@ -588,14 +396,6 @@ export default function DashboardPage() {
       };
     });
   }, [transactions]);
-
-  const editingGroupTransactions = useMemo(() => {
-    const groupId = editingTx?.groupId;
-    if (!groupId) return [];
-    return transactions
-      .filter((tx) => tx.groupId === groupId)
-      .sort((a, b) => Number(a.installmentCurrent || 0) - Number(b.installmentCurrent || 0));
-  }, [transactions, editingTx?.groupId]);
 
   // --- 5. EFFECTS ---
 
@@ -636,17 +436,6 @@ export default function DashboardPage() {
   }, [transactions]);
 
   useEffect(() => {
-    if (!isNewCategoryOpen) return;
-    setNewCategoryName("");
-    setNewCategoryMode("root");
-    setNewCategoryParent("");
-    setCustomParentFilter("all");
-    setEditingCategoryName(null);
-    setEditingCategoryInput("");
-    setEditingCategoryParent("");
-  }, [isNewCategoryOpen]);
-
-  useEffect(() => {
     if (!user) {
       setPaymentCards([]);
       return;
@@ -659,57 +448,10 @@ export default function DashboardPage() {
     return () => unsubscribe();
   }, [user]);
 
-  useEffect(() => {
-    if (paymentMethod !== "credit_card" && paymentMethod !== "debit_card") {
-      setSelectedPaymentCardId("");
-      return;
-    }
-    if (!availablePaymentCards.some((card) => card.id === selectedPaymentCardId)) {
-      const fallbackCard =
-        paymentCards.find((card) => card.type === paymentMethod || card.type === "credit_and_debit") ||
-        availablePaymentCards[0];
-      setSelectedPaymentCardId(fallbackCard?.id || "");
-      if (fallbackCard && fallbackCard.type !== "credit_and_debit" && fallbackCard.type !== paymentMethod) {
-        setPaymentMethod(fallbackCard.type);
-      }
-    }
-  }, [availablePaymentCards, paymentCards, paymentMethod, selectedPaymentCardId]);
-
   // --- RETORNO CONDICIONAL ---
   if (loading) return <DashboardSkeleton />;
 
   // --- 6. HANDLERS ---
-  const changeType = (newType: TransactionType) => {
-    setType(newType);
-    setIsInstallment(false);
-    setIsRecurring(false);
-    setInstallmentsCount("2");
-    if (newType === 'income') {
-      setCategory("Salário");
-      setPaymentMethod("pix");
-    } else {
-      setCategory("");
-      setPaymentMethod("credit_card");
-    }
-  };
-
-  const handleToggleRecurring = (checked: boolean) => {
-    setIsRecurring(checked);
-    if (checked) setIsInstallment(false);
-  };
-
-  const handleToggleInstallment = (checked: boolean) => {
-    if (!isBillingExemptRole && checked && !effectivePlanCapabilities.hasInstallments) {
-      setUpgradeReason("installments");
-      if (!isOnboardingActive) {
-        setShowUpgradeModal(true);
-      }
-      return;
-    }
-    setIsInstallment(checked);
-    if (checked) setIsRecurring(false);
-  };
-
   const handleGoToOnboardingStep = (step: "firstTransaction" | "firstCard" | "firstGoal" | "profileMenu") => {
     if (step === "profileMenu") {
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -733,217 +475,6 @@ export default function DashboardPage() {
 
   const canGoBack = availableMonths.findIndex(m => m.value === selectedMonth) > 0;
   const canGoForward = availableMonths.findIndex(m => m.value === selectedMonth) < availableMonths.length - 1;
-  const handleAdd = async () => {
-    const transactionLimit = effectivePlanCapabilities.maxTransactionsPerMonth;
-
-    if (!isBillingExemptRole && transactionLimit !== null && transactionsThisMonthCount >= transactionLimit) {
-      setUpgradeReason("transactions");
-      setShowUpgradeModal(true);
-      return;
-    }
-
-    if (!isBillingExemptRole && isInstallment && !effectivePlanCapabilities.hasInstallments) {
-      setUpgradeReason("installments");
-      setShowUpgradeModal(true);
-      return;
-    }
-
-    if (!desc || !amount || !category) return;
-    const isCardPayment = paymentMethod === "credit_card" || paymentMethod === "debit_card";
-    if (isCardPayment && !selectedPaymentCard) {
-      setFeedbackModal({
-        isOpen: true,
-        type: "error",
-        title: "Selecione um cartão",
-        message: "Cadastre um cartão em /cards e selecione antes de confirmar.",
-      });
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      const count = isInstallment ? Math.max(1, Number(installmentsCount || 1)) : 1;
-      const typedAmount = Number(amount);
-      const installmentPlan = isInstallment
-        ? buildInstallmentPlan(typedAmount, count, installmentValueMode)
-        : null;
-      const totalAmountToReserve = installmentPlan ? installmentPlan.totalAmount : typedAmount;
-
-      if (isCardPayment && selectedPaymentCard) {
-        const validation = validateCardLimitBeforeSave({
-          card: selectedPaymentCard,
-          method: paymentMethod,
-          amountTotal: totalAmountToReserve,
-        });
-        if (!validation.ok) {
-          setFeedbackModal({
-            isOpen: true,
-            type: "error",
-            title: validation.title,
-            message: validation.message,
-          });
-          return;
-        }
-      }
-
-      let transactionDate = date; // Data do Registro (compra ou crédito)
-      let transactionDueDate = date; // Data de Vencimento (ou Crédito)
-
-      // Lógica para definir as datas corretamente dependendo do tipo e método de pagamento
-      if (type === 'income') {
-        // Renda
-        transactionDate = dueDate; // Para rendas, a data do crédito é a data principal
-        transactionDueDate = dueDate;
-      } else {
-        // Gasto
-        if (paymentMethod === "credit_card") {
-          const cardDueDate = getCreditCardDueDateFromSelectedCard(selectedPaymentCard, date);
-          if (!cardDueDate) {
-            setFeedbackModal({
-              isOpen: true,
-              type: "error",
-              title: "Configure a fatura",
-              message: "O cartão de crédito selecionado precisa ter vencimento de fatura configurado.",
-            });
-            return;
-          }
-          transactionDate = date;
-          transactionDueDate = cardDueDate;
-        } else if (showDueDateInput) {
-          // Cartão de Crédito/Boleto: Data da Compra (date) != Data de Vencimento (dueDate)
-          transactionDate = date;
-          transactionDueDate = dueDate;
-        } else {
-          transactionDate = date;
-          transactionDueDate = date;
-        }
-      }
-
-      await addTransaction(user!.uid, {
-        title: desc,
-        description: "",
-        amount: typedAmount,
-        type: type, // Tipo (Despesa ou Renda)
-        category: category, // Categoria
-        paymentMethod: paymentMethod, // Método de Pagamento
-        cardId: selectedPaymentCard?.id,
-        cardLabel: selectedPaymentCard ? `${selectedPaymentCard.bankName} **** ${selectedPaymentCard.last4}` : undefined,
-        cardType: normalizeCardTypeForTransaction(selectedPaymentCard?.type, paymentMethod),
-        date: transactionDate, // Data do Gasto (para despesas) ou Data de Crédito (para rendas)
-        dueDate: transactionDueDate, // Data de Vencimento (para despesas) ou Data de Crédito (para rendas)
-        isInstallment, // Flag de Parcela
-        installmentsCount: count, // Número de Parcelas (se aplicável)
-        installmentValueMode,
-        isRecurring,
-      });
-
-      // Resetar form após adicionar
-      setDesc("");
-      setAmount("");
-      setIsInstallment(false);
-      setIsRecurring(false);
-      setInstallmentsCount("2");
-      setInstallmentValueMode("split_total");
-      if (isCardPayment) setSelectedPaymentCardId("");
-      if (type === 'income') setCategory("Salário");
-      setIsFormOpen(false); // Fecha o modal após adicionar
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCreateCategory = async () => {
-    if (!newCategoryName.trim()) return;
-    if (newCategoryMode === "sub" && !newCategoryParent) return;
-
-    const categoryName = newCategoryName.trim();
-    const parentName = newCategoryMode === "sub" ? newCategoryParent : undefined;
-    const fullCategoryName = parentName
-      ? `${parentName}${CATEGORY_PATH_SEPARATOR}${categoryName}`
-      : categoryName;
-
-    try {
-      await addNewCategory(categoryName, type, parentName);
-      setCategory(fullCategoryName);
-      setNewCategoryName("");
-      setNewCategoryParent("");
-      setNewCategoryMode("root");
-      setIsNewCategoryOpen(false);
-    } catch (error) {
-      console.error("Erro ao criar categoria:", error);
-    }
-  }
-
-  const handleDeleteCategory = async (categoryName: string) => {
-    setDeletingCategoryName(categoryName);
-    try {
-      await deleteCategory(categoryName);
-      if (category === categoryName || category.startsWith(`${categoryName}${CATEGORY_PATH_SEPARATOR}`)) {
-        setCategory("Outros");
-      }
-      if (editingTx && (editingTx.category === categoryName || editingTx.category.startsWith(`${categoryName}${CATEGORY_PATH_SEPARATOR}`))) {
-        setEditingTx({ ...editingTx, category: "Outros" });
-      }
-    } catch (error) {
-      console.error("Erro ao excluir categoria:", error);
-    } finally {
-      setDeletingCategoryName(null);
-    }
-  };
-
-  const handleStartEditCategory = (categoryName: string) => {
-    setEditingCategoryName(categoryName);
-    setEditingCategoryInput(getSubcategoryName(categoryName));
-    setEditingCategoryParent(
-      isSubcategory(categoryName)
-        ? (isLinkedSubcategory(categoryName) ? getCategoryRoot(categoryName) : "Outros")
-        : ""
-    );
-  };
-
-  const handleCancelEditCategory = () => {
-    setEditingCategoryName(null);
-    setEditingCategoryInput("");
-    setEditingCategoryParent("");
-  };
-
-  const handleSaveEditCategory = async (targetName: string) => {
-    if (!editingCategoryInput.trim()) return;
-
-    const isTargetSub = isSubcategory(targetName);
-    const nextName = isTargetSub
-      ? (editingCategoryParent
-        ? `${editingCategoryParent}${CATEGORY_PATH_SEPARATOR}${editingCategoryInput.trim()}`
-        : editingCategoryInput.trim())
-      : editingCategoryInput.trim();
-
-    if (nextName === targetName) {
-      handleCancelEditCategory();
-      return;
-    }
-
-    setRenamingCategoryName(targetName);
-    try {
-      await renameCategory(targetName, nextName);
-
-      if (category === targetName || category.startsWith(`${targetName}${CATEGORY_PATH_SEPARATOR}`)) {
-        const suffix = category.slice(targetName.length);
-        setCategory(`${nextName}${suffix}`);
-      }
-      if (editingTx && (editingTx.category === targetName || editingTx.category.startsWith(`${targetName}${CATEGORY_PATH_SEPARATOR}`))) {
-        const suffix = editingTx.category.slice(targetName.length);
-        setEditingTx({ ...editingTx, category: `${nextName}${suffix}` });
-      }
-
-      handleCancelEditCategory();
-    } catch (error) {
-      console.error("Erro ao editar categoria:", error);
-    } finally {
-      setRenamingCategoryName(null);
-    }
-  };
-
   const handleConfirmDelete = async (deleteGroup: boolean) => {
     if (!user || !txToDelete || !txToDelete.id) return;
     if (deleteAction) return;
@@ -1048,95 +579,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleConfirmEdit = async (updateGroup: boolean) => {
-    if (!editingTx || !user || !editingTx.id) return;
-    if (editAction) return;
-
-    setEditAction(updateGroup ? "group" : "single");
-    try {
-      const isCardPayment = editingTx.paymentMethod === "credit_card" || editingTx.paymentMethod === "debit_card";
-      if (isCardPayment && !editingTx.cardId) {
-        setFeedbackModal({
-          isOpen: true,
-          type: "error",
-          title: "Selecione um cartão",
-          message: "Cadastre um cartão em /cards e selecione antes de salvar.",
-        });
-        return;
-      }
-
-      if (isCardPayment && editingTx.cardId) {
-        const selectedCard = paymentCards.find((card) => card.id === editingTx.cardId);
-        if (selectedCard) {
-          const groupItems = updateGroup && editingTx.groupId
-            ? transactions.filter((tx) => tx.groupId === editingTx.groupId)
-            : [editingTx];
-          const affectedIds = groupItems.map((tx) => String(tx.id || "")).filter(Boolean);
-          const totalAmountToReserve = Math.round(Number(editingTx.amount || 0) * groupItems.length * 100) / 100;
-
-          const validation = validateCardLimitBeforeSave({
-            card: selectedCard,
-            method: editingTx.paymentMethod,
-            amountTotal: totalAmountToReserve,
-            excludeIds: affectedIds,
-          });
-          if (!validation.ok) {
-            setFeedbackModal({
-              isOpen: true,
-              type: "error",
-              title: validation.title,
-              message: validation.message,
-            });
-            return;
-          }
-        }
-      }
-
-      // Normalizacao das datas na edicao para manter consistencia.
-      const finalDate = editingTx.date;
-      let finalDueDate = editingTx.dueDate;
-
-      const method = PAYMENT_METHODS.find(pm => pm.value === editingTx.paymentMethod);
-      const hasDueDate = method ? method.hasDueDate : false;
-
-      if (editingTx.type === "income") {
-        finalDueDate = finalDate;
-      } else if (editingTx.paymentMethod === "credit_card") {
-        const selectedCard = paymentCards.find((card) => card.id === editingTx.cardId);
-        const cardDueDate = getCreditCardDueDateFromSelectedCard(selectedCard, finalDate);
-        if (!cardDueDate) {
-          setFeedbackModal({
-            isOpen: true,
-            type: "error",
-            title: "Configure a fatura",
-            message: "O cartão de crédito selecionado precisa ter vencimento de fatura configurado.",
-          });
-          return;
-        }
-        finalDueDate = cardDueDate;
-      } else if (!hasDueDate) {
-        finalDueDate = finalDate;
-      }
-
-      await updateTransaction(user.uid, editingTx.id, {
-        title: editingTx.title || editingTx.description,
-        description: editingTx.description,
-        amount: Number(editingTx.amount),
-        category: editingTx.category,
-        paymentMethod: editingTx.paymentMethod,
-        cardId: editingTx.cardId || undefined,
-        cardLabel: editingTx.cardLabel || undefined,
-        cardType: editingTx.cardType || undefined,
-        dueDate: finalDueDate,
-        date: finalDate
-      }, updateGroup);
-
-      setIsEditOpen(false);
-      setEditingTx(null);
-    } finally {
-      setEditAction(null);
-    }
-  };
   const handleCheckinAction = async (tx: Transaction, markAsPaid: boolean) => {
     if (!user || !tx.id) return;
     if (checkinAction) return;
@@ -1181,228 +623,6 @@ export default function DashboardPage() {
     if (!tx.id) return;
     router.push(`/transactions/${encodeURIComponent(tx.id)}/edit`);
   };
-
-  // --- COMPONENTE DO FORMULÁRIO ---
-  const TransactionFormContent = (
-    <div className="space-y-5 pb-3">
-      <div className="app-panel-subtle grid grid-cols-2 gap-1 rounded-xl border p-1.5">
-        <button onClick={() => changeType('expense')} className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 hover:cursor-pointer ${type === 'expense' ? 'bg-card shadow-sm text-red-600' : 'text-zinc-500 hover:text-zinc-700'}`}>Gasto</button>
-        <button onClick={() => changeType('income')} className={`text-sm font-semibold py-2 rounded-lg transition-all duration-200 hover:cursor-pointer ${type === 'income' ? 'bg-card shadow-sm text-emerald-600' : 'text-zinc-500 hover:text-zinc-700'}`}>Renda</button>
-      </div>
-      <div className="space-y-4">
-        <div>
-          <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">Titulo {type === 'expense' ? 'do Gasto' : 'da Renda'}</Label>
-          <Input className="mt-1.5 h-12 rounded-xl" placeholder={type === 'expense' ? "Ex: Netflix" : "Ex: Salário"} value={desc} onChange={e => setDesc(e.target.value)} />
-        </div>
-        <div>
-          <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1">
-            {isInstallment && installmentValueMode === "repeat_value" ? "Valor por parcela" : "Valor total"}
-          </Label>
-          <div className="relative mt-1.5">
-            <span className="absolute left-3.5 top-3 text-zinc-400 font-semibold">R$</span>
-            <Input type="number" className="h-12 rounded-xl pl-10 text-lg font-semibold" placeholder="0,00" value={amount} onChange={e => setAmount(e.target.value)} />
-          </div>
-          <p className="text-[10px] text-zinc-400 mt-1.5 text-right font-medium">
-            {isInstallment
-              ? installmentValueMode === "split_total"
-                ? "O sistema vai dividir este total pelas parcelas."
-                : "O valor digitado sera repetido em cada parcela."
-              : isRecurring
-                ? "Este valor sera usado como modelo mensal."
-                : "Valor único"}
-          </p>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label className="text-xs font-medium text-zinc-400 ml-1 uppercase">Categoria</Label>
-          <div className="flex gap-2">
-            <Select onValueChange={setCategory} value={category}>
-              <SelectTrigger className="h-12 w-full rounded-xl">
-                <SelectValue placeholder="Selecione" /></SelectTrigger>
-              <SelectContent>
-                {orderedAvailableCategories.map((cat) => (
-                  <SelectItem key={cat.name} value={cat.name}>
-                    <CategoryLabel value={cat.name} />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    onClick={() => {
-                      if (isOnboardingActive && onboardingActiveStep === "firstTransaction") return;
-                      setIsNewCategoryOpen(true);
-                    }}
-                    variant="outline"
-                    className="h-12 w-12 rounded-xl shrink-0 p-0 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={isOnboardingActive && onboardingActiveStep === "firstTransaction"}
-                  >
-                    <Settings className="h-5 w-5 text-primary" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="border-primary/40 bg-primary text-primary-foreground font-bold shadow-xl">
-                  <p>Gerenciar Categorias</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs font-medium text-zinc-400 ml-1 uppercase">Método</Label>
-          <Select onValueChange={(v) => setPaymentMethod(v as PaymentMethod)} value={paymentMethod}>
-            <SelectTrigger className="h-12 rounded-xl"><SelectValue /></SelectTrigger>
-            <SelectContent>{PAYMENT_METHODS.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-      </div>
-      {(paymentMethod === "credit_card" || paymentMethod === "debit_card") && (
-        <div className="space-y-1.5">
-          <Label className="text-xs font-medium text-zinc-400 ml-1 uppercase">
-            Cartão Vinculado
-          </Label>
-          <Select
-            value={selectedPaymentCardId}
-            onValueChange={(value) => {
-              setSelectedPaymentCardId(value);
-              const card = paymentCards.find((item) => item.id === value);
-              if (card && card.type !== "credit_and_debit") {
-                setPaymentMethod(card.type);
-              }
-            }}
-          >
-            <SelectTrigger className="h-12 rounded-xl">
-              <SelectValue placeholder="Selecione um cartão cadastrado em /cards" />
-            </SelectTrigger>
-            <SelectContent>
-              {availablePaymentCards.length === 0 ? (
-                <SelectItem value="__none" disabled>Nenhum cartão cadastrado</SelectItem>
-              ) : (
-                availablePaymentCards.map((card) => (
-                  <SelectItem key={card.id} value={card.id}>
-                    {card.bankName} **** {card.last4} ({card.type === "credit_card" ? "Crédito" : card.type === "debit_card" ? "Débito" : "Crédito e Débito"})
-                  </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
-          {availablePaymentCards.length === 0 && (
-            <p className="text-[11px] text-amber-600">
-              Cadastre o cartão na página `/cards` para vincular este lançamento.
-            </p>
-          )}
-          {selectedPaymentCard && selectedCardIndicator && (
-            <div
-              className={`rounded-xl border px-3 py-2 text-xs ${selectedCardIndicator.kind === "debit"
-                ? "border-primary/20 bg-accent text-primary"
-                : selectedCardIndicator.value < 0
-                  ? "border-red-200 bg-red-50 text-red-700"
-                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                }`}
-            >
-              <p className="financial-value font-semibold">{selectedCardIndicator.label}: {formatCurrencyDisplay(selectedCardIndicator.value)}</p>
-              {selectedCardIndicator.kind === "credit" && (
-                <p className="financial-value mt-0.5 opacity-90">
-                  Limite: {formatCurrencyDisplay(selectedCardIndicator.limit)} ⬢ Usado: {formatCurrencyDisplay(selectedCardIndicator.used)}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-      <div className="app-panel-subtle space-y-4 rounded-xl border p-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {type === 'expense' && (
-            <div className="space-y-1.5">
-              <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Data do Gasto</Label>
-              <Input type="date" className="h-10 rounded-lg text-xs" value={date} onChange={e => setDate(e.target.value)} />
-            </div>
-          )}
-          {(showDueDateInput || type === 'income') && (
-            <div className={`space-y-1.5 ${type === 'income' ? 'sm:col-span-2' : ''}`}>
-              <Label className={`text-[10px] font-bold uppercase tracking-wider ${type === 'expense' ? 'text-red-500' : 'text-emerald-600'}`}>{type === 'expense' ? 'Vencimento' : 'Data Crédito'}</Label>
-              <Input type="date" className="h-10 rounded-lg text-xs" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-            </div>
-          )}
-        </div>
-        <div className="flex items-center justify-between border-t border-border/60 pt-1">
-          <Label htmlFor="recurring-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
-            <Repeat className="h-3.5 w-3.5 text-primary" />
-            Lançamento Fixo / Assinatura
-          </Label>
-          <Switch
-            id="recurring-switch"
-            className="scale-100 data-[state=checked]:bg-primary"
-            checked={isRecurring}
-            onCheckedChange={handleToggleRecurring}
-          />
-        </div>
-        {isRecurring && (
-          <div className="rounded-xl border border-primary/20 bg-accent px-3 py-3 text-xs text-accent-foreground animate-in fade-in">
-            Este lançamento será mantido como recorrência mensal. Apenas a cobrança necessária do mês será criada. Próxima cobrança: {showDueDateInput ? dueDate : date}.
-          </div>
-        )}
-        <div className="flex items-center justify-between border-t border-border/60 pt-1">
-          <Label htmlFor="inst-switch" className="text-xs font-medium cursor-pointer flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
-            <Layers className="h-3.5 w-3.5 text-primary" />
-            {type === 'expense' ? 'Compra Parcelada' : 'Recebimento Parcelado'}
-          </Label>
-          <Switch
-            id="inst-switch"
-            className="scale-100 data-[state=checked]:bg-primary"
-            checked={isInstallment}
-            disabled={!isBillingExemptRole && !effectivePlanCapabilities.hasInstallments}
-            onCheckedChange={handleToggleInstallment}
-          />
-        </div>
-        {!isBillingExemptRole && !effectivePlanCapabilities.hasInstallments && (
-          <div className="rounded-xl border border-primary/20 bg-accent px-3 py-3 text-xs text-accent-foreground">
-            <p className="font-semibold">Parcelamentos disponíveis no Premium e no Pro.</p>
-            <p className="mt-1 text-primary">
-              Faça upgrade para lançar compras parceladas e acompanhar melhor o fechamento do mês.
-            </p>
-          </div>
-        )}
-        {isInstallment && (
-          <div className="animate-in slide-in-from-top-2 pt-1">
-            <Label className="text-xs font-medium text-zinc-500">
-              Numero de parcelas
-            </Label>
-            <Input type="number" className="mt-1.5 h-10 rounded-lg" min="2" max="60" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
-            <div className="mt-3 rounded-xl border border-primary/20 bg-accent px-3 py-3">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <Label htmlFor="dashboard-installment-split-mode" className="text-sm font-semibold text-accent-foreground">
-                    Dividir o valor total
-                  </Label>
-                  <p className="mt-1 text-xs text-primary">
-                    Ative para informar o total da compra. Desative se o valor digitado já for o de cada parcela.
-                  </p>
-                </div>
-                <Switch
-                  id="dashboard-installment-split-mode"
-                  checked={installmentValueMode === "split_total"}
-                  onCheckedChange={(checked) => setInstallmentValueMode(checked ? "split_total" : "repeat_value")}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-      <Button onClick={handleAdd} className={`w-full h-12 font-bold text-white shadow-lg rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] hover:cursor-pointer duration-200 ${type === 'expense' ? 'bg-linear-to-r from-red-500 to-orange-500 shadow-red-500/25 hover:shadow-red-500/40' : 'bg-linear-to-r from-emerald-500 to-teal-500 shadow-emerald-500/25 hover:shadow-emerald-500/40'}`} disabled={isSubmitting}>{isSubmitting ? "Processando..." : (type === 'expense' ? "Confirmar Despesa" : "Confirmar Receita")}</Button>
-      <Button
-        variant="ghost"
-        onClick={() => setIsFormOpen(false)}
-        className="w-full h-12 font-medium bg-red-500 text-white hover:bg-red-600 hover:text-white transition-all hover:cursor-pointer duration-200"
-      >
-        Cancelar
-      </Button>
-    </div>
-  );
-
-  // --- 7. RENDERIZAO E FILTRAGEM ---
 
   const monthTransactions = transactions.filter(t => t.dueDate && t.dueDate.startsWith(selectedMonth));
 
@@ -1618,7 +838,7 @@ export default function DashboardPage() {
     const isIncome = tx.type === "income";
     const label = isPending
       ? (isIncome ? "Receber" : "Pagar")
-      : (isIncome ? "Não recebido" : "Não pago");
+      : (isIncome ? "Não Recebido" : "Não Pago");
 
     return (
       <Button
@@ -1641,7 +861,7 @@ export default function DashboardPage() {
 
       <main className="container mx-auto p-3 md:p-8 space-y-6 max-w-7xl">
 
-        {/* TOP BAR: TÍTULO + CONTROLES + BOTO NOVA TRANSAO */}
+        {/* TOP BAR: TÍTULO + CONTROLES + BOTÃO NOVA TRANSAÇÃO */}
         <div className={`${fadeInUp} flex flex-col md:flex-row md:items-center justify-between gap-4`}>
           <div id="tour-welcome-header">
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Visão Geral</h1>
@@ -1658,7 +878,15 @@ export default function DashboardPage() {
               <Plus className="mr-2 h-4 w-4" /> Nova Transação
             </Button>
 
-            {/* Seletor de Mês */}
+            <Button
+              id="tour-reports-button"
+              variant="outline"
+              onClick={() => router.push("/reports")}
+              className="h-11 w-full rounded-xl border-primary/25 font-bold text-primary transition-all duration-200 active:scale-[0.98] hover:cursor-pointer hover:bg-accent sm:w-auto"
+            >
+              <FileBarChart2 className="mr-2 h-4 w-4" /> Relatórios
+            </Button>
+            {/* Seletor de M?s */}
             <div id="tour-month-select" className="app-panel-subtle flex items-center justify-between gap-2 rounded-2xl border p-1 shadow-sm w-full sm:w-auto md:justify-start">
               <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-accent disabled:opacity-30 shrink-0 hover:cursor-pointer duration-200" onClick={() => changeMonth(-1)} disabled={!canGoBack}>
                 <ChevronLeft className="h-4 w-4" />
@@ -1716,7 +944,7 @@ export default function DashboardPage() {
                       : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
-                  {onboardingStatus.steps.firstTransaction ? "✓ " : onboardingActiveStep === "firstTransaction" ? "• " : ""}Primeira transação
+                  {onboardingStatus.steps.firstTransaction ? "âœ“ " : onboardingActiveStep === "firstTransaction" ? "â€¢ " : ""}Primeira transação 
                 </button>
                 <button
                   type="button"
@@ -1728,7 +956,7 @@ export default function DashboardPage() {
                       : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
-                  {onboardingStatus.steps.firstCard ? "✓ " : onboardingActiveStep === "firstCard" ? "• " : ""}Primeiro cartão
+                  {onboardingStatus.steps.firstCard ? "âœ“ " : onboardingActiveStep === "firstCard" ? "â€¢ " : ""}Primeiro cartão
                 </button>
                 <button
                   type="button"
@@ -1740,7 +968,7 @@ export default function DashboardPage() {
                       : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
-                  {onboardingStatus.steps.firstGoal ? "✓ " : onboardingActiveStep === "firstGoal" ? "• " : ""}Primeira meta
+                  {onboardingStatus.steps.firstGoal ? "âœ“ " : onboardingActiveStep === "firstGoal" ? "â€¢ " : ""}Primeira meta
                 </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -1754,7 +982,7 @@ export default function DashboardPage() {
                       : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
-                  {onboardingStatus.steps.profileMenu ? "✓ " : onboardingActiveStep === "profileMenu" ? "• " : ""}Abrir menu da conta (foto no topo)
+                  {onboardingStatus.steps.profileMenu ? "âœ“ " : onboardingActiveStep === "profileMenu" ? "â€¢ " : ""}Abrir menu da conta (foto no topo)
                 </button>
               </div>
               <div className="flex justify-end">
@@ -1777,7 +1005,7 @@ export default function DashboardPage() {
                 <p className="text-xs text-zinc-500">Maior gasto do mês</p>
                 {monthlyInsights.biggestExpense ? (
                   <p className="text-sm font-semibold text-zinc-900 mt-1">
-                    {getTransactionTitle(monthlyInsights.biggestExpense)} • {formatCurrencyDisplay(monthlyInsights.biggestExpense.amount)}
+                    {getTransactionTitle(monthlyInsights.biggestExpense)} â€¢ {formatCurrencyDisplay(monthlyInsights.biggestExpense.amount)}
                   </p>
                 ) : (
                   <p className="text-sm font-semibold text-zinc-600 mt-1">Sem despesas no período.</p>
@@ -1790,7 +1018,7 @@ export default function DashboardPage() {
                 <p className="text-xs text-zinc-500">Risco de estourar limite</p>
                 {monthlyInsights.topRisk ? (
                   <p className="text-sm font-semibold text-amber-700 mt-1">
-                    {monthlyInsights.topRisk.card.bankName} •••• {monthlyInsights.topRisk.card.last4} em {monthlyInsights.topRisk.usagePct.toFixed(1)}%
+                    {monthlyInsights.topRisk.card.bankName} â€¢â€¢â€¢â€¢ {monthlyInsights.topRisk.card.last4} em {monthlyInsights.topRisk.usagePct.toFixed(1)}%
                   </p>
                 ) : (
                   <p className="text-sm font-semibold text-emerald-700 mt-1">Nenhum cartão em risco no momento.</p>
@@ -1955,7 +1183,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Previsão */}
+          {/* PREVISÃO */}
           {(isBillingExemptRole || effectivePlanCapabilities.hasMonthlyForecast) ? (
             <Card id="tour-forecast-card" className={`${fadeInUp} delay-500 app-panel-soft relative overflow-hidden rounded-2xl border border-color:var(--app-panel-border) shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
@@ -2021,7 +1249,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* --- Layout Principal (Agora coluna única) --- */}
+        {/* --- Layout Principal (Agora coluna Única) --- */}
         <div className="w-full space-y-8">
 
           {/* Gráfico do Fluxo Mensal */}
@@ -2038,19 +1266,19 @@ export default function DashboardPage() {
           {/* Tabela de Transações */}
           <Card id="tour-transactions-table" className={`${fadeInUp} delay-700 app-panel-soft rounded-2xl border border-color:var(--app-panel-border) shadow-lg shadow-zinc-200/50 dark:shadow-black/20 overflow-hidden`}>
             <CardHeader className="border-b border-color:var(--app-panel-border) py-5 px-6">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex-col md:flex-row md:items-center justify-between grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Extrato</CardTitle>
                   <CardDescription>
                     Lançamentos de {formatDateDisplay(selectedMonth + '-02', { month: 'long', year: 'numeric' })}.
                   </CardDescription>
                 </div>
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2 ">
                   {/* Campo de Busca */}
-                  <div className="relative w-full">
+                  <div className="relative w-full max-w-full">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" />
                     <Input
-                      placeholder="Buscar..."
+                      placeholder="Buscar transação..."
                       className="pl-9 h-9 text-xs rounded-lg"
                       value={searchTerm}
                       onChange={e => setSearchTerm(e.target.value)}
@@ -2171,7 +1399,7 @@ export default function DashboardPage() {
 
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getCategoryStyle(tx.category)}`}>
-                            <CategoryLabel value={tx.category} className="max-w-[13rem] gap-1.5" iconClassName="h-3 w-3" inheritColors />
+                            <CategoryLabel value={tx.category} className="max-w-52 gap-1.5" iconClassName="h-3 w-3" inheritColors />
                           </span>
                           {tx.cardLabel && (
                             tx.cardId ? (
@@ -2200,8 +1428,8 @@ export default function DashboardPage() {
                               {tx.isRecurring ? <Repeat className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
                               {tx.isRecurring
                                 ? tx.recurrenceEnded
-                                  ? "Recorrência encerrada"
-                                  : "Recorrência mensal"
+                                  ? "Recorr?ncia encerrada"
+                                  : "Recorr?ncia mensal"
                                 : `Parcela ${(tx.installmentCurrent || 0)}/${(tx.installmentTotal || 0)}`}
                             </span>
                           )}
@@ -2220,10 +1448,10 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Paginação Footer */}
+            {/* Pagina??o Footer */}
             <div className="app-panel-subtle flex items-center justify-between border-t border-border/70 px-6 py-4">
               <div className="text-xs text-zinc-500 font-medium">
-                Página {currentPage} de {totalPages || 1}
+                P?gina {currentPage} de {totalPages || 1}
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -2242,7 +1470,7 @@ export default function DashboardPage() {
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage >= totalPages}
                 >
-                  Próximo
+                  Pr?ximo
                 </Button>
               </div>
             </div>
@@ -2252,7 +1480,7 @@ export default function DashboardPage() {
 
         {/* --- DIALOGS (MODAIS) --- */}
 
-        {/* Modal de Exclusão */}
+        {/* Modal de Exclus?o */}
         <Dialog open={!!txToDelete} onOpenChange={(open) => !open && !deleteAction && setTxToDelete(null)}>
           <DialogContent className="sm:max-w-[425px] rounded-2xl p-6">
             <DialogHeader>
@@ -2353,7 +1581,7 @@ export default function DashboardPage() {
                 <div className="p-2 bg-amber-100 rounded-full">
                   <XCircle className="h-5 w-5" />
                 </div>
-                Encerrar recorrência
+                Encerrar recorr?ncia
               </DialogTitle>
               <DialogDescription className="pt-3 text-base">
                 Você vai encerrar a recorrência de <strong>{getTransactionTitle(txToCancelSubscription)}</strong>.

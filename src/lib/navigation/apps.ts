@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   CreditCard,
+  FileBarChart2,
   Grid2X2,
   LayoutDashboard,
   PiggyBank,
@@ -40,11 +41,21 @@ export const NAVIGATION_APP_ITEMS: NavigationAppItem[] = [
     id: "transactions-new",
     label: "Novo lançamento",
     shortLabel: "Lançar",
-    description: "Registre receita, despesa, recorrencia e compra parcelada.",
+    description: "Registre receita, despesa, recorrência e compra parcelada.",
     href: "/transactions/new",
     icon: PlusCircle,
     accentClass: "from-emerald-500/15 to-teal-500/10 text-emerald-700",
     matches: ["/transactions/new", "/transactions/"],
+  },
+  {
+    id: "reports",
+    label: "Relatórios",
+    shortLabel: "Relatórios",
+    description: "Resumo mensal com gráficos e exportação em PDF ou Excel.",
+    href: "/reports",
+    icon: FileBarChart2,
+    accentClass: "from-blue-500/15 to-cyan-500/10 text-blue-700",
+    matches: ["/reports"],
   },
   {
     id: "cards",
@@ -92,6 +103,7 @@ export const PLATFORM_TOUR_ROUTE_ORDER = [
   "dashboard",
   "settings",
   "transactions-new",
+  "reports",
   "cards",
   "piggy-bank",
 ] as const;

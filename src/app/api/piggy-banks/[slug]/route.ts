@@ -163,7 +163,7 @@ async function applyCardLimitAdjustment(
   const cardRaw = readSecureCardPayload(cardRow.raw);
   const currentLimit = Number(cardRow.credit_limit || cardRaw.creditLimit || 0);
   const nextLimit = Math.max(0, currentLimit + amountDelta);
-  const bankName = String(cardRow.bank_name || cardRaw.bankName || "Cartao");
+  const bankName = String(cardRow.bank_name || cardRaw.bankName || "Cartão");
   const last4 = String(cardRow.last4 || cardRaw.last4 || "");
 
   cardRaw.creditLimit = nextLimit;

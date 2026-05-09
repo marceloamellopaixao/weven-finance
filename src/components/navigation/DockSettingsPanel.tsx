@@ -89,7 +89,7 @@ const SURFACE_OPTIONS: Array<{
   description: string;
 }> = [
     { value: "glass", label: "Translucida", description: "Fundo translucido com brilho suave." },
-    { value: "solid", label: "Solida", description: "Fundo mais fechado e contraste mais forte." },
+    { value: "solid", label: "Sólida", description: "Fundo mais fechado e contraste mais forte." },
   ];
 
 const ACCENT_OPTIONS: Array<{
@@ -98,7 +98,7 @@ const ACCENT_OPTIONS: Array<{
   description: string;
   swatchClass?: string;
 }> = [
-    { value: "app", label: "Cor do app", description: "Acompanha a cor escolhida em ConfiguraÃ§Ãµes.", swatchClass: "bg-primary" },
+    { value: "app", label: "Cor do app", description: "Acompanha a cor escolhida em Configurações.", swatchClass: "bg-primary" },
     { value: "violet", label: "Violet", description: "A cor principal da marca e do app.", swatchClass: "bg-linear-to-br from-violet-500 to-fuchsia-500" },
     { value: "indigo", label: "Indigo", description: "Uma variação fria e mais executiva." },
     { value: "fuchsia", label: "Fuchsia", description: "Mais vibrante, mantendo o DNA premium." },
@@ -144,7 +144,7 @@ function ChoiceCardGroup<T extends string>({
           const swatchClass = option.swatchClass || OPTION_SWATCH_CLASSES[option.value];
           const description =
             option.value === "app"
-              ? "Acompanha a cor escolhida em Configura\u00e7\u00f5es."
+              ? "Acompanha a cor escolhida em Configurações."
               : option.description;
 
           return (
@@ -260,7 +260,7 @@ function PreviewSurface({
           <Badge className="rounded-full bg-violet-400/15 px-3 py-1 text-violet-100 hover:bg-violet-400/15">Preview</Badge>
           <h3 className="mt-3 text-xl font-semibold">Como sua barra rápida vai ficar?</h3>
           <p className="mt-2 max-w-md text-sm leading-6 text-violet-100/80">
-            Está é uma prévia. A barra real só muda depois que você salvar.
+            Esta é uma prévia. A barra real só muda depois que você salvar.
           </p>
         </div>
         <div className="inline-flex rounded-full border border-violet-200/15 bg-white/5 p-1">
@@ -335,8 +335,8 @@ function PreviewSurface({
                 <p className="text-xs text-violet-200/55">Visão no desktop</p>
                 <p className="mt-1 text-lg font-semibold text-zinc-50">
                   {isSidebar
-                    ? "A barra vira uma coluna lateral para abrir o que voce mais usa."
-                    : "Os atalhos ficam sempre prontos para abrir o que voce mais usa."}
+                    ? "A barra vira uma coluna lateral para abrir o que você mais usa."
+                    : "Os atalhos ficam sempre prontos para abrir o que você mais usa."}
                 </p>
               </div>
 
@@ -569,7 +569,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
 
             <PreferenceSection
               title="Nomes dos atalhos"
-              description="Escolha se a barra mostra os nomes ou se fica mais limpa so com os icones."
+              description="Escolha se a barra mostra os nomes ou se fica mais limpa só com os ícones."
               summary={[labelsLabel]}
             >
               <ChoiceCardGroup
@@ -597,7 +597,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
           <div className="space-y-4">
             <PreferenceSection
               title="Atalhos visíveis"
-              description={`Escolha ate ${MAX_DOCK_SHORTCUTS} atalhos para deixar sempre por perto.`}
+              description={`Escolha até ${MAX_DOCK_SHORTCUTS} atalhos para deixar sempre por perto.`}
               summary={[`${visibleShortcuts.length}/${MAX_DOCK_SHORTCUTS} ativos`]}
             >
               <div className="flex flex-wrap gap-2">

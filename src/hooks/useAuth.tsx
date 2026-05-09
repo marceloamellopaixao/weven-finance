@@ -16,9 +16,30 @@ import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { buildBrowserRedirectUrl, clearPostAuthRedirect, readPostAuthRedirect, rememberPostAuthRedirect } from "@/services/auth/postAuthRedirect";
 import { buildEmailVerificationRedirectUrl, rememberPendingVerificationEmail } from "@/services/auth/emailVerification";
 import { buildUpgradeCheckoutPath, readPendingUpgradePlan } from "@/services/billing/checkoutIntent";
+import { getDefaultWorkspace } from "@/services/workspaceService";
 
 const BLOCKED_STATUSES = new Set(["inactive", "blocked"]);
-const PUBLIC_ROUTES = ["/", "/login", "/register", "/forgot-password", "/first-access", "/verify-email", "/billing/checkout", "/billing/activating", "/not-found", "/blocked", "/goodbye"];
+const PUBLIC_ROUTES = [
+  "/",
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/first-access",
+  "/verify-email",
+  "/billing/checkout",
+  "/billing/activating",
+  "/not-found",
+  "/blocked",
+  "/goodbye",
+  "/contact",
+  "/security",
+  "/terms",
+  "/quanto-posso-gastar-hoje",
+  "/calculadora/quanto-posso-gastar-hoje",
+  "/controle-financeiro-simples",
+  "/organizar-cartao-de-credito",
+  "/app-para-sair-das-dividas",
+];
 
 export interface AuthUser {
   uid: string;
@@ -367,6 +388,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
   }, [loading, pathname, resolvePostAuthPath, router, supabase.auth, user, userProfile]);
+
+  useEffect(() => {
+    if (loading || !user || !userProfile) return;
+    if (userProfile.status === "deleted" || BLOCKED_STATUSES.has(userProfile.status)) return;
+    if (userProfile.needsPasswordSetup || !userProfile.verifiedEmail) return;
+    if (pathname.startsWith("/billing")) return;
+
+    const isMarketingOrAuthRoute = PUBLIC_ROUTES.includes(pathname);
+    const shouldCheckWorkspace = pathname === "/account-context" || !isMarketingOrAuthRoute;
+    if (!shouldCheckWorkspace) return;
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const workspace = await getDefaultWorkspace();
+        if (cancelled) return;
+        if (!workspace && pathname !== "/account-context") {
+          router.replace("/account-context");
+          return;
+        }
+        if (workspace && pathname === "/account-context") {
+          router.replace(resolvePostAuthPath());
+        }
+      } catch (error) {
+        console.error("Erro ao verificar contexto da conta:", error);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, pathname, resolvePostAuthPath, router, user, userProfile]);
 
   const togglePrivacyMode = () => {
     setPrivacyMode((prev) => {

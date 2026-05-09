@@ -12,7 +12,7 @@ export default function Page() {
   return (
     <SeoLandingPage
       eyebrow="Quanto posso gastar hoje?"
-      title="Saiba quanto voce pode gastar hoje sem comprometer o fim do mês"
+      title="Saiba quanto você pode gastar hoje sem comprometer o fim do mês"
       description="Pare de olhar apenas o saldo. O WevenFinance considera contas, cartão, parcelas e metas para orientar sua decisão diaria."
       keyword="quanto posso gastar hoje"
       benefits={["Limite diário estimado", "Previsão até o fim do mês", "Alertas para segurar antes de apertar"]}

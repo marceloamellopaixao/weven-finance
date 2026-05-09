@@ -19,6 +19,12 @@ create index if not exists idx_categories_uid_name
 create index if not exists idx_categories_uid_parent_name
   on public.categories(uid, parent_name);
 
+create index if not exists idx_workspaces_uid_default
+  on public.workspaces(uid, is_default desc, created_at asc);
+
+create index if not exists idx_workspaces_uid_type
+  on public.workspaces(uid, workspace_type);
+
 create index if not exists idx_transactions_uid_tx_date_desc
   on public.transactions(uid, tx_date desc);
 

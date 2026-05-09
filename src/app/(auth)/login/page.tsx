@@ -197,7 +197,7 @@ export default function LoginPage() {
 
             <div className="text-center pt-2">
               <p className="text-sm text-muted-foreground">
-                Nao tem uma conta?{" "}
+                Não tem uma conta?{" "}
                 <Link
                   href={pendingUpgradePlan ? `/register?upgrade_plan=${pendingUpgradePlan}` : "/register"}
                   className="text-primary font-semibold hover:underline hover:cursor-pointer transition-all duration-200"

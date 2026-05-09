@@ -45,7 +45,7 @@ export function DailyLimitCalculator() {
             ["Saldo atual", balance, setBalance],
             ["Receitas ainda previstas", income, setIncome],
             ["Contas e gastos fixos", bills, setBills],
-            ["Fatura/cartao previsto", card, setCard],
+            ["Fatura/cartão previsto", card, setCard],
             ["Valor que quer guardar", reserve, setReserve],
           ].map(([label, value, setter]) => (
             <div key={String(label)} className="space-y-2">
@@ -61,10 +61,10 @@ export function DailyLimitCalculator() {
         <p className="mt-4 text-sm font-semibold uppercase tracking-[0.18em] text-primary">Resultado estimado</p>
         <h2 className="mt-2 text-4xl font-bold">{money(result.amount)}</h2>
         <p className="mt-3 text-muted-foreground">
-          Esse e o valor medio que voce poderia gastar por dia ate o fim do mes, considerando os dados informados.
+          Esse é o valor médio que você poderia gastar por dia até o fim do mês, considerando os dados informados.
         </p>
         <div className="mt-5 rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground">
-          Previsao de fechamento: <strong className="text-foreground">{money(result.projectedEndBalance)}</strong>
+          Previsão de fechamento: <strong className="text-foreground">{money(result.projectedEndBalance)}</strong>
         </div>
         <Button asChild className="mt-6 h-12 w-full rounded-full">
           <Link href="/register">Salvar no WevenFinance <ArrowRight className="ml-2 h-4 w-4" /></Link>

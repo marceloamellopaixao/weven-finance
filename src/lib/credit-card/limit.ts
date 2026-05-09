@@ -6,7 +6,7 @@ import { getCurrentMonthKey, getMonthKey } from "@/lib/transactions/recurring";
 
 export const defaultCreditCardSettings: CreditCardSettings = {
   enabled: false,
-  cardName: "Cartao principal",
+  cardName: "Cartão principal",
   limit: 0,
   alertThresholdPct: 80,
   blockOnLimitExceeded: false,

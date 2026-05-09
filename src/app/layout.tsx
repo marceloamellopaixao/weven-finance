@@ -65,13 +65,16 @@ export const metadata: Metadata = {
     template: `%s | ${SITE_NAME}`,
   },
   description:
-    "Organize gastos, cartões, parcelamentos, vencimentos e metas em um painel simples para entender seu mês sem planilha e sem ansiedade.",
+    "Saiba quanto você pode gastar hoje sem comprometer o fim do mês. Organize gastos, cartões, parcelas, metas e relatórios mensais em um painel simples.",
   keywords: [
     "controle financeiro pessoal",
     "organização financeira",
     "finanças pessoais",
     "controle de cartões",
     "parcelamentos",
+    "relatórios financeiros mensais",
+    "quanto posso gastar hoje",
+    "limite diário inteligente",
     "metas financeiras",
     "WevenFinance",
   ],
@@ -88,7 +91,7 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     title: "WevenFinance | Controle financeiro pessoal com clareza",
     description:
-      "Organize gastos, cartões, parcelamentos, vencimentos e metas em um painel simples para entender seu mês sem planilha e sem ansiedade.",
+      "Saiba quanto você pode gastar hoje sem comprometer o fim do mês. Organize gastos, cartões, parcelas, metas e relatórios mensais em um painel simples.",
     images: [
       {
         url: "/wevenfinance.png",
@@ -100,7 +103,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "WevenFinance | Controle financeiro pessoal com clareza",
     description:
-      "Organize gastos, cartões, parcelamentos, vencimentos e metas em um painel simples para entender seu mês sem planilha e sem ansiedade.",
+      "Saiba quanto você pode gastar hoje sem comprometer o fim do mês. Organize gastos, cartões, parcelas, metas e relatórios mensais em um painel simples.",
     images: ["/wevenfinance.png"],
   },
   robots: {

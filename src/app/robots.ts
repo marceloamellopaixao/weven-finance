@@ -9,8 +9,19 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/contact", "/security", "/terms"],
+        allow: [
+          "/",
+          "/contact",
+          "/security",
+          "/terms",
+          "/quanto-posso-gastar-hoje",
+          "/calculadora/quanto-posso-gastar-hoje",
+          "/controle-financeiro-simples",
+          "/organizar-cartao-de-credito",
+          "/app-para-sair-das-dividas",
+        ],
         disallow: [
+          "/account-context",
           "/admin",
           "/api",
           "/apps",
@@ -23,6 +34,7 @@ export default function robots(): MetadataRoute.Robots {
           "/goodbye",
           "/login",
           "/piggy-bank",
+          "/reports",
           "/register",
           "/settings",
           "/swagger",
