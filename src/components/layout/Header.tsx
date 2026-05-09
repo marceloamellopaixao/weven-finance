@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home, UserCog, CreditCard, PiggyBank, Grid2X2 } from "lucide-react";
+import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home, UserCog, CreditCard, PiggyBank, Grid2X2, FileText } from "lucide-react";
 import Link from "next/link";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -292,6 +292,13 @@ export function Header() {
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <LayoutDashboard className="mr-2 h-4 w-4" />
                 <span>Dashboard</span>
+              </DropdownMenuItem>
+            </Link>
+
+            <Link href="/reports" className="cursor-pointer">
+              <DropdownMenuItem className="cursor-pointer rounded-lg">
+                <FileText className="mr-2 h-4 w-4" />
+                <span>Relatórios</span>
               </DropdownMenuItem>
             </Link>
 

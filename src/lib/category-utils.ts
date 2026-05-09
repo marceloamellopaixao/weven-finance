@@ -1,8 +1,6 @@
-"use client";
+const CATEGORY_PATH_SEPARATOR = "::";
 
-import { CATEGORY_PATH_SEPARATOR } from "@/hooks/useCategories";
-
-const LEGACY_SUB_PREFIX = /^\s*[\*\-•⬢]\s*/;
+const LEGACY_SUB_PREFIX = /^\s*[\*\-•]\s*/;
 
 export const toSafeCategory = (value: unknown) => (typeof value === "string" ? value : "");
 

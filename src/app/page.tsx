@@ -8,7 +8,7 @@ import { MarketingCtas } from "@/components/marketing/MarketingCtas";
 export const metadata: Metadata = {
   title: "Quanto posso gastar hoje? Controle financeiro simples",
   description:
-    "Saiba quanto voce pode gastar hoje sem se enrolar ate o fim do mes. Controle gastos, cartoes, parcelas e metas no WevenFinance.",
+    "Saiba quanto você pode gastar hoje sem se enrolar até o fim do mês. Controle gastos, cartões, parcelas e metas no WevenFinance.",
   alternates: { canonical: "/" },
 };
 

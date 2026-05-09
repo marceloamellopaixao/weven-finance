@@ -141,7 +141,7 @@ export default function FirstAccessPage() {
         setEmailSent(true);
         router.replace("/first-access");
       } catch {
-        setError("Nao foi possivel validar o link de recuperacao. Solicite um novo envio.");
+        setError("Não foi possível validar o link de recuperação. Solicite um novo envio.");
       }
     };
 

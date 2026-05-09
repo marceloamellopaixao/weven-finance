@@ -252,7 +252,7 @@ export default function EditTransactionPage() {
   const nextRecurringDueDate = isRecurringGroup && !isEndedRecurring ? addMonthsUTC(editingTx.dueDate, 1) : null;
 
   return (
-    <div className="min-h-screen bg-transparent p-4 pb-32 font-sans md:p-8">
+    <div className="min-h-screen bg-transparent p-4 pb-[calc(env(safe-area-inset-bottom)+10rem)] font-sans md:p-8 md:pb-25">
       <div className="mx-auto max-w-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
         
         {/* HEADER */}

@@ -1,6 +1,7 @@
 export type NavigationAppId =
   | "dashboard"
   | "transactions-new"
+  | "reports"
   | "cards"
   | "piggy-bank"
   | "settings"
@@ -31,6 +32,7 @@ export const ALL_PLATFORM_TOUR_ROUTES = [
   "dashboard",
   "settings",
   "transactions-new",
+  "reports",
   "cards",
   "piggy-bank",
 ] as const;
@@ -56,7 +58,7 @@ export const DEFAULT_NAVIGATION_PREFERENCES: NavigationPreferences = {
   labels: "always",
   surface: "glass",
   accent: "app",
-  shortcuts: ["dashboard", "transactions-new", "cards", "piggy-bank", "settings"],
+  shortcuts: ["dashboard", "transactions-new", "reports", "cards", "settings"],
 };
 
 export const DEFAULT_PLATFORM_TOUR_STATE: PlatformTourState = {

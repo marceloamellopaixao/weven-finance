@@ -48,7 +48,7 @@ export default function ForgotPasswordPage() {
         if (validationPayload.error === "email_not_found") {
           throw new Error("Nenhuma conta foi encontrada com esse e-mail.");
         }
-        throw new Error("Nao foi possivel validar este e-mail agora.");
+        throw new Error("Não foi possível validar este e-mail agora.");
       }
 
       await sendPasswordAccessEmail(email.trim().toLowerCase(), "recovery");

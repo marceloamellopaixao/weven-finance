@@ -139,7 +139,7 @@ export default function GoodbyePage() {
       const payload = (await response.json()) as { ok?: boolean; error?: string; protocol?: string };
       if (!response.ok || !payload.ok) {
         if (payload.error === "restore_window_expired") {
-          throw new Error("O prazo de reativacao desta conta ja terminou.");
+          throw new Error("O prazo de reativação desta conta já terminou.");
         }
         if (payload.error === "account_not_deleted") {
           throw new Error("Esta conta não está mais no estado de exclusão.");
@@ -257,7 +257,7 @@ export default function GoodbyePage() {
             </div>
           ) : (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
-              O prazo para reativacao desta conta terminou. A exclusao permanente sera mantida.
+              O prazo para reativação desta conta terminou. A exclusão permanente será mantida.
             </div>
           )}
 

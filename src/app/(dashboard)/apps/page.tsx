@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { type KeyboardEvent, useMemo, useState } from "react";
@@ -41,7 +41,11 @@ const PLATFORM_TOUR_COPY: Record<
     eyebrow: "Registrar entradas e saídas",
     description: "Aprenda a criar receitas, despesas, recorrências e compras parceladas sem confundir os fluxos.",
   },
-  cards: {
+  reports: {
+    title: "Relatórios",
+    eyebrow: "Resumo e exportação",
+    description: "Veja o fechamento mensal, leia gráficos por categoria e gere PDF ou Excel profissional.",
+  },  cards: {
     title: "Cartões",
     eyebrow: "Limites e faturas",
     description: "Veja como acompanhar limite usado, risco da fatura e saúde dos cartões.",
@@ -155,7 +159,7 @@ export default function AppsPage() {
                     Conta atual
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {userProfile?.displayName || "Usuario"} · plano{" "}
+                    {userProfile?.displayName || "Usuario"} ? plano{" "}
                     {(userProfile?.plan || "free").toUpperCase()}
                   </p>
                 </div>

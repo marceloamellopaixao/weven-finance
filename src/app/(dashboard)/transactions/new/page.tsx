@@ -435,7 +435,7 @@ export default function NewTransactionPage() {
   const isIncome = type === "income";
 
   return (
-    <div className="min-h-screen bg-transparent p-4 pb-32 font-sans md:p-8">
+    <div className="min-h-screen bg-transparent p-4 pb-[calc(env(safe-area-inset-bottom)+10rem)] font-sans md:p-8 md:pb-25">
       <div className="mx-auto max-w-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
         
         {/* HEADER NOVO DESIGN */}
@@ -496,7 +496,7 @@ export default function NewTransactionPage() {
 
             {/* INPUT DE VALOR SEM BORDAS */}
             <Label className="text-zinc-500 font-medium text-sm flex justify-start mb-2">
-              {isInstallment && installmentValueMode === "repeat_value" ? "Valor de cada parcela" : "Valor do lancamento"}
+              {isInstallment && installmentValueMode === "repeat_value" ? "Valor de cada parcela" : "Valor do lançamento"}
             </Label>
             <div id="tour-transactions-amount" className="flex items-center justify-center gap-2">
               <span className={`text-2xl font-bold transition-colors sm:text-3xl ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>R$</span>
@@ -551,7 +551,7 @@ export default function NewTransactionPage() {
               <textarea
                 value={transactionNotes}
                 onChange={(e) => setTransactionNotes(e.target.value)}
-                className="min-h-[96px] w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                className="min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 placeholder="Ex: pacote comprado na promoção, lembrar de conferir na fatura."
               />
             </div>

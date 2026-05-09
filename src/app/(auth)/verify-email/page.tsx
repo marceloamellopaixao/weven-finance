@@ -85,7 +85,7 @@ export default function VerifyEmailPage() {
     try {
       const targetEmail = user?.email || pendingEmail;
       if (!targetEmail) {
-        toast.error("Nao encontramos um e-mail para reenviar.");
+        toast.error("Não encontramos um e-mail para reenviar.");
         return;
       }
       setIsResending(true);
