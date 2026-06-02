@@ -41,12 +41,14 @@ import { getPlanCapabilities } from "@/lib/plans/capabilities";
 import { getOnboardingStepHref } from "@/lib/onboarding/flow";
 import { buildUpgradeCheckoutPath } from "@/services/billing/checkoutIntent";
 import { calculateDailyLimit } from "@/lib/finance/daily-limit";
+import { useUiText } from "@/i18n/T";
+import { useI18n } from "@/i18n/I18nProvider";
 
 
-const formatDateDisplay = (dateString: string, options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' }) => {
+const formatDateDisplay = (dateString: string, options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' }, locale = "pt-BR") => {
   if (!dateString) return "-";
   const date = new Date(`${dateString}T12:00:00`);
-  return date.toLocaleDateString('pt-BR', options);
+  return date.toLocaleDateString(locale, options);
 };
 
 const getTransactionTitle = (tx?: Pick<Transaction, "title" | "description"> | null) =>
@@ -130,6 +132,8 @@ const orderCategoryNames = (names: unknown[]) => {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { locale } = useI18n();
+  const tt = useUiText();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user, userProfile, privacyMode, togglePrivacyMode } = useAuth();
@@ -272,10 +276,10 @@ export default function DashboardPage() {
     return Array.from(monthsSet).sort().map(monthStr => {
       const [year, month] = monthStr.split('-').map(Number);
       const dateObj = new Date(year, month - 1, 2);
-      const label = dateObj.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      const label = dateObj.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
       return { value: monthStr, label: label.charAt(0).toUpperCase() + label.slice(1) };
     });
-  }, [transactions]);
+  }, [locale, transactions]);
 
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
 
@@ -388,14 +392,14 @@ export default function DashboardPage() {
     return sortedKeys.map(key => {
       const [year, month] = key.split('-').map(Number);
       const date = new Date(year, month - 1, 2);
-      const label = date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).replace('.', '').replace(' de ', '/');
+      const label = date.toLocaleDateString(locale, { month: 'short', year: '2-digit' }).replace('.', '').replace(' de ', '/');
 
       return {
         name: label.charAt(0).toUpperCase() + label.slice(1),
         amount: monthlyGroups[key]
       };
     });
-  }, [transactions]);
+  }, [locale, transactions]);
 
   // --- 5. EFFECTS ---
 
@@ -571,8 +575,8 @@ export default function DashboardPage() {
       setFeedbackModal({
         isOpen: true,
         type: "success",
-        title: "Recorrência encerrada",
-        message: `As próximas cobranças de "${description}" foram removidas.`,
+        title: tt("Recorrência encerrada"),
+        message: tt("As próximas cobranças de \"{description}\" foram removidas.", { description }),
       });
     } finally {
       setIsCancelingSubscription(false);
@@ -590,8 +594,11 @@ export default function DashboardPage() {
           setFeedbackModal({
             isOpen: true,
             type: 'error',
-            title: 'Saldo Insuficiente',
-            message: `Você possui ${formatCurrency(realCurrentBalance)} em caixa, mas a conta é de ${formatCurrency(tx.amount)}. A operação foi cancelada.`
+            title: tt("Saldo insuficiente"),
+            message: tt("Você possui {balance} em caixa, mas a conta é de {amount}. A operação foi cancelada.", {
+              balance: formatCurrency(realCurrentBalance),
+              amount: formatCurrency(tx.amount),
+            })
           });
           return;
         }
@@ -603,10 +610,10 @@ export default function DashboardPage() {
       setFeedbackModal({
         isOpen: true,
         type: 'success',
-        title: markAsPaid ? (tx.type === 'income' ? 'Recebido!' : 'Pago!') : (tx.type === 'income' ? 'Cancelado Recebimento' : 'Pagamento Cancelado'),
+        title: markAsPaid ? (tx.type === 'income' ? tt("Recebido!") : tt("Pago!")) : (tx.type === 'income' ? tt("Recebimento cancelado") : tt("Pagamento cancelado")),
         message: markAsPaid
-          ? `A transação "${getTransactionTitle(tx)}" foi confirmada com sucesso.`
-          : `A transação "${getTransactionTitle(tx)}" voltou para pendente.`
+          ? tt("A transação \"{title}\" foi confirmada com sucesso.", { title: getTransactionTitle(tx) })
+          : tt("A transação \"{title}\" voltou para pendente.", { title: getTransactionTitle(tx) })
       });
 
       const newList = pendingCheckins.filter(p => p.id !== tx.id);
@@ -657,39 +664,39 @@ export default function DashboardPage() {
     !effectivePlanCapabilities.hasSmartDailyLimit
       ? ""
       : remainingDaysInSelectedMonth <= 0 || smartDailyLimit === null
-        ? "Selecione o mês atual ou um mês futuro"
+        ? tt("Selecione o mês atual ou um mês futuro")
         : smartDailyLimit > 0.01
-          ? `Você pode gastar até ${formatCurrencyDisplay(smartDailyLimit)} hoje`
+          ? tt("Você pode gastar até {amount} hoje", { amount: formatCurrencyDisplay(smartDailyLimit) })
           : smartDailyLimit < -0.01
-            ? "Seu mês já está acima do ideal"
-            : "Hoje você está no limite do mês";
+            ? tt("Seu mês já está acima do ideal")
+            : tt("Hoje você está no limite do mês");
   const smartDailyDescription =
     !effectivePlanCapabilities.hasSmartDailyLimit
       ? ""
       : remainingDaysInSelectedMonth <= 0 || smartDailyLimit === null
-        ? "Esse cálculo funciona melhor com o mês em andamento para orientar sua decisão diária."
+        ? tt("Esse cálculo funciona melhor com o mês em andamento para orientar sua decisão diária.")
         : smartDailyLimit > 0.01
-          ? `Com base na sua previsão atual, esse é o valor diário médio para fechar ${selectedMonthLabel} com controle.`
+          ? tt("Com base na sua previsão atual, esse é o valor diário médio para fechar {month} com controle.", { month: selectedMonthLabel })
           : smartDailyLimit < -0.01
-            ? `Para terminar ${selectedMonthLabel} sem aperto, reduza cerca de ${formatCurrencyDisplay(Math.abs(smartDailyLimit))} por dia.`
-            : `Para fechar ${selectedMonthLabel} com segurança, o ideal é evitar novos gastos hoje.`;
+            ? tt("Para terminar {month} sem aperto, reduza cerca de {amount} por dia.", { month: selectedMonthLabel, amount: formatCurrencyDisplay(Math.abs(smartDailyLimit)) })
+            : tt("Para fechar {month} com segurança, o ideal é evitar novos gastos hoje.", { month: selectedMonthLabel });
 
   const upgradePrompt = (() => {
     if (hasBillingIssue) {
       return {
         kind: "billing" as const,
-        title: "Seu plano está com pendência de pagamento",
-        description: "Regularize a assinatura para manter recursos premium e evitar bloqueios de acesso.",
-        ctaPrimary: "Regularizar agora",
+        title: tt("Seu plano está com pendência de pagamento"),
+        description: tt("Regularize a assinatura para manter recursos premium e evitar bloqueios de acesso."),
+        ctaPrimary: tt("Regularizar agora"),
       };
     }
 
     if (!isBillingExemptRole && effectivePlan === "free" && freeUsagePct >= 80) {
       return {
         kind: "upgrade" as const,
-        title: "Você está perto do limite do plano grátis",
-        description: `Você já usou ${transactionsThisMonthCount}/${freeLimit} lançamentos neste mês.`,
-        ctaPrimary: "Fazer upgrade",
+        title: tt("Você está perto do limite do plano grátis"),
+        description: tt("Você já usou {used}/{limit} lançamentos neste mês.", { used: transactionsThisMonthCount, limit: freeLimit }),
+        ctaPrimary: tt("Fazer upgrade"),
         targetPlan: "premium" as const,
       };
     }
@@ -697,9 +704,9 @@ export default function DashboardPage() {
     if (!isBillingExemptRole && effectivePlan === "free" && monthlyInsights.topRisk) {
       return {
         kind: "upgrade" as const,
-        title: "Seu uso financeiro está evoluindo",
-        description: "Upgrade libera mais controle para cartões e crescimento sem limite mensal de lançamentos.",
-        ctaPrimary: "Conhecer planos",
+        title: tt("Seu uso financeiro está evoluindo"),
+        description: tt("Upgrade libera mais controle para cartões e crescimento sem limite mensal de lançamentos."),
+        ctaPrimary: tt("Conhecer planos"),
         targetPlan: "premium" as const,
       };
     }
@@ -707,9 +714,9 @@ export default function DashboardPage() {
     if (!isBillingExemptRole && effectivePlan === "premium") {
       return {
         kind: "upgrade" as const,
-        title: "O próximo nível é clareza diária",
-        description: "No Pro, o dashboard mostra quanto você ainda pode gastar hoje sem comprometer o fechamento do mês.",
-        ctaPrimary: "Conhecer o Pro",
+        title: tt("O próximo nível é clareza diária"),
+        description: tt("No Pro, o dashboard mostra quanto você ainda pode gastar hoje sem comprometer o fechamento do mês."),
+        ctaPrimary: tt("Conhecer o Pro"),
         targetPlan: "pro" as const,
       };
     }
@@ -730,8 +737,8 @@ export default function DashboardPage() {
       setFeedbackModal({
         isOpen: true,
         type: "info",
-        title: "Conta isenta",
-        message: "Administradores e moderadores não precisam de pagamento.",
+        title: tt("Conta isenta"),
+        message: tt("Administradores e moderadores não precisam de pagamento."),
       });
       return;
     }
@@ -744,8 +751,8 @@ export default function DashboardPage() {
       setFeedbackModal({
         isOpen: true,
         type: "error",
-        title: "Falha no checkout",
-        message: "Não foi possível abrir o pagamento agora.",
+        title: tt("Falha no checkout"),
+        message: tt("Não foi possível abrir o pagamento agora."),
       });
     } finally {
       setIsOpeningCheckout(null);
@@ -762,8 +769,8 @@ export default function DashboardPage() {
         setFeedbackModal({
           isOpen: true,
           type: "success",
-          title: "Assinatura confirmada",
-          message: `Plano atualizado para ${result.targetPlan}.`,
+          title: tt("Assinatura confirmada"),
+          message: tt("Plano atualizado para {plan}.", { plan: result.targetPlan }),
         });
         return;
       }
@@ -774,8 +781,8 @@ export default function DashboardPage() {
       setFeedbackModal({
         isOpen: true,
         type: "error",
-        title: "Falha na recuperação",
-        message: "Não foi possível regularizar o pagamento agora.",
+        title: tt("Falha na recuperação"),
+        message: tt("Não foi possível regularizar o pagamento agora."),
       });
     } finally {
       setIsRecoveringBilling(false);
@@ -801,33 +808,33 @@ export default function DashboardPage() {
         {tx.status === 'pending' && (
           <DropdownMenuItem onClick={() => handleCheckinAction(tx, true)} className="cursor-pointer rounded-lg text-xs font-medium text-emerald-600 focus:text-emerald-700 focus:bg-emerald-50">
             <CheckCircle2 className="mr-2 h-3.5 w-3.5" />
-            {tx.type === 'income' ? 'Receber' : 'Pagar'}
+            {tx.type === 'income' ? tt("Receber") : tt("Pagar")}
           </DropdownMenuItem>
         )}
 
         {tx.status === 'paid' && (
           <DropdownMenuItem onClick={() => handleCheckinAction(tx, false)} className="cursor-pointer rounded-lg text-xs font-medium text-red-600 focus:text-red-700 focus:bg-red-50">
             <XCircle className="mr-2 h-3.5 w-3.5" />
-            {tx.type === 'income' ? 'Não Recebido' : 'Não Pago'}
+            {tx.type === 'income' ? tt("Não recebido") : tt("Não pago")}
           </DropdownMenuItem>
         )}
 
         <DropdownMenuItem onClick={() => openEditModal(tx)} className="cursor-pointer rounded-lg text-xs font-medium">
-          <Pencil className="mr-2 h-3.5 w-3.5" /> Editar
+          <Pencil className="mr-2 h-3.5 w-3.5" /> {tt("Editar")}
         </DropdownMenuItem>
 
         {tx.groupId && tx.isRecurring && !tx.recurrenceEnded && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setTxToCancelSubscription(tx)} className="text-amber-600 focus:text-amber-700 cursor-pointer rounded-lg text-xs font-medium focus:bg-amber-50 dark:focus:bg-amber-900/20">
-              <XCircle className="mr-2 h-3.5 w-3.5" /> Encerrar Assinatura
+              <XCircle className="mr-2 h-3.5 w-3.5" /> {tt("Encerrar assinatura")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
         )}
 
         <DropdownMenuItem onClick={() => setTxToDelete(tx)} className="text-red-600 focus:text-red-600 cursor-pointer rounded-lg text-xs font-medium focus:bg-red-50 dark:focus:bg-red-900/20">
-          <Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir
+          <Trash2 className="mr-2 h-3.5 w-3.5" /> {tt("Excluir")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -837,8 +844,8 @@ export default function DashboardPage() {
     const isPending = tx.status === "pending";
     const isIncome = tx.type === "income";
     const label = isPending
-      ? (isIncome ? "Receber" : "Pagar")
-      : (isIncome ? "Não Recebido" : "Não Pago");
+      ? (isIncome ? tt("Receber") : tt("Pagar"))
+      : (isIncome ? tt("Não recebido") : tt("Não pago"));
 
     return (
       <Button
@@ -864,8 +871,8 @@ export default function DashboardPage() {
         {/* TOP BAR: TÍTULO + CONTROLES + BOTÃO NOVA TRANSAÇÃO */}
         <div className={`${fadeInUp} flex flex-col md:flex-row md:items-center justify-between gap-4`}>
           <div id="tour-welcome-header">
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Visão Geral</h1>
-            <p className="text-sm md:text-base text-zinc-500 dark:text-zinc-400 mt-1">Gerencie seu fluxo de caixa e previsões.</p>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">{tt("Visão Geral")}</h1>
+            <p className="text-sm md:text-base text-zinc-500 dark:text-zinc-400 mt-1">{tt("Gerencie seu fluxo de caixa e previsões.")}</p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
@@ -875,7 +882,7 @@ export default function DashboardPage() {
               onClick={() => router.push("/transactions/new")}
               className="h-11 w-full rounded-xl bg-primary font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all duration-200 active:scale-[0.98] hover:cursor-pointer hover:bg-primary/90 sm:w-auto"
             >
-              <Plus className="mr-2 h-4 w-4" /> Nova Transação
+              <Plus className="mr-2 h-4 w-4" /> {tt("Nova Transação")}
             </Button>
 
             <Button
@@ -884,7 +891,7 @@ export default function DashboardPage() {
               onClick={() => router.push("/reports")}
               className="h-11 w-full rounded-xl border-primary/25 font-bold text-primary transition-all duration-200 active:scale-[0.98] hover:cursor-pointer hover:bg-accent sm:w-auto"
             >
-              <FileBarChart2 className="mr-2 h-4 w-4" /> Relatórios
+              <FileBarChart2 className="mr-2 h-4 w-4" /> {tt("Relatórios")}
             </Button>
             {/* Seletor de M?s */}
             <div id="tour-month-select" className="app-panel-subtle flex items-center justify-between gap-2 rounded-2xl border p-1 shadow-sm w-full sm:w-auto md:justify-start">
@@ -895,7 +902,7 @@ export default function DashboardPage() {
                 <SelectTrigger className="w-full md:w-40 h-7 border-none shadow-none focus:ring-0 font-semibold text-sm bg-transparent flex justify-center text-center hover:cursor-pointer duration-200">
                   <div className="flex items-center gap-2">
                     <Calendar className="h-3.5 w-3.5 shrink-0 text-primary" />
-                    <SelectValue placeholder="Selecione" />
+                    <SelectValue placeholder={tt("Selecione")} />
                   </div>
                 </SelectTrigger>
                 <SelectContent className="max-h-[300px]">
@@ -917,10 +924,10 @@ export default function DashboardPage() {
           <Card className={`${fadeInUp} delay-100 app-panel-soft rounded-2xl border border-color:var(--app-panel-border) shadow-lg shadow-primary/10`}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <Info className="h-4 w-4 text-primary" /> Primeiros passos
+                <Info className="h-4 w-4 text-primary" /> {tt("Primeiros passos")}
               </CardTitle>
               <CardDescription>
-                Complete o onboarding para liberar o melhor da plataforma.
+                {tt("Complete o onboarding para liberar o melhor da plataforma.")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -931,7 +938,7 @@ export default function DashboardPage() {
                 />
               </div>
               <p className="text-xs text-zinc-500">
-                Progresso: {onboardingStatus.progress}/{onboardingStatus.total}
+                {tt("Progresso")}: {onboardingStatus.progress}/{onboardingStatus.total}
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <button
@@ -944,7 +951,7 @@ export default function DashboardPage() {
                       : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
-                  {onboardingStatus.steps.firstTransaction ? "âœ“ " : onboardingActiveStep === "firstTransaction" ? "â€¢ " : ""}Primeira transação 
+                  {onboardingStatus.steps.firstTransaction ? "✓ " : onboardingActiveStep === "firstTransaction" ? "• " : ""}{tt("Primeira transação")}
                 </button>
                 <button
                   type="button"
@@ -956,7 +963,7 @@ export default function DashboardPage() {
                       : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
-                  {onboardingStatus.steps.firstCard ? "âœ“ " : onboardingActiveStep === "firstCard" ? "â€¢ " : ""}Primeiro cartão
+                  {onboardingStatus.steps.firstCard ? "✓ " : onboardingActiveStep === "firstCard" ? "• " : ""}{tt("Primeiro cartão")}
                 </button>
                 <button
                   type="button"
@@ -968,7 +975,7 @@ export default function DashboardPage() {
                       : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
-                  {onboardingStatus.steps.firstGoal ? "âœ“ " : onboardingActiveStep === "firstGoal" ? "â€¢ " : ""}Primeira meta
+                  {onboardingStatus.steps.firstGoal ? "✓ " : onboardingActiveStep === "firstGoal" ? "• " : ""}{tt("Primeira meta")}
                 </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -982,12 +989,12 @@ export default function DashboardPage() {
                       : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
                     }`}
                 >
-                  {onboardingStatus.steps.profileMenu ? "âœ“ " : onboardingActiveStep === "profileMenu" ? "â€¢ " : ""}Abrir menu da conta (foto no topo)
+                  {onboardingStatus.steps.profileMenu ? "✓ " : onboardingActiveStep === "profileMenu" ? "• " : ""}{tt("Abrir menu da conta (foto no topo)")}
                 </button>
               </div>
               <div className="flex justify-end">
                 <Button variant="ghost" size="sm" onClick={() => void dismissOnboarding()} className="text-zinc-500 hover:cursor-pointer">
-                  Fechar onboarding
+                  {tt("Fechar onboarding")}
                 </Button>
               </div>
             </CardContent>
@@ -997,31 +1004,31 @@ export default function DashboardPage() {
         {showAutomaticInsights && (
           <Card className={`${fadeInUp} delay-120 app-panel-soft rounded-2xl border border-color:var(--app-panel-border) shadow-lg`}>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Insights Automáticos</CardTitle>
-              <CardDescription className="text-zinc-500">Resumo inteligente do mês selecionado.</CardDescription>
+              <CardTitle className="text-base">{tt("Insights automáticos")}</CardTitle>
+              <CardDescription className="text-zinc-500">{tt("Resumo inteligente do mês selecionado.")}</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="app-panel-subtle rounded-xl border px-3 py-2">
-                <p className="text-xs text-zinc-500">Maior gasto do mês</p>
+                <p className="text-xs text-zinc-500">{tt("Maior gasto do mês")}</p>
                 {monthlyInsights.biggestExpense ? (
                   <p className="text-sm font-semibold text-zinc-900 mt-1">
-                    {getTransactionTitle(monthlyInsights.biggestExpense)} â€¢ {formatCurrencyDisplay(monthlyInsights.biggestExpense.amount)}
+                    {getTransactionTitle(monthlyInsights.biggestExpense)} • {formatCurrencyDisplay(monthlyInsights.biggestExpense.amount)}
                   </p>
                 ) : (
-                  <p className="text-sm font-semibold text-zinc-600 mt-1">Sem despesas no período.</p>
+                  <p className="text-sm font-semibold text-zinc-600 mt-1">{tt("Sem despesas no período.")}</p>
                 )}
               </div>
               <div
                 className={`rounded-xl border px-3 py-2 ${monthlyInsights.topRisk ? "border-amber-300 bg-amber-50" : "border-emerald-200 bg-emerald-50"
                   }`}
               >
-                <p className="text-xs text-zinc-500">Risco de estourar limite</p>
+                <p className="text-xs text-zinc-500">{tt("Risco de estourar limite")}</p>
                 {monthlyInsights.topRisk ? (
                   <p className="text-sm font-semibold text-amber-700 mt-1">
-                    {monthlyInsights.topRisk.card.bankName} â€¢â€¢â€¢â€¢ {monthlyInsights.topRisk.card.last4} em {monthlyInsights.topRisk.usagePct.toFixed(1)}%
+                    {monthlyInsights.topRisk.card.bankName} •••• {monthlyInsights.topRisk.card.last4} {tt("em")} {monthlyInsights.topRisk.usagePct.toFixed(1)}%
                   </p>
                 ) : (
-                  <p className="text-sm font-semibold text-emerald-700 mt-1">Nenhum cartão em risco no momento.</p>
+                  <p className="text-sm font-semibold text-emerald-700 mt-1">{tt("Nenhum cartão em risco no momento.")}</p>
                 )}
               </div>
             </CardContent>
@@ -1038,7 +1045,7 @@ export default function DashboardPage() {
                 <p className="text-sm font-bold">{upgradePrompt.title}</p>
                 <p className="text-xs text-white/90">
                   {upgradePrompt.description}
-                  {overduePendingCount > 0 ? ` Você também tem ${overduePendingCount} lançamento(s) vencido(s).` : ""}
+                   {overduePendingCount > 0 ? ` ${tt("Você também tem {count} lançamento(s) vencido(s).", { count: overduePendingCount })}` : ""}
                 </p>
               </div>
               <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row">
@@ -1048,7 +1055,7 @@ export default function DashboardPage() {
                     onClick={() => void handleRecoverPayment()}
                     disabled={isRecoveringBilling}
                   >
-                    {isRecoveringBilling ? "Processando..." : upgradePrompt.ctaPrimary}
+                    {isRecoveringBilling ? tt("Processando...") : upgradePrompt.ctaPrimary}
                   </Button>
                 ) : (
                   <>
@@ -1057,13 +1064,13 @@ export default function DashboardPage() {
                       onClick={() => handleStartCheckout(upgradePrompt.targetPlan)}
                       disabled={isOpeningCheckout === upgradePrompt.targetPlan}
                     >
-                      {isOpeningCheckout === upgradePrompt.targetPlan ? "Abrindo..." : upgradePrompt.ctaPrimary}
+                       {isOpeningCheckout === upgradePrompt.targetPlan ? tt("Abrindo...") : upgradePrompt.ctaPrimary}
                     </Button>
                     <Button
                       className="h-9 bg-card text-primary hover:bg-accent"
                       onClick={() => router.push("/settings?tab=billing")}
                     >
-                      Ver planos
+                       {tt("Ver planos")}
                     </Button>
                   </>
                 )}
@@ -1079,20 +1086,20 @@ export default function DashboardPage() {
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-primary">
                   <CalendarDays className="h-4 w-4" />
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em]">Limite diário inteligente</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em]">{tt("Limite diário inteligente")}</p>
                 </div>
                 <p className="text-lg md:text-xl font-bold">{smartDailyHeadline}</p>
                 <p className="text-sm text-muted-foreground max-w-2xl">{smartDailyDescription}</p>
               </div>
               <div className="app-panel-subtle w-full min-w-0 rounded-2xl border border-color:var(--app-panel-border) px-4 py-3 md:w-auto md:min-w-[220px]">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Base do cálculo</p>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{tt("Base do cálculo")}</p>
                 <p className="mt-2 text-2xl font-bold">
-                  {remainingDaysInSelectedMonth > 0 ? `${remainingDaysInSelectedMonth} dia(s)` : "Mês encerrado"}
+                  {remainingDaysInSelectedMonth > 0 ? tt("{count} dia(s)", { count: remainingDaysInSelectedMonth }) : tt("Mês encerrado")}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {dailyLimit.currentMonthCardImpact > 0
-                    ? `Inclui ${formatCurrencyDisplay(dailyLimit.currentMonthCardImpact)} de impacto do cartão no mês.`
-                    : "Restantes para distribuir sua folga prevista."}
+                    ? tt("Inclui {amount} de impacto do cartão no mês.", { amount: formatCurrencyDisplay(dailyLimit.currentMonthCardImpact) })
+                    : tt("Restantes para distribuir sua folga prevista.")}
                 </p>
               </div>
             </CardContent>
@@ -1106,11 +1113,11 @@ export default function DashboardPage() {
             <div className="absolute inset-0 bg-linear-to-br from-primary/10 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Saldo Atual (Hoje)</CardTitle>
+                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{tt("Saldo Atual (Hoje)")}</CardTitle>
                 <button
                   id="tour-privacy-toggle"
                   type="button"
-                  aria-label={privacyMode ? "Mostrar valores" : "Ocultar valores"}
+                  aria-label={privacyMode ? tt("Mostrar valores") : tt("Ocultar valores")}
                   onClick={togglePrivacyMode}
                   className="block text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
                 >
@@ -1121,13 +1128,13 @@ export default function DashboardPage() {
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        aria-label="Explicação do saldo atual"
+                        aria-label={tt("Explicação do saldo atual")}
                         className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
                       >
                         <HelpCircle className="h-3.5 w-3.5" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>Dinheiro que realmente entrou menos o que já saiu (Pago/Recebido).</p></TooltipContent>
+                    <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>{tt("Dinheiro que realmente entrou menos o que já saiu (Pago/Recebido).")}</p></TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
@@ -1137,7 +1144,7 @@ export default function DashboardPage() {
               <div className={`financial-value text-2xl font-bold tracking-tight sm:text-3xl ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (realCurrentBalance < 0 ? 'text-red-500' : 'text-primary')}`}>
                 {formatCurrencyDisplay(realCurrentBalance)}
               </div>
-              <p className="text-xs text-zinc-400 mt-2 font-medium">O que você tem hoje (Realizado).</p>
+              <p className="text-xs text-zinc-400 mt-2 font-medium">{tt("O que você tem hoje (Realizado).")}</p>
             </CardContent>
           </Card>
 
@@ -1146,10 +1153,10 @@ export default function DashboardPage() {
             <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/6 to-transparent" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Movimentação (Mês)</CardTitle>
+                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{tt("Movimentação (Mês)")}</CardTitle>
                 <button
                   type="button"
-                  aria-label={privacyMode ? "Mostrar valores" : "Ocultar valores"}
+                  aria-label={privacyMode ? tt("Mostrar valores") : tt("Ocultar valores")}
                   onClick={togglePrivacyMode}
                   className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
                 >
@@ -1160,13 +1167,13 @@ export default function DashboardPage() {
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        aria-label="Explicação da movimentação do mês"
+                        aria-label={tt("Explicação da movimentação do mês")}
                         className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
                       >
                         <HelpCircle className="h-3.5 w-3.5" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>Total de Receitas e Despesas agendadas para este mês.</p></TooltipContent>
+                    <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>{tt("Total de receitas e despesas agendadas para este mês.")}</p></TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
@@ -1179,7 +1186,7 @@ export default function DashboardPage() {
                 <span className="financial-value flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-2xl text-emerald-600 sm:text-3xl dark:bg-emerald-900/20"><ArrowUpCircle className="mr-1 h-5 w-5 shrink-0 sm:h-6 sm:w-6" />{formatCurrencyDisplay(monthIncome)}</span>
                 <span className="financial-value flex items-center rounded-md bg-red-50 px-2 py-0.5 text-2xl font-bold text-red-600 sm:text-3xl dark:bg-red-900/20"><ArrowDownCircle className="mr-1 h-5 w-5 shrink-0 sm:h-6 sm:w-6" />{formatCurrencyDisplay(monthExpense)}</span>
               </div>
-              <p className="text-xs text-zinc-400 mt-2 font-medium">Total de entradas e saídas do mês.</p>
+              <p className="text-xs text-zinc-400 mt-2 font-medium">{tt("Total de entradas e saídas do mês.")}</p>
             </CardContent>
           </Card>
 
@@ -1188,10 +1195,10 @@ export default function DashboardPage() {
             <Card id="tour-forecast-card" className={`${fadeInUp} delay-500 app-panel-soft relative overflow-hidden rounded-2xl border border-color:var(--app-panel-border) shadow-lg md:shadow-xl shadow-zinc-200/50 dark:shadow-black/20 ring-2 ${projectedAccumulatedBalance >= 0 ? 'ring-emerald-500/20' : 'ring-red-500/20'}`}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
                 <div className="flex items-center gap-2">
-                  <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Previsão de Fechamento</CardTitle>
+                  <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{tt("Previsão de fechamento")}</CardTitle>
                   <button
                     type="button"
-                    aria-label={privacyMode ? "Mostrar valores" : "Ocultar valores"}
+                     aria-label={privacyMode ? tt("Mostrar valores") : tt("Ocultar valores")}
                     onClick={togglePrivacyMode}
                     className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
                   >
@@ -1202,13 +1209,13 @@ export default function DashboardPage() {
                       <TooltipTrigger asChild>
                         <button
                           type="button"
-                          aria-label="Explicação da previsão de fechamento"
+                           aria-label={tt("Explicação da previsão de fechamento")}
                           className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
                         >
                           <HelpCircle className="h-3.5 w-3.5" />
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>Cálculo: Saldo Atual + (A Receber - A Pagar) no mês.</p></TooltipContent>
+                       <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>{tt("Cálculo: saldo atual + (a receber - a pagar) no mês.")}</p></TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 </div>
@@ -1218,23 +1225,23 @@ export default function DashboardPage() {
                 <div className={`financial-value text-2xl font-bold tracking-tight sm:text-3xl ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (projectedAccumulatedBalance >= 0 ? 'text-emerald-600' : 'text-red-600')}`}>
                   {formatCurrencyDisplay(projectedAccumulatedBalance)}
                 </div>
-                <p className="text-xs text-zinc-400 mt-2 font-medium">Estimativa para o fim do mês.</p>
+                 <p className="text-xs text-zinc-400 mt-2 font-medium">{tt("Estimativa para o fim do mês.")}</p>
               </CardContent>
             </Card>
           ) : (
             <Card className={`${fadeInUp} delay-500 app-panel-soft relative overflow-hidden rounded-2xl border border-color:var(--app-panel-border) text-card-foreground shadow-lg shadow-primary/10 md:shadow-xl`}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
                 <div>
-                  <CardTitle className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Previsão de Fechamento</CardTitle>
-                  <CardDescription className="text-zinc-500 dark:text-zinc-400">Disponível no Premium e no Pro</CardDescription>
+                   <CardTitle className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{tt("Previsão de fechamento")}</CardTitle>
+                   <CardDescription className="text-zinc-500 dark:text-zinc-400">{tt("Disponível no Premium e no Pro")}</CardDescription>
                 </div>
                 <div className="rounded-xl bg-primary/10 p-2 text-primary"><Calculator className="h-5 w-5" /></div>
               </CardHeader>
               <CardContent className="relative h-full flex flex-col justify-between gap-4">
                 <div>
-                  <p className="text-xl font-bold tracking-tight">Entenda antes se o mês vai fechar no verde.</p>
+                   <p className="text-xl font-bold tracking-tight">{tt("Entenda antes se o mês vai fechar no verde.")}</p>
                   <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                    No Premium, o dashboard mostra sua previsão de fechamento com base no saldo atual, contas a pagar e valores a receber.
+                     {tt("No Premium, o dashboard mostra sua previsão de fechamento com base no saldo atual, contas a pagar e valores a receber.")}
                   </p>
                 </div>
                 <Button
@@ -1242,7 +1249,7 @@ export default function DashboardPage() {
                   onClick={() => handleStartCheckout("premium")}
                   disabled={isOpeningCheckout === "premium"}
                 >
-                  {isOpeningCheckout === "premium" ? "Abrindo..." : "Liberar previsão"}
+                   {isOpeningCheckout === "premium" ? tt("Abrindo...") : tt("Liberar previsão")}
                 </Button>
               </CardContent>
             </Card>
@@ -1255,8 +1262,8 @@ export default function DashboardPage() {
           {/* Gráfico do Fluxo Mensal */}
           <Card className={`${fadeInUp} delay-700 app-panel-soft rounded-2xl border border-color:var(--app-panel-border) shadow-lg shadow-zinc-200/50 dark:shadow-black/20`}>
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Fluxo Mensal</CardTitle>
-              <CardDescription className="text-zinc-500">Evolução do saldo ao longo do tempo.</CardDescription>
+              <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">{tt("Fluxo mensal")}</CardTitle>
+              <CardDescription className="text-zinc-500">{tt("Evolução do saldo ao longo do tempo.")}</CardDescription>
             </CardHeader>
             <CardContent className="h-[280px] w-full">
               <AreaChart data={chartData} />
@@ -1268,9 +1275,9 @@ export default function DashboardPage() {
             <CardHeader className="border-b border-color:var(--app-panel-border) py-5 px-6">
               <div className="flex-col md:flex-row md:items-center justify-between grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Extrato</CardTitle>
+                  <CardTitle className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">{tt("Extrato")}</CardTitle>
                   <CardDescription>
-                    Lançamentos de {formatDateDisplay(selectedMonth + '-02', { month: 'long', year: 'numeric' })}.
+                    {tt("Lançamentos de {month}.", { month: formatDateDisplay(selectedMonth + '-02', { month: 'long', year: 'numeric' }, locale) })}
                   </CardDescription>
                 </div>
                 <div className="flex flex-col gap-2 ">
@@ -1278,7 +1285,7 @@ export default function DashboardPage() {
                   <div className="relative w-full max-w-full">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" />
                     <Input
-                      placeholder="Buscar transação..."
+                      placeholder={tt("Buscar transação...")}
                       className="pl-9 h-9 text-xs rounded-lg"
                       value={searchTerm}
                       onChange={e => setSearchTerm(e.target.value)}
@@ -1288,23 +1295,23 @@ export default function DashboardPage() {
                     <Select value={filterType} onValueChange={(v) => setFilterType(v as "all" | "income" | "expense")}>
                       <SelectTrigger className="w-[150px] h-9 text-xs rounded-lg"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todos</SelectItem>
-                        <SelectItem value="expense">Despesas</SelectItem>
-                        <SelectItem value="income">Receitas</SelectItem>
+                        <SelectItem value="all">{tt("Todos")}</SelectItem>
+                        <SelectItem value="expense">{tt("Despesas")}</SelectItem>
+                        <SelectItem value="income">{tt("Receitas")}</SelectItem>
                       </SelectContent>
                     </Select>
                     <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as "all" | "paid" | "pending")}>
                       <SelectTrigger className="w-[250px] h-9 text-xs rounded-lg"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todos Status</SelectItem>
-                        <SelectItem value="pending">Pendente</SelectItem>
-                        <SelectItem value="paid">Pago</SelectItem>
+                        <SelectItem value="all">{tt("Todos os status")}</SelectItem>
+                        <SelectItem value="pending">{tt("Pendente")}</SelectItem>
+                        <SelectItem value="paid">{tt("Pago")}</SelectItem>
                       </SelectContent>
                     </Select>
                     <Select value={filterCategory} onValueChange={setFilterCategory}>
-                      <SelectTrigger className="w-[250px] h-9 text-xs rounded-lg"><SelectValue placeholder="Categoria" /></SelectTrigger>
+                      <SelectTrigger className="w-[250px] h-9 text-xs rounded-lg"><SelectValue placeholder={tt("Categoria")} /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todas Categorias</SelectItem>
+                        <SelectItem value="all">{tt("Todas as categorias")}</SelectItem>
                         {uniqueCategories.map(c => (
                           <SelectItem key={c} value={c}>
                             <CategoryLabel value={c} />
@@ -1328,12 +1335,12 @@ export default function DashboardPage() {
                     }}
                     className="cursor-pointer"
                   />
-                  Selecionar itens desta página
+                  {tt("Selecionar itens desta página")}
                 </label>
                 {selectedTransactionIds.length > 0 && (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-medium text-zinc-500">
-                      {selectedTransactionIds.length} selecionada(s)
+                      {tt("{count} selecionada(s)", { count: selectedTransactionIds.length })}
                     </span>
                     <Button
                       variant="outline"
@@ -1341,14 +1348,14 @@ export default function DashboardPage() {
                       className="h-8 text-xs rounded-lg hover:cursor-pointer duration-200"
                       onClick={() => setSelectedTransactionIds([])}
                     >
-                      Limpar seleção
+                      {tt("Limpar seleção")}
                     </Button>
                     <Button
                       size="sm"
                       className="h-8 text-xs rounded-lg bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200"
                       onClick={() => setBulkDeleteTargetIds(selectedTransactionIds)}
                     >
-                      <Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir selecionadas
+                      <Trash2 className="mr-2 h-3.5 w-3.5" /> {tt("Excluir selecionadas")}
                     </Button>
                   </div>
                 )}
@@ -1358,7 +1365,7 @@ export default function DashboardPage() {
             <div className="p-3">
               {pagedTransactions.length === 0 ? (
                 <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border text-sm text-zinc-400">
-                  Nenhum lançamento encontrado com estes filtros.
+                  {tt("Nenhum lançamento encontrado com estes filtros.")}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -1386,7 +1393,7 @@ export default function DashboardPage() {
                               </p>
                               <p className={`text-xs mt-1 flex items-center gap-1 ${overdue ? "text-red-500" : "text-zinc-500 dark:text-zinc-400"}`}>
                                 <CalendarDays className="h-3.5 w-3.5" />
-                                {formatDateDisplay(tx.dueDate)}
+                                {formatDateDisplay(tx.dueDate, undefined, locale)}
                                 {overdue && <AlertCircle className="h-3.5 w-3.5 text-red-500" />}
                               </p>
                             </div>
@@ -1408,11 +1415,11 @@ export default function DashboardPage() {
                                 onClick={() => handleOpenCardFromTransaction(tx.cardId as string)}
                                 className="rounded-full border border-primary/20 bg-accent px-2 py-0.5 text-[10px] font-medium text-primary transition-colors hover:bg-accent/80"
                               >
-                                Cartão: {tx.cardLabel}
+                                {tt("Cartão")}: {tx.cardLabel}
                               </button>
                             ) : (
                               <span className="rounded-full border border-primary/20 bg-accent px-2 py-0.5 text-[10px] font-medium text-primary">
-                                Cartão: {tx.cardLabel}
+                                {tt("Cartão")}: {tx.cardLabel}
                               </span>
                             )
                           )}
@@ -1428,9 +1435,9 @@ export default function DashboardPage() {
                               {tx.isRecurring ? <Repeat className="h-3 w-3 mr-1" /> : <Layers className="h-3 w-3 mr-1" />}
                               {tx.isRecurring
                                 ? tx.recurrenceEnded
-                                  ? "Recorr?ncia encerrada"
-                                  : "Recorr?ncia mensal"
-                                : `Parcela ${(tx.installmentCurrent || 0)}/${(tx.installmentTotal || 0)}`}
+                                  ? tt("Recorrência encerrada")
+                                  : tt("Recorrência mensal")
+                                : tt("Parcela {current}/{total}", { current: tx.installmentCurrent || 0, total: tx.installmentTotal || 0 })}
                             </span>
                           )}
                         </div>
@@ -1451,7 +1458,7 @@ export default function DashboardPage() {
             {/* Pagina??o Footer */}
             <div className="app-panel-subtle flex items-center justify-between border-t border-border/70 px-6 py-4">
               <div className="text-xs text-zinc-500 font-medium">
-                P?gina {currentPage} de {totalPages || 1}
+                {tt("Página {current} de {total}", { current: currentPage, total: totalPages || 1 })}
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -1461,7 +1468,7 @@ export default function DashboardPage() {
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
                 >
-                  Anterior
+                  {tt("Anterior")}
                 </Button>
                 <Button
                   variant="outline"
@@ -1470,7 +1477,7 @@ export default function DashboardPage() {
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage >= totalPages}
                 >
-                  Pr?ximo
+                  {tt("Próximo")}
                 </Button>
               </div>
             </div>
@@ -1488,30 +1495,30 @@ export default function DashboardPage() {
                 <div className="p-2 bg-red-100 rounded-full">
                   <AlertCircle className="h-5 w-5" />
                 </div>
-                Excluir Transação
+                {tt("Excluir transação")}
               </DialogTitle>
               <DialogDescription className="pt-3 text-base">
-                Tem certeza que você vai apagar: <br /> <span className="font-bold text-zinc-900 dark:text-white mt-1 block">{getTransactionTitle(txToDelete)}</span>
+                {tt("Tem certeza que você vai apagar:")} <br /> <span className="font-bold text-zinc-900 dark:text-white mt-1 block">{getTransactionTitle(txToDelete)}</span>
               </DialogDescription>
             </DialogHeader>
 
             <DialogFooter className="flex-col sm:flex-row gap-3 mt-4">
               <Button className="w-full sm:w-auto rounded-xl h-10 hover:cursor-pointer duration-200" variant="ghost" disabled={Boolean(deleteAction)} onClick={() => setTxToDelete(null)}>
-                Cancelar
+                {tt("Cancelar")}
               </Button>
 
               {txToDelete?.groupId ? (
                 <>
                   <Button className="w-full sm:w-auto rounded-xl h-10 hover:cursor-pointer duration-200" variant="outline" disabled={Boolean(deleteAction)} onClick={() => handleConfirmDelete(false)}>
-                    {deleteAction === "single" ? "Excluindo..." : "Apenas Esta"}
+                    {deleteAction === "single" ? tt("Excluindo...") : tt("Apenas esta")}
                   </Button>
                   <Button className="w-full sm:w-auto rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200" disabled={Boolean(deleteAction)} onClick={() => handleConfirmDelete(true)}>
-                    {deleteAction === "group" ? "Excluindo..." : "Todas as Parcelas"}
+                    {deleteAction === "group" ? tt("Excluindo...") : tt("Todas as parcelas")}
                   </Button>
                 </>
               ) : (
                 <Button className="w-full sm:w-auto rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200" disabled={Boolean(deleteAction)} onClick={() => handleConfirmDelete(false)}>
-                  {deleteAction === "single" ? "Excluindo..." : "Confirmar Exclusão"}
+                  {deleteAction === "single" ? tt("Excluindo...") : tt("Confirmar exclusão")}
                 </Button>
               )}
             </DialogFooter>
@@ -1523,13 +1530,13 @@ export default function DashboardPage() {
           <DialogContent className="sm:max-w-[425px] rounded-2xl p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-600">
-                <AlertCircle className="h-6 w-6" /> Excluir Selecionadas
+                <AlertCircle className="h-6 w-6" /> {tt("Excluir selecionadas")}
               </DialogTitle>
               <DialogDescription className="pt-2 text-base">
-                Você selecionou <strong>{bulkDeleteTransactions.length}</strong> lançamento(s).
+                {tt("Você selecionou")} <strong>{bulkDeleteTransactions.length}</strong> {tt("lançamento(s).")}
                 {bulkDeleteTransactions.some((tx) => !!tx.groupId)
-                  ? " Alguns itens fazem parte de parcelamentos ou recorrências."
-                  : " Essa ação não poderá ser desfeita."}
+                  ? ` ${tt("Alguns itens fazem parte de parcelamentos ou recorrências.")}`
+                  : ` ${tt("Essa ação não poderá ser desfeita.")}`}
               </DialogDescription>
             </DialogHeader>
 
@@ -1542,14 +1549,14 @@ export default function DashboardPage() {
                     disabled={Boolean(bulkDeleteAction)}
                     onClick={() => void handleConfirmBulkDelete(false)}
                   >
-                    {bulkDeleteAction === "selected" ? "Excluindo..." : "Excluir apenas os itens selecionados"}
+                    {bulkDeleteAction === "selected" ? tt("Excluindo...") : tt("Excluir apenas os itens selecionados")}
                   </Button>
                   <Button
                     className="w-full rounded-xl h-10 bg-red-600 hover:bg-red-700 text-white hover:cursor-pointer duration-200"
                     disabled={Boolean(bulkDeleteAction)}
                     onClick={() => void handleConfirmBulkDelete(true)}
                   >
-                    {bulkDeleteAction === "groups" ? "Excluindo..." : "Excluir também todas as parcelas dos grupos"}
+                    {bulkDeleteAction === "groups" ? tt("Excluindo...") : tt("Excluir também todas as parcelas dos grupos")}
                   </Button>
                 </>
               ) : (
@@ -1558,7 +1565,7 @@ export default function DashboardPage() {
                   disabled={Boolean(bulkDeleteAction)}
                   onClick={() => void handleConfirmBulkDelete(false)}
                 >
-                  {bulkDeleteAction === "selected" ? "Excluindo..." : "Confirmar exclusão"}
+                  {bulkDeleteAction === "selected" ? tt("Excluindo...") : tt("Confirmar exclusão")}
                 </Button>
               )}
               <Button
@@ -1567,7 +1574,7 @@ export default function DashboardPage() {
                 disabled={Boolean(bulkDeleteAction)}
                 onClick={() => setBulkDeleteTargetIds(null)}
               >
-                Cancelar
+                {tt("Cancelar")}
               </Button>
             </div>
           </DialogContent>
@@ -1581,23 +1588,23 @@ export default function DashboardPage() {
                 <div className="p-2 bg-amber-100 rounded-full">
                   <XCircle className="h-5 w-5" />
                 </div>
-                Encerrar recorr?ncia
+                {tt("Encerrar recorrência")}
               </DialogTitle>
               <DialogDescription className="pt-3 text-base">
-                Você vai encerrar a recorrência de <strong>{getTransactionTitle(txToCancelSubscription)}</strong>.
+                {tt("Você vai encerrar a recorrência de")} <strong>{getTransactionTitle(txToCancelSubscription)}</strong>.
                 <br /><br />
-                A ocorrência de <strong>{formatDateDisplay(txToCancelSubscription?.dueDate || "")}</strong> será a última mantida.
+                {tt("A ocorrência de")} <strong>{formatDateDisplay(txToCancelSubscription?.dueDate || "", undefined, locale)}</strong> {tt("será a última mantida.")}
                 <br />
-                As cobranças futuras serão removidas e este lançamento ficará marcado como encerrado.
+                {tt("As cobranças futuras serão removidas e este lançamento ficará marcado como encerrado.")}
               </DialogDescription>
             </DialogHeader>
 
             <DialogFooter className="flex-col sm:flex-row gap-3 mt-4">
               <Button className="w-full sm:w-auto rounded-xl h-10 hover:cursor-pointer duration-200" variant="ghost" disabled={isCancelingSubscription} onClick={() => setTxToCancelSubscription(null)}>
-                Voltar
+                {tt("Voltar")}
               </Button>
               <Button className="w-full sm:w-auto rounded-xl h-10 bg-amber-600 hover:bg-amber-700 text-white hover:cursor-pointer duration-200" disabled={isCancelingSubscription} onClick={handleConfirmCancelSubscription}>
-                {isCancelingSubscription ? "Encerrando..." : "Confirmar Encerramento"}
+                {isCancelingSubscription ? tt("Encerrando...") : tt("Confirmar encerramento")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1608,17 +1615,17 @@ export default function DashboardPage() {
           <DialogContent className="sm:max-w-[425px] rounded-3xl p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-primary">
-                <CheckCircle2 className="h-6 w-6" /> Check-in Diário
+                <CheckCircle2 className="h-6 w-6" /> {tt("Check-in diário")}
               </DialogTitle>
               <DialogDescription className="pt-2 text-base">
-                Você tem <strong>{pendingCheckins.length}</strong> contas vencidas ou vencendo hoje. Vamos atualizar
+                {tt("Você tem")} <strong>{pendingCheckins.length}</strong> {tt("contas vencidas ou vencendo hoje. Vamos atualizar.")}
               </DialogDescription>
             </DialogHeader>
 
             {pendingCheckins.length > 0 && (
               <div className="app-panel-subtle my-2 rounded-xl border p-4">
                 <p className="font-semibold text-lg">{getTransactionTitle(pendingCheckins[0])}</p>
-                <p className="text-sm text-zinc-500 mb-2">Venceu em: {formatDateDisplay(pendingCheckins[0].dueDate)}</p>
+                <p className="text-sm text-zinc-500 mb-2">{tt("Venceu em")}: {formatDateDisplay(pendingCheckins[0].dueDate, undefined, locale)}</p>
                 <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                   {formatCurrencyDisplay(pendingCheckins[0].amount)}
                 </div>
@@ -1632,14 +1639,14 @@ export default function DashboardPage() {
                 disabled={Boolean(checkinAction) || pendingCheckins.length === 0}
                 onClick={() => handleCheckinAction(pendingCheckins[0], false)}
               >
-                {checkinAction === "pending" ? "Atualizando..." : "Ainda Não"}
+                {checkinAction === "pending" ? tt("Atualizando...") : tt("Ainda não")}
               </Button>
               <Button
                 className="rounded-xl h-12 bg-green-600 hover:bg-green-700 text-white hover:cursor-pointer duration-200"
                 disabled={Boolean(checkinAction) || pendingCheckins.length === 0}
                 onClick={() => handleCheckinAction(pendingCheckins[0], true)}
               >
-                {checkinAction === "paid" ? "Atualizando..." : "Já Paguei/Recebi"}
+                {checkinAction === "paid" ? tt("Atualizando...") : tt("Já paguei/recebi")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1654,21 +1661,21 @@ export default function DashboardPage() {
               </div>
 
               <DialogTitle className="text-2xl font-bold text-primary">
-                Limite Atingido!
+                {tt("Limite atingido!")}
               </DialogTitle>
 
               <DialogDescription className="text-base text-zinc-600 dark:text-zinc-400 mt-2">
                 {upgradeReason === "transactions" ? (
                   <>
-                    Você atingiu o limite de {freeLimit} lançamentos mensais do plano Grátis.
+                    {tt("Você atingiu o limite de {limit} lançamentos mensais do plano Grátis.", { limit: freeLimit })}
                     <br /><br />
-                    Faça o upgrade para o <strong>Plano Premium ou Pro</strong> e remova esse limite para continuar organizando sua vida financeira.
+                    {tt("Faça o upgrade para o")} <strong>{tt("Plano Premium ou Pro")}</strong> {tt("e remova esse limite para continuar organizando sua vida financeira.")}
                   </>
                 ) : (
                   <>
-                    Parcelamentos estão disponíveis apenas nos planos pagos.
+                    {tt("Parcelamentos estão disponíveis apenas nos planos pagos.")}
                     <br /><br />
-                    Faça o upgrade para o <strong>Plano Premium ou Pro</strong> para lançar compras parceladas e acompanhar melhor o fechamento do mês.
+                    {tt("Faça o upgrade para o")} <strong>{tt("Plano Premium ou Pro")}</strong> {tt("para lançar compras parceladas e acompanhar melhor o fechamento do mês.")}
                   </>
                 )}
               </DialogDescription>
@@ -1682,7 +1689,7 @@ export default function DashboardPage() {
                   variant="outline"
                   className="h-12 w-full rounded-xl border-primary/20 text-primary shadow-lg shadow-primary/15 transition-all duration-400 hover:cursor-pointer hover:bg-accent sm:text-lg font-bold"
                 >
-                  <Medal className="inline-block h-6 w-6 text-primary" /> {isOpeningCheckout === "premium" ? "Abrindo..." : "Premium"}
+                  <Medal className="inline-block h-6 w-6 text-primary" /> {isOpeningCheckout === "premium" ? tt("Abrindo...") : "Premium"}
                 </Button>
 
                 <Button
@@ -1690,7 +1697,7 @@ export default function DashboardPage() {
                   disabled={isOpeningCheckout === "pro"}
                   className="h-12 w-full rounded-xl bg-primary font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all duration-400 hover:cursor-pointer hover:bg-primary/90 sm:text-lg"
                 >
-                  <Medal className="inline-block h-6 w-6 text-zinc-400 dark:text-zinc-800" /> {isOpeningCheckout === "pro" ? "Abrindo..." : "Pro"}
+                  <Medal className="inline-block h-6 w-6 text-zinc-400 dark:text-zinc-800" /> {isOpeningCheckout === "pro" ? tt("Abrindo...") : "Pro"}
                 </Button>
 
                 <Button
@@ -1698,7 +1705,7 @@ export default function DashboardPage() {
                   className="col-span-2 h-12 w-full rounded-xl bg-accent text-primary shadow-lg shadow-primary/10 transition-all duration-400 hover:cursor-pointer hover:bg-accent/80 sm:text-lg"
                   onClick={() => setShowUpgradeModal(false)}
                 >
-                  Continuar no Grátis
+                  {tt("Continuar no Grátis")}
                 </Button>
               </div>
             </DialogFooter>
@@ -1718,7 +1725,7 @@ export default function DashboardPage() {
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })} className="w-full rounded-xl hover:cursor-pointer duration-200">Entendido</Button>
+              <Button onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })} className="w-full rounded-xl hover:cursor-pointer duration-200">{tt("Entendido")}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
