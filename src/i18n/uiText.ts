@@ -878,9 +878,7 @@ const es: Record<string, string> = {
   "Não foi possível criar o perfil da conta": "No fue posible crear el perfil de la cuenta",
   "Selecionado": "Seleccionado",
   "Escolher": "Elegir",
-  "FREE": "Gratis",
-  "Premium": "Premium",
-  "Pro": "Pro",
+  
 };
 
 export function translateUiText(locale: Locale, text: string) {
