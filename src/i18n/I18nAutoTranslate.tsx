@@ -7,7 +7,12 @@ import { translateUiText } from "@/i18n/uiText";
 
 const TEXT_SKIP_TAGS = new Set(["SCRIPT", "STYLE", "TEXTAREA", "INPUT", "CODE", "PRE"]);
 const ATTRIBUTE_SKIP_TAGS = new Set(["SCRIPT", "STYLE", "CODE", "PRE"]);
-const TEXT_NODE_ORIGINAL = new WeakMap<Text, string>();
+type TextNodeTranslation = {
+  original: string;
+  translated: string;
+};
+
+const TEXT_NODE_TRANSLATIONS = new WeakMap<Text, TextNodeTranslation>();
 const ATTRIBUTES = ["placeholder", "title", "aria-label", "alt"] as const;
 const ATTRIBUTE_ORIGINAL = new WeakMap<Element, Partial<Record<(typeof ATTRIBUTES)[number], string>>>();
 
@@ -19,10 +24,14 @@ function shouldSkip(node: Node) {
 
 function translateTextNode(node: Text, locale: Parameters<typeof translateUiText>[0]) {
   if (shouldSkip(node)) return;
-  const original = TEXT_NODE_ORIGINAL.get(node) ?? node.nodeValue ?? "";
+  const current = node.nodeValue ?? "";
+  const previous = TEXT_NODE_TRANSLATIONS.get(node);
+  const original = previous && (current === previous.original || current === previous.translated)
+    ? previous.original
+    : current;
   if (!original.trim()) return;
-  TEXT_NODE_ORIGINAL.set(node, original);
   const translated = translateUiText(locale, original);
+  TEXT_NODE_TRANSLATIONS.set(node, { original, translated });
   if (node.nodeValue !== translated) node.nodeValue = translated;
 }
 
