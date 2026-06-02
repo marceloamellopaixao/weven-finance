@@ -28,6 +28,9 @@ import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { useI18n } from "@/i18n/I18nProvider";
+import { useUiText } from "@/i18n/T";
+import { translateDefaultCategoryValue } from "@/lib/categories/defaultCategories";
 import { buildMonthlyReport, formatPaymentMethodLabel, formatReportCurrency } from "@/lib/reports/monthlyReport";
 import { exportMonthlyReportToExcel, exportMonthlyReportToPdf } from "@/services/reportExportService";
 
@@ -40,10 +43,10 @@ const REPORT_COLORS = {
 
 const CHART_COLORS = ["#2563eb", "#059669", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#be123c", "#4f46e5"];
 
-function getMonthLabel(month: string) {
+function getMonthLabel(month: string, locale = "pt-BR") {
   const [year, monthIndex] = month.split("-").map(Number);
   const date = new Date(year, monthIndex - 1, 2);
-  const label = date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const label = date.toLocaleDateString(locale, { month: "long", year: "numeric" });
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
@@ -83,6 +86,8 @@ function StatCard({
 
 export default function ReportsPage() {
   const reportRef = useRef<HTMLDivElement>(null);
+  const { locale } = useI18n();
+  const tt = useUiText();
   const { userProfile, privacyMode } = useAuth();
   const { transactions, loading: transactionsLoading } = useTransactions();
   const { workspaces, defaultWorkspace, loading: workspacesLoading } = useWorkspaces();
@@ -124,15 +129,19 @@ export default function ReportsPage() {
 
   const report = useMemo(() => buildMonthlyReport(transactions, selectedMonth), [selectedMonth, transactions]);
   const loading = transactionsLoading || workspacesLoading;
+  const money = (value: number) => formatReportCurrency(value, locale);
+  const translatedCategoryExpenses = report.categoryExpenses.map((item) => ({ ...item, name: translateDefaultCategoryValue(item.name, locale) }));
+  const translatedCategoryIncomes = report.categoryIncomes.map((item) => ({ ...item, name: translateDefaultCategoryValue(item.name, locale) }));
+  const translatedPaymentMethods = report.paymentMethods.map((item) => ({ ...item, name: tt(item.name) }));
 
   const incomeExpenseData = [
-    { name: "Receitas", value: report.totals.income },
-    { name: "Despesas", value: report.totals.expense },
+    { name: tt("Receitas"), value: report.totals.income },
+    { name: tt("Despesas"), value: report.totals.expense },
   ];
 
   const privacyConfirm = () => {
     if (!privacyMode) return true;
-    return window.confirm("O modo privacidade está ativo. A exportação vai incluir valores reais no arquivo. Deseja continuar?");
+    return window.confirm(tt("O modo privacidade está ativo. A exportação vai incluir valores reais no arquivo. Deseja continuar?"));
   };
 
   const handlePdf = async () => {
@@ -144,9 +153,11 @@ export default function ReportsPage() {
         element: reportRef.current,
         workspaceName: selectedWorkspace?.name,
         userName: userProfile?.displayName,
+        locale,
+        t: tt,
       });
     } catch (error) {
-      setExportError(error instanceof Error ? error.message : "Não foi possível exportar PDF");
+      setExportError(error instanceof Error ? error.message : tt("Não foi possível exportar PDF"));
     } finally {
       setExporting(null);
     }
@@ -160,9 +171,11 @@ export default function ReportsPage() {
       await exportMonthlyReportToExcel(report, {
         workspaceName: selectedWorkspace?.name,
         userName: userProfile?.displayName,
+        locale,
+        t: tt,
       });
     } catch (error) {
-      setExportError(error instanceof Error ? error.message : "Não foi possível exportar Excel");
+      setExportError(error instanceof Error ? error.message : tt("Não foi possível exportar Excel"));
     } finally {
       setExporting(null);
     }
@@ -180,18 +193,18 @@ export default function ReportsPage() {
             </div>
             <div>
               <p className="text-sm font-semibold text-primary">
-                Relatórios
+                {tt("Relatórios")}
               </p>
-              <h1 id="tour-reports-header" className="text-3xl font-bold tracking-tight sm:text-4xl">Relatório financeiro mensal</h1>
+              <h1 id="tour-reports-header" className="text-3xl font-bold tracking-tight sm:text-4xl">{tt("Relatório financeiro mensal")}</h1>
             </div>
           </div>
           <p className="max-w-2xl text-muted-foreground">
-            Resumo do mês, gráficos e exportação profissional em PDF ou Excel.
+            {tt("Resumo do mês, gráficos e exportação profissional em PDF ou Excel.")}
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[520px]">
           <div className="space-y-2">
-            <Label htmlFor="report-month">Mês</Label>
+            <Label htmlFor="report-month">{tt("Mês")}</Label>
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger id="report-month" className="h-11 rounded-xl">
                 <SelectValue />
@@ -199,21 +212,21 @@ export default function ReportsPage() {
               <SelectContent>
                 {availableMonths.map((month) => (
                   <SelectItem key={month} value={month}>
-                    {getMonthLabel(month)}
+                    {getMonthLabel(month, locale)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="report-workspace">Tipo da conta</Label>
+            <Label htmlFor="report-workspace">{tt("Tipo da conta")}</Label>
             <Select value={selectedWorkspace?.id || "default"} onValueChange={setSelectedWorkspaceId}>
               <SelectTrigger id="report-workspace" className="h-11 rounded-xl">
-                <SelectValue placeholder="Pessoal" />
+                <SelectValue placeholder={tt("Pessoal")} />
               </SelectTrigger>
               <SelectContent>
                 {workspaceOptions.length === 0 ? (
-                  <SelectItem value="default">{defaultWorkspace?.name || "Pessoal"}</SelectItem>
+                  <SelectItem value="default">{defaultWorkspace?.name || tt("Pessoal")}</SelectItem>
                 ) : null}
                 {workspaceOptions.map((workspace) => (
                   <SelectItem key={workspace.id} value={workspace.id}>
@@ -228,7 +241,7 @@ export default function ReportsPage() {
 
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
-          {selectedWorkspace?.name || "WevenFinance"} - {getMonthLabel(selectedMonth)}
+          {selectedWorkspace?.name || "WevenFinance"} - {getMonthLabel(selectedMonth, locale)}
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button id="tour-reports-export" variant="outline" className="h-11 rounded-xl" onClick={handleExcel} disabled={loading || exporting !== null}>
@@ -250,21 +263,21 @@ export default function ReportsPage() {
 
       <section ref={reportRef} className="space-y-6 bg-background p-1">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard title="Receitas" value={formatReportCurrency(report.totals.income)} tone="income" />
-          <StatCard title="Despesas" value={formatReportCurrency(report.totals.expense)} tone="expense" />
-          <StatCard title="Saldo do mês" value={formatReportCurrency(report.totals.balance)} tone="neutral" />
-          <StatCard title="Lançamentos" value={String(report.highlights.transactionCount)} tone="neutral" />
-          <StatCard title="Despesas pagas" value={formatReportCurrency(report.totals.paidExpense)} tone="expense" />
-          <StatCard title="Despesas pendentes" value={formatReportCurrency(report.totals.pendingExpense)} tone="expense" />
-          <StatCard title="Receitas recebidas" value={formatReportCurrency(report.totals.paidIncome)} tone="income" />
-          <StatCard title="Receitas pendentes" value={formatReportCurrency(report.totals.pendingIncome)} tone="income" />
+          <StatCard title={tt("Receitas")} value={money(report.totals.income)} tone="income" />
+          <StatCard title={tt("Despesas")} value={money(report.totals.expense)} tone="expense" />
+          <StatCard title={tt("Saldo do mês")} value={money(report.totals.balance)} tone="neutral" />
+          <StatCard title={tt("Lançamentos")} value={String(report.highlights.transactionCount)} tone="neutral" />
+          <StatCard title={tt("Despesas pagas")} value={money(report.totals.paidExpense)} tone="expense" />
+          <StatCard title={tt("Despesas pendentes")} value={money(report.totals.pendingExpense)} tone="expense" />
+          <StatCard title={tt("Receitas recebidas")} value={money(report.totals.paidIncome)} tone="income" />
+          <StatCard title={tt("Receitas pendentes")} value={money(report.totals.pendingIncome)} tone="income" />
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
           <Card id="tour-reports-summary-chart" className="app-panel-subtle rounded-xl lg:col-span-2">
             <CardHeader>
-              <CardTitle>Receitas x despesas</CardTitle>
-              <CardDescription>Comparativo do mês selecionado</CardDescription>
+              <CardTitle>{tt("Receitas x despesas")}</CardTitle>
+              <CardDescription>{tt("Comparativo do mês selecionado")}</CardDescription>
             </CardHeader>
             <CardContent className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -272,7 +285,7 @@ export default function ReportsPage() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
-                  <RechartsTooltip formatter={(value) => formatReportCurrency(Number(value))} />
+                  <RechartsTooltip formatter={(value) => money(Number(value))} />
                   <Bar dataKey="value" radius={[8, 8, 0, 0]}>
                     {incomeExpenseData.map((entry, index) => (
                       <Cell key={entry.name} fill={index === 0 ? REPORT_COLORS.income : REPORT_COLORS.expense} />
@@ -285,32 +298,32 @@ export default function ReportsPage() {
 
           <Card className="app-panel-subtle rounded-xl">
             <CardHeader>
-              <CardTitle>Destaques</CardTitle>
-              <CardDescription>Leituras rápidas do período</CardDescription>
+              <CardTitle>{tt("Destaques")}</CardTitle>
+              <CardDescription>{tt("Leituras rápidas do período")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               <div>
-                <p className="font-semibold">Maior categoria de despesa</p>
+                <p className="font-semibold">{tt("Maior categoria de despesa")}</p>
                 <p className="text-muted-foreground">
                   {report.highlights.topExpenseCategory
-                    ? `${report.highlights.topExpenseCategory.name} - ${formatReportCurrency(report.highlights.topExpenseCategory.value)}`
-                    : "Sem despesas no mês"}
+                    ? `${translateDefaultCategoryValue(report.highlights.topExpenseCategory.name, locale)} - ${money(report.highlights.topExpenseCategory.value)}`
+                    : tt("Sem despesas no mês")}
                 </p>
               </div>
               <div>
-                <p className="font-semibold">Maior transação</p>
+                <p className="font-semibold">{tt("Maior transação")}</p>
                 <p className="text-muted-foreground">
                   {report.highlights.largestTransaction
-                    ? `${getTransactionTitle(report.highlights.largestTransaction)} - ${formatReportCurrency(report.highlights.largestTransaction.amount)}`
-                    : "Nenhum lançamento encontrado"}
+                    ? `${getTransactionTitle(report.highlights.largestTransaction)} - ${money(report.highlights.largestTransaction.amount)}`
+                    : tt("Nenhum lançamento encontrado")}
                 </p>
               </div>
               <div>
-                <p className="font-semibold">Variação vs mês anterior</p>
+                <p className="font-semibold">{tt("Variação vs mês anterior")}</p>
                 <p className="text-muted-foreground">
                   {report.comparison
-                    ? `Saldo ${formatReportCurrency(report.comparison.balanceChange)}`
-                    : "Sem dados suficientes para comparar"}
+                    ? `${tt("Saldo")} ${money(report.comparison.balanceChange)}`
+                    : tt("Sem dados suficientes para comparar")}
                 </p>
               </div>
             </CardContent>
@@ -321,7 +334,7 @@ export default function ReportsPage() {
           <Card className="app-panel-soft rounded-xl">
             <CardContent className="flex min-h-[220px] items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              Carregando relatório...
+              {tt("Carregando relatório...")}
             </CardContent>
           </Card>
         ) : report.transactions.length === 0 ? (
@@ -329,8 +342,8 @@ export default function ReportsPage() {
             <CardContent className="flex min-h-[220px] flex-col items-center justify-center gap-3 text-center">
               <Download className="h-8 w-8 text-primary" />
               <div>
-                <p className="font-semibold">Nenhum lançamento encontrado neste mês</p>
-                <p className="text-sm text-muted-foreground">Escolha outro mês ou registre novas receitas e despesas.</p>
+                <p className="font-semibold">{tt("Nenhum lançamento encontrado neste mês")}</p>
+                <p className="text-sm text-muted-foreground">{tt("Escolha outro mês ou registre novas receitas e despesas.")}</p>
               </div>
             </CardContent>
           </Card>
@@ -339,17 +352,17 @@ export default function ReportsPage() {
             <div className="grid gap-4 lg:grid-cols-2">
               <Card id="tour-reports-categories" className="app-panel-subtle rounded-xl">
                 <CardHeader>
-                  <CardTitle>Despesas por categoria</CardTitle>
+                  <CardTitle>{tt("Despesas por categoria")}</CardTitle>
                 </CardHeader>
                 <CardContent className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={report.categoryExpenses} dataKey="value" nameKey="name" innerRadius={58} outerRadius={98} paddingAngle={2}>
-                        {report.categoryExpenses.map((entry, index) => (
+                      <Pie data={translatedCategoryExpenses} dataKey="value" nameKey="name" innerRadius={58} outerRadius={98} paddingAngle={2}>
+                        {translatedCategoryExpenses.map((entry, index) => (
                           <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                         ))}
                       </Pie>
-                      <RechartsTooltip formatter={(value, name) => [formatReportCurrency(Number(value)), String(name)]} />
+                      <RechartsTooltip formatter={(value, name) => [money(Number(value)), String(name)]} />
                       <Legend formatter={legendFormatter} />
                     </PieChart>
                   </ResponsiveContainer>
@@ -358,17 +371,17 @@ export default function ReportsPage() {
 
               <Card className="app-panel-subtle rounded-xl">
                 <CardHeader>
-                  <CardTitle>Receitas por categoria</CardTitle>
+                  <CardTitle>{tt("Receitas por categoria")}</CardTitle>
                 </CardHeader>
                 <CardContent className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={report.categoryIncomes} dataKey="value" nameKey="name" innerRadius={58} outerRadius={98} paddingAngle={2}>
-                        {report.categoryIncomes.map((entry, index) => (
+                      <Pie data={translatedCategoryIncomes} dataKey="value" nameKey="name" innerRadius={58} outerRadius={98} paddingAngle={2}>
+                        {translatedCategoryIncomes.map((entry, index) => (
                           <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                         ))}
                       </Pie>
-                      <RechartsTooltip formatter={(value, name) => [formatReportCurrency(Number(value)), String(name)]} />
+                      <RechartsTooltip formatter={(value, name) => [money(Number(value)), String(name)]} />
                       <Legend formatter={legendFormatter} />
                     </PieChart>
                   </ResponsiveContainer>
@@ -379,7 +392,7 @@ export default function ReportsPage() {
             <div className="grid gap-4 lg:grid-cols-2">
               <Card className="app-panel-subtle rounded-xl">
                 <CardHeader>
-                  <CardTitle>Evolução diária</CardTitle>
+                  <CardTitle>{tt("Evolução diária")}</CardTitle>
                 </CardHeader>
                 <CardContent className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
@@ -387,9 +400,9 @@ export default function ReportsPage() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis />
-                      <RechartsTooltip formatter={(value) => formatReportCurrency(Number(value))} />
-                      <Area type="monotone" dataKey="income" stackId="1" stroke={REPORT_COLORS.income} fill={REPORT_COLORS.income} fillOpacity={0.25} name="Receitas" />
-                      <Area type="monotone" dataKey="expense" stackId="2" stroke={REPORT_COLORS.expense} fill={REPORT_COLORS.expense} fillOpacity={0.2} name="Despesas" />
+                      <RechartsTooltip formatter={(value) => money(Number(value))} />
+                      <Area type="monotone" dataKey="income" stackId="1" stroke={REPORT_COLORS.income} fill={REPORT_COLORS.income} fillOpacity={0.25} name={tt("Receitas")} />
+                      <Area type="monotone" dataKey="expense" stackId="2" stroke={REPORT_COLORS.expense} fill={REPORT_COLORS.expense} fillOpacity={0.2} name={tt("Despesas")} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -397,14 +410,14 @@ export default function ReportsPage() {
 
               <Card className="app-panel-subtle rounded-xl">
                 <CardHeader>
-                  <CardTitle>Métodos de pagamento</CardTitle>
+                  <CardTitle>{tt("Métodos de pagamento")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {report.paymentMethods.map((method, index) => (
+                  {translatedPaymentMethods.map((method, index) => (
                     <div key={method.name} className="rounded-lg border bg-background/60 p-3">
                       <div className="flex items-center justify-between gap-3 text-sm font-semibold">
                         <span>{method.name}</span>
-                        <span>{formatReportCurrency(method.value)}</span>
+                        <span>{money(method.value)}</span>
                       </div>
                       <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
                         <div
@@ -415,7 +428,7 @@ export default function ReportsPage() {
                           }}
                         />
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">{method.percentage}% do volume do mês</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{tt("{percentage}% do volume do mês", { percentage: method.percentage })}</p>
                     </div>
                   ))}
                 </CardContent>
@@ -424,38 +437,38 @@ export default function ReportsPage() {
 
             <Card className="app-panel-subtle rounded-xl">
               <CardHeader>
-                <CardTitle>Tabela de transações</CardTitle>
-                <CardDescription>Dados usados no relatório exportável</CardDescription>
+                <CardTitle>{tt("Tabela de transações")}</CardTitle>
+                <CardDescription>{tt("Dados usados no relatório exportável")}</CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto">
                 <table className="w-full min-w-[760px] text-sm">
                   <thead className="border-b text-left text-xs uppercase text-muted-foreground">
                     <tr>
-                      <th className="py-3 pr-4">Data</th>
-                      <th className="py-3 pr-4">Tipo</th>
-                      <th className="py-3 pr-4">Categoria</th>
-                      <th className="py-3 pr-4">Descrição</th>
-                      <th className="py-3 pr-4">Método</th>
-                      <th className="py-3 pr-4">Status</th>
-                      <th className="py-3 text-right">Valor</th>
+                      <th className="py-3 pr-4">{tt("Data")}</th>
+                      <th className="py-3 pr-4">{tt("Tipo")}</th>
+                      <th className="py-3 pr-4">{tt("Categoria")}</th>
+                      <th className="py-3 pr-4">{tt("Descrição")}</th>
+                      <th className="py-3 pr-4">{tt("Método")}</th>
+                      <th className="py-3 pr-4">{tt("Status")}</th>
+                      <th className="py-3 text-right">{tt("Valor")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {report.transactions.map((transaction) => (
                       <tr key={transaction.id || `${transaction.dueDate}-${transaction.description}`} className="border-b last:border-0 hover:bg-muted/80">
                         <td className="py-3 pr-4">{transaction.dueDate}</td>
-                        <td className="py-3 pr-4">{transaction.type === "income" ? "Receita" : "Despesa"}</td>
+                        <td className="py-3 pr-4">{transaction.type === "income" ? tt("Receita") : tt("Despesa")}</td>
                         <td className="py-3 pr-4">
                           <CategoryLabel value={transaction.category} className="max-w-52 gap-1.5" iconClassName="h-3 w-3" />
                         </td>
                         <td className="py-3 pr-4">{getTransactionTitle(transaction)}</td>
-                        <td className="py-3 pr-4">{formatPaymentMethodLabel(transaction.paymentMethod)}</td>
-                        <td className="py-3 pr-4">{transaction.status === "paid" ? "Pago" : "Pendente"}</td>
+                        <td className="py-3 pr-4">{tt(formatPaymentMethodLabel(transaction.paymentMethod))}</td>
+                        <td className="py-3 pr-4">{transaction.status === "paid" ? tt("Pago") : tt("Pendente")}</td>
                         <td
                           className="financial-value py-3 text-right font-semibold"
                           style={{ color: transaction.type === "income" ? REPORT_COLORS.income : REPORT_COLORS.expense }}
                         >
-                          {formatReportCurrency(transaction.amount)}
+                          {money(transaction.amount)}
                         </td>
                       </tr>
                     ))}
