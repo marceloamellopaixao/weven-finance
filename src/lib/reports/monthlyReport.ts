@@ -1,6 +1,9 @@
 import type { MonthlyReport, ReportSlice } from "@/types/report";
 import type { PaymentMethod, Transaction } from "@/types/transaction";
+import type { Locale } from "@/i18n/config";
 import { formatCategoryLabel } from "@/lib/category-utils";
+import type { CurrencyCode } from "@/lib/money/formatMoney";
+import { formatMoney } from "@/lib/money/formatMoney";
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   pix: "Pix",
@@ -15,8 +18,8 @@ export function formatPaymentMethodLabel(method?: string) {
   return PAYMENT_METHOD_LABELS[method as PaymentMethod] || method || "Outro";
 }
 
-export function formatReportCurrency(value: number) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+export function formatReportCurrency(value: number, locale: Locale = "pt-BR", currency: CurrencyCode = "BRL") {
+  return formatMoney(value, currency, locale);
 }
 
 export function normalizeReportData(transactions: Transaction[]) {
