@@ -9,7 +9,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LocaleSwitcher } from "@/components/i18n/LocaleSwitcher";
 import { AuthPageShell, authIconClassName, authPanelClassName } from "@/components/auth/AuthPageShell";
+import { useUiText } from "@/i18n/T";
 import {
   buildUpgradeCheckoutPath,
   parseUpgradePlan,
@@ -28,6 +30,7 @@ const GoogleIcon = () => (
 
 export default function LoginPage() {
   const { signInWithGoogle, loginWithEmail, user, userProfile } = useAuth();
+  const tt = useUiText();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -60,20 +63,20 @@ export default function LoginPage() {
     setError("");
     try {
       if (email.trim() === "" || password.trim() === "") {
-        setError("Por favor, preencha todos os campos.");
+        setError(tt("Por favor, preencha todos os campos."));
         setIsLoading(false);
         return;
       }
 
       if (password.length < 6) {
-        setError("A senha deve ter no minimo 6 caracteres.");
+        setError(tt("A senha deve ter no mínimo 6 caracteres."));
         setIsLoading(false);
         return;
       }
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
-        setError("Por favor, insira um e-mail valido.");
+        setError(tt("Por favor, insira um e-mail válido."));
         setIsLoading(false);
         return;
       }
@@ -99,6 +102,9 @@ export default function LoginPage() {
   return (
     <AuthPageShell maxWidthClassName="max-w-[400px]">
         <div className={`${zoomIn} ${authPanelClassName}`}>
+          <div className="mb-4 flex justify-end">
+            <LocaleSwitcher />
+          </div>
           <div className="text-center mb-6 space-y-2">
             <div className={`${zoomIn} ${authIconClassName} mb-4`}>
               <Wallet className="h-8 w-8" />
@@ -107,11 +113,11 @@ export default function LoginPage() {
               Weven<span className="text-primary">Finance</span>
             </h1>
             <p className={`${fadeInUp} delay-200 text-sm text-muted-foreground`}>
-              Bem-vindo de volta!
+              {tt("Bem-vindo de volta!")}
             </p>
             {pendingUpgradePlan && (
               <p className="text-xs font-medium text-primary">
-                Depois do login, vamos continuar na contratacao do plano {pendingUpgradePlan === "premium" ? "Premium" : "Pro"}.
+                {tt("Depois do login, vamos continuar na contratação do plano {plan}.", { plan: pendingUpgradePlan === "premium" ? "Premium" : "Pro" })}
               </p>
             )}
           </div>
@@ -119,7 +125,7 @@ export default function LoginPage() {
           <div className={`${fadeInUp} delay-300 space-y-6`}>
             <form onSubmit={handleEmailLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
+                <Label htmlFor="email">{tt("E-mail")}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -134,12 +140,12 @@ export default function LoginPage() {
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <Label htmlFor="password">Senha</Label>
+                  <Label htmlFor="password">{tt("Senha")}</Label>
                   <Link
                     href={pendingUpgradePlan ? `/forgot-password?upgrade_plan=${pendingUpgradePlan}` : "/forgot-password"}
                     className="text-xs text-primary hover:underline hover:cursor-pointer transition-all duration-200"
                   >
-                    Esqueceu?
+                    {tt("Esqueceu?")}
                   </Link>
                 </div>
                 <Input
@@ -164,7 +170,7 @@ export default function LoginPage() {
                 disabled={isLoading || isGoogleLoading}
                 className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium shadow-lg shadow-black/10 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
               >
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Entrar"}
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : tt("Entrar")}
               </Button>
             </form>
 
@@ -174,7 +180,7 @@ export default function LoginPage() {
               </div>
               <div className="relative flex justify-center text-xs uppercase">
                 <span className="app-panel-soft rounded px-2 font-medium text-muted-foreground backdrop-blur-sm">
-                  Ou continue com
+                  {tt("Ou continue com")}
                 </span>
               </div>
             </div>
@@ -186,7 +192,7 @@ export default function LoginPage() {
               className="h-11 w-full rounded-xl border-[color:var(--app-panel-border)] bg-background/70 font-medium shadow-sm active:scale-[0.98]"
             >
               {isGoogleLoading ? (
-                <span className="flex items-center gap-2">Conectando...</span>
+                <span className="flex items-center gap-2">{tt("Conectando...")}</span>
               ) : (
                 <span className="flex items-center justify-center w-full">
                   <GoogleIcon />
@@ -197,12 +203,12 @@ export default function LoginPage() {
 
             <div className="text-center pt-2">
               <p className="text-sm text-muted-foreground">
-                Não tem uma conta?{" "}
+                {tt("Não tem uma conta?")}{" "}
                 <Link
                   href={pendingUpgradePlan ? `/register?upgrade_plan=${pendingUpgradePlan}` : "/register"}
                   className="text-primary font-semibold hover:underline hover:cursor-pointer transition-all duration-200"
                 >
-                  Cadastre-se
+                  {tt("Cadastre-se")}
                 </Link>
               </p>
             </div>
