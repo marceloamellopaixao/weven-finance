@@ -111,7 +111,7 @@ export default function AccountProfilePage() {
           ) : null}
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {OPTIONS.map((option) => {
             const Icon = option.icon;
             const selected = option.type === selectedType;
@@ -121,7 +121,7 @@ export default function AccountProfilePage() {
                 type="button"
                 onClick={() => setSelectedType(option.type)}
                 disabled={submitting}
-                className={`group min-h-[220px] rounded-2xl border p-1 text-left transition-all duration-300 ${
+                className={`group min-h-[150px] rounded-2xl border p-1 text-left transition-all duration-300 ${
                   selected
                     ? "border-primary/60 bg-primary/10 shadow-xl shadow-primary/10"
                     : "border-border/80 bg-card/80 hover:border-primary/35 hover:bg-accent/60"
