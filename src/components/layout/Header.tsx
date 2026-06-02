@@ -18,6 +18,8 @@ import { useImpersonation } from "@/hooks/useImpersonation";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePlatformExperience } from "@/hooks/usePlatformExperience";
+import { LocaleSwitcher } from "@/components/i18n/LocaleSwitcher";
+import { useUiText } from "@/i18n/T";
 import { Bell } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -27,6 +29,7 @@ const PUBLIC_FIXED_HEADER_ROUTES = new Set(["/", "/contact", "/security", "/term
 
 export function Header() {
   const { user, userProfile, logout } = useAuth();
+  const tt = useUiText();
   const router = useRouter();
   const pathname = usePathname();
   const { isImpersonating, impersonationTargetUid, stopImpersonation } = useImpersonation();
@@ -37,8 +40,8 @@ export function Header() {
   const { forceAccountMenuOpen, isPlatformTourActive } = usePlatformExperience();
   const isAuthenticated = !!user || !!userProfile;
   const displayName = isImpersonating
-    ? (userProfile?.displayName || "Usuário")
-    : (userProfile?.displayName || user?.displayName || "Usuário");
+    ? (userProfile?.displayName || tt("Usuário"))
+    : (userProfile?.displayName || user?.displayName || tt("Usuário"));
   const displayEmail = isImpersonating
     ? (userProfile?.email || impersonationTargetUid || "")
     : (userProfile?.email || user?.email || "");
@@ -123,12 +126,13 @@ export function Header() {
             </span>
           </Link>
           <div className="flex items-center gap-4">
+            <LocaleSwitcher />
             <Link href="/login" className="hidden sm:block">
-              <Button variant="ghost" className="rounded-full font-medium text-muted-foreground hover:bg-accent hover:text-foreground">Login</Button>
+              <Button variant="ghost" className="rounded-full font-medium text-muted-foreground hover:bg-accent hover:text-foreground">{tt("Login")}</Button>
             </Link>
             <Link href="/register">
               <Button className="rounded-full bg-primary px-5 font-medium text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-105 hover:bg-primary/90 hover:shadow-xl sm:px-6">
-                Começar Agora
+                {tt("Começar Agora")}
               </Button>
             </Link>
           </div>
@@ -152,6 +156,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
+        <LocaleSwitcher />
         {isImpersonating && (
           <>
             <Button
@@ -159,20 +164,20 @@ export function Header() {
               size="icon"
               className="md:hidden h-9 w-9 rounded-full border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:cursor-pointer"
               onClick={handleStopImpersonation}
-              title="Encerrar impersonação"
+              title={tt("Encerrar impersonação")}
             >
               <UserCog className="h-4 w-4" />
             </Button>
             <div className="hidden md:flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-700">
               <UserCog className="h-3.5 w-3.5" />
-              <span>Impersonando {displayEmail || impersonationTargetUid}</span>
+              <span>{tt("Impersonando")} {displayEmail || impersonationTargetUid}</span>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2 text-amber-700 hover:bg-amber-100 hover:cursor-pointer"
                 onClick={handleStopImpersonation}
               >
-                Encerrar
+                {tt("Encerrar")}
               </Button>
             </div>
           </>
@@ -197,26 +202,26 @@ export function Header() {
 
           <DropdownMenuContent align="end" className="app-panel-soft w-[calc(100vw-2rem)] max-w-80 rounded-xl border-color:var(--app-panel-border) p-2 shadow-xl shadow-primary/10">
             <div className="flex items-center justify-between px-2 py-1">
-              <DropdownMenuLabel className="p-0">Notificações</DropdownMenuLabel>
+              <DropdownMenuLabel className="p-0">{tt("Notificações")}</DropdownMenuLabel>
               <button
                 type="button"
                 onClick={() => void markAllAsRead()}
                 className="text-[11px] text-primary hover:underline"
               >
-                Marcar todas como lidas
+                {tt("Marcar todas como lidas")}
               </button>
               <button
                 type="button"
                 onClick={() => void clearAll()}
                 className="text-[11px] text-muted-foreground hover:text-primary hover:underline"
               >
-                Limpar
+                {tt("Limpar")}
               </button>
             </div>
             <DropdownMenuSeparator />
 
             {notifications.length === 0 ? (
-              <div className="px-2 py-6 text-center text-xs text-muted-foreground">Sem notificações.</div>
+              <div className="px-2 py-6 text-center text-xs text-muted-foreground">{tt("Sem notificações.")}</div>
             ) : (
               notifications.slice(0, 8).map((item) => (
                 <DropdownMenuItem
@@ -272,10 +277,10 @@ export function Header() {
           <DropdownMenuContent id="tour-account-menu-panel" align="end" className="app-panel-soft w-[calc(100vw-2rem)] max-w-56 rounded-xl border-color:var(--app-panel-border) p-2 shadow-xl shadow-primary/10">
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none truncate">{displayName || "Minha Conta"}</p>
+                <p className="text-sm font-medium leading-none truncate">{displayName || tt("Minha Conta")}</p>
                 <p className="truncate text-xs leading-none text-muted-foreground">{displayEmail}</p>
                 {isOnboardingActive && onboardingActiveStep === "profileMenu" && (
-                  <p className="text-[11px] font-medium text-primary">Abra este menu para concluir a etapa atual.</p>
+                  <p className="text-[11px] font-medium text-primary">{tt("Abra este menu para concluir a etapa atual.")}</p>
                 )}
               </div>
             </DropdownMenuLabel>
@@ -284,49 +289,49 @@ export function Header() {
             <Link href="/" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <Home className="mr-2 h-4 w-4" />
-                <span>Início</span>
+                <span>{tt("Início")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/dashboard" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <LayoutDashboard className="mr-2 h-4 w-4" />
-                <span>Dashboard</span>
+                <span>{tt("Dashboard")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/reports" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <FileText className="mr-2 h-4 w-4" />
-                <span>Relatórios</span>
+                <span>{tt("Relatórios")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/cards" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <CreditCard className="mr-2 h-4 w-4" />
-                <span>Cartões</span>
+                <span>{tt("Cartões")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/piggy-bank" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <PiggyBank className="mr-2 h-4 w-4" />
-                <span>Porquinho</span>
+                <span>{tt("Porquinho")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/settings" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <Settings className="mr-2 h-4 w-4" />
-                <span>Configurações</span>
+                <span>{tt("Configurações")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/apps" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <Grid2X2 className="mr-2 h-4 w-4" />
-                <span>Apps / Barra Rápida</span>
+                <span>{tt("Apps / Barra Rápida")}</span>
               </DropdownMenuItem>
             </Link>
 
@@ -343,7 +348,7 @@ export function Header() {
                       }`}
                   >
                     <ShieldAlert className="mr-2 h-4 w-4" />
-                    <span>Painel {userProfile.role === "admin" ? "Admin" : userProfile.role === "moderator" ? "Moderador" : "Funcionário"}</span>
+                    <span>{tt("Painel")} {userProfile.role === "admin" ? "Admin" : userProfile.role === "moderator" ? tt("Moderador") : tt("Funcionário")}</span>
                   </DropdownMenuItem>
                 </Link>
               </>
@@ -356,7 +361,7 @@ export function Header() {
               className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/30 rounded-lg"
             >
               <LogOut className="mr-2 h-4 w-4" />
-              <span>Sair da Conta</span>
+              <span>{tt("Sair da Conta")}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
