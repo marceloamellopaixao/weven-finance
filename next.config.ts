@@ -10,6 +10,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        source: "/account-context",
+        destination: "/account-profile",
+        permanent: true,
+      },
+      {
         source: "/porquinho/novo",
         destination: "/piggy-bank/new",
         permanent: true,
