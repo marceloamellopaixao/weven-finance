@@ -396,7 +396,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (pathname.startsWith("/billing")) return;
 
     const isMarketingOrAuthRoute = PUBLIC_ROUTES.includes(pathname);
-    const shouldCheckWorkspace = pathname === "/account-context" || !isMarketingOrAuthRoute;
+    const shouldCheckWorkspace = pathname === "/account-profile" || !isMarketingOrAuthRoute;
     if (!shouldCheckWorkspace) return;
 
     let cancelled = false;
@@ -404,11 +404,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const workspace = await getDefaultWorkspace();
         if (cancelled) return;
-        if (!workspace && pathname !== "/account-context") {
-          router.replace("/account-context");
+        if (!workspace && pathname !== "/account-profile") {
+          router.replace("/account-profile");
           return;
         }
-        if (workspace && pathname === "/account-context") {
+        if (workspace && pathname === "/account-profile") {
           router.replace(resolvePostAuthPath());
         }
       } catch (error) {
