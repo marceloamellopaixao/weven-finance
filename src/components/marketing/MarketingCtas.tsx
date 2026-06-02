@@ -6,6 +6,7 @@ import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useUiText } from "@/i18n/T";
 import { buildUpgradeCheckoutPath, rememberPendingUpgradePlan } from "@/services/billing/checkoutIntent";
 
 type MarketingCtasProps = {
@@ -14,10 +15,11 @@ type MarketingCtasProps = {
 
 export function MarketingCtas({ variant }: MarketingCtasProps) {
   const { user, userProfile } = useAuth();
+  const tt = useUiText();
   const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
   const hasSession = Boolean(user || userProfile);
   const primaryHref = hasSession ? "/dashboard" : "/register";
-  const primaryLabel = hasSession ? "Abrir meu painel" : "Começar grátis";
+  const primaryLabel = hasSession ? tt("Abrir meu painel") : tt("Começar grátis");
 
   const handlePlanCheckout = async (plan: "premium" | "pro") => {
     if (!user) {
@@ -44,7 +46,7 @@ export function MarketingCtas({ variant }: MarketingCtasProps) {
           </Button>
         </Link>
         <Button size="lg" variant="outline" className="h-12 w-full rounded-full border-color:var(--app-panel-border) px-8 text-base text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-foreground hover:cursor-pointer sm:h-14 sm:w-auto sm:text-lg" asChild>
-          <a href="#pricing">Ver planos</a>
+          <a href="#pricing">{tt("Ver planos")}</a>
         </Button>
       </div>
     );
@@ -54,7 +56,7 @@ export function MarketingCtas({ variant }: MarketingCtasProps) {
     return (
       <Link href={primaryHref} className="w-full">
         <Button className="h-12 w-full rounded-2xl border border-color:var(--app-panel-border) bg-card text-foreground shadow-sm transition-all duration-200 hover:scale-105 hover:bg-accent active:scale-95">
-          {hasSession ? "Abrir painel" : "Começar no Free"}
+          {hasSession ? tt("Abrir painel") : tt("Começar no Free")}
         </Button>
       </Link>
     );
@@ -70,7 +72,7 @@ export function MarketingCtas({ variant }: MarketingCtasProps) {
       disabled={isOpeningCheckout !== null}
       onClick={() => void handlePlanCheckout(plan)}
     >
-      {isOpeningCheckout === plan ? "Abrindo checkout..." : plan === "premium" ? "Ir para o Premium" : "Ir para o Pro"}
+      {isOpeningCheckout === plan ? tt("Abrindo checkout...") : plan === "premium" ? tt("Ir para o Premium") : tt("Ir para o Pro")}
     </Button>
   );
 }
