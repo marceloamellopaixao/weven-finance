@@ -22,6 +22,7 @@ export default function robots(): MetadataRoute.Robots {
         ],
         disallow: [
           "/account-context",
+          "/account-profile",
           "/admin",
           "/api",
           "/apps",
