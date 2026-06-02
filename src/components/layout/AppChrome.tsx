@@ -13,7 +13,7 @@ const AUTH_ROUTES = new Set([
   "/register",
   "/forgot-password",
   "/first-access",
-  "/account-context",
+  "/account-profile",
   "/verify-email",
   "/goodbye",
   "/blocked",
