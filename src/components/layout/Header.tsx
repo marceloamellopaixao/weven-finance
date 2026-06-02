@@ -184,6 +184,7 @@ export function Header() {
         )}
 
         <DropdownMenu
+          modal={false}
           onOpenChange={(open) => {
             if (isPlatformTourActive) return;
             setIsNotificationsOpen(open);
@@ -253,13 +254,13 @@ export function Header() {
                 : "border-border bg-muted text-muted-foreground"
                 }`}
             >
-              {userProfile?.plan || "Free"}
+              {tt(userProfile?.plan === "pro" ? "Pro" : userProfile?.plan === "premium" ? "Premium" : "Grátis")}
             </Badge>
           </div>
         </div>
 
         {/* Dropdown Menu do Usuário */}
-        <DropdownMenu open={isAccountMenuOpen} onOpenChange={handleAccountMenuOpenChange}>
+        <DropdownMenu modal={false} open={isAccountMenuOpen} onOpenChange={handleAccountMenuOpenChange}>
           <DropdownMenuTrigger asChild>
             <div id="tour-account-avatar" className="relative">
               <Avatar className={`h-9 w-9 cursor-pointer border-2 border-background shadow-sm ring-2 transition-all hover:ring-ring/35 md:h-10 md:w-10 ${
