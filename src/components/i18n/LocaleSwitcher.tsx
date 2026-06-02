@@ -2,7 +2,8 @@
 
 import { Globe2 } from "lucide-react";
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LOCALE_LABELS, Locale } from "@/i18n/config";
 
@@ -15,17 +16,21 @@ export function LocaleSwitcher({ className }: LocaleSwitcherProps) {
 
   return (
     <div className={className}>
-      <Select value={locale} onValueChange={(value) => setLocale(value as Locale)}>
-        <SelectTrigger aria-label="Idioma" className="h-9 rounded-full border-border/70 bg-background/70 text-xs">
-          <Globe2 className="mr-2 h-3.5 w-3.5" />
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent align="end">
-          <SelectItem value="pt-BR">{LOCALE_LABELS["pt-BR"]}</SelectItem>
-          <SelectItem value="en-US">{LOCALE_LABELS["en-US"]}</SelectItem>
-          <SelectItem value="es">{LOCALE_LABELS.es}</SelectItem>
-        </SelectContent>
-      </Select>
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" aria-label="Idioma" className="h-9 rounded-full border-border/70 bg-background/70 px-3 text-xs">
+            <Globe2 className="mr-2 h-3.5 w-3.5" />
+            {LOCALE_LABELS[locale]}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {(Object.keys(LOCALE_LABELS) as Locale[]).map((option) => (
+            <DropdownMenuItem key={option} onClick={() => setLocale(option)} className={locale === option ? "font-semibold text-primary" : undefined}>
+              {LOCALE_LABELS[option]}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
