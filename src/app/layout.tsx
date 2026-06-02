@@ -10,6 +10,9 @@ import { ToastContainer } from "react-toastify";
 import { ImpersonationConsentModal } from "@/components/impersonation/ImpersonationConsentModal";
 import { ImpersonationActionApprovalModal } from "@/components/impersonation/ImpersonationActionApprovalModal";
 import { AppChrome } from "@/components/layout/AppChrome";
+import { RegionBootstrapModal } from "@/components/region/RegionBootstrapModal";
+import { I18nAutoTranslate } from "@/i18n/I18nAutoTranslate";
+import { I18nProvider } from "@/i18n/I18nProvider";
 import { getSiteUrl, SITE_NAME } from "@/lib/site";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -83,6 +86,11 @@ export const metadata: Metadata = {
   publisher: "Weven Tech",
   alternates: {
     canonical: "/",
+    languages: {
+      "pt-BR": "/",
+      en: "/",
+      es: "/",
+    },
   },
   openGraph: {
     type: "website",
@@ -148,31 +156,35 @@ export default function RootLayout({
           suppressHydrationWarning
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
-        <AuthProvider>
-          <PlatformExperienceProvider>
-            <BlockedGuard>
-              <AppChrome>
-                {children}
-                <ImpersonationConsentModal />
-                <ImpersonationActionApprovalModal />
-                <div aria-live="polite" aria-atomic="true">
-                  <ToastContainer
-                    position="top-right"
-                    autoClose={3000}
-                    hideProgressBar={false}
-                    newestOnTop={false}
-                    closeOnClick
-                    rtl={false}
-                    pauseOnFocusLoss
-                    draggable
-                    pauseOnHover
-                    theme="colored"
-                  />
-                </div>
-              </AppChrome>
-            </BlockedGuard>
-          </PlatformExperienceProvider>
-        </AuthProvider>
+        <I18nProvider>
+          <AuthProvider>
+            <PlatformExperienceProvider>
+              <BlockedGuard>
+                <AppChrome>
+                  {children}
+                  <RegionBootstrapModal />
+                  <ImpersonationConsentModal />
+                  <ImpersonationActionApprovalModal />
+                  <I18nAutoTranslate />
+                  <div aria-live="polite" aria-atomic="true">
+                    <ToastContainer
+                      position="top-right"
+                      autoClose={3000}
+                      hideProgressBar={false}
+                      newestOnTop={false}
+                      closeOnClick
+                      rtl={false}
+                      pauseOnFocusLoss
+                      draggable
+                      pauseOnHover
+                      theme="colored"
+                    />
+                  </div>
+                </AppChrome>
+              </BlockedGuard>
+            </PlatformExperienceProvider>
+          </AuthProvider>
+        </I18nProvider>
       </body>
     </html>
   );
