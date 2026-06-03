@@ -235,7 +235,7 @@ export default function DashboardPage() {
     }
   }, [pathname, router, searchParams, shouldForceTour]);
 
-  // --- 3. CHECK-IN DI?RIO (Pop-up Inteligente) ---
+  // --- 3. CHECK-IN DIÁRIO (Pop-up Inteligente) ---
   useEffect(() => {
     if (loading || !user || hasRunCheckin || isOnboardingActive) return;
 
@@ -871,8 +871,12 @@ export default function DashboardPage() {
         {/* TOP BAR: TÍTULO + CONTROLES + BOTÃO NOVA TRANSAÇÃO */}
         <div className={`${fadeInUp} flex flex-col md:flex-row md:items-center justify-between gap-4`}>
           <div id="tour-welcome-header">
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">{tt("Visão Geral")}</h1>
-            <p className="text-sm md:text-base text-zinc-500 dark:text-zinc-400 mt-1">{tt("Gerencie seu fluxo de caixa e previsões.")}</p>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+              {tt("Visão Geral")}
+            </h1>
+            <p className="text-sm md:text-base text-zinc-500 dark:text-zinc-400 mt-1">
+              {tt("Gerencie seu fluxo de caixa e previsões.")}
+            </p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
@@ -893,7 +897,7 @@ export default function DashboardPage() {
             >
               <FileBarChart2 className="mr-2 h-4 w-4" /> {tt("Relatórios")}
             </Button>
-            {/* Seletor de M?s */}
+            {/* Seletor de Mês */}
             <div id="tour-month-select" className="app-panel-subtle flex items-center justify-between gap-2 rounded-2xl border p-1 shadow-sm w-full sm:w-auto md:justify-start">
               <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-accent disabled:opacity-30 shrink-0 hover:cursor-pointer duration-200" onClick={() => changeMonth(-1)} disabled={!canGoBack}>
                 <ChevronLeft className="h-4 w-4" />
@@ -1025,7 +1029,7 @@ export default function DashboardPage() {
                 <p className="text-xs text-zinc-500">{tt("Risco de estourar limite")}</p>
                 {monthlyInsights.topRisk ? (
                   <p className="text-sm font-semibold text-amber-700 mt-1">
-                    {monthlyInsights.topRisk.card.bankName} •••• {monthlyInsights.topRisk.card.last4} {tt("em")} {monthlyInsights.topRisk.usagePct.toFixed(1)}%
+                    {monthlyInsights.topRisk.card.bankName} **** {monthlyInsights.topRisk.card.last4} {tt("em")} {monthlyInsights.topRisk.usagePct.toFixed(1)}%
                   </p>
                 ) : (
                   <p className="text-sm font-semibold text-emerald-700 mt-1">{tt("Nenhum cartão em risco no momento.")}</p>
@@ -1045,7 +1049,7 @@ export default function DashboardPage() {
                 <p className="text-sm font-bold">{upgradePrompt.title}</p>
                 <p className="text-xs text-white/90">
                   {upgradePrompt.description}
-                   {overduePendingCount > 0 ? ` ${tt("Você também tem {count} lançamento(s) vencido(s).", { count: overduePendingCount })}` : ""}
+                  {overduePendingCount > 0 ? ` ${tt("Você também tem {count} lançamento(s) vencido(s).", { count: overduePendingCount })}` : ""}
                 </p>
               </div>
               <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row">
@@ -1064,13 +1068,13 @@ export default function DashboardPage() {
                       onClick={() => handleStartCheckout(upgradePrompt.targetPlan)}
                       disabled={isOpeningCheckout === upgradePrompt.targetPlan}
                     >
-                       {isOpeningCheckout === upgradePrompt.targetPlan ? tt("Abrindo...") : upgradePrompt.ctaPrimary}
+                      {isOpeningCheckout === upgradePrompt.targetPlan ? tt("Abrindo...") : upgradePrompt.ctaPrimary}
                     </Button>
                     <Button
                       className="h-9 bg-card text-primary hover:bg-accent"
                       onClick={() => router.push("/settings?tab=billing")}
                     >
-                       {tt("Ver planos")}
+                      {tt("Ver planos")}
                     </Button>
                   </>
                 )}
@@ -1113,7 +1117,9 @@ export default function DashboardPage() {
             <div className="absolute inset-0 bg-linear-to-br from-primary/10 to-transparent pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{tt("Saldo Atual (Hoje)")}</CardTitle>
+                <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+                  {tt("Saldo Atual (Hoje)")}
+                </CardTitle>
                 <button
                   id="tour-privacy-toggle"
                   type="button"
@@ -1198,7 +1204,7 @@ export default function DashboardPage() {
                   <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{tt("Previsão de fechamento")}</CardTitle>
                   <button
                     type="button"
-                     aria-label={privacyMode ? tt("Mostrar valores") : tt("Ocultar valores")}
+                    aria-label={privacyMode ? tt("Mostrar valores") : tt("Ocultar valores")}
                     onClick={togglePrivacyMode}
                     className="block sm:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
                   >
@@ -1209,13 +1215,13 @@ export default function DashboardPage() {
                       <TooltipTrigger asChild>
                         <button
                           type="button"
-                           aria-label={tt("Explicação da previsão de fechamento")}
+                          aria-label={tt("Explicação da previsão de fechamento")}
                           className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
                         >
                           <HelpCircle className="h-3.5 w-3.5" />
                         </button>
                       </TooltipTrigger>
-                       <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>{tt("Cálculo: saldo atual + (a receber - a pagar) no mês.")}</p></TooltipContent>
+                      <TooltipContent className="bg-zinc-200 text-zinc-900 font-bold border border-zinc-800"><p>{tt("Cálculo: saldo atual + (a receber - a pagar) no mês.")}</p></TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 </div>
@@ -1225,23 +1231,23 @@ export default function DashboardPage() {
                 <div className={`financial-value text-2xl font-bold tracking-tight sm:text-3xl ${privacyMode ? 'text-zinc-800 dark:text-zinc-200' : (projectedAccumulatedBalance >= 0 ? 'text-emerald-600' : 'text-red-600')}`}>
                   {formatCurrencyDisplay(projectedAccumulatedBalance)}
                 </div>
-                 <p className="text-xs text-zinc-400 mt-2 font-medium">{tt("Estimativa para o fim do mês.")}</p>
+                <p className="text-xs text-zinc-400 mt-2 font-medium">{tt("Estimativa para o fim do mês.")}</p>
               </CardContent>
             </Card>
           ) : (
             <Card className={`${fadeInUp} delay-500 app-panel-soft relative overflow-hidden rounded-2xl border border-color:var(--app-panel-border) text-card-foreground shadow-lg shadow-primary/10 md:shadow-xl`}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 relative">
                 <div>
-                   <CardTitle className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{tt("Previsão de fechamento")}</CardTitle>
-                   <CardDescription className="text-zinc-500 dark:text-zinc-400">{tt("Disponível no Premium e no Pro")}</CardDescription>
+                  <CardTitle className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{tt("Previsão de fechamento")}</CardTitle>
+                  <CardDescription className="text-zinc-500 dark:text-zinc-400">{tt("Disponível no Premium e no Pro")}</CardDescription>
                 </div>
                 <div className="rounded-xl bg-primary/10 p-2 text-primary"><Calculator className="h-5 w-5" /></div>
               </CardHeader>
               <CardContent className="relative h-full flex flex-col justify-between gap-4">
                 <div>
-                   <p className="text-xl font-bold tracking-tight">{tt("Entenda antes se o mês vai fechar no verde.")}</p>
+                  <p className="text-xl font-bold tracking-tight">{tt("Entenda antes se o mês vai fechar no verde.")}</p>
                   <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                     {tt("No Premium, o dashboard mostra sua previsão de fechamento com base no saldo atual, contas a pagar e valores a receber.")}
+                    {tt("No Premium, o dashboard mostra sua previsão de fechamento com base no saldo atual, contas a pagar e valores a receber.")}
                   </p>
                 </div>
                 <Button
@@ -1249,7 +1255,7 @@ export default function DashboardPage() {
                   onClick={() => handleStartCheckout("premium")}
                   disabled={isOpeningCheckout === "premium"}
                 >
-                   {isOpeningCheckout === "premium" ? tt("Abrindo...") : tt("Liberar previsão")}
+                  {isOpeningCheckout === "premium" ? tt("Abrindo...") : tt("Liberar previsão")}
                 </Button>
               </CardContent>
             </Card>

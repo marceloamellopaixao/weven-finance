@@ -129,6 +129,7 @@ const enUS: Record<string, string> = {
   "Nova Transação": "New Transaction",
   "Cartão": "Card",
   "Novo Cartão": "New Card",
+  "Novo Lançamento": "New Entry",
   "Configurações": "Settings",
   "Dashboard": "Dashboard",
   "Quanto posso gastar hoje?": "How much can I spend today?",
@@ -475,7 +476,7 @@ const enUS: Record<string, string> = {
   "Relatório financeiro": "Financial report",
   "Resumo": "Summary",
   "Métodos": "Methods",
-  "Selecione seu perfil de uso para começarmos!":"Select your usage profile to get started!",
+  "Selecione seu perfil de uso para começarmos!": "Select your usage profile to get started!",
   "Vamos usar país e estado para sugerir idioma, moeda e experiências regionais. Você poderá alterar isso depois em Configurações.": "We'll use your country and state to suggest your language, currency, and regional experiences. You can change these later in Settings.",
   "Olá, {name}. Escolha uma opção para continuar.": "Hello, {name}. Choose an option to continue.",
   "Vamos preparar categorias, relatórios e atalhos para o jeito que você usa dinheiro no dia a dia.": "Let's set up categories, reports, and shortcuts based on how you manage your money on a daily basis.",
@@ -492,6 +493,23 @@ const enUS: Record<string, string> = {
   "Você poderá criar outros perfis depois. Este será usado como padrão para relatórios mensais e categorias iniciais.": "You can create other profiles later. This one will be used as the default for monthly reports and initial categories.",
   "Preparando...": "Preparing...",
   "Não foi possível criar o perfil da conta": "Could not create the account profile",
+  "Navegação rápida do app": "Quick app navigation",
+  "Explore o WevenFinance como um app": "Explore WevenFinance as an app",
+  "Veja o que cada área faz, personalize sua barra rápida e monte um tour guiado do jeito que fizer mais sentido para você.": "See what each area does, customize your quick bar, and create a guided tour in the way that makes the most sense for you.",
+  "Iniciar tour completo": "Start full tour",
+  "Conclua o início guiado primeiro": "Complete the guided start first",
+  "Abrir dashboard": "Open Dashboard",
+  "Conta atual": "Current account",
+  "{name} - {plan}": "{name} - {plan}",
+  "Use esta tela para revisar as áreas do app, escolher quais capítulos do tour você quer ver e ajustar seus atalhos sem sair do contexto.": "Use this screen to review the app areas, choose which tour chapters you want to see, and adjust your shortcuts without leaving the context.",
+  "Tour guiado": "Guided tour",
+  "Escolha tudo ou só as partes que você quer rever": "Choose all or just the parts you want to review",
+  "O guia segue a ordem natural da plataforma, mas você pode pular o que já domina e focar apenas nas telas que ainda quer entender melhor.": "The guide follows the natural order of the platform, but you can skip what you already master and focus only on the screens you still want to understand better.",
+  "Guia selecionado": "Selected guide",
+  "Nenhuma etapa marcada": "No steps marked",
+  "{count} etapa pronta": "{count} step ready",
+  "{count} etapas prontas": "{count} steps ready",
+  "Selecionar tudo": "Select All",
 
 };
 
@@ -878,7 +896,7 @@ const es: Record<string, string> = {
   "Não foi possível criar o perfil da conta": "No fue posible crear el perfil de la cuenta",
   "Selecionado": "Seleccionado",
   "Escolher": "Elegir",
-  
+
 };
 
 export function translateUiText(locale: Locale, text: string) {

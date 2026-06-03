@@ -17,6 +17,7 @@ import {
   PlatformTourRouteKey,
 } from "@/types/navigation";
 import { PLATFORM_TOUR_ROUTE_HREFS } from "@/lib/platform-tour/config";
+import { useUiText } from "@/i18n/T";
 
 const PLATFORM_TOUR_COPY: Record<
   PlatformTourRouteKey,
@@ -45,7 +46,7 @@ const PLATFORM_TOUR_COPY: Record<
     title: "Relatórios",
     eyebrow: "Resumo e exportação",
     description: "Veja o fechamento mensal, leia gráficos por categoria e gere PDF ou Excel profissional.",
-  },  cards: {
+  }, cards: {
     title: "Cartões",
     eyebrow: "Limites e faturas",
     description: "Veja como acompanhar limite usado, risco da fatura e saúde dos cartões.",
@@ -59,6 +60,7 @@ const PLATFORM_TOUR_COPY: Record<
 
 export default function AppsPage() {
   const router = useRouter();
+  const tt = useUiText();
   const { userProfile } = useAuth();
   const { startPlatformTour } = usePlatformExperience();
   const { resetTour, isActive: isOnboardingActive } = useOnboarding();
@@ -115,15 +117,14 @@ export default function AppsPage() {
           <div className="grid gap-6 px-6 py-8 md:grid-cols-[1.3fr_0.7fr] md:px-8 md:py-10">
             <div className="space-y-4">
               <Badge className="rounded-full bg-accent px-3 py-1 text-primary">
-                Navegação rápida do app
+                {tt("Navegação rápida do app")}
               </Badge>
               <div className="space-y-3">
                 <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-                  Explore o WevenFinance como um app
+                  {tt("Explore o WevenFinance como um app")}
                 </h1>
                 <p className="max-w-2xl text-sm leading-6 text-muted-foreground md:text-base">
-                  Veja o que cada área faz, personalize sua barra rápida e monte
-                  um tour guiado do jeito que fizer mais sentido para você.
+                  {tt("Veja o que cada área faz, personalize sua barra rápida e monte um tour guiado do jeito que fizer mais sentido para você.")}
                 </p>
               </div>
 
@@ -138,12 +139,12 @@ export default function AppsPage() {
                 >
                   <PlayCircle className="mr-2 h-4 w-4" />
                   {isOnboardingActive
-                    ? "Conclua o início guiado primeiro"
-                    : "Iniciar tour completo"}
+                    ? `${tt("Conclua o início guiado primeiro")}`
+                    : `${tt("Iniciar tour completo")}`}
                 </Button>
                 <Link href="/dashboard">
                   <Button variant="outline" className="rounded-2xl">
-                    Abrir dashboard
+                    {tt("Abrir dashboard")}
                   </Button>
                 </Link>
               </div>
@@ -156,18 +157,18 @@ export default function AppsPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-foreground">
-                    Conta atual
+                    {tt("Conta atual")}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {userProfile?.displayName || "Usuario"} ? plano{" "}
-                    {(userProfile?.plan || "free").toUpperCase()}
+                    {tt("{name} - {plan}", {
+                      name: userProfile?.displayName || "Conta",
+                      plan: userProfile?.plan || "Grátis",
+                    })}
                   </p>
                 </div>
               </div>
               <div className="mt-5 rounded-2xl border border-primary/20 bg-background/60 p-4 text-sm text-muted-foreground shadow-sm">
-                Use esta tela para revisar as áreas do app, escolher quais
-                capítulos do tour você quer ver e ajustar seus atalhos sem sair
-                do contexto.
+                {tt("Use esta tela para revisar as áreas do app, escolher quais capítulos do tour você quer ver e ajustar seus atalhos sem sair do contexto.")}
               </div>
             </div>
           </div>
@@ -181,15 +182,13 @@ export default function AppsPage() {
             <CardContent className="space-y-6 p-6 sm:p-7">
               <div className="space-y-2">
                 <Badge className="rounded-full bg-accent px-3 py-1 text-primary">
-                  Tour guiado
+                  {tt("Tour guiado")}
                 </Badge>
                 <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                  Escolha tudo ou só as partes que você quer rever
+                  {tt("Escolha tudo ou só as partes que você quer rever")}
                 </h2>
                 <p className="text-sm leading-6 text-muted-foreground">
-                  O guia segue a ordem natural da plataforma, mas você pode
-                  pular o que já domina e focar apenas nas telas que ainda quer
-                  entender melhor.
+                  {tt("O guia segue a ordem natural da plataforma, mas você pode pular o que já domina e focar apenas nas telas que ainda quer entender melhor.")}
                 </p>
               </div>
 
@@ -198,12 +197,17 @@ export default function AppsPage() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-medium uppercase tracking-[0.22em] text-primary">
-                        Guia selecionado
+                        {tt("Guia selecionado")}
                       </p>
                       <p className="mt-2 text-2xl font-semibold text-foreground">
                         {selectedCount === 0
-                          ? "Nenhuma etapa marcada"
-                          : `${selectedCount} etapa${selectedCount > 1 ? "s" : ""} pronta${selectedCount > 1 ? "s" : ""}`}
+                          ? tt("Nenhuma etapa marcada")
+                          : `${tt(
+                            selectedCount === 1
+                              ? "{count} etapa pronta"
+                              : "{count} etapas prontas",
+                            { count: selectedCount }
+                          )}`}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -213,7 +217,7 @@ export default function AppsPage() {
                         onClick={handleSelectAllRoutes}
                         className="rounded-xl border-primary/20 text-primary hover:bg-accent"
                       >
-                        Selecionar tudo
+                        {tt("Selecionar tudo")}
                       </Button>
                       <Button
                         type="button"
@@ -221,7 +225,7 @@ export default function AppsPage() {
                         onClick={handleClearRoutes}
                         className="rounded-xl text-muted-foreground hover:bg-accent"
                       >
-                        Limpar
+                        Selecionar tudo
                       </Button>
                     </div>
                   </div>
@@ -297,26 +301,23 @@ export default function AppsPage() {
                       role="button"
                       tabIndex={0}
                       aria-pressed={isSelected}
-                      className={`group flex w-full items-start gap-4 rounded-3xl border p-4 text-left transition-all ${
-                        isSelected
-                          ? "border-primary/35 bg-accent shadow-sm shadow-primary/10 dark:border-primary/40 dark:bg-accent/25"
-                          : "app-panel-subtle border-color:var(--app-panel-border) hover:border-primary/25 hover:bg-accent/60"
-                      }`}
+                      className={`group flex w-full items-start gap-4 rounded-3xl border p-4 text-left transition-all ${isSelected
+                        ? "border-primary/35 bg-accent shadow-sm shadow-primary/10 dark:border-primary/40 dark:bg-accent/25"
+                        : "app-panel-subtle border-color:var(--app-panel-border) hover:border-primary/25 hover:bg-accent/60"
+                        }`}
                     >
                       <div
                         aria-hidden="true"
-                        className={`mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-lg border transition-colors ${
-                          isSelected
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-primary/35 bg-background/70 text-transparent"
-                        }`}
+                        className={`mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-lg border transition-colors ${isSelected
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-primary/35 bg-background/70 text-transparent"
+                          }`}
                       >
                         <Check className="h-3 w-3" />
                       </div>
                       <div
-                        className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-linear-to-br ${
-                          item?.accentClass || "from-primary/15 to-primary/5 text-primary"
-                        }`}
+                        className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-linear-to-br ${item?.accentClass || "from-primary/15 to-primary/5 text-primary"
+                          }`}
                       >
                         <Icon className="h-5 w-5" />
                       </div>
