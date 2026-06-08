@@ -15,6 +15,11 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
+        source: "/controle-financeiro-simples",
+        destination: "/controle-financeiro",
+        permanent: true,
+      },
+      {
         source: "/porquinho/novo",
         destination: "/piggy-bank/new",
         permanent: true,

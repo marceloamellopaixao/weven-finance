@@ -3,6 +3,18 @@ export const seo = {
     metadata: {
       title: "WevenFinance | Controle financeiro pessoal com clareza",
       description: "Saiba quanto você pode gastar hoje sem comprometer o fim do mês. Organize gastos, cartões, parcelas, metas e relatórios mensais em um painel simples.",
+      keywords: [
+        "controle financeiro pessoal",
+        "organização financeira",
+        "finanças pessoais",
+        "controle de cartões",
+        "parcelamentos",
+        "relatórios financeiros mensais",
+        "quanto posso gastar hoje",
+        "limite diário inteligente",
+        "metas financeiras",
+        "WevenFinance",
+      ],
     },
   },
   pages: {
@@ -37,7 +49,7 @@ export const seo = {
         },
       ],
     },
-    organizarCartao: {
+    creditCardOrganization: {
       metadata: {
         title: "Como organizar cartão de crédito e parcelas?",
         description: "Controle limite, fatura, vencimentos e compras parceladas sem confundir cartão com renda.",
@@ -62,17 +74,17 @@ export const seo = {
         },
       ],
     },
-    controleFinanceiroSimples: {
+    financialControl: {
       metadata: {
-        title: "Controle financeiro simples para não passar aperto",
+        title: "Controle financeiro para não passar aperto",
         description: "Organize gastos, cartões e vencimentos sem planilha e descubra quanto pode gastar hoje.",
       },
-      eyebrow: "Controle financeiro simples",
-      title: "Controle financeiro simples para quem quer clareza sem planilha",
+      eyebrow: "Controle financeiro",
+      title: "Controle financeiro para quem quer clareza sem depender de planilha",
       description: "Registre o essencial, acompanhe vencimentos e entenda se o dinheiro do mês ainda está seguro.",
-      keyword: "controle financeiro simples",
+      keyword: "controle financeiro",
       benefits: [
-        "Sem planilha complicada",
+        "Organização sem planilha complicada",
         "Gastos e vencimentos no mesmo lugar",
         "Resposta clara para o dia a dia",
       ],
@@ -84,23 +96,42 @@ export const seo = {
         {
           title: "Do registro para a decisão",
           text: "Cada lançamento ajuda a calcular sua previsão e seu limite diário, transformando dados em uma orientação simples.",
-        }
+        },
       ],
     },
-    appParaSairDasDividas: {
+    debtFreeApp: {
       metadata: {
-        title: "App para sair das dívidas com controle simples",
+        title: "App para sair das dívidas com controle financeiro",
         description: "Organize gastos, vencimentos e metas para parar de se perder e recuperar previsibilidade financeira.",
       },
       eyebrow: "Sair das dívidas",
       title: "Um app para sair das dívidas com clareza no dia a dia",
       description: "Veja o que ainda vence, reduza gastos antes do aperto e acompanhe metas para recuperar controle financeiro.",
       keyword: "app para sair das dívidas",
-      benefits: ["Vencimentos visíveis", "Limite diário para segurar gastos", "Metas para reconstruir reserva"],
-      sections: [
-        { title: "Comece pelo que vence", text: "Antes de tentar mudar tudo, veja boletos, faturas e recorrências que ainda vão consumir seu saldo." },
-        { title: "Pequenas decisões diárias", text: "Sair das dívidas depende de saber quando gastar e quando segurar. O limite diário deixa essa decisão mais concreta." },
+      benefits: [
+        "Vencimentos visíveis",
+        "Limite diário para segurar gastos",
+        "Metas para reconstruir reserva",
       ],
+      sections: [
+        {
+          title: "Comece pelo que vence",
+          text: "Antes de tentar mudar tudo, veja boletos, faturas e recorrências que ainda vão consumir seu saldo.",
+        },
+        {
+          title: "Pequenas decisões diárias",
+          text: "Sair das dívidas depende de saber quando gastar e quando segurar. O limite diário deixa essa decisão mais concreta.",
+        },
+      ],
+    },
+    dailySpendCalculator: {
+      metadata: {
+        title: "Calculadora: quanto posso gastar hoje?",
+        description: "Calcule grátis quanto você pode gastar hoje sem comprometer o fim do mês.",
+      },
+      eyebrow: "Calculadora gratuita",
+      title: "Quanto posso gastar hoje sem comprometer o fim do mês?",
+      description: "Informe seu saldo, contas previstas, cartão e reserva desejada. O resultado é uma estimativa simples para orientar sua decisão de hoje.",
     }
   },
 } as const;

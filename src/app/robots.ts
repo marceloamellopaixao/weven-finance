@@ -16,7 +16,7 @@ export default function robots(): MetadataRoute.Robots {
           "/terms",
           "/quanto-posso-gastar-hoje",
           "/calculadora/quanto-posso-gastar-hoje",
-          "/controle-financeiro-simples",
+          "/controle-financeiro",
           "/organizar-cartao-de-credito",
           "/app-para-sair-das-dividas",
         ],

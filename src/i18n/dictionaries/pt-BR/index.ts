@@ -1,6 +1,7 @@
 import { accountProfile } from "./accountProfile";
 import { auth } from "./auth";
 import { billing } from "./billing";
+import { calculator } from "./calculator";
 import { common } from "./common";
 import { header } from "./header";
 import { landing } from "./landing";
@@ -13,6 +14,7 @@ export const ptBR = {
   accountProfile,
   auth,
   billing,
+  calculator,
   common,
   header,
   landing,

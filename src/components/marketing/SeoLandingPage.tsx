@@ -52,9 +52,9 @@ export function SeoLandingPage({
         <section className="grid gap-4 md:grid-cols-3">
           {benefits.map((benefit) => (
             <Card key={benefit} className="app-panel-soft rounded-2xl border-color:var(--app-panel-border)">
-              <CardHeader>
+              <CardHeader className="flex items-center gap-3">
                 <CheckCircle2 className="h-5 w-5 text-primary" />
-                <CardTitle className="text-base">{benefit}</CardTitle>
+                <CardTitle className="text-start">{benefit}</CardTitle>
               </CardHeader>
             </Card>
           ))}

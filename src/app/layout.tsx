@@ -1,5 +1,4 @@
-import type { Metadata } from "next";
-import type { Viewport } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
@@ -13,14 +12,12 @@ import { AppChrome } from "@/components/layout/AppChrome";
 import { RegionBootstrapModal } from "@/components/region/RegionBootstrapModal";
 import { I18nAutoTranslate } from "@/i18n/I18nAutoTranslate";
 import { I18nProvider } from "@/i18n/I18nProvider";
-import { DEFAULT_LOCALE } from "@/i18n/config";
-import { translate } from "@/i18n/getDictionary";
+import { getDictionary } from "@/i18n/getDictionary";
+import { getRequestLocale } from "@/i18n/server";
 import { getSiteUrl, SITE_NAME } from "@/lib/site";
 
 const inter = Inter({ subsets: ["latin"] });
 const siteUrl = getSiteUrl();
-const defaultTitle = translate(DEFAULT_LOCALE, "seo.default.metadata.title");
-const defaultDescription = translate(DEFAULT_LOCALE, "seo.default.metadata.description");
 const structuredData = [
   {
     "@context": "https://schema.org",
@@ -64,74 +61,69 @@ const structuredData = [
   },
 ];
 
-export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
-  applicationName: SITE_NAME,
-  title: {
-    default: defaultTitle,
-    template: `%s | ${SITE_NAME}`,
-  },
-  description: defaultDescription,
-  keywords: [
-    "controle financeiro pessoal",
-    "organização financeira",
-    "finanças pessoais",
-    "controle de cartões",
-    "parcelamentos",
-    "relatórios financeiros mensais",
-    "quanto posso gastar hoje",
-    "limite diário inteligente",
-    "metas financeiras",
-    "WevenFinance",
-  ],
-  authors: [{ name: "Weven Tech", url: "https://weven.tech" }],
-  creator: "Weven Tech",
-  publisher: "Weven Tech",
-  alternates: {
-    canonical: "/",
-    languages: {
-      "pt-BR": "/",
-      "en-US": "/",
-      es: "/",
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const dictionary = getDictionary(locale);
+  const metadata = dictionary.seo.default.metadata;
+
+  return {
+    metadataBase: new URL(siteUrl),
+    applicationName: SITE_NAME,
+    title: {
+      default: metadata.title,
+      template: `%s | ${SITE_NAME}`,
     },
-  },
-  openGraph: {
-    type: "website",
-    locale: "pt_BR",
-    url: "/",
-    siteName: SITE_NAME,
-    title: defaultTitle,
-    description: defaultDescription,
-    images: [
-      {
-        url: "/wevenfinance.png",
-        alt: "WevenFinance",
+    description: metadata.description,
+    keywords: [...metadata.keywords],
+    authors: [{ name: "Weven Tech", url: "https://weven.tech" }],
+    creator: "Weven Tech",
+    publisher: "Weven Tech",
+    alternates: {
+      canonical: "/",
+      languages: {
+        "pt-BR": "/",
+        "en-US": "/",
+        es: "/",
       },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: defaultTitle,
-    description: defaultDescription,
-    images: ["/wevenfinance.png"],
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
+    },
+    openGraph: {
+      type: "website",
+      locale: locale === "pt-BR" ? "pt_BR" : locale,
+      url: "/",
+      siteName: SITE_NAME,
+      title: metadata.title,
+      description: metadata.description,
+      images: [
+        {
+          url: "/wevenfinance.png",
+          alt: "WevenFinance",
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: metadata.title,
+      description: metadata.description,
+      images: ["/wevenfinance.png"],
+    },
+    robots: {
       index: true,
       follow: true,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-      "max-video-preview": -1,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+        "max-video-preview": -1,
+      },
     },
-  },
-  icons: {
-    icon: "/wevenfinance.svg",
-    shortcut: "/wevenfinance.svg",
-    apple: "/wevenfinance.png",
-  },
-};
+    icons: {
+      icon: "/wevenfinance.svg",
+      shortcut: "/wevenfinance.svg",
+      apple: "/wevenfinance.png",
+    },
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -144,13 +136,15 @@ export const viewport: Viewport = {
   colorScheme: "light dark",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getRequestLocale();
+
   return (
-    <html lang="pt-BR">
+    <html lang={locale}>
       <body className={inter.className}>
         <script
           type="application/ld+json"
@@ -179,6 +173,7 @@ export default function RootLayout({
                       draggable
                       pauseOnHover
                       theme="colored"
+                      
                     />
                   </div>
                 </AppChrome>

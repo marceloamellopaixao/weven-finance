@@ -1,5 +1,6 @@
 export const common = {
   appName: "WevenFinance",
+  copyright: "© 2026 WevenFinance.",
   save: "Guardar",
   saving: "Guardando...",
   cancel: "Cancelar",

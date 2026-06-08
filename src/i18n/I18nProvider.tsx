@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { DEFAULT_LOCALE, Locale, detectBrowserLocale, normalizeLocale } from "@/i18n/config";
+import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, LOCALE_STORAGE_KEY, Locale, detectBrowserLocale, normalizeLocale } from "@/i18n/config";
 import { translate, TranslationKey, TranslationValues } from "@/i18n/getDictionary";
 
 type I18nContextValue = {
@@ -10,15 +10,37 @@ type I18nContextValue = {
   t: (key: TranslationKey | string, values?: TranslationValues) => string;
 };
 
-const STORAGE_KEY = "wevenfinance:locale:v1";
 const I18nContext = createContext<I18nContextValue | null>(null);
 
+function writeLocaleCookie(locale: Locale) {
+  document.cookie = `${LOCALE_COOKIE_NAME}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
+}
+
+function readLocaleCookie() {
+  const match = document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith(`${LOCALE_COOKIE_NAME}=`));
+
+  return match ? normalizeLocale(decodeURIComponent(match.split("=").slice(1).join("="))) : null;
+}
+
 function readInitialLocale() {
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  if (stored) return normalizeLocale(stored);
+  const cookieLocale = readLocaleCookie();
+  if (cookieLocale) {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, cookieLocale);
+    return cookieLocale;
+  }
+
+  const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+  if (stored) {
+    const storedLocale = normalizeLocale(stored);
+    writeLocaleCookie(storedLocale);
+    return storedLocale;
+  }
 
   const detected = detectBrowserLocale(window.navigator.language);
-  window.localStorage.setItem(STORAGE_KEY, detected);
+  window.localStorage.setItem(LOCALE_STORAGE_KEY, detected);
+  writeLocaleCookie(detected);
   return detected;
 }
 
@@ -29,7 +51,8 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     const normalized = normalizeLocale(nextLocale);
     setLocaleState(normalized);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY, normalized);
+      window.localStorage.setItem(LOCALE_STORAGE_KEY, normalized);
+      writeLocaleCookie(normalized);
       document.documentElement.lang = normalized;
     }
   }, []);

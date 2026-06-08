@@ -5,21 +5,25 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { MarketingCtas } from "@/components/marketing/MarketingCtas";
 import { T } from "@/i18n/T";
-import { DEFAULT_LOCALE } from "@/i18n/config";
 import { translate } from "@/i18n/getDictionary";
+import { getRequestLocale } from "@/i18n/server";
 
-export const metadata: Metadata = {
-  title: translate(DEFAULT_LOCALE, "seo.pages.home.metadata.title"),
-  description: translate(DEFAULT_LOCALE, "seo.pages.home.metadata.description"),
-  alternates: {
-    canonical: "/",
-    languages: {
-      "pt-BR": "/",
-      "en-US": "/",
-      es: "/",
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+
+  return {
+    title: translate(locale, "seo.pages.home.metadata.title"),
+    description: translate(locale, "seo.pages.home.metadata.description"),
+    alternates: {
+      canonical: "/",
+      languages: {
+        "pt-BR": "/",
+        "en-US": "/",
+        es: "/",
+      },
     },
-  },
-};
+  };
+}
 
 const plans = {
   free: {

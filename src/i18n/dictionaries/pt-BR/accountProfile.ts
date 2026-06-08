@@ -1,4 +1,8 @@
 export const accountProfile = {
+  metadata: {
+    title: "WevenFinance | Perfil da conta",
+    description: "Escolha o perfil de uso para preparar categorias, relatórios e atalhos iniciais no WevenFinance.",
+  },
   badge: "Selecione seu perfil de uso para começarmos!",
   title: "Como você quer organizar o WevenFinance?",
   description: "Vamos preparar categorias, relatórios e atalhos para o jeito que você usa dinheiro no dia a dia.",

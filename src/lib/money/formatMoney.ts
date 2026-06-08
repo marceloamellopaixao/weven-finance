@@ -1,6 +1,6 @@
 import { Locale, normalizeLocale } from "@/i18n/config";
-import { BillingCurrency } from "@/types/billing";
 import { MAX_FINANCIAL_AMOUNT } from "@/lib/money";
+import { BillingCurrency } from "@/types/billing";
 
 export type CurrencyCode = BillingCurrency;
 
@@ -22,7 +22,14 @@ export function isSupportedCurrency(value: unknown): value is CurrencyCode {
 }
 
 export function normalizeCurrency(value: unknown): CurrencyCode {
-  return isSupportedCurrency(value) ?value : "BRL";
+  return isSupportedCurrency(value) ? value : "BRL";
+}
+
+export function getDefaultCurrencyForLocale(locale: Locale): CurrencyCode {
+  const normalizedLocale = normalizeLocale(locale);
+  if (normalizedLocale === "en-US") return "USD";
+  if (normalizedLocale === "es") return "EUR";
+  return "BRL";
 }
 
 export function formatMoney(value: number | null | undefined, currency: CurrencyCode = "BRL", locale: Locale = "pt-BR") {
@@ -40,7 +47,7 @@ export function getCurrencySymbol(currency: CurrencyCode) {
 }
 
 export function normalizeMoneyValue(value: string | number | null | undefined) {
-  const parsed = typeof value === "number" ?value : Number(value);
+  const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(parsed)) return 0;
   return Math.min(Math.max(parsed, 0), MAX_FINANCIAL_AMOUNT);
 }
@@ -54,7 +61,7 @@ export function parseMoneyInput(value: string | number | null | undefined, local
   const normalizedLocale = normalizeLocale(locale);
   const separators =
     normalizedLocale === "en-US"
-      ?{ decimal: ".", group: "," }
+      ? { decimal: ".", group: "," }
       : { decimal: ",", group: "." };
 
   const normalized = text

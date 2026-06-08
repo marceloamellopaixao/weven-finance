@@ -1,23 +1,23 @@
 import type { Metadata } from "next";
 
 import { SeoLandingPage } from "@/components/marketing/SeoLandingPage";
-import { DEFAULT_LOCALE } from "@/i18n/config";
 import { getDictionary } from "@/i18n/getDictionary";
+import { getRequestLocale } from "@/i18n/server";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const dictionary = getDictionary(DEFAULT_LOCALE);
-  const page = dictionary.seo.pages.controleFinanceiroSimples;
+  const dictionary = getDictionary(await getRequestLocale());
+  const page = dictionary.seo.pages.financialControl;
 
   return {
     title: page.metadata.title,
     description: page.metadata.description,
-    alternates: { canonical: "/controle-financeiro-simples" },
+    alternates: { canonical: "/controle-financeiro" },
   };
 }
 
-export default function Page() {
-  const dictionary = getDictionary(DEFAULT_LOCALE);
-  const page = dictionary.seo.pages.controleFinanceiroSimples;
+export default async function Page() {
+  const dictionary = getDictionary(await getRequestLocale());
+  const page = dictionary.seo.pages.financialControl;
 
   return (
     <SeoLandingPage

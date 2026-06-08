@@ -1,6 +1,7 @@
 "use client";
 
 import { Globe2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -13,8 +14,14 @@ type LocaleSwitcherProps = {
 };
 
 export function LocaleSwitcher({ className }: LocaleSwitcherProps) {
+  const router = useRouter();
   const { locale, setLocale } = useI18n();
   const tLocale = useTranslations("locale");
+
+  const handleLocaleChange = (option: Locale) => {
+    setLocale(option);
+    router.refresh();
+  };
 
   return (
     <div className={className}>
@@ -27,7 +34,7 @@ export function LocaleSwitcher({ className }: LocaleSwitcherProps) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {(Object.keys(LOCALE_LABELS) as Locale[]).map((option) => (
-            <DropdownMenuItem key={option} onClick={() => setLocale(option)} className={locale === option ? "font-semibold text-primary" : undefined}>
+            <DropdownMenuItem key={option} onClick={() => handleLocaleChange(option)} className={locale === option ? "font-semibold text-primary" : undefined}>
               {LOCALE_LABELS[option]}
             </DropdownMenuItem>
           ))}

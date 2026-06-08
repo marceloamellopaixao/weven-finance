@@ -1,33 +1,39 @@
-export const accountProfile = {
-  badge: "¡Selecciona tu perfil de uso para comenzar!",
-  title: "¿Cómo quieres organizar WevenFinance?",
-  description: "Prepararemos categorías, reportes y accesos rápidos según la forma en que administras tu dinero día a día.",
-  greeting: "Hola, {name}. Elige una opción para continuar.",
+import type { Dictionary } from "@/i18n/dictionaries/pt-BR";
+
+export const accountProfile: Dictionary["accountProfile"] = {
+  metadata: {
+    title: "WevenFinance | Perfil de la cuenta",
+    description: "Elija el perfil de uso para preparar categorías, informes y accesos iniciales en WevenFinance.",
+  },
+  badge: "¡Seleccione su perfil de uso para comenzar!",
+  title: "¿Cómo quiere organizar WevenFinance?",
+  description: "Prepararemos categorías, informes y accesos rápidos según la forma en que administra su dinero día a día.",
+  greeting: "Hola, {name}. Elija una opción para continuar.",
   selected: "Seleccionado",
   choose: "Elegir",
-  notice: "Podrás crear otros perfiles más adelante. Este se usará como predeterminado para reportes mensuales y categorías iniciales.",
+  notice: "Podrá crear otros perfiles más adelante. Este se usará como predeterminado para informes mensuales y categorías iniciales.",
   preparing: "Preparando...",
   createError: "No fue posible crear el perfil de la cuenta",
   options: {
     personal: {
       title: "Perfil personal",
-      description: "Controla ingresos, gastos, tarjetas, metas, deudas y el límite diario inteligente.",
+      description: "Controle ingresos, gastos, tarjetas, metas, deudas y el límite diario inteligente.",
     },
     professional: {
       title: "Perfil profesional / autónomo",
-      description: "Controla ingresos de clientes, gastos de trabajo, impuestos, caja mensual y reportes.",
+      description: "Controle ingresos de clientes, gastos de trabajo, impuestos, caja mensual e informes.",
     },
     church: {
       title: "Perfil iglesia / ministerio",
-      description: "Controla diezmos, ofrendas, misiones, cafetería, departamentos, eventos y gastos por área.",
+      description: "Controle diezmos, ofrendas, misiones, cafetería, departamentos, eventos y gastos por área.",
     },
     family: {
       title: "Perfil familia / hogar",
-      description: "Controla cuentas compartidas, supermercado, alquiler, escuela, transporte y metas familiares.",
+      description: "Controle cuentas compartidas, supermercado, alquiler, escuela, transporte y metas familiares.",
     },
     business: {
       title: "Perfil pequeño negocio",
-      description: "Controla ventas, costos, cuentas por pagar y cobrar, flujo de caja y beneficio estimado.",
+      description: "Controle ventas, costos, cuentas por pagar y cobrar, flujo de caja y beneficio estimado.",
     },
   },
 } as const;

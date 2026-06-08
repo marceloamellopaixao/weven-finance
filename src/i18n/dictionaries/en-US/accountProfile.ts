@@ -1,7 +1,13 @@
-export const accountProfile = {
+import type { Dictionary } from "@/i18n/dictionaries/pt-BR";
+
+export const accountProfile: Dictionary["accountProfile"] = {
+  metadata: {
+    title: "WevenFinance | Account profile",
+    description: "Choose your usage profile to prepare initial categories, reports, and shortcuts in WevenFinance.",
+  },
   badge: "Select your usage profile to get started!",
   title: "How do you want to organize WevenFinance?",
-  description: "Let's set up categories, reports, and shortcuts based on how you manage your money on a daily basis.",
+  description: "We will set up categories, reports, and shortcuts based on how you manage money day to day.",
   greeting: "Hello, {name}. Choose an option to continue.",
   selected: "Selected",
   choose: "Choose",
@@ -11,7 +17,7 @@ export const accountProfile = {
   options: {
     personal: {
       title: "Personal profile",
-      description: "Track your income, expenses, credit cards, goals, debts, and smart daily limit.",
+      description: "Track income, expenses, cards, goals, debts, and the smart daily limit.",
     },
     professional: {
       title: "Professional / self-employed profile",

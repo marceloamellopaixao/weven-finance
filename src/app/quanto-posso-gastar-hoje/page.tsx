@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
 import { SeoLandingPage } from "@/components/marketing/SeoLandingPage";
-import { DEFAULT_LOCALE } from "@/i18n/config";
 import { getDictionary } from "@/i18n/getDictionary";
+import { getRequestLocale } from "@/i18n/server";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const dictionary = getDictionary(DEFAULT_LOCALE);
+  const dictionary = getDictionary(await getRequestLocale());
   const page = dictionary.seo.pages.dailySpend;
 
   return {
@@ -15,8 +15,8 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function Page() {
-  const dictionary = getDictionary(DEFAULT_LOCALE);
+export default async function Page() {
+  const dictionary = getDictionary(await getRequestLocale());
   const page = dictionary.seo.pages.dailySpend;
 
   return (

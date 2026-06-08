@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 
 import { SeoLandingPage } from "@/components/marketing/SeoLandingPage";
-import { DEFAULT_LOCALE } from "@/i18n/config";
 import { getDictionary } from "@/i18n/getDictionary";
+import { getRequestLocale } from "@/i18n/server";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const dictionary = getDictionary(DEFAULT_LOCALE);
-  const page = dictionary.seo.pages.organizarCartao;
+  const dictionary = getDictionary(await getRequestLocale());
+  const page = dictionary.seo.pages.creditCardOrganization;
 
   return {
     title: page.metadata.title,
@@ -15,9 +15,9 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function Page() {
-  const dictionary = getDictionary(DEFAULT_LOCALE);
-  const page = dictionary.seo.pages.organizarCartao;
+export default async function Page() {
+  const dictionary = getDictionary(await getRequestLocale());
+  const page = dictionary.seo.pages.creditCardOrganization;
   return (
     <SeoLandingPage
       eyebrow={page.eyebrow}

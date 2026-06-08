@@ -3,11 +3,13 @@ export const SUPPORTED_LOCALES = ["pt-BR", "en-US", "es"] as const;
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
 export const DEFAULT_LOCALE: Locale = "pt-BR";
+export const LOCALE_COOKIE_NAME = "wevenfinance-locale";
+export const LOCALE_STORAGE_KEY = "wevenfinance:locale:v1";
 
 export const LOCALE_LABELS: Record<Locale, string> = {
   "pt-BR": "Português Brasil",
   "en-US": "English",
-  "es": "Español",
+  es: "Español",
 };
 
 export function isSupportedLocale(value: unknown): value is Locale {
