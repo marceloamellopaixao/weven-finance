@@ -18,7 +18,7 @@ export default function Page() {
             Quanto posso gastar hoje sem comprometer o fim do mês?
           </h1>
           <p className="mx-auto max-w-2xl text-lg leading-relaxed text-muted-foreground">
-            Informe seu saldo, contas previstas, cartão e reserva desejada. O resultado e uma estimativa simples para orientar sua decisão de hoje.
+            Informe seu saldo, contas previstas, cartão e reserva desejada. O resultado é uma estimativa simples para orientar sua decisão de hoje.
           </p>
         </section>
         <DailyLimitCalculator />

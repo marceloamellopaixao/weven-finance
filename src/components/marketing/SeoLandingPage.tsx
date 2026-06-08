@@ -12,9 +12,26 @@ type SeoLandingPageProps = {
   keyword: string;
   benefits: string[];
   sections: Array<{ title: string; text: string }>;
+  primaryCta?: string;
+  secondaryCta?: string;
+  finalTitle?: string;
+  finalDescription?: string;
+  finalCta?: string;
 };
 
-export function SeoLandingPage({ eyebrow, title, description, keyword, benefits, sections }: SeoLandingPageProps) {
+export function SeoLandingPage({
+  eyebrow,
+  title,
+  description,
+  keyword,
+  benefits,
+  sections,
+  primaryCta = "Começar grátis",
+  secondaryCta = "Calcular quanto posso gastar",
+  finalTitle,
+  finalDescription,
+  finalCta = "Salvar meu controle no WevenFinance",
+}: SeoLandingPageProps) {
   return (
     <main className="bg-transparent px-4 py-16 sm:px-6 sm:py-24">
       <div className="container mx-auto max-w-5xl space-y-14">
@@ -24,10 +41,10 @@ export function SeoLandingPage({ eyebrow, title, description, keyword, benefits,
           <p className="mx-auto max-w-2xl text-lg leading-relaxed text-muted-foreground">{description}</p>
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
             <Button asChild className="h-12 rounded-full px-7">
-              <Link href="/register">Começar grátis <ArrowRight className="ml-2 h-4 w-4" /></Link>
+              <Link href="/register">{primaryCta} <ArrowRight className="ml-2 h-4 w-4" /></Link>
             </Button>
             <Button asChild variant="outline" className="h-12 rounded-full px-7">
-              <Link href="/calculadora/quanto-posso-gastar-hoje">Calcular quanto posso gastar</Link>
+              <Link href="/calculadora/quanto-posso-gastar-hoje">{secondaryCta}</Link>
             </Button>
           </div>
         </section>
@@ -58,12 +75,12 @@ export function SeoLandingPage({ eyebrow, title, description, keyword, benefits,
 
         <section className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) p-6 text-center shadow-xl shadow-primary/10 sm:p-8">
           <Calculator className="mx-auto h-8 w-8 text-primary" />
-          <h2 className="mt-4 text-2xl font-bold">Transforme {keyword} em uma decisão diária.</h2>
+          <h2 className="mt-4 text-2xl font-bold">{finalTitle ?? `Transforme ${keyword} em uma decisão diária.`}</h2>
           <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
-            O WevenFinance organiza o que entra, o que sai e o que vence para responder o que importa: quanto você pode gastar hoje sem apertar o fim do mês.
+            {finalDescription ?? "O WevenFinance organiza o que entra, o que sai e o que vence para responder o que importa: quanto você pode gastar hoje sem apertar o fim do mês."}
           </p>
           <Button asChild className="mt-6 h-12 rounded-full px-7">
-            <Link href="/register">Salvar meu controle no WevenFinance</Link>
+            <Link href="/register">{finalCta}</Link>
           </Button>
         </section>
       </div>

@@ -19,8 +19,8 @@ import { getSiteUrl, SITE_NAME } from "@/lib/site";
 
 const inter = Inter({ subsets: ["latin"] });
 const siteUrl = getSiteUrl();
-const defaultTitle = translate(DEFAULT_LOCALE, "seo.home.title");
-const defaultDescription = translate(DEFAULT_LOCALE, "seo.home.description");
+const defaultTitle = translate(DEFAULT_LOCALE, "seo.default.metadata.title");
+const defaultDescription = translate(DEFAULT_LOCALE, "seo.default.metadata.description");
 const structuredData = [
   {
     "@context": "https://schema.org",

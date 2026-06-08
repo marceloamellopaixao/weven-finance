@@ -9,8 +9,8 @@ import { DEFAULT_LOCALE } from "@/i18n/config";
 import { translate } from "@/i18n/getDictionary";
 
 export const metadata: Metadata = {
-  title: translate(DEFAULT_LOCALE, "seo.home.title"),
-  description: translate(DEFAULT_LOCALE, "seo.home.description"),
+  title: translate(DEFAULT_LOCALE, "seo.pages.home.metadata.title"),
+  description: translate(DEFAULT_LOCALE, "seo.pages.home.metadata.description"),
   alternates: {
     canonical: "/",
     languages: {
