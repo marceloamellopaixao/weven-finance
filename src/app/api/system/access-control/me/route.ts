@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { verifyRequestAuth } from "@/lib/auth/server";
-import { buildEffectiveFeatureAccessConfig, hasBillingExemption, normalizeAccessControlConfig, resolveAccessLevel } from "@/lib/access-control/config";
+import { ACCESS_RESOURCE_KEYS, buildEffectiveFeatureAccessConfig, hasBillingExemption, normalizeAccessControlConfig, resolveAccessLevel } from "@/lib/access-control/config";
 import { hasIrregularGatewayBilling, hasTrustedPaidBilling } from "@/lib/billing/effective";
 import {
   AccessPermissionLevel,
@@ -51,8 +51,8 @@ export async function GET(request: NextRequest) {
     const effectiveFeatureAccess = buildEffectiveFeatureAccessConfig(accessControl, { uid: auth.uid, plan, role });
 
     const access: Partial<Record<AccessResourceKey, AccessPermissionLevel>> = {};
-    for (const rule of accessControl.rules) {
-      access[rule.resource] = resolveAccessLevel(accessControl, { uid: auth.uid, plan, role }, rule.resource);
+    for (const resource of ACCESS_RESOURCE_KEYS) {
+      access[resource] = resolveAccessLevel(accessControl, { uid: auth.uid, plan, role }, resource);
     }
 
     return NextResponse.json(

@@ -7,7 +7,7 @@ export const DEFAULT_LOCALE: Locale = "pt-BR";
 export const LOCALE_LABELS: Record<Locale, string> = {
   "pt-BR": "Português Brasil",
   "en-US": "English",
-  es: "Español",
+  "es": "Español",
 };
 
 export function isSupportedLocale(value: unknown): value is Locale {

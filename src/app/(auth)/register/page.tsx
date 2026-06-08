@@ -12,12 +12,14 @@ import { Label } from "@/components/ui/label";
 import { LocaleSwitcher } from "@/components/i18n/LocaleSwitcher";
 import { AuthPageShell, authIconClassName, authPanelClassName } from "@/components/auth/AuthPageShell";
 import { formatPhone, normalizePhone } from "@/lib/phone";
-import { useUiText } from "@/i18n/T";
+import { useTranslations } from "@/i18n/T";
 import { parseUpgradePlan, readPendingUpgradePlan, rememberPendingUpgradePlan } from "@/services/billing/checkoutIntent";
 
 export default function RegisterPage() {
   const { registerWithEmail } = useAuth();
-  const tt = useUiText();
+  const tRegister = useTranslations("auth.register");
+  const tPlaceholders = useTranslations("auth.placeholders");
+  const tValidation = useTranslations("validation");
   const searchParams = useSearchParams();
 
   const [displayName, setDisplayName] = useState("");
@@ -44,15 +46,15 @@ export default function RegisterPage() {
     e.preventDefault();
     setError("");
 
-    if (!displayName) return setError(tt("Por favor, insira um apelido para o dashboard."));
-    if (!phone) return setError(tt("Por favor, insira seu número de celular/telefone."));
-    if (phone.replace(/\D/g, "").length < 10) return setError(tt("Por favor, insira um número de celular/telefone válido."));
-    if (!completeName) return setError(tt("Por favor, insira seu nome completo."));
-    if (!email) return setError(tt("Por favor, insira seu e-mail."));
-    if (!password) return setError(tt("Por favor, insira sua senha."));
-    if (!confirmPassword) return setError(tt("Por favor, confirme sua senha."));
-    if (password !== confirmPassword) return setError(tt("As senhas não coincidem."));
-    if (password.length < 6) return setError(tt("A senha deve ter no mínimo 6 caracteres."));
+    if (!displayName) return setError(tValidation("nicknameRequired"));
+    if (!phone) return setError(tValidation("phoneRequired"));
+    if (phone.replace(/\D/g, "").length < 10) return setError(tValidation("phoneInvalid"));
+    if (!completeName) return setError(tValidation("fullNameRequired"));
+    if (!email) return setError(tValidation("emailRequired"));
+    if (!password) return setError(tValidation("passwordRequired"));
+    if (!confirmPassword) return setError(tValidation("confirmPasswordRequired"));
+    if (password !== confirmPassword) return setError(tValidation("passwordMismatch"));
+    if (password.length < 6) return setError(tValidation("passwordMin"));
 
     setIsLoading(true);
     try {
@@ -75,14 +77,14 @@ export default function RegisterPage() {
             <Wallet className="h-6 w-6" />
           </div>
           <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-foreground`}>
-            {tt("Crie sua conta")}
+            {tRegister("title")}
           </h1>
           <p className={`${fadeInUp} delay-200 text-sm text-muted-foreground`}>
-            {tt("Comece a controlar suas finanças hoje.")}
+            {tRegister("subtitle")}
           </p>
           {pendingUpgradePlan && (
             <p className="text-xs font-medium text-primary">
-              {tt("Depois do cadastro, vamos continuar na contratação do plano {plan}.", { plan: pendingUpgradePlan === "premium" ? "Premium" : "Pro" })}
+              {tRegister("pendingUpgrade", { plan: pendingUpgradePlan === "premium" ? "Premium" : "Pro" })}
             </p>
           )}
         </div>
@@ -90,24 +92,24 @@ export default function RegisterPage() {
         <form onSubmit={handleRegister} className={`${fadeInUp} delay-300 space-y-4`}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="displayName">{tt("Apelido")}</Label>
+              <Label htmlFor="displayName">{tRegister("nickname")}</Label>
               <Input
                 id="displayName"
                 autoComplete="nickname"
-                placeholder={tt("Ex: Marcelo")}
+                placeholder={tPlaceholders("nickname")}
                 className="app-field-surface h-11 rounded-xl"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="phone">{tt("Celular")}</Label>
+              <Label htmlFor="phone">{tRegister("phone")}</Label>
               <Input
                 id="phone"
                 type="tel"
                 autoComplete="tel-national"
                 inputMode="tel"
-                placeholder={tt("Ex: 1199...")}
+                placeholder={tPlaceholders("phone")}
                 className="app-field-surface h-11 rounded-xl"
                 maxLength={15}
                 value={formatPhone(phone)}
@@ -117,11 +119,11 @@ export default function RegisterPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="completeName">{tt("Nome completo")}</Label>
+            <Label htmlFor="completeName">{tRegister("fullName")}</Label>
             <Input
               id="completeName"
               autoComplete="name"
-              placeholder={tt("Ex: Marcelo Augusto")}
+              placeholder={tPlaceholders("fullName")}
               className="app-field-surface h-11 rounded-xl"
               value={completeName}
               onChange={(e) => setCompleteName(e.target.value)}
@@ -129,13 +131,13 @@ export default function RegisterPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email">{tt("E-mail")}</Label>
+            <Label htmlFor="email">{tRegister("email")}</Label>
             <Input
               id="email"
               type="email"
               autoComplete="email"
               inputMode="email"
-              placeholder={tt("Ex: seu@email.com")}
+              placeholder={tPlaceholders("email")}
               spellCheck={false}
               className="app-field-surface h-11 rounded-xl"
               value={email}
@@ -145,7 +147,7 @@ export default function RegisterPage() {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="password">{tt("Senha")}</Label>
+              <Label htmlFor="password">{tRegister("password")}</Label>
               <Input
                 id="password"
                 type="password"
@@ -158,7 +160,7 @@ export default function RegisterPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">{tt("Confirmar")}</Label>
+              <Label htmlFor="confirmPassword">{tRegister("confirm")}</Label>
               <Input
                 id="confirmPassword"
                 type="password"
@@ -182,7 +184,7 @@ export default function RegisterPage() {
             className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium shadow-lg shadow-black/10 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
             disabled={isLoading}
           >
-            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : tt("Cadastrar")}
+            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : tRegister("submit")}
           </Button>
         </form>
 
@@ -191,7 +193,7 @@ export default function RegisterPage() {
             href={pendingUpgradePlan ? `/login?upgrade_plan=${pendingUpgradePlan}` : "/login"}
             className="flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground hover:cursor-pointer transition-colors duration-200"
           >
-            <ArrowLeft className="w-3 h-3" /> {tt("Voltar para Login")}
+            <ArrowLeft className="w-3 h-3" /> {tRegister("backToLogin")}
           </Link>
         </div>
       </div>

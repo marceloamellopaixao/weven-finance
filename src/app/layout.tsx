@@ -13,10 +13,14 @@ import { AppChrome } from "@/components/layout/AppChrome";
 import { RegionBootstrapModal } from "@/components/region/RegionBootstrapModal";
 import { I18nAutoTranslate } from "@/i18n/I18nAutoTranslate";
 import { I18nProvider } from "@/i18n/I18nProvider";
+import { DEFAULT_LOCALE } from "@/i18n/config";
+import { translate } from "@/i18n/getDictionary";
 import { getSiteUrl, SITE_NAME } from "@/lib/site";
 
 const inter = Inter({ subsets: ["latin"] });
 const siteUrl = getSiteUrl();
+const defaultTitle = translate(DEFAULT_LOCALE, "seo.home.title");
+const defaultDescription = translate(DEFAULT_LOCALE, "seo.home.description");
 const structuredData = [
   {
     "@context": "https://schema.org",
@@ -64,11 +68,10 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   applicationName: SITE_NAME,
   title: {
-    default: "WevenFinance | Controle financeiro pessoal com clareza",
+    default: defaultTitle,
     template: `%s | ${SITE_NAME}`,
   },
-  description:
-    "Saiba quanto você pode gastar hoje sem comprometer o fim do mês. Organize gastos, cartões, parcelas, metas e relatórios mensais em um painel simples.",
+  description: defaultDescription,
   keywords: [
     "controle financeiro pessoal",
     "organização financeira",
@@ -88,7 +91,7 @@ export const metadata: Metadata = {
     canonical: "/",
     languages: {
       "pt-BR": "/",
-      en: "/",
+      "en-US": "/",
       es: "/",
     },
   },
@@ -97,9 +100,8 @@ export const metadata: Metadata = {
     locale: "pt_BR",
     url: "/",
     siteName: SITE_NAME,
-    title: "WevenFinance | Controle financeiro pessoal com clareza",
-    description:
-      "Saiba quanto você pode gastar hoje sem comprometer o fim do mês. Organize gastos, cartões, parcelas, metas e relatórios mensais em um painel simples.",
+    title: defaultTitle,
+    description: defaultDescription,
     images: [
       {
         url: "/wevenfinance.png",
@@ -109,9 +111,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "WevenFinance | Controle financeiro pessoal com clareza",
-    description:
-      "Saiba quanto você pode gastar hoje sem comprometer o fim do mês. Organize gastos, cartões, parcelas, metas e relatórios mensais em um painel simples.",
+    title: defaultTitle,
+    description: defaultDescription,
     images: ["/wevenfinance.png"],
   },
   robots: {

@@ -85,6 +85,7 @@ export type AccessResourceKey =
   | "admin.health"
   | "admin.billing_jobs"
   | "admin.retention_jobs"
+  | "admin.pages.preview"
   | "admin.permissions.read"
   | "admin.permissions.write"
   | "admin.permissions.delete";
@@ -237,6 +238,7 @@ export const DEFAULT_ACCESS_CONTROL_CONFIG: AccessControlConfig = {
     { id: "role-admin-billing-jobs", subjectType: "role", subjectId: "admin", resource: "admin.billing_jobs", level: "write", active: true },
     { id: "role-admin-billing-exempt", subjectType: "role", subjectId: "admin", resource: "billing.exempt", level: "read", active: true },
     { id: "role-admin-retention-jobs", subjectType: "role", subjectId: "admin", resource: "admin.retention_jobs", level: "write", active: true },
+    { id: "role-admin-pages-preview", subjectType: "role", subjectId: "admin", resource: "admin.pages.preview", level: "read", active: true },
     { id: "role-admin-permissions-read", subjectType: "role", subjectId: "admin", resource: "admin.permissions.read", level: "read", active: true },
     { id: "role-admin-permissions-write", subjectType: "role", subjectId: "admin", resource: "admin.permissions.write", level: "write", active: true },
     { id: "role-moderator-users-read", subjectType: "role", subjectId: "moderator", resource: "admin.users.read", level: "read", active: true },

@@ -19,17 +19,19 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePlatformExperience } from "@/hooks/usePlatformExperience";
 import { LocaleSwitcher } from "@/components/i18n/LocaleSwitcher";
-import { useUiText } from "@/i18n/T";
+import { useTranslations } from "@/i18n/T";
 import { Bell } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { canAccessAdminArea, isCreatorSupremeUid } from "@/lib/access-control/roles";
 
 const FLOW_ROUTES = new Set(["/login", "/register", "/forgot-password", "/first-access", "/verify-email", "/goodbye", "/blocked"]);
 const PUBLIC_FIXED_HEADER_ROUTES = new Set(["/", "/contact", "/security", "/terms"]);
 
 export function Header() {
   const { user, userProfile, logout } = useAuth();
-  const tt = useUiText();
+  const tHeader = useTranslations("header");
+  const tCommon = useTranslations("common");
   const router = useRouter();
   const pathname = usePathname();
   const { isImpersonating, impersonationTargetUid, stopImpersonation } = useImpersonation();
@@ -40,8 +42,8 @@ export function Header() {
   const { forceAccountMenuOpen, isPlatformTourActive } = usePlatformExperience();
   const isAuthenticated = !!user || !!userProfile;
   const displayName = isImpersonating
-    ? (userProfile?.displayName || tt("Usuário"))
-    : (userProfile?.displayName || user?.displayName || tt("Usuário"));
+    ? (userProfile?.displayName || tHeader("userFallback"))
+    : (userProfile?.displayName || user?.displayName || tHeader("userFallback"));
   const displayEmail = isImpersonating
     ? (userProfile?.email || impersonationTargetUid || "")
     : (userProfile?.email || user?.email || "");
@@ -81,8 +83,7 @@ export function Header() {
       value = `/${value.replace(/^\/+/, "")}`;
     }
 
-    const role = userProfile?.role;
-    const isStaff = role === "admin" || role === "moderator" || role === "support";
+    const isStaff = canAccessAdminArea(userProfile);
     if (value.startsWith("/admin") && !isStaff) return "/dashboard";
     if (value.startsWith("/settings") && !user) return "/login";
     return value;
@@ -128,11 +129,11 @@ export function Header() {
           <div className="flex items-center gap-4">
             <LocaleSwitcher />
             <Link href="/login" className="hidden sm:block">
-              <Button variant="ghost" className="rounded-full font-medium text-muted-foreground hover:bg-accent hover:text-foreground">{tt("Login")}</Button>
+              <Button variant="ghost" className="rounded-full font-medium text-muted-foreground hover:bg-accent hover:text-foreground">{tHeader("login")}</Button>
             </Link>
             <Link href="/register">
               <Button className="rounded-full bg-primary px-5 font-medium text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-105 hover:bg-primary/90 hover:shadow-xl sm:px-6">
-                {tt("Começar Agora")}
+                {tHeader("startNow")}
               </Button>
             </Link>
           </div>
@@ -164,20 +165,20 @@ export function Header() {
               size="icon"
               className="md:hidden h-9 w-9 rounded-full border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:cursor-pointer"
               onClick={handleStopImpersonation}
-              title={tt("Encerrar impersonação")}
+              title={tHeader("endImpersonation")}
             >
               <UserCog className="h-4 w-4" />
             </Button>
             <div className="hidden md:flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-700">
               <UserCog className="h-3.5 w-3.5" />
-              <span>{tt("Impersonando")} {displayEmail || impersonationTargetUid}</span>
+              <span>{tHeader("impersonating")} {displayEmail || impersonationTargetUid}</span>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2 text-amber-700 hover:bg-amber-100 hover:cursor-pointer"
                 onClick={handleStopImpersonation}
               >
-                {tt("Encerrar")}
+                {tHeader("end")}
               </Button>
             </div>
           </>
@@ -203,26 +204,26 @@ export function Header() {
 
           <DropdownMenuContent align="end" className="app-panel-soft w-[calc(100vw-2rem)] max-w-80 rounded-xl border-color:var(--app-panel-border) p-2 shadow-xl shadow-primary/10">
             <div className="flex items-center justify-between px-2 py-1">
-              <DropdownMenuLabel className="p-0">{tt("Notificações")}</DropdownMenuLabel>
+              <DropdownMenuLabel className="p-0">{tHeader("notifications")}</DropdownMenuLabel>
               <button
                 type="button"
                 onClick={() => void markAllAsRead()}
                 className="text-[11px] text-primary hover:underline"
               >
-                {tt("Marcar todas como lidas")}
+                {tHeader("markAllRead")}
               </button>
               <button
                 type="button"
                 onClick={() => void clearAll()}
                 className="text-[11px] text-muted-foreground hover:text-primary hover:underline"
               >
-                {tt("Limpar")}
+                {tHeader("clear")}
               </button>
             </div>
             <DropdownMenuSeparator />
 
             {notifications.length === 0 ? (
-              <div className="px-2 py-6 text-center text-xs text-muted-foreground">{tt("Sem notificações.")}</div>
+              <div className="px-2 py-6 text-center text-xs text-muted-foreground">{tHeader("noNotifications")}</div>
             ) : (
               notifications.slice(0, 8).map((item) => (
                 <DropdownMenuItem
@@ -254,7 +255,7 @@ export function Header() {
                 : "border-border bg-muted text-muted-foreground"
                 }`}
             >
-              {tt(userProfile?.plan === "pro" ? "Pro" : userProfile?.plan === "premium" ? "Premium" : "Grátis")}
+              {userProfile?.plan === "pro" ? tCommon("pro") : userProfile?.plan === "premium" ? tCommon("premium") : tCommon("free")}
             </Badge>
           </div>
         </div>
@@ -278,10 +279,10 @@ export function Header() {
           <DropdownMenuContent id="tour-account-menu-panel" align="end" className="app-panel-soft w-[calc(100vw-2rem)] max-w-56 rounded-xl border-color:var(--app-panel-border) p-2 shadow-xl shadow-primary/10">
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none truncate">{displayName || tt("Minha Conta")}</p>
+                <p className="text-sm font-medium leading-none truncate">{displayName || tHeader("account")}</p>
                 <p className="truncate text-xs leading-none text-muted-foreground">{displayEmail}</p>
                 {isOnboardingActive && onboardingActiveStep === "profileMenu" && (
-                  <p className="text-[11px] font-medium text-primary">{tt("Abra este menu para concluir a etapa atual.")}</p>
+                  <p className="text-[11px] font-medium text-primary">{tHeader("profileTourHint")}</p>
                 )}
               </div>
             </DropdownMenuLabel>
@@ -290,66 +291,66 @@ export function Header() {
             <Link href="/" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <Home className="mr-2 h-4 w-4" />
-                <span>{tt("Início")}</span>
+                <span>{tHeader("home")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/dashboard" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <LayoutDashboard className="mr-2 h-4 w-4" />
-                <span>{tt("Dashboard")}</span>
+                <span>{tHeader("dashboard")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/reports" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <FileText className="mr-2 h-4 w-4" />
-                <span>{tt("Relatórios")}</span>
+                <span>{tHeader("reports")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/cards" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <CreditCard className="mr-2 h-4 w-4" />
-                <span>{tt("Cartões")}</span>
+                <span>{tHeader("cards")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/piggy-bank" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <PiggyBank className="mr-2 h-4 w-4" />
-                <span>{tt("Porquinho")}</span>
+                <span>{tHeader("piggyBank")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/settings" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <Settings className="mr-2 h-4 w-4" />
-                <span>{tt("Configurações")}</span>
+                <span>{tHeader("settings")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/apps" className="cursor-pointer">
               <DropdownMenuItem className="cursor-pointer rounded-lg">
                 <Grid2X2 className="mr-2 h-4 w-4" />
-                <span>{tt("Apps / Barra Rápida")}</span>
+                <span>{tHeader("apps")}</span>
               </DropdownMenuItem>
             </Link>
 
-            {(userProfile?.role === "admin" || userProfile?.role === "moderator" || userProfile?.role === "support") && (
+            {canAccessAdminArea(userProfile) && (
               <>
                 <DropdownMenuSeparator />
                 <Link href="/admin" className="cursor-pointer">
                   <DropdownMenuItem
-                    className={`cursor-pointer rounded-lg font-medium ${userProfile.role === "admin"
+                    className={`cursor-pointer rounded-lg font-medium ${userProfile?.role === "admin" || isCreatorSupremeUid(userProfile?.uid)
                       ? "text-red-600 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-900/10"
-                      : userProfile.role === "moderator"
+                      : userProfile?.role === "moderator"
                         ? "text-amber-600 focus:text-amber-700 focus:bg-amber-50 dark:focus:bg-amber-900/10"
                         : "text-muted-foreground focus:bg-accent focus:text-foreground"
                       }`}
                   >
                     <ShieldAlert className="mr-2 h-4 w-4" />
-                    <span>{tt("Painel")} {userProfile.role === "admin" ? "Admin" : userProfile.role === "moderator" ? tt("Moderador") : tt("Funcionário")}</span>
+                    <span>{tHeader("panel")} {userProfile?.role === "admin" || isCreatorSupremeUid(userProfile?.uid) ? "Admin" : userProfile?.role === "moderator" ? tHeader("moderator") : tHeader("staff")}</span>
                   </DropdownMenuItem>
                 </Link>
               </>
@@ -362,7 +363,7 @@ export function Header() {
               className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/30 rounded-lg"
             >
               <LogOut className="mr-2 h-4 w-4" />
-              <span>{tt("Sair da Conta")}</span>
+              <span>{tHeader("signOut")}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -69,6 +69,8 @@ export function I18nAutoTranslate() {
   const { locale } = useI18n();
 
   useEffect(() => {
+    if (process.env.NEXT_PUBLIC_I18N_AUTO_TRANSLATE_ENABLED !== "true") return;
+
     let frame = 0;
     const run = () => {
       window.cancelAnimationFrame(frame);

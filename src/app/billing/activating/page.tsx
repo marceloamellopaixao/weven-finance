@@ -20,7 +20,7 @@ function sleep(ms: number) {
 export default function BillingActivatingPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, userProfile, loading, refreshProfile } = useAuth();
+  const { user, userProfile, loading, refreshProfile, canPreviewRestrictedPages } = useAuth();
   const [state, setState] = useState<ActivationState>("preparing");
   const [message, setMessage] = useState("Estamos validando sua assinatura com o Mercado Pago.");
   const startedKeyRef = useRef("");
@@ -36,7 +36,7 @@ export default function BillingActivatingPage() {
   const checkoutAttemptId = checkoutAttemptIdFromQuery || userProfile?.billing?.pendingCheckoutAttemptId;
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || canPreviewRestrictedPages) return;
     if (user && !expectedPlan) {
       router.replace("/settings?tab=billing");
       return;
@@ -88,23 +88,27 @@ export default function BillingActivatingPage() {
 
     void run();
 
-  }, [checkoutAttemptId, expectedPlan, loading, refreshProfile, router, user]);
+  }, [canPreviewRestrictedPages, checkoutAttemptId, expectedPlan, loading, refreshProfile, router, user]);
 
   const resolvedState: ActivationState =
-    !loading && !user
+    canPreviewRestrictedPages
+      ? "preparing"
+      : !loading && !user
       ? "login_required"
       : !loading && !expectedPlan
         ? "error"
         : state;
 
   const resolvedMessage =
-    !loading && !user
+    canPreviewRestrictedPages
+      ? "Pré-visualização administrativa. Nenhuma confirmação real será executada nesta visualização."
+      : !loading && !user
       ? "Faça login para concluir a ativação do seu plano."
       : !loading && !expectedPlan
         ? "Não foi possível identificar qual plano deve ser ativado."
         : message;
 
-  const isLoadingState = resolvedState === "preparing" || resolvedState === "confirming";
+  const isLoadingState = !canPreviewRestrictedPages && (resolvedState === "preparing" || resolvedState === "confirming");
 
   return (
     <div className="relative flex min-h-[calc(100svh-4rem)] items-center justify-center overflow-hidden px-4 py-10 font-sans sm:px-6">
@@ -126,7 +130,9 @@ export default function BillingActivatingPage() {
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            {resolvedState === "success"
+            {canPreviewRestrictedPages
+              ? "Pré-visualização da ativação"
+              : resolvedState === "success"
               ? "Plano ativado"
               : resolvedState === "error"
                 ? "Ainda estamos validando"

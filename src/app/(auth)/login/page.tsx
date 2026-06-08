@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LocaleSwitcher } from "@/components/i18n/LocaleSwitcher";
 import { AuthPageShell, authIconClassName, authPanelClassName } from "@/components/auth/AuthPageShell";
-import { useUiText } from "@/i18n/T";
+import { useTranslations } from "@/i18n/T";
 import {
   buildUpgradeCheckoutPath,
   parseUpgradePlan,
@@ -29,8 +29,10 @@ const GoogleIcon = () => (
 );
 
 export default function LoginPage() {
-  const { signInWithGoogle, loginWithEmail, user, userProfile } = useAuth();
-  const tt = useUiText();
+  const { signInWithGoogle, loginWithEmail, user, userProfile, canPreviewRestrictedPages } = useAuth();
+  const tLogin = useTranslations("auth.login");
+  const tValidation = useTranslations("validation");
+  const tCommon = useTranslations("common");
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -52,10 +54,10 @@ export default function LoginPage() {
   }, [pendingUpgradePlan]);
 
   useEffect(() => {
-    if (user && userProfile && userProfile.status !== "deleted") {
+    if (user && userProfile && userProfile.status !== "deleted" && !canPreviewRestrictedPages) {
       router.replace(pendingUpgradePlan ? buildUpgradeCheckoutPath(pendingUpgradePlan) : "/dashboard");
     }
-  }, [pendingUpgradePlan, router, user, userProfile]);
+  }, [canPreviewRestrictedPages, pendingUpgradePlan, router, user, userProfile]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,20 +65,20 @@ export default function LoginPage() {
     setError("");
     try {
       if (email.trim() === "" || password.trim() === "") {
-        setError(tt("Por favor, preencha todos os campos."));
+        setError(tValidation("fillAllFields"));
         setIsLoading(false);
         return;
       }
 
       if (password.length < 6) {
-        setError(tt("A senha deve ter no mínimo 6 caracteres."));
+        setError(tValidation("passwordMin"));
         setIsLoading(false);
         return;
       }
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
-        setError(tt("Por favor, insira um e-mail válido."));
+        setError(tValidation("invalidEmail"));
         setIsLoading(false);
         return;
       }
@@ -113,11 +115,11 @@ export default function LoginPage() {
               Weven<span className="text-primary">Finance</span>
             </h1>
             <p className={`${fadeInUp} delay-200 text-sm text-muted-foreground`}>
-              {tt("Bem-vindo de volta!")}
+              {tLogin("welcome")}
             </p>
             {pendingUpgradePlan && (
               <p className="text-xs font-medium text-primary">
-                {tt("Depois do login, vamos continuar na contratação do plano {plan}.", { plan: pendingUpgradePlan === "premium" ? "Premium" : "Pro" })}
+                {tLogin("pendingUpgrade", { plan: pendingUpgradePlan === "premium" ? "Premium" : "Pro" })}
               </p>
             )}
           </div>
@@ -125,7 +127,7 @@ export default function LoginPage() {
           <div className={`${fadeInUp} delay-300 space-y-6`}>
             <form onSubmit={handleEmailLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">{tt("E-mail")}</Label>
+                <Label htmlFor="email">{tLogin("email")}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -140,12 +142,12 @@ export default function LoginPage() {
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <Label htmlFor="password">{tt("Senha")}</Label>
+                  <Label htmlFor="password">{tLogin("password")}</Label>
                   <Link
                     href={pendingUpgradePlan ? `/forgot-password?upgrade_plan=${pendingUpgradePlan}` : "/forgot-password"}
                     className="text-xs text-primary hover:underline hover:cursor-pointer transition-all duration-200"
                   >
-                    {tt("Esqueceu?")}
+                    {tLogin("forgot")}
                   </Link>
                 </div>
                 <Input
@@ -170,7 +172,7 @@ export default function LoginPage() {
                 disabled={isLoading || isGoogleLoading}
                 className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium shadow-lg shadow-black/10 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
               >
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : tt("Entrar")}
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : tLogin("submit")}
               </Button>
             </form>
 
@@ -180,7 +182,7 @@ export default function LoginPage() {
               </div>
               <div className="relative flex justify-center text-xs uppercase">
                 <span className="app-panel-soft rounded px-2 font-medium text-muted-foreground backdrop-blur-sm">
-                  {tt("Ou continue com")}
+                  {tLogin("orContinueWith")}
                 </span>
               </div>
             </div>
@@ -189,10 +191,10 @@ export default function LoginPage() {
               onClick={handleGoogleLogin}
               disabled={isLoading || isGoogleLoading}
               variant="outline"
-              className="h-11 w-full rounded-xl border-[color:var(--app-panel-border)] bg-background/70 font-medium shadow-sm active:scale-[0.98]"
+              className="h-11 w-full rounded-xl border-color:var(--app-panel-border) bg-background/70 font-medium shadow-sm active:scale-[0.98]"
             >
               {isGoogleLoading ? (
-                <span className="flex items-center gap-2">{tt("Conectando...")}</span>
+                <span className="flex items-center gap-2">{tCommon("connecting")}</span>
               ) : (
                 <span className="flex items-center justify-center w-full">
                   <GoogleIcon />
@@ -203,12 +205,12 @@ export default function LoginPage() {
 
             <div className="text-center pt-2">
               <p className="text-sm text-muted-foreground">
-                {tt("Não tem uma conta?")}{" "}
+                {tLogin("noAccount")}{" "}
                 <Link
                   href={pendingUpgradePlan ? `/register?upgrade_plan=${pendingUpgradePlan}` : "/register"}
                   className="text-primary font-semibold hover:underline hover:cursor-pointer transition-all duration-200"
                 >
-                  {tt("Cadastre-se")}
+                  {tLogin("signUp")}
                 </Link>
               </p>
             </div>

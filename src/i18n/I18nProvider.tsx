@@ -2,12 +2,12 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { DEFAULT_LOCALE, Locale, detectBrowserLocale, normalizeLocale } from "@/i18n/config";
-import { translate, TranslationKey } from "@/i18n/getDictionary";
+import { translate, TranslationKey, TranslationValues } from "@/i18n/getDictionary";
 
 type I18nContextValue = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  t: (key: TranslationKey) => string;
+  t: (key: TranslationKey | string, values?: TranslationValues) => string;
 };
 
 const STORAGE_KEY = "wevenfinance:locale:v1";
@@ -49,7 +49,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     () => ({
       locale,
       setLocale,
-      t: (key) => translate(locale, key),
+      t: (key, values) => translate(locale, key, values),
     }),
     [locale, setLocale]
   );

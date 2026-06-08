@@ -17,7 +17,7 @@ import { resolvePendingUpgradePath } from "@/services/billing/checkoutIntent";
 import { AuthPageShell, authIconClassName } from "@/components/auth/AuthPageShell";
 
 export default function VerifyEmailPage() {
-  const { logout, user, userProfile, loading } = useAuth();
+  const { logout, user, userProfile, loading, canPreviewRestrictedPages } = useAuth();
   const router = useRouter();
   const [isChecking, setIsChecking] = useState(false);
   const [isResending, setIsResending] = useState(false);
@@ -33,14 +33,14 @@ export default function VerifyEmailPage() {
 
   useEffect(() => {
     if (loading || !pendingEmailLoaded) return;
-    if (userProfile?.verifiedEmail) {
+    if (userProfile?.verifiedEmail && !canPreviewRestrictedPages) {
       router.replace(resolvePendingUpgradePath() || "/dashboard");
       return;
     }
     if (!user && !pendingEmail) {
       router.replace("/register");
     }
-  }, [loading, pendingEmail, pendingEmailLoaded, router, user, userProfile?.verifiedEmail]);
+  }, [canPreviewRestrictedPages, loading, pendingEmail, pendingEmailLoaded, router, user, userProfile?.verifiedEmail]);
 
   const syncVerifiedEmail = useCallback(async (token: string) => {
     const response = await fetch("/api/profile/verify-email", {
@@ -125,10 +125,10 @@ export default function VerifyEmailPage() {
     }
   };
 
-  if (loading || !pendingEmailLoaded || (!user && !pendingEmail) || userProfile?.verifiedEmail) {
+  if (loading || !pendingEmailLoaded || (!user && !pendingEmail) || (userProfile?.verifiedEmail && !canPreviewRestrictedPages)) {
     return (
       <AuthPageShell maxWidthClassName="max-w-md">
-        <div className="app-panel-soft rounded-3xl border border-[color:var(--app-panel-border)] p-6 text-center text-sm text-muted-foreground shadow-xl shadow-primary/10">
+        <div className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) p-6 text-center text-sm text-muted-foreground shadow-xl shadow-primary/10">
           Carregando...
         </div>
       </AuthPageShell>
@@ -137,7 +137,7 @@ export default function VerifyEmailPage() {
 
   return (
     <AuthPageShell maxWidthClassName="max-w-lg">
-        <Card className="app-panel-soft overflow-hidden rounded-3xl border border-[color:var(--app-panel-border)] shadow-2xl shadow-primary/10 backdrop-blur-xl">
+        <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-2xl shadow-primary/10 backdrop-blur-xl">
           <div className="h-2 w-full bg-primary" />
           <CardHeader className="pb-2 pt-8 text-center">
             <div className={`${authIconClassName} mx-auto mb-4`}>
@@ -149,7 +149,7 @@ export default function VerifyEmailPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 pt-6">
-            <div className="flex items-start gap-4 rounded-2xl border border-primary/20 bg-primary/10 p-5">
+            <div className="flex items-center gap-4 rounded-2xl border border-primary/20 bg-primary/10 p-5">
               <div className="shrink-0 rounded-lg bg-primary/10 p-2 text-primary">
                 <ShieldCheck className="h-6 w-6" />
               </div>

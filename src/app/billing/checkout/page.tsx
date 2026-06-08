@@ -27,7 +27,7 @@ const PLAN_RANK: Record<"free" | "premium" | "pro", number> = {
 export default function BillingCheckoutPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, userProfile, loading } = useAuth();
+  const { user, userProfile, loading, canPreviewRestrictedPages } = useAuth();
   const [state, setState] = useState<CheckoutState>("preparing");
   const [message, setMessage] = useState("Preparando sua contratação.");
   const startedRef = useRef("");
@@ -42,12 +42,12 @@ export default function BillingCheckoutPage() {
   }, [planFromQuery]);
 
   useEffect(() => {
-    if (loading || plan) return;
+    if (loading || canPreviewRestrictedPages || plan) return;
     router.replace(user ? "/settings?tab=billing" : "/login");
-  }, [loading, plan, router, user]);
+  }, [canPreviewRestrictedPages, loading, plan, router, user]);
 
   useEffect(() => {
-    if (loading || !plan) return;
+    if (loading || canPreviewRestrictedPages || !plan) return;
 
     rememberPendingUpgradePlan(plan);
 
@@ -97,11 +97,13 @@ export default function BillingCheckoutPage() {
 
     void run();
 
-  }, [loading, plan, router, user, userProfile]);
+  }, [canPreviewRestrictedPages, loading, plan, router, user, userProfile]);
 
   const resolvedState: CheckoutState = !loading && !plan ? "error" : state;
   const resolvedMessage =
-    !loading && !plan
+    canPreviewRestrictedPages
+      ? "Pré-visualização administrativa. Nenhum checkout real será iniciado nesta visualização."
+      : !loading && !plan
       ? "Não foi possível identificar qual plano você quer contratar."
       : message;
 
@@ -123,7 +125,9 @@ export default function BillingCheckoutPage() {
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            {resolvedState === "error"
+            {canPreviewRestrictedPages
+              ? "Pré-visualização do checkout"
+              : resolvedState === "error"
               ? "Não foi possível continuar"
               : resolvedState === "exempt"
                 ? "Checkout dispensado"
@@ -132,7 +136,7 @@ export default function BillingCheckoutPage() {
 
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{resolvedMessage}</p>
 
-          {resolvedState !== "error" && resolvedState !== "exempt" && (
+          {!canPreviewRestrictedPages && resolvedState !== "error" && resolvedState !== "exempt" && (
             <div className="mt-6 flex items-center justify-center gap-2 text-sm font-medium text-primary">
               <Loader2 className="h-4 w-4 animate-spin" />
               Abrindo checkout

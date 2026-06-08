@@ -29,7 +29,7 @@ function formatDate(value: string | null) {
 
 export default function GoodbyePage() {
   const router = useRouter();
-  const { user, userProfile, loading } = useAuth();
+  const { user, userProfile, loading, canPreviewRestrictedPages } = useAuth();
   const [hasDeletionContext, setHasDeletionContext] = useState<boolean | null>(null);
   const [isRestarting, setIsRestarting] = useState(false);
   const [error, setError] = useState("");
@@ -46,9 +46,9 @@ export default function GoodbyePage() {
   useEffect(() => {
     if (loading) return;
     if (hasDeletionContext === null) return;
-    if (userProfile?.status === "deleted" || (!user && hasDeletionContext)) return;
+    if (canPreviewRestrictedPages || userProfile?.status === "deleted" || (!user && hasDeletionContext)) return;
     router.replace(user ? "/dashboard" : "/");
-  }, [hasDeletionContext, loading, router, user, userProfile?.status]);
+  }, [canPreviewRestrictedPages, hasDeletionContext, loading, router, user, userProfile?.status]);
 
   useEffect(() => {
     if (!restoreEmail && user?.email) {
@@ -72,7 +72,7 @@ export default function GoodbyePage() {
   if (
     loading ||
     hasDeletionContext === null ||
-    (userProfile?.status !== "deleted" && (user || !hasDeletionContext))
+    (!canPreviewRestrictedPages && userProfile?.status !== "deleted" && (user || !hasDeletionContext))
   ) {
     return (
       <AuthPageShell maxWidthClassName="max-w-md">

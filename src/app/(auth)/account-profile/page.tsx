@@ -7,49 +7,49 @@ import { BriefcaseBusiness, Building2, CheckCircle2, Home, Loader2, UsersRound, 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
-import { useUiText } from "@/i18n/T";
+import { useTranslations } from "@/i18n/T";
 import { createWorkspace } from "@/services/workspaceService";
 import type { WorkspaceType } from "@/types/workspace";
 
 const OPTIONS: Array<{
   type: WorkspaceType;
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
   icon: typeof WalletCards;
   accent: string;
 }> = [
   {
     type: "personal",
-    title: "Perfil pessoal",
-    description: "Controle salário, gastos, cartões, metas, dívidas e limite diário inteligente.",
+    titleKey: "options.personal.title",
+    descriptionKey: "options.personal.description",
     icon: WalletCards,
     accent: "from-emerald-500/15 to-teal-500/10 text-emerald-700",
   },
   {
     type: "professional",
-    title: "Perfil profissional / autônomo",
-    description: "Controle receitas de clientes, despesas de trabalho, impostos, caixa mensal e relatórios.",
+    titleKey: "options.professional.title",
+    descriptionKey: "options.professional.description",
     icon: BriefcaseBusiness,
     accent: "from-sky-500/15 to-cyan-500/10 text-sky-700",
   },
   {
     type: "church",
-    title: "Perfil igreja / ministério",
-    description: "Controle dízimos, ofertas, missões, cantina, departamentos, eventos e despesas por área.",
+    titleKey: "options.church.title",
+    descriptionKey: "options.church.description",
     icon: Building2,
     accent: "from-violet-500/15 to-indigo-500/10 text-violet-700",
   },
   {
     type: "family",
-    title: "Perfil família / casa",
-    description: "Controle contas compartilhadas, mercado, aluguel, escola, transporte e metas familiares.",
+    titleKey: "options.family.title",
+    descriptionKey: "options.family.description",
     icon: Home,
     accent: "from-amber-500/15 to-orange-500/10 text-amber-700",
   },
   {
     type: "business",
-    title: "Perfil pequeno negócio",
-    description: "Controle vendas, custos, contas a pagar e receber, fluxo de caixa e lucro estimado.",
+    titleKey: "options.business.title",
+    descriptionKey: "options.business.description",
     icon: UsersRound,
     accent: "from-fuchsia-500/15 to-pink-500/10 text-fuchsia-700",
   },
@@ -58,7 +58,8 @@ const OPTIONS: Array<{
 export default function AccountProfilePage() {
   const router = useRouter();
   const { userProfile } = useAuth();
-  const tt = useUiText();
+  const tProfile = useTranslations("accountProfile");
+  const tCommon = useTranslations("common");
   const [selectedType, setSelectedType] = useState<WorkspaceType>("personal");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +74,7 @@ export default function AccountProfilePage() {
     setError(null);
     try {
       await createWorkspace({
-        name: selectedOption.title,
+        name: tProfile(selectedOption.titleKey),
         type: selectedOption.type,
         isDefault: true,
         settings: {
@@ -85,7 +86,7 @@ export default function AccountProfilePage() {
       router.replace("/dashboard");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : tt("Não foi possível criar o perfil da conta"));
+      setError(err instanceof Error ? err.message : tProfile("createError"));
       setSubmitting(false);
     }
   };
@@ -96,18 +97,18 @@ export default function AccountProfilePage() {
         <section className="max-w-3xl space-y-4">
           <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
             <CheckCircle2 className="h-4 w-4" />
-            {tt("Selecione seu perfil de uso para começarmos!")}
+            {tProfile("badge")}
           </div>
           <div className="space-y-3">
             <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
-              {tt("Como você quer organizar o WevenFinance?")}
+              {tProfile("title")}
             </h1>
             <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              {tt("Vamos preparar categorias, relatórios e atalhos para o jeito que você usa dinheiro no dia a dia.")}
+              {tProfile("description")}
             </p>
           </div>
           {userProfile?.displayName ? (
-            <p className="text-sm font-medium text-muted-foreground">{tt("Olá, {name}. Escolha uma opção para continuar.", { name: userProfile.displayName })}</p>
+            <p className="text-sm font-medium text-muted-foreground">{tProfile("greeting", { name: userProfile.displayName })}</p>
           ) : null}
         </section>
 
@@ -133,11 +134,11 @@ export default function AccountProfilePage() {
                       <Icon className="h-6 w-6" />
                     </div>
                     <div className="space-y-2">
-                      <h2 className="text-lg font-bold text-foreground">{tt(option.title)}</h2>
-                      <p className="text-sm leading-relaxed text-muted-foreground">{tt(option.description)}</p>
+                      <h2 className="text-lg font-bold text-foreground">{tProfile(option.titleKey)}</h2>
+                      <p className="text-sm leading-relaxed text-muted-foreground">{tProfile(option.descriptionKey)}</p>
                     </div>
                     <div className="mt-auto flex items-center gap-2 text-sm font-semibold text-primary">
-                      <span>{selected ? tt("Selecionado") : tt("Escolher")}</span>
+                      <span>{selected ? tProfile("selected") : tProfile("choose")}</span>
                       {selected ? <CheckCircle2 className="h-4 w-4" /> : null}
                     </div>
                   </CardContent>
@@ -149,16 +150,16 @@ export default function AccountProfilePage() {
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="max-w-2xl text-sm text-muted-foreground">
-            {tt("Você poderá criar outros perfis depois. Este será usado como padrão para relatórios mensais e categorias iniciais.")}
+            {tProfile("notice")}
           </p>
           <Button className="h-12 rounded-xl px-8 text-base font-semibold" onClick={handleContinue} disabled={submitting}>
             {submitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {tt("Preparando...")}
+                {tProfile("preparing")}
               </>
             ) : (
-              tt("Continuar")
+              tCommon("continue")
             )}
           </Button>
         </div>

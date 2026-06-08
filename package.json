@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "i18n:validate": "tsx scripts/validate-i18n.ts",
     "test": "tsx --test tests/**/*.test.ts",
     "health:check": "powershell -ExecutionPolicy Bypass -File scripts/health-check.ps1 -BaseUrl http://localhost:3000"
   },

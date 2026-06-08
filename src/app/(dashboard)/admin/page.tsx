@@ -37,6 +37,7 @@ import {
   PlanDetails,
 } from "@/types/system";
 import { ACCESS_RESOURCE_LABEL_BY_KEY, ACCESS_SCREENS, hasAccess, hasBillingExemption } from "@/lib/access-control/config";
+import { CREATOR_SUPREME_UID, canAccessAdminArea, isCreatorSupremeUid } from "@/lib/access-control/roles";
 import { computePermanentDeleteAt } from "@/lib/account-deletion/policy";
 import { cn } from "@/lib/utils";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -217,8 +218,6 @@ function formatDateSafe(value: unknown) {
   return "Data inválida";
 }
 
-// Dono Supremo (Hardcoded para segurança extra na UI)
-const CREATOR_SUPREME = "Z3ciyXudWuZZywhojA6iWJTurH52";
 const ADMIN_USERS_FILTERS_STORAGE_KEY = "wevenfinance:admin:users-filters:v1";
 const ADMIN_SUPPORT_FILTERS_STORAGE_KEY = "wevenfinance:admin:support-filters:v1";
 const ADMIN_AUDIT_FILTERS_STORAGE_KEY = "wevenfinance:admin:audit-filters:v1";
@@ -453,7 +452,7 @@ export default function AdminPage() {
   const [permissionGroupByScreen, setPermissionGroupByScreen] = useState<Record<string, string>>({});
 
   // --- Permissões ---
-  const isSupremeAdmin = userProfile?.uid === CREATOR_SUPREME;
+  const isSupremeAdmin = isCreatorSupremeUid(userProfile?.uid);
   const accessControlConfig = editedAccessControl ?? DEFAULT_ACCESS_CONTROL_CONFIG;
   const hasAdminPermission = useCallback((
     resource: AdminPermissionArea,
@@ -489,7 +488,7 @@ export default function AdminPage() {
 
   const unseenSupportTickets = useMemo(() => {
     if (!userProfile) return [];
-    if (userProfile.role !== "admin" && userProfile.role !== "moderator" && userProfile.role !== "support") return [];
+    if (!canAccessAdminArea(userProfile)) return [];
     return tickets.filter((ticket) => !Array.isArray(ticket.staffSeenBy) || !ticket.staffSeenBy.includes(userProfile.uid));
   }, [tickets, userProfile]);
 
@@ -616,11 +615,11 @@ export default function AdminPage() {
   const canEditRole = useCallback((targetUser: UserProfile) => {
     if (!userProfile) return false;
     if (targetUser.uid === userProfile.uid) return false; // Não edita a si mesmo
-    if (targetUser.uid === CREATOR_SUPREME) return false; // Não edita o Criador Supremo
+    if (targetUser.uid === CREATOR_SUPREME_UID) return false; // Não edita o Criador Supremo
     if (hasAdminPermission("users", "write")) return true;
 
     if (userProfile.role === 'admin') {
-      if (userProfile.uid === CREATOR_SUPREME) return true; // Criador edita tudo
+      if (isCreatorSupremeUid(userProfile.uid)) return true; // Criador edita tudo
       if (targetUser.role === 'admin') return false; // Admin comum não edita outro admin
       return true;
     }
@@ -644,7 +643,7 @@ export default function AdminPage() {
     const targetRank = hierarchy[targetUser.role] ?? 0;
 
     // Só pode editar se tiver hierarquia maior e não for o Criador Supremo
-    if (userProfile.uid === CREATOR_SUPREME) return true;
+    if (isCreatorSupremeUid(userProfile.uid)) return true;
 
     return myRank > targetRank;
   }, [hasAdminPermission, userProfile]);
@@ -654,10 +653,10 @@ export default function AdminPage() {
     if (!userProfile) return false;
 
     // Ninguém edita a si mesmo nestas ações
-    if (targetUser.uid === userProfile.uid) return userProfile.uid === CREATOR_SUPREME;
+    if (targetUser.uid === userProfile.uid) return isCreatorSupremeUid(userProfile.uid);
 
     // Criador Supremo pode se editar
-    if (userProfile.uid === CREATOR_SUPREME) return true;
+    if (isCreatorSupremeUid(userProfile.uid)) return true;
     if (hasAdminPermission("users", "write")) return true;
 
     const hierarchy: Record<string, number> = { admin: 3, moderator: 2, support: 1, client: 0 };
@@ -665,7 +664,7 @@ export default function AdminPage() {
     const targetRank = hierarchy[targetUser.role] ?? 0;
 
     // Criador supremo edita todos
-    if (userProfile.uid === CREATOR_SUPREME) return true;
+    if (isCreatorSupremeUid(userProfile.uid)) return true;
 
     // Regra geral: Só edita quem está abaixo na hierarquia
     return myRank > targetRank;
@@ -674,7 +673,7 @@ export default function AdminPage() {
   const canResetUser = useCallback((targetUser: UserProfile) => {
     if (!userProfile) return false;
     if (!canDeleteRecords) return false;
-    if (targetUser.uid === userProfile.uid) return userProfile.uid === CREATOR_SUPREME;
+    if (targetUser.uid === userProfile.uid) return isCreatorSupremeUid(userProfile.uid);
     return canEditUser(targetUser);
   }, [canDeleteRecords, canEditUser, userProfile]);
 
@@ -1781,6 +1780,7 @@ export default function AdminPage() {
     if (resource.startsWith("admin.restore.")) return "Restauração";
     if (resource.startsWith("admin.plans.")) return "Planos";
     if (resource.startsWith("admin.permissions.")) return "Permissões";
+    if (resource === "admin.pages.preview") return "Auditoria de telas";
     if (resource === "admin.billing_jobs" || resource === "admin.retention_jobs" || resource === "admin.health") return "Jobs e saúde";
     if (resource === "admin.metrics.read") return "Métricas";
     if (resource === "admin.audit.read") return "Auditoria";

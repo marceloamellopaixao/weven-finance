@@ -1,0 +1,32 @@
+export const auth = {
+  login: {
+    welcome: "Bem-vindo de volta!",
+    pendingUpgrade: "Depois do login, vamos continuar na contratação do plano {plan}.",
+    email: "E-mail",
+    password: "Senha",
+    forgot: "Esqueceu?",
+    submit: "Entrar",
+    orContinueWith: "Ou continue com",
+    noAccount: "Não tem uma conta?",
+    signUp: "Cadastre-se",
+  },
+  register: {
+    title: "Crie sua conta",
+    subtitle: "Comece a controlar suas finanças hoje.",
+    pendingUpgrade: "Depois do cadastro, vamos continuar na contratação do plano {plan}.",
+    nickname: "Apelido",
+    phone: "Celular",
+    fullName: "Nome completo",
+    email: "E-mail",
+    password: "Senha",
+    confirm: "Confirmar",
+    submit: "Cadastrar",
+    backToLogin: "Voltar para Login",
+  },
+  placeholders: {
+    nickname: "Ex: Marcelo",
+    phone: "Ex: 1199...",
+    fullName: "Ex: Marcelo Augusto",
+    email: "Ex: seu@email.com",
+  },
+} as const;

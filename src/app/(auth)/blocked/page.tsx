@@ -14,18 +14,20 @@ import { sendSupportRequest } from "@/hooks/supportService";
 const WHATSAPP_SUPPORT_URL = "https://wa.me/5511992348613";
 
 export default function BlockedPage() {
-  const { user, userProfile, logout, loading } = useAuth();
+  const { user, userProfile, logout, loading, canPreviewRestrictedPages } = useAuth();
   const router = useRouter();
   const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
   const [supportFeedback, setSupportFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const isBlocked = userProfile?.status === "blocked";
   const isInactive = userProfile?.status === "inactive";
-  const canViewBlockedPage = isBlocked || isInactive;
-  const title = isBlocked ? "Acesso Bloqueado" : "Conta Inativa";
+  const canViewBlockedPage = isBlocked || isInactive || canPreviewRestrictedPages;
+  const title = isBlocked ? "Acesso Bloqueado" : isInactive ? "Conta Inativa" : "Pré-visualização de bloqueio";
   const description = isBlocked
     ? "Sua conta foi bloqueada pela equipe administrativa."
-    : "Sua conta está inativa no momento.";
+    : isInactive
+      ? "Sua conta está inativa no momento."
+      : "Você está visualizando esta tela com permissão administrativa de auditoria.";
 
   useEffect(() => {
     if (loading) return;
@@ -129,7 +131,7 @@ export default function BlockedPage() {
             Solicitar suporte técnico
           </Button>
 
-          {userProfile.blockReason === "Falta de Pagamento" ? (
+          {userProfile?.blockReason === "Falta de Pagamento" ? (
             <Link
               href="/settings?tab=billing"
               className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-green-600 text-base font-semibold text-white shadow-lg shadow-green-600/20 transition-transform duration-200 hover:scale-[1.02] hover:bg-green-700 hover:cursor-pointer"

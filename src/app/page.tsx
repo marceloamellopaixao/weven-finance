@@ -5,12 +5,20 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { MarketingCtas } from "@/components/marketing/MarketingCtas";
 import { T } from "@/i18n/T";
+import { DEFAULT_LOCALE } from "@/i18n/config";
+import { translate } from "@/i18n/getDictionary";
 
 export const metadata: Metadata = {
-  title: "Quanto posso gastar hoje? Controle financeiro simples",
-  description:
-    "Saiba quanto você pode gastar hoje sem se enrolar até o fim do mês. Controle gastos, cartões, parcelas e metas no WevenFinance.",
-  alternates: { canonical: "/" },
+  title: translate(DEFAULT_LOCALE, "seo.home.title"),
+  description: translate(DEFAULT_LOCALE, "seo.home.description"),
+  alternates: {
+    canonical: "/",
+    languages: {
+      "pt-BR": "/",
+      "en-US": "/",
+      es: "/",
+    },
+  },
 };
 
 const plans = {
@@ -57,18 +65,18 @@ export default function LandingPage() {
 
         <div className="container mx-auto max-w-4xl space-y-6 text-center sm:space-y-8">
           <Badge variant="outline" className="max-w-full whitespace-normal rounded-full border-primary/20 bg-primary/10 px-4 py-1.5 text-center text-xs font-medium leading-relaxed text-primary shadow-sm backdrop-blur-md sm:text-sm">
-            <T text="Controle financeiro simples para quem não quer passar aperto." />
+            <T i18nKey="landing.badge" />
           </Badge>
 
           <h1 className="text-4xl font-bold leading-[1.08] tracking-tight text-foreground sm:text-5xl md:text-7xl">
-            <T text="Saiba quanto você pode gastar hoje" />{" "}
+            <T i18nKey="landing.hero.title" />{" "}
             <span className="bg-linear-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-              <T text="sem se enrolar até o fim do mês." />
+              <T i18nKey="landing.hero.highlight" />
             </span>
           </h1>
 
           <p className="mx-auto max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg md:text-xl">
-            <T text="O WevenFinance transforma saldo, cartões, parcelas, vencimentos e metas em uma resposta simples para o dia a dia: posso gastar ou preciso segurar?" />
+            <T i18nKey="landing.hero.description" />
           </p>
 
           <MarketingCtas variant="hero" />
