@@ -1,4 +1,5 @@
 import { accountProfile } from "./accountProfile";
+import { admin } from "./admin";
 import { auth } from "./auth";
 import { billing } from "./billing";
 import { calculator } from "./calculator";
@@ -12,6 +13,7 @@ import { validation } from "./validation";
 
 export const ptBR = {
   accountProfile,
+  admin,
   auth,
   billing,
   calculator,
