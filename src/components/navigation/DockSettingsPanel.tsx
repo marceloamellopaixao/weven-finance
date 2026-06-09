@@ -36,15 +36,16 @@ import {
   NavigationDockTheme,
   NavigationPreferences,
 } from "@/types/navigation";
+import { useTranslations } from "@/i18n/T";
 
 const POSITION_OPTIONS: Array<{
   value: NavigationDockPosition;
   label: string;
   description: string;
 }> = [
-    { value: "left", label: "Esquerda", description: "Vira uma barra lateral fixa no lado esquerdo." },
-    { value: "center", label: "Centro", description: "Mantém a barra central do jeito clássico." },
-    { value: "right", label: "Direita", description: "Vira uma barra lateral fixa no lado direito." },
+    { value: "left", label: "", description: "" },
+    { value: "center", label: "", description: "" },
+    { value: "right", label: "", description: "" },
   ];
 
 const BEHAVIOR_OPTIONS: Array<{
@@ -52,8 +53,8 @@ const BEHAVIOR_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
-    { value: "fixed", label: "Sempre visível", description: "Fixa na tela e não se oculta." },
-    { value: "auto-hide", label: "Ocultar automaticamente", description: "Oculta sozinha até você precisar dela." },
+    { value: "fixed", label: "", description: "" },
+    { value: "auto-hide", label: "", description: "" },
   ];
 
 const THEME_OPTIONS: Array<{
@@ -61,8 +62,8 @@ const THEME_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
-    { value: "dark", label: "Escuro", description: "Visual roxo escuro com mais contraste." },
-    { value: "light", label: "Claro", description: "Visual claro com destaque roxo mais leve." },
+    { value: "dark", label: "", description: "" },
+    { value: "light", label: "", description: "" },
   ];
 
 const DENSITY_OPTIONS: Array<{
@@ -70,8 +71,8 @@ const DENSITY_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
-    { value: "compact", label: "Compacta", description: "Ocupa menos espaço e fica mais enxuta." },
-    { value: "comfortable", label: "Confortável", description: "Mais respiro para tocar e ler melhor." },
+    { value: "compact", label: "", description: "" },
+    { value: "comfortable", label: "", description: "" },
   ];
 
 const LABEL_OPTIONS: Array<{
@@ -79,8 +80,8 @@ const LABEL_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
-    { value: "always", label: "Com nomes", description: "Mostra o nome de cada atalho na barra." },
-    { value: "icons-only", label: "Somente ícones", description: "Deixa a barra mais limpa e minimalista." },
+    { value: "always", label: "", description: "" },
+    { value: "icons-only", label: "", description: "" },
   ];
 
 const SURFACE_OPTIONS: Array<{
@@ -88,8 +89,8 @@ const SURFACE_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
-    { value: "glass", label: "Translucida", description: "Fundo translucido com brilho suave." },
-    { value: "solid", label: "Sólida", description: "Fundo mais fechado e contraste mais forte." },
+    { value: "glass", label: "", description: "" },
+    { value: "solid", label: "", description: "" },
   ];
 
 const ACCENT_OPTIONS: Array<{
@@ -98,12 +99,12 @@ const ACCENT_OPTIONS: Array<{
   description: string;
   swatchClass?: string;
 }> = [
-    { value: "app", label: "Cor do app", description: "Acompanha a cor escolhida em Configurações.", swatchClass: "bg-primary" },
-    { value: "violet", label: "Violet", description: "A cor principal da marca e do app.", swatchClass: "bg-linear-to-br from-violet-500 to-fuchsia-500" },
-    { value: "indigo", label: "Indigo", description: "Uma variação fria e mais executiva." },
-    { value: "fuchsia", label: "Fuchsia", description: "Mais vibrante, mantendo o DNA premium." },
-    { value: "emerald", label: "Emerald", description: "Derivação limpa para um visual mais fresco." },
-    { value: "amber", label: "Amber", description: "Quente e chamativa, sem fugir do sistema." },
+    { value: "app", label: "", description: "", swatchClass: "bg-primary" },
+    { value: "violet", label: "", description: "", swatchClass: "bg-linear-to-br from-violet-500 to-fuchsia-500" },
+    { value: "indigo", label: "", description: "" },
+    { value: "fuchsia", label: "", description: "" },
+    { value: "emerald", label: "", description: "" },
+    { value: "amber", label: "", description: "" },
   ];
 
 const OPTION_SWATCH_CLASSES: Partial<Record<string, string>> = {
@@ -142,11 +143,6 @@ function ChoiceCardGroup<T extends string>({
       <div className={cn("grid gap-3", columns)}>
         {options.map((option) => {
           const swatchClass = option.swatchClass || OPTION_SWATCH_CLASSES[option.value];
-          const description =
-            option.value === "app"
-              ? "Acompanha a cor escolhida em Configurações."
-              : option.description;
-
           return (
             <button
               key={option.value}
@@ -171,7 +167,7 @@ function ChoiceCardGroup<T extends string>({
                 ) : null}
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold text-foreground">{option.label}</span>
-                  <span className="mt-2 block text-xs leading-5 text-muted-foreground">{description}</span>
+                  <span className="mt-2 block text-xs leading-5 text-muted-foreground">{option.description}</span>
                 </span>
               </div>
             </button>
@@ -247,8 +243,10 @@ function PreferenceSection({
 
 function PreviewSurface({
   preferences,
+  tApps,
 }: {
   preferences: NavigationPreferences;
+  tApps: (key: string, values?: Record<string, string | number>) => string;
 }) {
   const [device, setDevice] = useState<"mobile" | "desktop">("mobile");
   const isSidebar = device === "desktop" && preferences.position !== "center";
@@ -257,10 +255,10 @@ function PreviewSurface({
     <div className="rounded-4xl border border-violet-200 bg-linear-to-br from-violet-950 via-fuchsia-950 to-zinc-950 p-5 text-white shadow-2xl shadow-violet-300/20 dark:border-violet-500/20 dark:shadow-black/30">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <Badge className="rounded-full bg-violet-400/15 px-3 py-1 text-violet-100 hover:bg-violet-400/15">Preview</Badge>
-          <h3 className="mt-3 text-xl font-semibold">Como sua barra rápida vai ficar?</h3>
+          <Badge className="rounded-full bg-violet-400/15 px-3 py-1 text-violet-100 hover:bg-violet-400/15">{tApps("dock.preview.badge")}</Badge>
+          <h3 className="mt-3 text-xl font-semibold">{tApps("dock.preview.title")}</h3>
           <p className="mt-2 max-w-md text-sm leading-6 text-violet-100/80">
-            Esta é uma prévia. A barra real só muda depois que você salvar.
+            {tApps("dock.preview.description")}
           </p>
         </div>
         <div className="inline-flex rounded-full border border-violet-200/15 bg-white/5 p-1">
@@ -272,7 +270,7 @@ function PreviewSurface({
               device === "mobile" ? "bg-white text-zinc-900" : "text-zinc-300"
             )}
           >
-            Celular
+            {tApps("dock.preview.mobile")}
           </button>
           <button
             type="button"
@@ -282,28 +280,28 @@ function PreviewSurface({
               device === "desktop" ? "bg-white text-zinc-900" : "text-zinc-300"
             )}
           >
-            Desktop
+            {tApps("dock.preview.desktop")}
           </button>
         </div>
       </div>
 
       <div className="mt-5 grid gap-3 xl:grid-cols-3">
         <div className="rounded-2xl border border-violet-200/10 bg-white/5 px-4 py-3">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-violet-200/50">Posição</p>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-violet-200/50">{tApps("dock.preview.position")}</p>
           <p className="mt-2 text-sm font-semibold text-white">
-            {POSITION_OPTIONS.find((option) => option.value === preferences.position)?.label}
+            {tApps(`dock.options.position.${preferences.position}.label`)}
           </p>
         </div>
         <div className="rounded-2xl border border-violet-200/10 bg-white/5 px-4 py-3">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-violet-200/50">Comportamento</p>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-violet-200/50">{tApps("dock.preview.behavior")}</p>
           <p className="mt-2 text-sm font-semibold text-white">
-            {BEHAVIOR_OPTIONS.find((option) => option.value === preferences.behavior)?.label}
+            {tApps(`dock.options.behavior.${preferences.behavior}.label`)}
           </p>
         </div>
         <div className="rounded-2xl border border-violet-200/10 bg-white/5 px-4 py-3">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-violet-200/50">Estilo</p>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-violet-200/50">{tApps("dock.preview.style")}</p>
           <p className="mt-2 text-sm font-semibold text-white">
-            {THEME_OPTIONS.find((option) => option.value === preferences.theme)?.label}
+            {tApps(`dock.options.theme.${preferences.theme}.label`)}
           </p>
         </div>
       </div>
@@ -319,9 +317,9 @@ function PreviewSurface({
           {device === "mobile" ? (
             <div className="relative mx-auto h-[440px] w-[280px] rounded-[34px] border border-violet-200/10 bg-white/5 p-5">
               <div className="rounded-3xl border border-violet-200/10 bg-white/5 px-4 py-4">
-                <p className="text-xs text-violet-200/55">Visão no celular</p>
+                <p className="text-xs text-violet-200/55">{tApps("dock.preview.mobileView")}</p>
                 <p className="mt-1 text-lg font-semibold text-zinc-50">
-                  Os atalhos ficam ao alcance do polegar.
+                  {tApps("dock.preview.mobileText")}
                 </p>
               </div>
 
@@ -332,11 +330,11 @@ function PreviewSurface({
           ) : (
             <div className="relative h-[300px] rounded-4xl border border-violet-200/10 bg-white/5 p-6">
               <div className="rounded-3xl border border-violet-200/10 bg-white/5 px-5 py-4">
-                <p className="text-xs text-violet-200/55">Visão no desktop</p>
+                <p className="text-xs text-violet-200/55">{tApps("dock.preview.desktopView")}</p>
                 <p className="mt-1 text-lg font-semibold text-zinc-50">
                   {isSidebar
-                    ? "A barra vira uma coluna lateral para abrir o que você mais usa."
-                    : "Os atalhos ficam sempre prontos para abrir o que você mais usa."}
+                    ? tApps("dock.preview.desktopSidebarText")
+                    : tApps("dock.preview.desktopCenterText")}
                 </p>
               </div>
 
@@ -363,6 +361,7 @@ function PreviewSurface({
 }
 
 export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
+  const tApps = useTranslations("apps");
   const { navigationPreferences, navigationLoading, updatePreferences } = usePlatformExperience();
   const [draft, setDraft] = useState<NavigationPreferences>(navigationPreferences);
   const [isSaving, setIsSaving] = useState(false);
@@ -381,13 +380,31 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
       .filter((item): item is (typeof NAVIGATION_APP_ITEMS)[number] => Boolean(item));
   }, [draft.shortcuts]);
 
-  const positionLabel = POSITION_OPTIONS.find((option) => option.value === draft.position)?.label || "Centro";
-  const behaviorLabel = BEHAVIOR_OPTIONS.find((option) => option.value === draft.behavior)?.label || "Sempre visivel";
-  const themeLabel = THEME_OPTIONS.find((option) => option.value === draft.theme)?.label || "Escuro";
-  const accentLabel = ACCENT_OPTIONS.find((option) => option.value === draft.accent)?.label || "Violet";
-  const labelsLabel = LABEL_OPTIONS.find((option) => option.value === draft.labels)?.label || "Com nomes";
-  const densityLabel = DENSITY_OPTIONS.find((option) => option.value === draft.density)?.label || "Confortavel";
-  const surfaceLabel = SURFACE_OPTIONS.find((option) => option.value === draft.surface)?.label || "Translucida";
+  const translateOptions = <T extends string>(
+    group: "position" | "behavior" | "theme" | "accent" | "density" | "labels" | "surface",
+    options: Array<{ value: T; label: string; description: string; swatchClass?: string }>
+  ) =>
+    options.map((option) => ({
+      ...option,
+      label: tApps(`dock.options.${group}.${option.value}.label`),
+      description: tApps(`dock.options.${group}.${option.value}.description`),
+    }));
+
+  const positionOptions = translateOptions("position", POSITION_OPTIONS);
+  const behaviorOptions = translateOptions("behavior", BEHAVIOR_OPTIONS);
+  const themeOptions = translateOptions("theme", THEME_OPTIONS);
+  const accentOptions = translateOptions("accent", ACCENT_OPTIONS);
+  const densityOptions = translateOptions("density", DENSITY_OPTIONS);
+  const labelOptions = translateOptions("labels", LABEL_OPTIONS);
+  const surfaceOptions = translateOptions("surface", SURFACE_OPTIONS);
+
+  const positionLabel = tApps(`dock.options.position.${draft.position}.label`);
+  const behaviorLabel = tApps(`dock.options.behavior.${draft.behavior}.label`);
+  const themeLabel = tApps(`dock.options.theme.${draft.theme}.label`);
+  const accentLabel = tApps(`dock.options.accent.${draft.accent}.label`);
+  const labelsLabel = tApps(`dock.options.labels.${draft.labels}.label`);
+  const densityLabel = tApps(`dock.options.density.${draft.density}.label`);
+  const surfaceLabel = tApps(`dock.options.surface.${draft.surface}.label`);
 
   const updateDraft = (updater: (current: NavigationPreferences) => NavigationPreferences) => {
     setDraft((prev) => normalizeNavigationPreferences(updater(prev)));
@@ -440,9 +457,9 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
             <Sparkles className="h-5 w-5" />
           </div>
           <div className="space-y-2">
-            <h3 className="text-lg font-semibold text-foreground">Barra rápida personalizada</h3>
+            <h3 className="text-lg font-semibold text-foreground">{tApps("dock.title")}</h3>
             <p className="text-sm leading-6 text-muted-foreground">
-              Ajuste o comportamento da barra e escolha os atalhos que devem ficar sempre por perto.
+              {tApps("dock.description")}
             </p>
           </div>
         </div>
@@ -450,11 +467,11 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
         <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(360px,0.88fr)]">
           <div className="space-y-3">
             <PreferenceSection
-              title="Disponibilidade"
-              description="Ative a barra no celular, no desktop ou nos dois contextos."
+              title={tApps("dock.availability.title")}
+              description={tApps("dock.availability.description")}
               summary={[
-                draft.mobileEnabled ? "Celular ligado" : "Celular desligado",
-                draft.desktopEnabled ? "Desktop ligado" : "Desktop desligado",
+                draft.mobileEnabled ? tApps("dock.availability.mobileOn") : tApps("dock.availability.mobileOff"),
+                draft.desktopEnabled ? tApps("dock.availability.desktopOn") : tApps("dock.availability.desktopOff"),
               ]}
               defaultOpen
             >
@@ -462,8 +479,8 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                 <div className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">No celular</p>
-                      <p className="mt-1 text-xs leading-5 text-muted-foreground">Barra inferior parecida com app para abrir o que você usa mais rápido.</p>
+                      <p className="text-sm font-semibold text-foreground">{tApps("dock.availability.mobileTitle")}</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{tApps("dock.availability.mobileDescription")}</p>
                     </div>
                     <Switch
                       checked={draft.mobileEnabled}
@@ -473,15 +490,15 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                   </div>
                   <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
                     <MonitorSmartphone className="h-4 w-4" />
-                    No celular ela fica centralizada e pronta para uso com o polegar.
+                    {tApps("dock.availability.mobileHint")}
                   </div>
                 </div>
 
                 <div className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">No computador</p>
-                      <p className="mt-1 text-xs leading-5 text-muted-foreground">Ative se quiser navegar com uma barra parecida com app também no desktop.</p>
+                      <p className="text-sm font-semibold text-foreground">{tApps("dock.availability.desktopTitle")}</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{tApps("dock.availability.desktopDescription")}</p>
                     </div>
                     <Switch
                       checked={draft.desktopEnabled}
@@ -491,19 +508,19 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                   </div>
                   <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
                     <Laptop className="h-4 w-4" />
-                    Em esquerda ou direita ela vira uma barra lateral de verdade.
+                    {tApps("dock.availability.desktopHint")}
                   </div>
                 </div>
               </div>
             </PreferenceSection>
 
             <PreferenceSection
-              title="Posição"
-              description="Escolha se a barra fica embaixo ou se vira uma barra lateral no computador."
+              title={tApps("dock.sections.position.title")}
+              description={tApps("dock.sections.position.description")}
               summary={[positionLabel]}
             >
               <ChoiceCardGroup
-                options={POSITION_OPTIONS}
+                options={positionOptions}
                 value={draft.position}
                 onChange={(value) =>
                   updateDraft((current) => ({
@@ -516,12 +533,12 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
             </PreferenceSection>
 
             <PreferenceSection
-              title="Comportamento"
-              description="Defina se a barra fica sempre vísivel ou se pode se ocultar sozinha."
+              title={tApps("dock.sections.behavior.title")}
+              description={tApps("dock.sections.behavior.description")}
               summary={[behaviorLabel]}
             >
               <ChoiceCardGroup
-                options={BEHAVIOR_OPTIONS}
+                options={behaviorOptions}
                 value={draft.behavior}
                 onChange={(value) => updateDraft((current) => ({ ...current, behavior: value }))}
                 columns="md:grid-cols-2"
@@ -529,12 +546,12 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
             </PreferenceSection>
 
             <PreferenceSection
-              title="Estilo"
-              description="Escolha o clima visual da barra para combinar com o jeito que você gosta de usar."
+              title={tApps("dock.sections.theme.title")}
+              description={tApps("dock.sections.theme.description")}
               summary={[themeLabel]}
             >
               <ChoiceCardGroup
-                options={THEME_OPTIONS}
+                options={themeOptions}
                 value={draft.theme}
                 onChange={(value) => updateDraft((current) => ({ ...current, theme: value }))}
                 columns="md:grid-cols-2"
@@ -542,12 +559,12 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
             </PreferenceSection>
 
             <PreferenceSection
-              title="Cor"
-              description="Escolha a cor principal da barra usando tons derivados do visual do WevenFinance."
+              title={tApps("dock.sections.accent.title")}
+              description={tApps("dock.sections.accent.description")}
               summary={[accentLabel]}
             >
               <ChoiceCardGroup
-                options={ACCENT_OPTIONS}
+                options={accentOptions}
                 value={draft.accent}
                 onChange={(value) => updateDraft((current) => ({ ...current, accent: value }))}
                 columns="md:grid-cols-2"
@@ -555,12 +572,12 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
             </PreferenceSection>
 
             <PreferenceSection
-              title="Tamanho"
-              description="Deixe a barra mais compacta ou mais confortável para tocar e ler."
+              title={tApps("dock.sections.density.title")}
+              description={tApps("dock.sections.density.description")}
               summary={[densityLabel]}
             >
               <ChoiceCardGroup
-                options={DENSITY_OPTIONS}
+                options={densityOptions}
                 value={draft.density}
                 onChange={(value) => updateDraft((current) => ({ ...current, density: value }))}
                 columns="md:grid-cols-2"
@@ -568,12 +585,12 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
             </PreferenceSection>
 
             <PreferenceSection
-              title="Nomes dos atalhos"
-              description="Escolha se a barra mostra os nomes ou se fica mais limpa só com os ícones."
+              title={tApps("dock.sections.labels.title")}
+              description={tApps("dock.sections.labels.description")}
               summary={[labelsLabel]}
             >
               <ChoiceCardGroup
-                options={LABEL_OPTIONS}
+                options={labelOptions}
                 value={draft.labels}
                 onChange={(value) => updateDraft((current) => ({ ...current, labels: value }))}
                 columns="md:grid-cols-2"
@@ -581,12 +598,12 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
             </PreferenceSection>
 
             <PreferenceSection
-              title="Acabamento"
-              description="Defina se a barra fica mais translucida ou com fundo mais fechado."
+              title={tApps("dock.sections.surface.title")}
+              description={tApps("dock.sections.surface.description")}
               summary={[surfaceLabel]}
             >
               <ChoiceCardGroup
-                options={SURFACE_OPTIONS}
+                options={surfaceOptions}
                 value={draft.surface}
                 onChange={(value) => updateDraft((current) => ({ ...current, surface: value }))}
                 columns="md:grid-cols-2"
@@ -596,14 +613,14 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
 
           <div className="space-y-4">
             <PreferenceSection
-              title="Atalhos visíveis"
-              description={`Escolha até ${MAX_DOCK_SHORTCUTS} atalhos para deixar sempre por perto.`}
-              summary={[`${visibleShortcuts.length}/${MAX_DOCK_SHORTCUTS} ativos`]}
+              title={tApps("dock.sections.shortcuts.title")}
+              description={tApps("dock.sections.shortcuts.description", { count: MAX_DOCK_SHORTCUTS })}
+              summary={[tApps("dock.sections.shortcuts.summary", { active: visibleShortcuts.length, max: MAX_DOCK_SHORTCUTS })]}
             >
               <div className="flex flex-wrap gap-2">
                 {visibleShortcuts.map((item) => (
                   <Badge key={item.id} variant="secondary" className="rounded-full bg-accent px-3 py-1 text-primary">
-                    {item.label}
+                    {tApps(`navigation.${item.id}.label`)}
                   </Badge>
                 ))}
               </div>
@@ -636,17 +653,17 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                       </div>
 
                       <div className="mt-4">
-                        <p className="text-sm font-semibold text-foreground">{item.label}</p>
-                        <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.description}</p>
+                        <p className="text-sm font-semibold text-foreground">{tApps(`navigation.${item.id}.label`)}</p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">{tApps(`navigation.${item.id}.description`)}</p>
                       </div>
 
                       <div className="mt-4 flex items-center justify-between">
                         {enabled ? (
                           <Badge variant="outline" className="rounded-full border-primary/25 bg-background/60 text-primary">
-                            Atalho {index + 1}
+                            {tApps("dock.sections.shortcuts.shortcutBadge", { index: index + 1 })}
                           </Badge>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Não aparece na barra rápida</span>
+                          <span className="text-xs text-muted-foreground">{tApps("dock.sections.shortcuts.hidden")}</span>
                         )}
 
                         {enabled && (
@@ -681,7 +698,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
             </PreferenceSection>
 
             <div className="xl:sticky xl:top-24">
-              <PreviewSurface preferences={draft} />
+              <PreviewSurface preferences={draft} tApps={tApps} />
             </div>
           </div>
         </div>
@@ -695,9 +712,9 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                 <Sparkles className="h-5 w-5" />
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-foreground">Aplicar alterações</p>
+                <p className="text-sm font-semibold text-foreground">{tApps("dock.actions.title")}</p>
                 <p className="text-xs leading-5 text-muted-foreground">
-                  Salve quando quiser usar essas escolhas na barra rápida do app.
+                  {tApps("dock.actions.description")}
                 </p>
               </div>
             </div>
@@ -711,7 +728,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                 disabled={isSaving}
               >
                 <RotateCcw className="h-4 w-4" />
-                Restaurar padrão
+                {tApps("dock.actions.reset")}
               </Button>
               <Button
                 type="button"
@@ -720,7 +737,7 @@ export function DockSettingsPanel({ compact = false }: DockSettingsPanelProps) {
                 disabled={navigationLoading || isSaving || !hasChanges}
               >
                 <Save className="h-4 w-4" />
-                {isSaving ? "Salvando..." : "Salvar preferências"}
+                {isSaving ? tApps("dock.actions.saving") : tApps("dock.actions.save")}
               </Button>
             </div>
           </div>

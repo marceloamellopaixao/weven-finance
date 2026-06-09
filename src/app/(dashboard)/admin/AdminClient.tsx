@@ -127,7 +127,9 @@ import {
   getMyImpersonationStatus,
   requestImpersonationAccess,
 } from "@/services/impersonationService";
+import { useI18n } from "@/i18n/I18nProvider";
 import { useTranslations } from "@/i18n/T";
+import { AdminLoadingShell } from "./components/AdminLoadingShell";
 
 type UserWithCount = UserProfile & { transactionCount?: number };
 type DeletionSuccessData = { name: string; email: string } | null;
@@ -282,78 +284,11 @@ function getAdminNavButtonClass(active: boolean) {
   );
 }
 
-function AdminPulse({ className = "" }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-full bg-primary/10", className)} />;
-}
-
-function AdminPageLoadingShell() {
-  return (
-    <div className="relative min-h-screen overflow-x-hidden p-3 pb-20 font-sans sm:p-4 md:p-6 xl:p-8">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute right-[-10%] top-[-10%] h-[500px] w-[500px] rounded-full bg-primary/6 blur-[100px]" />
-        <div className="absolute bottom-[-12%] left-[-12%] h-[500px] w-[500px] rounded-full bg-primary/4 blur-[110px]" />
-      </div>
-
-      <div className="relative z-10 mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-3">
-            <AdminPulse className="h-9 w-64" />
-            <AdminPulse className="h-4 w-72" />
-          </div>
-          <AdminPulse className="h-11 w-64 rounded-xl" />
-        </div>
-
-        <div className="app-panel-subtle grid grid-cols-1 gap-1 rounded-2xl border border-color:var(--app-panel-border) p-1.5 shadow-sm sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div
-              key={index}
-              className={cn(
-                "rounded-xl px-6 py-3",
-                index === 0 && "app-panel-soft border border-color:var(--app-panel-border)"
-              )}
-            >
-              <AdminPulse className="h-4 w-full" />
-            </div>
-          ))}
-        </div>
-
-        <div className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
-          <div className="app-panel-subtle border-b border-color:var(--app-panel-border) px-6 py-5">
-            <AdminPulse className="h-5 w-56" />
-            <AdminPulse className="mt-3 h-3 w-80" />
-          </div>
-          <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
-                <AdminPulse className="h-3 w-24" />
-                <AdminPulse className="mt-4 h-7 w-16" />
-              </div>
-            ))}
-          </div>
-          <div className="grid gap-4 p-5 pt-0 xl:grid-cols-2">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
-                <div className="flex justify-between gap-4">
-                  <div className="space-y-3">
-                    <AdminPulse className="h-3 w-28" />
-                    <AdminPulse className="h-4 w-44" />
-                    <AdminPulse className="h-3 w-56" />
-                  </div>
-                  <AdminPulse className="h-8 w-8 rounded-lg" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function AdminPage() {
   const { user, userProfile, loading } = useAuth();
   const { plans } = usePlans();
   const tAdmin = useTranslations("admin");
+  const { locale } = useI18n();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -1057,6 +992,12 @@ export default function AdminPage() {
     return "bg-zinc-500 text-white";
   };
 
+  const getUserStatusLabel = (status: UserStatus | string) => {
+    if (status === "active") return tAdmin("users.status.active");
+    if (status === "blocked") return tAdmin("users.status.blocked");
+    return tAdmin("users.status.inactive");
+  };
+
   const isTicketFinalStatus = (status: SupportTicket["status"]) =>
     status === "resolved" || status === "implemented" || status === "rejected";
 
@@ -1126,11 +1067,11 @@ export default function AdminPage() {
       const result = await requestImpersonationAccess(targetUser.uid);
       setImpersonationPollingTargetUid(targetUser.uid);
       const message = result.alreadyPending
-        ? "Já existe uma solicitação pendente para este usuário."
-        : "Solicitação enviada. Aguarde o usuário aprovar no modal.";
-      showFeedback("info", "Impersonação", message);
+        ? tAdmin("impersonation.pendingMessage")
+        : tAdmin("impersonation.sentMessage");
+      showFeedback("info", tAdmin("impersonation.title"), message);
     } catch {
-      showFeedback("error", "Erro", "Não foi possível iniciar a solicitação de impersonação.");
+      showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("impersonation.requestErrorMessage"));
     }
   };
 
@@ -1149,7 +1090,7 @@ export default function AdminPage() {
         if (status.approved) {
           activateImpersonation(impersonationPollingTargetUid);
           setImpersonationPollingTargetUid(null);
-          showFeedback("success", "Impersonação ativa", "Aprovação recebida. Entrando na tela do usuário.");
+          showFeedback("success", tAdmin("impersonation.activeTitle"), tAdmin("impersonation.activeMessage"));
           router.push("/dashboard");
           return;
         }
@@ -1157,14 +1098,14 @@ export default function AdminPage() {
         const requestStatus = status.request?.status;
         if (requestStatus === "rejected" || requestStatus === "revoked" || requestStatus === "expired") {
           setImpersonationPollingTargetUid(null);
-          showFeedback("info", "Solicitação finalizada", "O usuário não aprovou o acesso.");
+          showFeedback("info", tAdmin("impersonation.finishedTitle"), tAdmin("impersonation.rejectedMessage"));
           return;
         }
 
         attempts += 1;
         if (attempts >= maxAttempts) {
           setImpersonationPollingTargetUid(null);
-          showFeedback("info", "Tempo esgotado", "O usuário ainda não aprovou a solicitação de acesso.");
+          showFeedback("info", tAdmin("impersonation.timeoutTitle"), tAdmin("impersonation.timeoutMessage"));
         }
       } catch {
         // polling best effort
@@ -1181,7 +1122,7 @@ export default function AdminPage() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [impersonationPollingTargetUid, router]);
+  }, [impersonationPollingTargetUid, router, tAdmin]);
 
   useEffect(() => {
     if (!userProfile) return;
@@ -1240,7 +1181,7 @@ export default function AdminPage() {
         };
 
         if (!response.ok || !payload.ok) {
-          throw new Error(payload.error || "Não foi possível carregar a auditoria.");
+          throw new Error(payload.error || tAdmin("audit.errors.load"));
         }
 
         if (!cancelled) {
@@ -1264,7 +1205,7 @@ export default function AdminPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [activeTab, auditPage, auditPerPage, auditSearch, auditActionFilter, auditActorUidFilter, auditTargetUidFilter, auditFromDate, auditToDate, user, userProfile]);
+  }, [activeTab, auditPage, auditPerPage, auditSearch, auditActionFilter, auditActorUidFilter, auditTargetUidFilter, auditFromDate, auditToDate, tAdmin, user, userProfile]);
 
   useEffect(() => {
     if (!user || !userProfile) return;
@@ -1292,7 +1233,7 @@ export default function AdminPage() {
           alerts?: AdminMetricsAlert[];
         };
         if (!response.ok || !payload.ok) {
-          throw new Error(payload.error || "Não foi possível carregar as métricas.");
+          throw new Error(payload.error || tAdmin("metrics.errors.load"));
         }
 
         if (!cancelled) {
@@ -1321,7 +1262,7 @@ export default function AdminPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [activeTab, metricsWindowMinutes, onlyCriticalAlerts, user, userProfile]);
+  }, [activeTab, metricsWindowMinutes, onlyCriticalAlerts, tAdmin, user, userProfile]);
 
   useEffect(() => {
     if (!user || !userProfile) return;
@@ -1400,7 +1341,7 @@ export default function AdminPage() {
     const staff = staffMembers.find(s => s.uid === staffUid);
     const assignment = {
       assignedTo: staffUid,
-      assignedToName: staff?.displayName || "Staff",
+      assignedToName: staff?.displayName || tAdmin("common.staff"),
     };
     try {
       await updateTicket(ticketId, assignment);
@@ -1408,7 +1349,7 @@ export default function AdminPage() {
       setViewTicket((ticket) => (ticket?.id === ticketId ? { ...ticket, ...assignment } : ticket));
       showFeedback("success", tAdmin("support.feedback.assignedTitle"), tAdmin("support.feedback.assignedMessage"));
     } catch {
-      showFeedback('error', 'Erro', 'Falha ao atribuir chamado.');
+      showFeedback("error", tAdmin("support.feedback.assignErrorTitle"), tAdmin("support.feedback.assignErrorMessage"));
     }
   };
 
@@ -1418,7 +1359,7 @@ export default function AdminPage() {
       setTickets((prev) => prev.map((ticket) => (ticket.id === ticketId ? { ...ticket, status } : ticket)));
       setViewTicket((ticket) => (ticket?.id === ticketId ? { ...ticket, status } : ticket));
     } catch {
-      showFeedback('error', 'Erro', 'Falha ao atualizar status.');
+      showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("support.feedback.statusErrorMessage"));
     }
   };
 
@@ -1431,14 +1372,14 @@ export default function AdminPage() {
       setTickets((prev) => prev.map((ticket) => (ticket.id === ticketId ? { ...ticket, priority } : ticket)));
       setViewTicket((ticket) => (ticket?.id === ticketId ? { ...ticket, priority } : ticket));
     } catch {
-      showFeedback('error', 'Erro', 'Falha ao atualizar prioridade.');
+      showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("support.feedback.priorityErrorMessage"));
     }
   };
 
   const handleDeleteTicket = async () => {
     if (!ticketToDelete) return;
     if (!canDeleteRecords) {
-      showFeedback('error', 'Acesso negado', 'Somente o ADMIN Supremo pode excluir registros.');
+      showFeedback("error", tAdmin("feedback.accessDeniedTitle"), tAdmin("feedback.supremeAdminDeleteRecords"));
       setTicketToDelete(null);
       return;
     }
@@ -1446,9 +1387,9 @@ export default function AdminPage() {
       await deleteTicket(ticketToDelete.id);
       setTickets((prev) => prev.filter((ticket) => ticket.id !== ticketToDelete.id));
       setViewTicket((ticket) => (ticket?.id === ticketToDelete.id ? null : ticket));
-      showFeedback('success', 'Excluído', 'O chamado foi removido permanentemente.');
+      showFeedback("success", tAdmin("support.feedback.deletedTitle"), tAdmin("support.feedback.deletedMessage"));
     } catch {
-      showFeedback('error', 'Erro', 'Falha ao excluir chamado.');
+      showFeedback("error", tAdmin("support.feedback.deleteErrorTitle"), tAdmin("support.feedback.deleteErrorMessage"));
     } finally {
       setTicketToDelete(null);
     }
@@ -1460,10 +1401,10 @@ export default function AdminPage() {
     setIsNormalizing(true);
     try {
       const count = await normalizeDatabaseUsers();
-      showFeedback('success', 'Normalização Concluída', `${count} usuários foram verificados e atualizados.`);
+      showFeedback("success", tAdmin("users.normalization.successTitle"), tAdmin("users.normalization.successMessage", { count }));
     } catch (error) {
       console.error(error);
-      showFeedback('error', 'Erro', 'Falha ao normalizar dados do banco.');
+      showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("users.normalization.errorMessage"));
     } finally {
       setIsNormalizing(false);
     }
@@ -1490,16 +1431,16 @@ export default function AdminPage() {
   const confirmRestoreUser = async () => {
     if (!userToRestore) return;
     if (isRestoreExpired(userToRestore.user)) {
-      showFeedback('error', 'Erro', 'A janela de restauracao desta conta ja expirou.');
+      showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("restore.expiredWindowMessage"));
       setUserToRestore(null);
       return;
     }
     try {
       await restoreUserAccount(userToRestore.user.uid, userToRestore.withData);
-      showFeedback('success', 'Conta Restaurada', `O usuário ${userToRestore.user.displayName} foi movido para a lista ativa.`);
+      showFeedback("success", tAdmin("restore.restoredTitle"), tAdmin("restore.restoredMessage", { name: userToRestore.user.displayName }));
     } catch (error) {
       console.error(error);
-      showFeedback('error', 'Erro', 'Não foi possível restaurar o usuário.');
+      showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("restore.restoreErrorMessage"));
     } finally {
       setUserToRestore(null);
     }
@@ -1509,7 +1450,7 @@ export default function AdminPage() {
     if (!userToBlock) return;
     const finalReason = selectedReason === "Outros" ? customReason : selectedReason;
     if (!finalReason) {
-      showFeedback('error', 'Campo Obrigatório', 'Por favor, informe um motivo para o bloqueio.');
+      showFeedback("error", tAdmin("block.requiredTitle"), tAdmin("block.requiredMessage"));
       return;
     }
 
@@ -1570,7 +1511,7 @@ export default function AdminPage() {
       setPendingPaymentChange({ uid, status });
       setUserToBlock(u);
       setSelectedReason("Outros");
-      setCustomReason("Cancelamento de Assinatura");
+      setCustomReason(tAdmin("block.subscriptionCancellation"));
       return;
     }
 
@@ -1586,13 +1527,13 @@ export default function AdminPage() {
   const confirmResetData = async () => {
     if (!userToReset) return;
     if (!canDeleteRecords) {
-      showFeedback('error', 'Acesso negado', 'Somente o ADMIN Supremo pode resetar dados.');
+      showFeedback("error", tAdmin("feedback.accessDeniedTitle"), tAdmin("feedback.supremeAdminResetData"));
       setUserToReset(null);
       return;
     }
     await resetUserFinancialData(userToReset.uid);
     setUserToReset(null);
-    showFeedback('success', 'Dados Resetados', 'Todas as transações do usuário foram apagadas permanentemente.');
+    showFeedback("success", tAdmin("dialogs.dataResetTitle"), tAdmin("dialogs.dataResetMessage"));
 
     try {
       const count = await getUserTransactionCount(userToReset.uid);
@@ -1605,7 +1546,7 @@ export default function AdminPage() {
   const confirmDeleteUser = async () => {
     if (!userToDelete) return;
     if (!canDeleteRecords) {
-      showFeedback('error', 'Acesso negado', 'Somente o ADMIN Supremo pode arquivar contas.');
+      showFeedback("error", tAdmin("feedback.accessDeniedTitle"), tAdmin("feedback.supremeAdminArchiveAccounts"));
       setUserToDelete(null);
       return;
     }
@@ -1616,23 +1557,23 @@ export default function AdminPage() {
       setUserToDelete(null);
     } catch (error) {
       console.error("Erro ao excluir usuário:", error);
-      showFeedback('error', 'Erro', 'Falha ao excluir usuário.');
+      showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("dialogs.deleteUserErrorMessage"));
     }
   };
 
   const confirmPermanentDeleteUser = async () => {
     if (!userToPermanentDelete) return;
     if (!canDeleteRecords) {
-      showFeedback('error', 'Acesso negado', 'Somente o ADMIN Supremo pode excluir permanentemente.');
+      showFeedback("error", tAdmin("feedback.accessDeniedTitle"), tAdmin("feedback.supremeAdminPermanentDelete"));
       setUserToPermanentDelete(null);
       return;
     }
     try {
       await permanentlyDeleteUser(userToPermanentDelete.uid);
-      showFeedback('success', 'Exclusão Permanente Concluída', `A conta de ${userToPermanentDelete.displayName} foi removida definitivamente, incluindo o login.`);
+      showFeedback("success", tAdmin("dialogs.permanentDeleteCompletedTitle"), tAdmin("dialogs.permanentDeleteCompletedMessage", { name: userToPermanentDelete.displayName }));
     } catch (error) {
       console.error("Erro ao excluir permanentemente o usuário:", error);
-      showFeedback('error', 'Erro', 'Falha ao excluir permanentemente o usuário.');
+      showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("dialogs.permanentDeleteErrorMessage"));
     } finally {
       setUserToPermanentDelete(null);
     }
@@ -1701,7 +1642,7 @@ export default function AdminPage() {
         {
           id,
           key: `role_${id.slice(0, 6)}`,
-          name: "Novo cargo",
+          name: tAdmin("access.newRoleName"),
           description: "",
           active: true,
           system: false,
@@ -1775,20 +1716,20 @@ export default function AdminPage() {
   };
 
   const getPermissionGroupLabel = (screenId: string, resource: AccessResourceKey, label: string) => {
-    if (resource === "billing.exempt") return "Cobrança";
-    if (screenId !== "admin") return "Geral";
+    if (resource === "billing.exempt") return tAdmin("access.groups.billing");
+    if (screenId !== "admin") return tAdmin("access.groups.general");
     if (resource.startsWith("admin.users.")) return tAdmin("access.groups.users");
     if (resource.startsWith("admin.support.")) return tAdmin("access.groups.support");
     if (resource.startsWith("admin.restore.")) return tAdmin("access.groups.restore");
     if (resource.startsWith("admin.plans.")) return tAdmin("access.groups.plans");
     if (resource.startsWith("admin.permissions.")) return tAdmin("access.groups.permissions");
     if (resource === "admin.pages.preview") return tAdmin("access.groups.screenAudit");
-    if (resource === "admin.billing_jobs" || resource === "admin.retention_jobs" || resource === "admin.health") return "Jobs e saúde";
+    if (resource === "admin.billing_jobs" || resource === "admin.retention_jobs" || resource === "admin.health") return tAdmin("access.groups.jobsHealth");
     if (resource === "admin.metrics.read") return tAdmin("access.groups.metrics");
     if (resource === "admin.audit.read") return tAdmin("access.groups.audit");
-    if (resource === "admin.export") return "Exportações";
-    if (resource === "admin.impersonation") return "Impersonação";
-    return label.split("·")[0].trim() || "Geral";
+    if (resource === "admin.export") return tAdmin("access.groups.exports");
+    if (resource === "admin.impersonation") return tAdmin("access.groups.impersonation");
+    return label.split("·")[0].trim() || tAdmin("access.groups.general");
   };
 
   const getVisiblePermissionResources = (screen: (typeof ACCESS_SCREENS)[number]) => {
@@ -1823,7 +1764,7 @@ export default function AdminPage() {
       showFeedback("success", tAdmin("access.savedTitle"), tAdmin("access.savedMessage"));
     } catch (error) {
       console.error(error);
-      showFeedback("error", "Erro ao Salvar", "Não foi possível atualizar as permissões.");
+      showFeedback("error", tAdmin("access.saveErrorTitle"), tAdmin("access.saveErrorMessage"));
     } finally {
       setIsSavingAccessControl(false);
     }
@@ -1837,7 +1778,7 @@ export default function AdminPage() {
       showFeedback("success", tAdmin("plans.savedTitle"), tAdmin("plans.savedMessage"));
     } catch (error) {
       console.error(error);
-      showFeedback('error', 'Erro ao Salvar', 'Não foi possível atualizar os planos.');
+      showFeedback("error", tAdmin("plans.saveErrorTitle"), tAdmin("plans.saveErrorMessage"));
     } finally {
       setIsSavingPlans(false);
     }
@@ -1865,11 +1806,11 @@ export default function AdminPage() {
       });
     } catch (error) {
       console.error(error);
-      showFeedback("error", "Exportação falhou", "Não foi possível exportar os usuários agora.");
+      showFeedback("error", tAdmin("users.exportErrorTitle"), tAdmin("users.exportErrorMessage"));
     } finally {
       setIsExportingCsv(null);
     }
-  }, [searchTerm, roleFilter, planFilter, statusFilter, paymentStatusFilter]);
+  }, [searchTerm, roleFilter, planFilter, statusFilter, paymentStatusFilter, tAdmin]);
 
   const clearSupportFilters = useCallback(() => {
     setSupportTypeFilter("all");
@@ -1890,11 +1831,11 @@ export default function AdminPage() {
       });
     } catch (error) {
       console.error(error);
-      showFeedback("error", "Exportação falhou", "Não foi possível exportar os chamados agora.");
+      showFeedback("error", tAdmin("support.feedback.exportErrorTitle"), tAdmin("support.feedback.exportErrorMessage"));
     } finally {
       setIsExportingCsv(null);
     }
-  }, [supportSearch, supportTypeFilter, supportStatusFilter, supportPriorityFilter]);
+  }, [supportSearch, supportTypeFilter, supportStatusFilter, supportPriorityFilter, tAdmin]);
 
   const handleExportAuditCsv = useCallback(async () => {
     try {
@@ -1909,11 +1850,11 @@ export default function AdminPage() {
       });
     } catch (error) {
       console.error(error);
-      showFeedback("error", "Exportação falhou", "Não foi possível exportar a auditoria agora.");
+      showFeedback("error", tAdmin("audit.errors.exportTitle"), tAdmin("audit.errors.exportMessage"));
     } finally {
       setIsExportingCsv(null);
     }
-  }, [auditSearch, auditActionFilter, auditActorUidFilter, auditTargetUidFilter, auditFromDate, auditToDate]);
+  }, [auditSearch, auditActionFilter, auditActorUidFilter, auditTargetUidFilter, auditFromDate, auditToDate, tAdmin]);
 
   const deletedUsers = useMemo(() => {
     return users.filter(u => u.status === 'deleted');
@@ -1921,15 +1862,15 @@ export default function AdminPage() {
 
   const getRestoreDeadlineLabel = useCallback((user: UserProfile) => {
     const value = user.permanentDeleteAt || computePermanentDeleteAt(user.deletedAt || null);
-    if (!value) return "Prazo não informado";
+    if (!value) return tAdmin("restore.deadlineNotProvided");
     const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return "Prazo não informado";
-    return parsed.toLocaleDateString("pt-BR", {
+    if (Number.isNaN(parsed.getTime())) return tAdmin("restore.deadlineNotProvided");
+    return parsed.toLocaleDateString(locale, {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
     });
-  }, []);
+  }, [locale, tAdmin]);
 
   const isRestoreExpired = useCallback((user: UserProfile) => {
     const value = user.permanentDeleteAt || computePermanentDeleteAt(user.deletedAt || null);
@@ -1960,7 +1901,7 @@ export default function AdminPage() {
     (user && !userProfile) ||
     (shouldLoadAdminConfig && (!editedAccessControl || !editedPlans))
   ) {
-    return <AdminPageLoadingShell />;
+    return <AdminLoadingShell />;
   }
 
   if (!hasAdminAccess) {
@@ -1981,9 +1922,9 @@ export default function AdminPage() {
           <div>
             <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight text-foreground">
               <ShieldAlert className="h-8 w-8 text-red-600" />
-              Administração
+              {tAdmin("header.title")}
             </h1>
-            <p className="text-muted-foreground">Controle total da plataforma.</p>
+            <p className="text-muted-foreground">{tAdmin("header.subtitle")}</p>
           </div>
 
           {hasAdminPermission("users", "write") && activeTab === 'users' && (
@@ -1994,7 +1935,7 @@ export default function AdminPage() {
               className="w-full gap-2 rounded-xl border-amber-200 bg-amber-50/80 text-amber-700 shadow-sm transition-all hover:cursor-pointer hover:bg-amber-100 dark:bg-amber-950/20 dark:text-amber-300 dark:hover:bg-amber-950/30 sm:w-auto sm:hover:scale-105"
             >
               {isNormalizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
-              Corrigir/Normalizar Dados Antigos
+              {tAdmin("header.normalizeLegacyData")}
             </Button>
           )}
         </div>
@@ -2003,7 +1944,7 @@ export default function AdminPage() {
           <div className={`${fadeInUp} mb-4 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-red-900`}>
             <div className="flex items-center gap-2 font-semibold text-sm">
               <AlertTriangle className="h-4 w-4" />
-              {criticalMetricsAlerts.length} alerta(s) crítico(s) ativo(s)
+              {tAdmin("header.criticalAlerts", { count: criticalMetricsAlerts.length })}
             </div>
             <p className="text-xs mt-1">
               {criticalMetricsAlerts[0]?.title}: {criticalMetricsAlerts[0]?.description}
@@ -2015,11 +1956,11 @@ export default function AdminPage() {
           <aside className="hidden lg:block">
             <div className="app-panel-subtle sticky top-24 rounded-3xl border border-color:var(--app-panel-border) p-3 shadow-xl shadow-primary/10">
               <div className="px-3 py-3">
-                <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary">Weven Admin</p>
-                <h2 className="mt-1 text-lg font-bold text-foreground">Painel Operacional</h2>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">Governança, suporte e controle da plataforma em um só lugar.</p>
+                <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary">{tAdmin("header.sidebarEyebrow")}</p>
+                <h2 className="mt-1 text-lg font-bold text-foreground">{tAdmin("header.sidebarTitle")}</h2>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{tAdmin("header.sidebarDescription")}</p>
               </div>
-              <nav className="mt-2 space-y-1" aria-label="Navegação administrativa">
+              <nav className="mt-2 space-y-1" aria-label={tAdmin("header.navAria")}>
                 {adminNavItems.map((item) => {
                   const Icon = item.icon;
                   const active = activeTab === item.id;
@@ -2054,7 +1995,7 @@ export default function AdminPage() {
 
           <section className="min-w-0 space-y-6">
             <div className="lg:hidden">
-              <div className="app-panel-subtle flex gap-2 overflow-x-auto rounded-2xl border border-color:var(--app-panel-border) p-1.5 shadow-sm no-scrollbar" aria-label="Navegação administrativa">
+              <div className="app-panel-subtle flex gap-2 overflow-x-auto rounded-2xl border border-color:var(--app-panel-border) p-1.5 shadow-sm no-scrollbar" aria-label={tAdmin("header.navAria")}>
                 {adminNavItems.map((item) => {
                   const Icon = item.icon;
                   const active = activeTab === item.id;
@@ -2104,31 +2045,31 @@ export default function AdminPage() {
               <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                 <CardHeader className="app-panel-subtle border-b border-border/70 px-4 py-4 sm:px-6">
                   <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                    <HeadphonesIcon className="h-5 w-5 text-primary" /> Central de Atendimento
+                    <HeadphonesIcon className="h-5 w-5 text-primary" /> {tAdmin("support.title")}
                   </CardTitle>
                   <CardDescription>
                     {userProfile?.role === 'admin'
-                      ? "Gerencie a atribuição e status dos chamados de toda a plataforma."
-                      : "Visualize e atenda os chamados atribuídos a você."}
+                      ? tAdmin("support.descriptionAdmin")
+                      : tAdmin("support.descriptionStaff")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="grid grid-cols-1 gap-3 border-b border-color:var(--app-panel-border) p-4 sm:grid-cols-2 md:p-5 lg:grid-cols-4">
                     <div className="app-panel-subtle rounded-xl border border-color:var(--app-panel-border) p-3">
-                      <p className="text-xs text-muted-foreground">Fila aberta</p>
+                      <p className="text-xs text-muted-foreground">{tAdmin("support.metrics.openQueue")}</p>
                       <p className="text-lg font-bold">{supportQueueMetrics.open}</p>
                     </div>
                     <div className="rounded-xl border border-red-200 bg-red-50 p-3 dark:border-red-900/40 dark:bg-red-950/20">
-                      <p className="text-xs text-red-600">SLA estourado</p>
+                      <p className="text-xs text-red-600">{tAdmin("support.metrics.slaBreached")}</p>
                       <p className="text-lg font-bold text-red-600">{supportQueueMetrics.overdue}</p>
                     </div>
                     <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 dark:border-orange-900/40 dark:bg-orange-950/20">
-                      <p className="text-xs text-orange-700">Alta/Urgente</p>
+                      <p className="text-xs text-orange-700">{tAdmin("support.metrics.highUrgent")}</p>
                       <p className="text-lg font-bold text-orange-700">{supportQueueMetrics.urgent}</p>
                     </div>
                     <div className="rounded-xl border border-primary/20 bg-accent p-3">
-                      <p className="text-xs text-primary">TMA resolução</p>
-                      <p className="text-lg font-bold text-primary">{supportQueueMetrics.avgResolutionMinutes} min</p>
+                      <p className="text-xs text-primary">{tAdmin("support.metrics.avgResolution")}</p>
+                      <p className="text-lg font-bold text-primary">{tAdmin("support.metrics.minutes", { value: supportQueueMetrics.avgResolutionMinutes })}</p>
                     </div>
                   </div>
                   <div className="space-y-3 border-b border-color:var(--app-panel-border) p-4 md:p-5">
@@ -2137,49 +2078,49 @@ export default function AdminPage() {
                         value={supportSearch}
                         onChange={(e) => setSupportSearch(e.target.value)}
                         className="h-10 rounded-xl"
-                        placeholder="Buscar chamado por protocolo, nome ou email"
+                        placeholder={tAdmin("support.searchPlaceholder")}
                       />
                       <Select value={supportTypeFilter} onValueChange={(value) => setSupportTypeFilter(value as "support" | "feature" | "all")}>
                         <SelectTrigger className="h-10 rounded-xl">
-                          <SelectValue placeholder="Tipo" />
+                          <SelectValue placeholder={tAdmin("support.filters.type")} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">Todos os tipos</SelectItem>
-                          <SelectItem value="support">Suporte</SelectItem>
-                          <SelectItem value="feature">Ideias</SelectItem>
+                          <SelectItem value="all">{tAdmin("support.filters.allTypes")}</SelectItem>
+                          <SelectItem value="support">{tAdmin("support.type.support")}</SelectItem>
+                          <SelectItem value="feature">{tAdmin("support.type.featurePlural")}</SelectItem>
                         </SelectContent>
                       </Select>
                       <Select value={supportStatusFilter} onValueChange={setSupportStatusFilter}>
                         <SelectTrigger className="h-10 rounded-xl">
-                          <SelectValue placeholder="Status" />
+                          <SelectValue placeholder={tAdmin("support.filters.status")} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">Todos os status</SelectItem>
-                          <SelectItem value="pending">Pendente</SelectItem>
-                          <SelectItem value="in_progress">Em Progresso</SelectItem>
-                          <SelectItem value="resolved">Resolvido</SelectItem>
-                          <SelectItem value="rejected">Rejeitado</SelectItem>
-                          <SelectItem value="under_review">Em Análise</SelectItem>
-                          <SelectItem value="approved">Aprovado</SelectItem>
-                          <SelectItem value="implemented">Implementado</SelectItem>
+                          <SelectItem value="all">{tAdmin("support.filters.allStatuses")}</SelectItem>
+                          <SelectItem value="pending">{tAdmin("support.status.pending")}</SelectItem>
+                          <SelectItem value="in_progress">{tAdmin("support.status.inProgress")}</SelectItem>
+                          <SelectItem value="resolved">{tAdmin("support.status.resolved")}</SelectItem>
+                          <SelectItem value="rejected">{tAdmin("support.status.rejected")}</SelectItem>
+                          <SelectItem value="under_review">{tAdmin("support.status.underReview")}</SelectItem>
+                          <SelectItem value="approved">{tAdmin("support.status.approved")}</SelectItem>
+                          <SelectItem value="implemented">{tAdmin("support.status.implemented")}</SelectItem>
                         </SelectContent>
                       </Select>
                       <Select value={supportPriorityFilter} onValueChange={(value) => setSupportPriorityFilter(value as "low" | "medium" | "high" | "urgent" | "all")}>
                         <SelectTrigger className="h-10 rounded-xl">
-                          <SelectValue placeholder="Prioridade" />
+                          <SelectValue placeholder={tAdmin("support.filters.priority")} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">Todas prioridades</SelectItem>
-                          <SelectItem value="low">Baixa</SelectItem>
-                          <SelectItem value="medium">Média</SelectItem>
-                          <SelectItem value="high">Alta</SelectItem>
-                          <SelectItem value="urgent">Urgente</SelectItem>
+                          <SelectItem value="all">{tAdmin("support.filters.allPriorities")}</SelectItem>
+                          <SelectItem value="low">{tAdmin("support.priority.low")}</SelectItem>
+                          <SelectItem value="medium">{tAdmin("support.priority.medium")}</SelectItem>
+                          <SelectItem value="high">{tAdmin("support.priority.high")}</SelectItem>
+                          <SelectItem value="urgent">{tAdmin("support.priority.urgent")}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <Button variant="outline" className="h-10 w-full rounded-xl sm:w-auto" onClick={clearSupportFilters}>
-                        <FilterX className="mr-2 h-4 w-4" /> Limpar filtros
+                        <FilterX className="mr-2 h-4 w-4" /> {tAdmin("common.clearFilters")}
                       </Button>
                       <Button
                         variant="outline"
@@ -2188,14 +2129,14 @@ export default function AdminPage() {
                         disabled={isExportingCsv === "support"}
                       >
                         <Download className="mr-2 h-4 w-4" />
-                        {isExportingCsv === "support" ? "Exportando..." : "Exportar CSV"}
+                        {isExportingCsv === "support" ? tAdmin("common.exporting") : tAdmin("common.exportCsv")}
                       </Button>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-4 p-4 md:p-5 2xl:grid-cols-2">
                     {supportTicketsOrdered.length === 0 ? (
                       <div className="app-panel-subtle col-span-full flex h-32 items-center justify-center rounded-2xl border border-color:var(--app-panel-border) text-muted-foreground">
-                        Nenhum chamado encontrado.
+                        {tAdmin("support.empty")}
                       </div>
                     ) : (
                       supportTicketsOrdered.map((ticket) => {
@@ -2232,27 +2173,27 @@ export default function AdminPage() {
                             <div className="flex flex-wrap items-center gap-2">
                               {ticket.type === 'feature' ? (
                                 <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 gap-1">
-                                  <Lightbulb className="h-3 w-3" /> Ideia
+                                  <Lightbulb className="h-3 w-3" /> {tAdmin("support.type.feature")}
                                 </Badge>
                               ) : (
                                 <Badge variant="outline" className="gap-1 border-primary/20 bg-accent text-primary">
-                                  <MessageSquare className="h-3 w-3" /> Suporte
+                                  <MessageSquare className="h-3 w-3" /> {tAdmin("support.type.support")}
                                 </Badge>
                               )}
                               {ticket.supportKind === "account_restore" && (
                                 <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
-                                  <ArchiveRestore className="h-3 w-3" /> Retorno de conta
+                                  <ArchiveRestore className="h-3 w-3" /> {tAdmin("support.accountRestore")}
                                 </Badge>
                               )}
                               <Badge className={tone.badge}>{formatTicketStatus(ticket.status)}</Badge>
                               <Badge className={getTicketPriorityTone(ticket.priority)}>
-                                Prioridade: {getTicketPriorityLabel(ticket.priority)}
+                                {tAdmin("support.priorityLabel", { priority: getTicketPriorityLabel(ticket.priority) })}
                               </Badge>
                               <Badge variant="outline" className="text-[10px]">
-                                Protocolo {ticket.protocol || `#${ticket.id.slice(0, 8)}`}
+                                {tAdmin("support.protocolLabel", { protocol: ticket.protocol || `#${ticket.id.slice(0, 8)}` })}
                               </Badge>
                               {ticket.slaBreached && (
-                                <Badge className="bg-red-600 text-white">SLA estourado</Badge>
+                                <Badge className="bg-red-600 text-white">{tAdmin("support.slaBreached")}</Badge>
                               )}
                             </div>
 
@@ -2272,10 +2213,10 @@ export default function AdminPage() {
                                     onValueChange={(val) => handleAssignTicket(ticket.id, val)}
                                   >
                                     <SelectTrigger className="h-8 w-full max-w-full text-xs sm:w-[260px]">
-                                      <SelectValue placeholder="Atribuir" />
+                                      <SelectValue placeholder={tAdmin("support.assignPlaceholder")} />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="unassigned">-- Ninguém --</SelectItem>
+                                      <SelectItem value="unassigned">-- {tAdmin("common.nobody")} --</SelectItem>
                                       {staffMembers.map(staff => (
                                         <SelectItem key={staff.uid} value={staff.uid}>
                                           {staff.displayName || staff.email} ({staff.role})
@@ -2284,7 +2225,7 @@ export default function AdminPage() {
                                     </SelectContent>
                                   </Select>
                                 ) : (
-                                  <span>{ticket.assignedToName || (ticket.assignedTo ? "Staff" : "Ninguém")}</span>
+                                  <span>{ticket.assignedToName || (ticket.assignedTo ? tAdmin("common.staff") : tAdmin("common.nobody"))}</span>
                                 )}
                               </div>
 
@@ -2299,7 +2240,7 @@ export default function AdminPage() {
                                 }}
                               >
                                 <Eye className="mr-1.5 h-4 w-4" />
-                                Detalhes
+                                {tAdmin("support.detailsAction")}
                               </Button>
                             </div>
                           </div>
@@ -2312,20 +2253,20 @@ export default function AdminPage() {
                     <Table>
                       <TableHeader className="bg-zinc-50 dark:bg-zinc-950">
                         <TableRow className="border-zinc-100 dark:border-zinc-800 hover:bg-transparent">
-                          <TableHead className="pl-6 font-semibold">Data</TableHead>
-                          <TableHead className="font-semibold">Solicitante</TableHead>
-                          <TableHead className="font-semibold">Tipo</TableHead>
-                          <TableHead className="font-semibold">Mensagem (Resumo)</TableHead>
-                          <TableHead className="font-semibold text-center">Status</TableHead>
-                          <TableHead className="font-semibold">Responsável</TableHead>
-                          <TableHead className="text-right pr-6 font-semibold">Ação</TableHead>
+                          <TableHead className="pl-6 font-semibold">{tAdmin("common.date")}</TableHead>
+                          <TableHead className="font-semibold">{tAdmin("common.requester")}</TableHead>
+                          <TableHead className="font-semibold">{tAdmin("support.filters.type")}</TableHead>
+                          <TableHead className="font-semibold">{tAdmin("common.message")}</TableHead>
+                          <TableHead className="font-semibold text-center">{tAdmin("common.status")}</TableHead>
+                          <TableHead className="font-semibold">{tAdmin("common.responsible")}</TableHead>
+                          <TableHead className="text-right pr-6 font-semibold">{tAdmin("common.actions")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {supportTicketsOrdered.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={7} className="h-32 text-center text-zinc-500">
-                              Nenhum chamado encontrado.
+                              {tAdmin("support.empty")}
                             </TableCell>
                           </TableRow>
                         ) : (
@@ -2349,16 +2290,16 @@ export default function AdminPage() {
                                 <TableCell>
                                   {ticket.type === 'feature' ? (
                                     <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 gap-1">
-                                      <Lightbulb className="h-3 w-3" /> Ideia
+                                      <Lightbulb className="h-3 w-3" /> {tAdmin("support.type.feature")}
                                     </Badge>
                                   ) : (
                                     <Badge variant="outline" className="gap-1 border-primary/20 bg-accent text-primary">
-                                      <MessageSquare className="h-3 w-3" /> Suporte
+                                      <MessageSquare className="h-3 w-3" /> {tAdmin("support.type.support")}
                                     </Badge>
                                   )}
                                   {ticket.supportKind === "account_restore" && (
                                     <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
-                                      <ArchiveRestore className="h-3 w-3" /> Retorno de conta
+                                      <ArchiveRestore className="h-3 w-3" /> {tAdmin("support.accountRestore")}
                                     </Badge>
                                   )}
                                 </TableCell>
@@ -2392,10 +2333,10 @@ export default function AdminPage() {
                                       onValueChange={(val) => handleAssignTicket(ticket.id, val)}
                                     >
                                       <SelectTrigger className="h-8 w-full max-w-full text-xs sm:w-[220px]">
-                                        <SelectValue placeholder="Atribuir" />
+                                        <SelectValue placeholder={tAdmin("support.assignPlaceholder")} />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="unassigned">-- Ninguém --</SelectItem>
+                                        <SelectItem value="unassigned">-- {tAdmin("common.nobody")} --</SelectItem>
                                         {staffMembers.map(staff => (
                                           <SelectItem key={staff.uid} value={staff.uid}>
                                             {staff.displayName || staff.email} ({staff.role})
@@ -2405,7 +2346,7 @@ export default function AdminPage() {
                                     </Select>
                                   ) : (
                                     <span className="text-xs font-medium text-zinc-600">
-                                      {ticket.assignedToName || (ticket.assignedTo ? "Staff" : "Ninguém")}
+                                      {ticket.assignedToName || (ticket.assignedTo ? tAdmin("common.staff") : tAdmin("common.nobody"))}
                                     </span>
                                   )}
                                 </TableCell>
@@ -2423,7 +2364,7 @@ export default function AdminPage() {
                                       className="w-48 max-h-[min(70vh,24rem)] rounded-xl border border-zinc-200/70 bg-white p-1 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
                                     >
                                       <DropdownMenuItem onClick={() => setViewTicket(ticket)}>
-                                        <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
+                                        <Eye className="mr-2 h-4 w-4" /> {tAdmin("support.viewDetails")}
                                       </DropdownMenuItem>
 
                                       {canEditStatus && (
@@ -2433,7 +2374,7 @@ export default function AdminPage() {
                                           >
                                             <span className="flex items-center">
                                               <RefreshCcw className="mr-2 h-4 w-4 text-zinc-500" />
-                                              Alterar Status
+                                              {tAdmin("support.changeStatus")}
                                             </span>
                                           </DropdownMenuSubTrigger>
                                           <DropdownMenuSubContent className="w-56 max-h-[min(70vh,22rem)] rounded-xl border border-zinc-200/70 bg-white p-1 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
@@ -2443,28 +2384,28 @@ export default function AdminPage() {
                                                   onClick={() => handleChangeTicketStatus(ticket.id, 'pending')}
                                                   className="rounded-lg text-sm focus:bg-amber-50 focus:text-amber-900 dark:focus:bg-amber-950/30 dark:focus:text-amber-100"
                                                 >
-                                                  Pendente
+                                                  {tAdmin("support.status.pending")}
                                                 </DropdownMenuItem>
 
                                                 <DropdownMenuItem
                                                   onClick={() => handleChangeTicketStatus(ticket.id, 'in_progress')}
                                                   className="rounded-lg text-sm focus:bg-blue-50 focus:text-blue-900 dark:focus:bg-blue-950/30 dark:focus:text-blue-100"
                                                 >
-                                                  Em Progresso
+                                                  {tAdmin("support.status.inProgress")}
                                                 </DropdownMenuItem>
 
                                                 <DropdownMenuItem
                                                   onClick={() => handleChangeTicketStatus(ticket.id, 'resolved')}
                                                   className="rounded-lg text-sm focus:bg-emerald-50 focus:text-emerald-900 dark:focus:bg-emerald-950/30 dark:focus:text-emerald-100"
                                                 >
-                                                  Resolvido
+                                                  {tAdmin("support.status.resolved")}
                                                 </DropdownMenuItem>
 
                                                 <DropdownMenuItem
                                                   onClick={() => handleChangeTicketStatus(ticket.id, 'rejected')}
                                                   className="rounded-lg text-sm focus:bg-red-50 focus:text-red-900 dark:focus:bg-red-950/30 dark:focus:text-red-100"
                                                 >
-                                                  Rejeitado
+                                                  {tAdmin("support.status.rejected")}
                                                 </DropdownMenuItem>
                                               </>
                                             )}
@@ -2475,35 +2416,35 @@ export default function AdminPage() {
                                                   onClick={() => handleChangeTicketStatus(ticket.id, 'pending')}
                                                   className="rounded-lg text-sm focus:bg-amber-50 focus:text-amber-900 dark:focus:bg-amber-950/30 dark:focus:text-amber-100"
                                                 >
-                                                  Pendente
+                                                  {tAdmin("support.status.pending")}
                                                 </DropdownMenuItem>
 
                                                 <DropdownMenuItem
                                                   onClick={() => handleChangeTicketStatus(ticket.id, 'under_review')}
                                                   className="rounded-lg text-sm focus:bg-amber-50 focus:text-amber-900 dark:focus:bg-amber-950/30 dark:focus:text-amber-100"
                                                 >
-                                                  Em Análise
+                                                  {tAdmin("support.status.underReview")}
                                                 </DropdownMenuItem>
 
                                                 <DropdownMenuItem
                                                   onClick={() => handleChangeTicketStatus(ticket.id, 'approved')}
                                                   className="rounded-lg text-sm focus:bg-emerald-50 focus:text-emerald-900 dark:focus:bg-emerald-950/30 dark:focus:text-emerald-100"
                                                 >
-                                                  Aprovado
+                                                  {tAdmin("support.status.approved")}
                                                 </DropdownMenuItem>
 
                                                 <DropdownMenuItem
                                                   onClick={() => handleChangeTicketStatus(ticket.id, 'rejected')}
                                                   className="rounded-lg text-sm focus:bg-red-50 focus:text-red-900 dark:focus:bg-red-950/30 dark:focus:text-red-100"
                                                 >
-                                                  Rejeitado
+                                                  {tAdmin("support.status.rejected")}
                                                 </DropdownMenuItem>
 
                                                 <DropdownMenuItem
                                                   onClick={() => handleChangeTicketStatus(ticket.id, 'implemented')}
                                                   className="rounded-lg text-sm focus:bg-emerald-50 focus:text-emerald-900 dark:focus:bg-emerald-950/30 dark:focus:text-emerald-100"
                                                 >
-                                                  Implementado
+                                                  {tAdmin("support.status.implemented")}
                                                 </DropdownMenuItem>
                                               </>
                                             )}
@@ -2516,13 +2457,13 @@ export default function AdminPage() {
                                           <DropdownMenuSubTrigger
                                             className="rounded-lg font-medium text-zinc-700 dark:text-zinc-200"
                                           >
-                                            Prioridade
+                                            {tAdmin("common.priority")}
                                           </DropdownMenuSubTrigger>
                                           <DropdownMenuSubContent className="w-44 rounded-xl border border-zinc-200/70 bg-white p-1 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
-                                            <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "low")}>Baixa</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "medium")}>Média</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "high")}>Alta</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "urgent")}>Urgente</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "low")}>{tAdmin("support.priority.low")}</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "medium")}>{tAdmin("support.priority.medium")}</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "high")}>{tAdmin("support.priority.high")}</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleChangeTicketPriority(ticket.id, "urgent")}>{tAdmin("support.priority.urgent")}</DropdownMenuItem>
                                           </DropdownMenuSubContent>
                                         </DropdownMenuSub>
                                       )}
@@ -2534,7 +2475,7 @@ export default function AdminPage() {
                                             onClick={() => setTicketToDelete(ticket)}
                                             className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950 hover:cursor-pointer"
                                           >
-                                            <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                                            <Trash2 className="mr-2 h-4 w-4" /> {tAdmin("common.delete")}
                                           </DropdownMenuItem>
                                         </>
                                       )}
@@ -2550,7 +2491,7 @@ export default function AdminPage() {
                   </div>
                   <div className="flex flex-col gap-3 border-t border-color:var(--app-panel-border) px-4 pb-4 sm:flex-row sm:items-center sm:justify-between md:px-6">
                     <p className="text-xs font-medium text-muted-foreground">
-                      Página {supportPage} de {supportTotalPages || 1} • {ticketsTotal} chamado(s)
+                      {tAdmin("support.pageSummary", { page: supportPage, totalPages: supportTotalPages || 1, total: ticketsTotal })}
                     </p>
                     <div className="flex justify-end gap-2">
                       <Button
@@ -2584,10 +2525,10 @@ export default function AdminPage() {
               <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                 <CardHeader className="app-panel-subtle border-b border-border/70 px-4 py-4 sm:px-6">
                   <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                    <ShieldCheck className="h-5 w-5 text-emerald-600" /> Auditoria Operacional
+                    <ShieldCheck className="h-5 w-5 text-emerald-600" /> {tAdmin("audit.title")}
                   </CardTitle>
                   <CardDescription>
-                    Histórico das alterações administrativas e ações sensíveis no sistema.
+                    {tAdmin("audit.description")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-4 md:p-5 space-y-4">
@@ -2601,11 +2542,11 @@ export default function AdminPage() {
                           setAuditPage(1);
                         }}
                         className="pl-10 h-10 rounded-xl"
-                        placeholder="Buscar por ação, rota, ator, alvo..."
+                        placeholder={tAdmin("audit.searchPlaceholder")}
                       />
                     </div>
                     <Badge variant="outline" className="rounded-xl px-3 py-1.5 text-xs">
-                      {auditTotal} registros
+                      {tAdmin("audit.recordsLabel", { count: auditTotal })}
                     </Badge>
                     <Button
                       variant="outline"
@@ -2614,7 +2555,7 @@ export default function AdminPage() {
                       disabled={isExportingCsv === "audit"}
                     >
                       <Download className="mr-2 h-4 w-4" />
-                      {isExportingCsv === "audit" ? "Exportando..." : "Exportar CSV"}
+                      {isExportingCsv === "audit" ? tAdmin("common.exporting") : tAdmin("common.exportCsv")}
                     </Button>
                   </div>
 
@@ -2627,16 +2568,16 @@ export default function AdminPage() {
                       }}
                     >
                       <SelectTrigger className="rounded-xl h-10">
-                        <SelectValue placeholder="Ação" />
+                        <SelectValue placeholder={tAdmin("audit.filters.action")} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todas ações</SelectItem>
-                        <SelectItem value="admin.users.patch">Atualização de usuário</SelectItem>
-                        <SelectItem value="admin.users.normalize">Normalização</SelectItem>
-                        <SelectItem value="admin.users.reset_financial_data">Reset financeiro</SelectItem>
-                        <SelectItem value="admin.users.soft_delete">Exclusão de usuário</SelectItem>
-                        <SelectItem value="admin.users.restore">Restauração de usuário</SelectItem>
-                        <SelectItem value="admin.users.recount_transaction_count">Recontagem de transações</SelectItem>
+                        <SelectItem value="all">{tAdmin("audit.filters.allActions")}</SelectItem>
+                        <SelectItem value="admin.users.patch">{tAdmin("audit.actions.userPatch")}</SelectItem>
+                        <SelectItem value="admin.users.normalize">{tAdmin("audit.actions.normalize")}</SelectItem>
+                        <SelectItem value="admin.users.reset_financial_data">{tAdmin("audit.actions.resetFinancialData")}</SelectItem>
+                        <SelectItem value="admin.users.soft_delete">{tAdmin("audit.actions.softDelete")}</SelectItem>
+                        <SelectItem value="admin.users.restore">{tAdmin("audit.actions.restore")}</SelectItem>
+                        <SelectItem value="admin.users.recount_transaction_count">{tAdmin("audit.actions.recountTransactions")}</SelectItem>
                       </SelectContent>
                     </Select>
 
@@ -2647,7 +2588,7 @@ export default function AdminPage() {
                         setAuditPage(1);
                       }}
                       className="h-10 rounded-xl"
-                      placeholder="UID do ator"
+                      placeholder={tAdmin("audit.actorUidPlaceholder")}
                     />
 
                     <Input
@@ -2657,7 +2598,7 @@ export default function AdminPage() {
                         setAuditPage(1);
                       }}
                       className="h-10 rounded-xl"
-                      placeholder="UID do alvo"
+                      placeholder={tAdmin("audit.targetUidPlaceholder")}
                     />
 
                     <Input
@@ -2684,11 +2625,11 @@ export default function AdminPage() {
                   <div className="space-y-3">
                     {isLoadingAuditLogs ? (
                       <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando auditoria...
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" /> {tAdmin("audit.loading")}
                       </div>
                     ) : auditLogs.length === 0 ? (
                       <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-muted-foreground">
-                        Nenhum registro encontrado.
+                        {tAdmin("audit.empty")}
                       </div>
                     ) : (
                       auditLogs.map((log) => (
@@ -2698,11 +2639,11 @@ export default function AdminPage() {
                             <Badge className="bg-zinc-800 text-white">{(log.method || "N/A").toUpperCase()}</Badge>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-zinc-600 dark:text-zinc-300">
-                            <p><span className="font-semibold">Ator:</span> {log.actorUid || "-"}</p>
-                            <p><span className="font-semibold">Alvo:</span> {log.targetUid || "-"}</p>
-                            <p><span className="font-semibold">Quando:</span> {formatDateSafe(log.createdAt) ?? tAdmin("common.invalidDate")}</p>
-                            <p className="md:col-span-2 break-all"><span className="font-semibold">Rota:</span> {log.route || "-"}</p>
-                            <p className="break-all"><span className="font-semibold">IP:</span> {log.ip || "-"}</p>
+                            <p><span className="font-semibold">{tAdmin("audit.fields.actor")}:</span> {log.actorUid || "-"}</p>
+                            <p><span className="font-semibold">{tAdmin("audit.fields.target")}:</span> {log.targetUid || "-"}</p>
+                            <p><span className="font-semibold">{tAdmin("audit.fields.when")}:</span> {formatDateSafe(log.createdAt) ?? tAdmin("common.invalidDate")}</p>
+                            <p className="md:col-span-2 break-all"><span className="font-semibold">{tAdmin("audit.fields.route")}:</span> {log.route || "-"}</p>
+                            <p className="break-all"><span className="font-semibold">{tAdmin("audit.fields.ip")}:</span> {log.ip || "-"}</p>
                           </div>
                         </div>
                       ))
@@ -2711,7 +2652,7 @@ export default function AdminPage() {
 
                   <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-xs text-zinc-500">
-                      Página {auditPage} de {Math.max(1, Math.ceil(auditTotal / auditPerPage))}
+                      {tAdmin("audit.pageSummary", { page: auditPage, totalPages: Math.max(1, Math.ceil(auditTotal / auditPerPage)) })}
                     </p>
                     <div className="flex gap-2">
                       <Button
@@ -2749,23 +2690,23 @@ export default function AdminPage() {
               <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                 <CardHeader className="app-panel-subtle border-b border-border/70 px-4 py-4 sm:px-6">
                   <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                    <Calculator className="h-5 w-5 text-primary" /> Métricas Operacionais
+                    <Calculator className="h-5 w-5 text-primary" /> {tAdmin("metrics.title")}
                   </CardTitle>
                   <CardDescription>
-                    Tráfego, erros, rate limit e latência das APIs monitoradas.
+                    {tAdmin("metrics.description")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-4 md:p-5 space-y-4">
                   <div className="flex flex-col gap-3 md:flex-row md:items-center">
                     <Select value={metricsWindowMinutes} onValueChange={setMetricsWindowMinutes}>
                       <SelectTrigger className="rounded-xl h-10 w-full md:w-56">
-                        <SelectValue placeholder="Janela" />
+                        <SelectValue placeholder={tAdmin("metrics.filters.window")} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="15">Últimos 15 minutos</SelectItem>
-                        <SelectItem value="60">Última 1 hora</SelectItem>
-                        <SelectItem value="180">Últimas 3 horas</SelectItem>
-                        <SelectItem value="1440">Últimas 24 horas</SelectItem>
+                        <SelectItem value="15">{tAdmin("metrics.filters.last15Minutes")}</SelectItem>
+                        <SelectItem value="60">{tAdmin("metrics.filters.lastHour")}</SelectItem>
+                        <SelectItem value="180">{tAdmin("metrics.filters.last3Hours")}</SelectItem>
+                        <SelectItem value="1440">{tAdmin("metrics.filters.last24Hours")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -2774,27 +2715,27 @@ export default function AdminPage() {
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
                       <Card className={`rounded-2xl border ${healthData.dbHealthy ? "border-emerald-200" : "border-red-300"}`}>
                         <CardContent className="p-3">
-                          <p className="text-xs text-zinc-500">Banco</p>
+                          <p className="text-xs text-zinc-500">{tAdmin("metrics.health.database")}</p>
                           <p className={`text-base font-bold ${healthData.dbHealthy ? "text-emerald-700" : "text-red-700"}`}>
-                            {healthData.dbHealthy ? "Saudável" : "Falha"}
+                            {healthData.dbHealthy ? tAdmin("metrics.health.healthy") : tAdmin("metrics.health.failed")}
                           </p>
                         </CardContent>
                       </Card>
                       <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
                         <CardContent className="p-3">
-                          <p className="text-xs text-zinc-500">Webhook MP (min)</p>
-                          <p className="text-base font-bold">{healthData.webhookDelayMinutes ?? "-"} min</p>
+                          <p className="text-xs text-zinc-500">{tAdmin("metrics.health.webhookDelay")}</p>
+                          <p className="text-base font-bold">{tAdmin("support.metrics.minutes", { value: healthData.webhookDelayMinutes ?? "-" })}</p>
                         </CardContent>
                       </Card>
                       <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
                         <CardContent className="p-3">
-                          <p className="text-xs text-zinc-500">Falhas pagamento 24h</p>
+                          <p className="text-xs text-zinc-500">{tAdmin("metrics.health.paymentFailures24h")}</p>
                           <p className="text-base font-bold">{healthData.failedPayments24h}</p>
                         </CardContent>
                       </Card>
                       <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
                         <CardContent className="p-3">
-                          <p className="text-xs text-zinc-500">Recuperação pendente</p>
+                          <p className="text-xs text-zinc-500">{tAdmin("metrics.health.pendingRecovery")}</p>
                           <p className="text-base font-bold">{healthData.pendingRecoveryUsers}</p>
                         </CardContent>
                       </Card>
@@ -2828,56 +2769,56 @@ export default function AdminPage() {
 
                   {isLoadingMetrics ? (
                     <div className="app-panel-subtle flex h-24 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando métricas...
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" /> {tAdmin("metrics.loading")}
                     </div>
                   ) : (
                     <>
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
                         <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
                           <CardContent className="p-3">
-                            <p className="text-xs text-zinc-500">Total Requests</p>
+                            <p className="text-xs text-zinc-500">{tAdmin("metrics.summary.totalRequests")}</p>
                             <p className="text-xl font-bold">{metricsSummary?.total ?? 0}</p>
                           </CardContent>
                         </Card>
                         <Card className="rounded-2xl border border-red-200">
                           <CardContent className="p-3">
-                            <p className="text-xs text-red-600">Erros 5xx</p>
+                            <p className="text-xs text-red-600">{tAdmin("metrics.summary.serverErrors")}</p>
                             <p className="text-xl font-bold text-red-600">{metricsSummary?.errors ?? 0}</p>
                           </CardContent>
                         </Card>
                         <Card className="rounded-2xl border border-amber-200">
                           <CardContent className="p-3">
-                            <p className="text-xs text-amber-700">Rate Limited (429)</p>
+                            <p className="text-xs text-amber-700">{tAdmin("metrics.summary.rateLimited")}</p>
                             <p className="text-xl font-bold text-amber-700">{metricsSummary?.rateLimited ?? 0}</p>
                           </CardContent>
                         </Card>
                         <Card className="rounded-2xl border border-primary/20 bg-accent">
                           <CardContent className="p-3">
-                            <p className="text-xs text-primary">Latência Média</p>
-                            <p className="text-xl font-bold text-primary">{metricsSummary?.avgDurationMs ?? 0} ms</p>
+                            <p className="text-xs text-primary">{tAdmin("metrics.summary.averageLatency")}</p>
+                            <p className="text-xl font-bold text-primary">{tAdmin("metrics.summary.milliseconds", { value: metricsSummary?.avgDurationMs ?? 0 })}</p>
                           </CardContent>
                         </Card>
                         <Card className="rounded-2xl border border-red-200">
                           <CardContent className="p-3">
-                            <p className="text-xs text-red-600">Taxa de Erro</p>
+                            <p className="text-xs text-red-600">{tAdmin("metrics.summary.errorRate")}</p>
                             <p className="text-xl font-bold text-red-600">{metricsSummary?.errorRatePct ?? 0}%</p>
                           </CardContent>
                         </Card>
                         <Card className="rounded-2xl border border-amber-200">
                           <CardContent className="p-3">
-                            <p className="text-xs text-amber-700">Taxa 429</p>
+                            <p className="text-xs text-amber-700">{tAdmin("metrics.summary.rate429")}</p>
                             <p className="text-xl font-bold text-amber-700">{metricsSummary?.rateLimitedPct ?? 0}%</p>
                           </CardContent>
                         </Card>
                         <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
                           <CardContent className="p-3">
-                            <p className="text-xs text-zinc-500">Janela Anterior</p>
+                            <p className="text-xs text-zinc-500">{tAdmin("metrics.summary.previousWindow")}</p>
                             <p className="text-xl font-bold">{metricsSummary?.previousTotal ?? 0}</p>
                           </CardContent>
                         </Card>
                         <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
                           <CardContent className="p-3">
-                            <p className="text-xs text-zinc-500">Variação Tráfego</p>
+                            <p className="text-xs text-zinc-500">{tAdmin("metrics.summary.trafficChange")}</p>
                             <p className={`text-xl font-bold ${(metricsSummary?.trafficDropPct ?? 0) > 0 ? "text-orange-700" : "text-emerald-700"}`}>
                               {(metricsSummary?.trafficDropPct ?? 0).toFixed(2)}%
                             </p>
@@ -2889,18 +2830,18 @@ export default function AdminPage() {
                         <Table className="min-w-[720px]">
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Rota</TableHead>
-                              <TableHead>Total</TableHead>
-                              <TableHead>Erros</TableHead>
+                              <TableHead>{tAdmin("metrics.table.route")}</TableHead>
+                              <TableHead>{tAdmin("metrics.table.total")}</TableHead>
+                              <TableHead>{tAdmin("metrics.table.errors")}</TableHead>
                               <TableHead>429</TableHead>
-                              <TableHead>Latência Média</TableHead>
+                              <TableHead>{tAdmin("metrics.table.averageLatency")}</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {metricsByRoute.length === 0 ? (
                               <TableRow>
                                 <TableCell colSpan={5} className="h-20 text-center text-zinc-500">
-                                  Sem dados de métricas para o período.
+                                  {tAdmin("metrics.table.empty")}
                                 </TableCell>
                               </TableRow>
                             ) : (
@@ -2912,7 +2853,7 @@ export default function AdminPage() {
                                   <TableCell>{row.total}</TableCell>
                                   <TableCell className="text-red-600">{row.errors}</TableCell>
                                   <TableCell className="text-amber-700">{row.rateLimited}</TableCell>
-                                  <TableCell>{row.avgDurationMs} ms</TableCell>
+                                  <TableCell>{tAdmin("metrics.summary.milliseconds", { value: row.avgDurationMs })}</TableCell>
                                 </TableRow>
                               ))
                             )}
@@ -2934,7 +2875,7 @@ export default function AdminPage() {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-3.5 h-4 w-4 text-zinc-400" />
                   <Input
-                    placeholder="Buscar usuário (nome ou email)..."
+                    placeholder={tAdmin("users.searchPlaceholder")}
                     className="h-11 rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg) pl-9"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -2945,10 +2886,10 @@ export default function AdminPage() {
                   {/* Filtro: Plano */}
                   <Select value={planFilter} onValueChange={(val) => setPlanFilter(val as UserPlan | "all")}>
                     <SelectTrigger className="h-11 w-full rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
-                      <SelectValue placeholder="Plano" />
+                      <SelectValue placeholder={tAdmin("users.filters.plan")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos os Planos</SelectItem>
+                      <SelectItem value="all">{tAdmin("users.filters.allPlans")}</SelectItem>
                       <SelectItem value="free">Free</SelectItem>
                       <SelectItem value="premium">Premium</SelectItem>
                       <SelectItem value="pro">Pro</SelectItem>
@@ -2958,10 +2899,10 @@ export default function AdminPage() {
                   {/* Filtro: Cargo */}
                   <Select value={roleFilter} onValueChange={(val) => setRoleFilter(val as UserRole | "all")}>
                     <SelectTrigger className="h-11 w-full rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
-                      <SelectValue placeholder="Cargo" />
+                      <SelectValue placeholder={tAdmin("users.filters.role")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos os Cargos</SelectItem>
+                      <SelectItem value="all">{tAdmin("users.filters.allRoles")}</SelectItem>
                       {accessControlConfig.roles.map((role) => (
                         <SelectItem key={role.key} value={role.key}>{role.name}</SelectItem>
                       ))}
@@ -2971,30 +2912,30 @@ export default function AdminPage() {
                   {/* Filtro: Status */}
                   <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val as UserStatus | "all")}>
                     <SelectTrigger className="h-11 w-full rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
-                      <SelectValue placeholder="Status" />
+                      <SelectValue placeholder={tAdmin("users.filters.status")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos os Status</SelectItem>
-                      <SelectItem value="active">Ativo</SelectItem>
-                      <SelectItem value="inactive">Inativo</SelectItem>
-                      <SelectItem value="blocked">Bloqueado</SelectItem>
+                      <SelectItem value="all">{tAdmin("users.filters.allStatuses")}</SelectItem>
+                      <SelectItem value="active">{tAdmin("users.status.active")}</SelectItem>
+                      <SelectItem value="inactive">{tAdmin("users.status.inactive")}</SelectItem>
+                      <SelectItem value="blocked">{tAdmin("users.status.blocked")}</SelectItem>
                     </SelectContent>
                   </Select>
 
                   {/* Filtro: Pagamento */}
                   <Select value={paymentStatusFilter} onValueChange={(val) => setPaymentStatusFilter(val as PaymentFilterType)}>
                     <SelectTrigger className="h-11 w-full rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
-                      <SelectValue placeholder="Pagamento" />
+                      <SelectValue placeholder={tAdmin("users.filters.payment")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos Pagamentos</SelectItem>
-                      <SelectItem value="free">Grátis</SelectItem>
-                      <SelectItem value="paid">Pago</SelectItem>
-                      <SelectItem value="pending">Pendente</SelectItem>
-                      <SelectItem value="not_paid">Não Pago</SelectItem>
-                      <SelectItem value="overdue">Atrasado</SelectItem>
-                      <SelectItem value="canceled">Cancelado</SelectItem>
-                      <SelectItem value="unpaid_group" className="text-red-500 font-medium">Inadimplentes (Geral)</SelectItem>
+                      <SelectItem value="all">{tAdmin("users.filters.allPayments")}</SelectItem>
+                      <SelectItem value="free">{tAdmin("users.payment.free")}</SelectItem>
+                      <SelectItem value="paid">{tAdmin("users.payment.paid")}</SelectItem>
+                      <SelectItem value="pending">{tAdmin("users.payment.pending")}</SelectItem>
+                      <SelectItem value="not_paid">{tAdmin("users.payment.notPaid")}</SelectItem>
+                      <SelectItem value="overdue">{tAdmin("users.payment.overdue")}</SelectItem>
+                      <SelectItem value="canceled">{tAdmin("users.payment.canceled")}</SelectItem>
+                      <SelectItem value="unpaid_group" className="text-red-500 font-medium">{tAdmin("users.filters.unpaidGroup")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -3004,7 +2945,7 @@ export default function AdminPage() {
                     className="h-10 w-full rounded-xl sm:w-auto"
                     onClick={clearUsersFilters}
                   >
-                    <FilterX className="mr-2 h-4 w-4" /> Limpar filtros
+                    <FilterX className="mr-2 h-4 w-4" /> {tAdmin("common.clearFilters")}
                   </Button>
                   <Button
                     variant="outline"
@@ -3013,24 +2954,24 @@ export default function AdminPage() {
                     disabled={isExportingCsv === "users"}
                   >
                     <Download className="mr-2 h-4 w-4" />
-                    {isExportingCsv === "users" ? "Exportando..." : "Exportar CSV"}
+                    {isExportingCsv === "users" ? tAdmin("common.exporting") : tAdmin("common.exportCsv")}
                   </Button>
                 </div>
               </div>
 
               <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                 <CardHeader className="border-b border-color:var(--app-panel-border) bg-accent/70 px-4 py-4 dark:bg-accent/20 sm:px-6">
-                  <CardTitle className="text-lg font-semibold text-primary">Base de Usuários</CardTitle>
+                  <CardTitle className="text-lg font-semibold text-primary">{tAdmin("users.tableTitle")}</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="md:hidden p-3 space-y-3">
                     {isLoadingUsers ? (
                       <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando base de dados...
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" /> {tAdmin("users.loadingDatabase")}
                       </div>
                     ) : paginatedUsers.length === 0 ? (
                       <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-muted-foreground">
-                        Nenhum usuário encontrado com os filtros atuais.
+                        {tAdmin("users.empty")}
                       </div>
                     ) : (
                       paginatedUsers.map((u) => {
@@ -3048,7 +2989,7 @@ export default function AdminPage() {
                                 <p className="font-semibold text-zinc-900 truncate">{u.displayName}</p>
                                 <p className="text-xs text-zinc-500 truncate">{u.email}</p>
                                 <p className="text-[11px] text-zinc-400 mt-0.5">
-                                  Cadastro: {new Date(u.createdAt).toLocaleDateString()}
+                                  {tAdmin("users.registrationLabel", { date: new Date(u.createdAt).toLocaleDateString() })}
                                 </p>
                               </div>
                               <DropdownMenu>
@@ -3058,7 +2999,7 @@ export default function AdminPage() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="rounded-xl p-1 shadow-xl border-zinc-200 dark:border-zinc-800">
-                                  <DropdownMenuLabel className="text-xs">Ações</DropdownMenuLabel>
+                                  <DropdownMenuLabel className="text-xs">{tAdmin("common.actions")}</DropdownMenuLabel>
                                   <DropdownMenuSeparator />
                                   {canImpersonateUsers && u.uid !== userProfile?.uid && (
                                     <DropdownMenuItem
@@ -3066,7 +3007,7 @@ export default function AdminPage() {
                                       disabled={!canEditThisUser}
                                       className="cursor-pointer rounded-lg text-xs font-medium"
                                     >
-                                      <User className="mr-2 h-4 w-4" /> Impersonar
+                                      <User className="mr-2 h-4 w-4" /> {tAdmin("users.menu.impersonate")}
                                     </DropdownMenuItem>
                                   )}
                                   {canDeleteRecords && (
@@ -3076,7 +3017,7 @@ export default function AdminPage() {
                                         disabled={!canResetThisUser}
                                         className="cursor-pointer rounded-lg text-xs font-medium disabled:opacity-50"
                                       >
-                                        <RefreshCcw className="mr-2 h-4 w-4" /> Resetar Dados
+                                        <RefreshCcw className="mr-2 h-4 w-4" /> {tAdmin("users.menu.resetData")}
                                       </DropdownMenuItem>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
@@ -3084,7 +3025,7 @@ export default function AdminPage() {
                                         disabled={!canDeleteThisUser}
                                         className="text-red-600 focus:text-red-700 focus:bg-red-50 cursor-pointer rounded-lg text-xs font-medium dark:focus:bg-red-900/20 disabled:opacity-50"
                                       >
-                                        <Trash2 className="mr-2 h-4 w-4" /> Excluir Conta
+                                        <Trash2 className="mr-2 h-4 w-4" /> {tAdmin("users.menu.deleteAccount")}
                                       </DropdownMenuItem>
                                     </>
                                   )}
@@ -3094,7 +3035,7 @@ export default function AdminPage() {
 
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                               <div>
-                                <p className="text-[10px] text-zinc-400 uppercase">Plano</p>
+                                <p className="text-[10px] text-zinc-400 uppercase">{tAdmin("common.plan")}</p>
                                 {canChangePlan ? (
                                   <Select value={u.plan} onValueChange={(val) => handlePlanChange(u.uid, val)}>
                                     <SelectTrigger className="w-full h-8 text-xs rounded-lg"><SelectValue /></SelectTrigger>
@@ -3109,7 +3050,7 @@ export default function AdminPage() {
                                 )}
                               </div>
                               <div>
-                                <p className="text-[10px] text-zinc-400 uppercase">Função</p>
+                                <p className="text-[10px] text-zinc-400 uppercase">{tAdmin("users.role")}</p>
                                 {canChangeRole ? (
                                   <Select value={u.role} onValueChange={(val) => handleRoleChange(u.uid, val)}>
                                     <SelectTrigger className="w-full h-8 text-xs rounded-lg"><SelectValue /></SelectTrigger>
@@ -3129,18 +3070,18 @@ export default function AdminPage() {
 
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                               <Badge variant="secondary" className="bg-zinc-100 text-zinc-600 border-zinc-200">
-                                Registros: {Number.isNaN(u.transactionCount) ? "..." : (u.transactionCount ?? "...")}
+                                {tAdmin("users.recordsLabel", { count: Number.isNaN(u.transactionCount) ? "..." : (u.transactionCount ?? "...") })}
                               </Badge>
                               <Badge variant={u.status === "active" ? "default" : "destructive"} className={u.status === "active" ? "bg-emerald-500" : ""}>
-                                {u.status === "active" ? "Ativo" : u.status === "blocked" ? "Bloqueado" : "Inativo"}
+                                {getUserStatusLabel(u.status)}
                               </Badge>
                             </div>
 
                             <div>
-                              <p className="text-[10px] text-zinc-400 uppercase mb-1">Pagamento</p>
+                              <p className="text-[10px] text-zinc-400 uppercase mb-1">{tAdmin("common.payment")}</p>
                               {isTargetAdminOrMod ? (
                                 <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                                  <ShieldCheck className="h-3 w-3 mr-1" /> Isento
+                                  <ShieldCheck className="h-3 w-3 mr-1" /> {tAdmin("users.payment.exempt")}
                                 </Badge>
                               ) : (
                                 <Select
@@ -3150,12 +3091,12 @@ export default function AdminPage() {
                                 >
                                   <SelectTrigger className="w-full h-8 text-xs rounded-lg"><SelectValue /></SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="free">Grátis</SelectItem>
-                                    <SelectItem value="paid">Pago</SelectItem>
-                                    <SelectItem value="pending">Pendente</SelectItem>
-                                    <SelectItem value="not_paid">Não Pago</SelectItem>
-                                    <SelectItem value="overdue">Atrasado</SelectItem>
-                                    <SelectItem value="canceled">Cancelado</SelectItem>
+                                    <SelectItem value="free">{tAdmin("users.payment.free")}</SelectItem>
+                                    <SelectItem value="paid">{tAdmin("users.payment.paid")}</SelectItem>
+                                    <SelectItem value="pending">{tAdmin("users.payment.pending")}</SelectItem>
+                                    <SelectItem value="not_paid">{tAdmin("users.payment.notPaid")}</SelectItem>
+                                    <SelectItem value="overdue">{tAdmin("users.payment.overdue")}</SelectItem>
+                                    <SelectItem value="canceled">{tAdmin("users.payment.canceled")}</SelectItem>
                                   </SelectContent>
                                 </Select>
                               )}
@@ -3170,14 +3111,14 @@ export default function AdminPage() {
                     <Table className="min-w-[1040px]">
                       <TableHeader className="bg-accent/70 dark:bg-accent/20">
                         <TableRow className="border-border hover:bg-transparent">
-                          <TableHead className="pl-6 font-semibold">Usuário</TableHead>
-                          <TableHead className="font-semibold">Cadastro</TableHead>
-                          <TableHead className="font-semibold">Plano</TableHead>
-                          <TableHead className="font-semibold">Função</TableHead>
-                          <TableHead className="font-semibold">Registros</TableHead>
-                          <TableHead className="font-semibold">Sts. Pagamento</TableHead>
-                          <TableHead className="font-semibold">Sts. Usuário</TableHead>
-                          <TableHead className="text-right pr-6 font-semibold">Ações</TableHead>
+                          <TableHead className="pl-6 font-semibold">{tAdmin("common.user")}</TableHead>
+                          <TableHead className="font-semibold">{tAdmin("users.createdAt")}</TableHead>
+                          <TableHead className="font-semibold">{tAdmin("common.plan")}</TableHead>
+                          <TableHead className="font-semibold">{tAdmin("users.role")}</TableHead>
+                          <TableHead className="font-semibold">{tAdmin("users.records")}</TableHead>
+                          <TableHead className="font-semibold">{tAdmin("users.paymentStatus")}</TableHead>
+                          <TableHead className="font-semibold">{tAdmin("users.userStatus")}</TableHead>
+                          <TableHead className="text-right pr-6 font-semibold">{tAdmin("common.actions")}</TableHead>
                         </TableRow>
                       </TableHeader>
 
@@ -3186,14 +3127,14 @@ export default function AdminPage() {
                           <TableRow>
                             <TableCell colSpan={8} className="h-32 text-center">
                               <div className="flex justify-center items-center gap-2 text-zinc-500">
-                                <Loader2 className="h-5 w-5 animate-spin" /> Carregando base de dados...
+                                <Loader2 className="h-5 w-5 animate-spin" /> {tAdmin("users.loadingDatabase")}
                               </div>
                             </TableCell>
                           </TableRow>
                         ) : paginatedUsers.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={8} className="h-32 text-center text-zinc-500">
-                              Nenhum usuário encontrado com os filtros atuais.
+                              {tAdmin("users.empty")}
                             </TableCell>
                           </TableRow>
                         ) : paginatedUsers.map((u) => {
@@ -3267,9 +3208,9 @@ export default function AdminPage() {
 
                               <TableCell>
                                 {isTargetAdminOrMod ? (
-                                  <div className="flex items-center gap-1 text-xs text-emerald-600 font-medium pl-2 bg-emerald-50 dark:bg-emerald-900/20 py-1 px-2 rounded-lg w-fit" title="Isento de pagamento">
+                                  <div className="flex items-center gap-1 text-xs text-emerald-600 font-medium pl-2 bg-emerald-50 dark:bg-emerald-900/20 py-1 px-2 rounded-lg w-fit" title={tAdmin("users.payment.exempt")}>
                                     <ShieldCheck className="h-3 w-3" />
-                                    Isento
+                                    {tAdmin("users.payment.exempt")}
                                   </div>
                                 ) : (
                                   <div className="space-y-1">
@@ -3284,24 +3225,24 @@ export default function AdminPage() {
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="free">Grátis</SelectItem>
-                                        <SelectItem value="paid">Pago</SelectItem>
-                                        <SelectItem value="pending">Pendente</SelectItem>
-                                        <SelectItem value="not_paid">Não Pago</SelectItem>
-                                        <SelectItem value="overdue">Atrasado</SelectItem>
-                                        <SelectItem value="canceled">Cancelado</SelectItem>
+                                        <SelectItem value="free">{tAdmin("users.payment.free")}</SelectItem>
+                                        <SelectItem value="paid">{tAdmin("users.payment.paid")}</SelectItem>
+                                        <SelectItem value="pending">{tAdmin("users.payment.pending")}</SelectItem>
+                                        <SelectItem value="not_paid">{tAdmin("users.payment.notPaid")}</SelectItem>
+                                        <SelectItem value="overdue">{tAdmin("users.payment.overdue")}</SelectItem>
+                                        <SelectItem value="canceled">{tAdmin("users.payment.canceled")}</SelectItem>
                                       </SelectContent>
                                     </Select>
                                     <p className="text-[10px] text-zinc-500 leading-none">
                                       {u.billing?.source === "mercadopago_webhook"
-                                        ? "Fonte: Webhook MP"
+                                        ? tAdmin("users.billingSource.mercadoPagoWebhook")
                                         : u.billing?.source === "mercadopago_confirm"
-                                          ? "Fonte: Confirmação MP"
+                                          ? tAdmin("users.billingSource.mercadoPagoConfirm")
                                           : u.billing?.source === "mercadopago_cancel"
-                                            ? "Fonte: Cancelamento MP"
+                                            ? tAdmin("users.billingSource.mercadoPagoCancel")
                                             : u.billing?.source === "system"
-                                              ? "Fonte: Sistema"
-                                              : "Fonte: Manual"}
+                                              ? tAdmin("users.billingSource.system")
+                                              : tAdmin("users.billingSource.manual")}
                                     </p>
                                     {u.billing?.lastSyncAt && (
                                       <p className="text-[10px] text-zinc-400 leading-none">
@@ -3317,7 +3258,7 @@ export default function AdminPage() {
                                   variant={u.status === "active" ? "default" : "destructive"}
                                   className={u.status === "active" ? "bg-emerald-500 hover:bg-emerald-600" : ""}
                                 >
-                                  {u.status === "active" ? "Ativo" : u.status === "blocked" ? "Bloqueado" : "Inativo"}
+                                  {getUserStatusLabel(u.status)}
                                 </Badge>
                               </TableCell>
 
@@ -3330,7 +3271,7 @@ export default function AdminPage() {
                                       size="icon"
                                       disabled={!canToggleStatusForUser}
                                       className="h-8 w-8 text-zinc-400 hover:text-red-500 hover:bg-red-50 hover:cursor-pointer dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                      title="Bloquear Usuário"
+                                      title={tAdmin("users.tooltips.block")}
                                       onClick={() => handleStatusChange(u.uid, "blocked")}
                                     >
                                       <UserX className="h-4 w-4" />
@@ -3341,7 +3282,7 @@ export default function AdminPage() {
                                       size="icon"
                                       disabled={!canToggleStatusForUser}
                                       className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 hover:cursor-pointer dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
-                                      title="Reativar Usuário"
+                                      title={tAdmin("users.tooltips.reactivate")}
                                       onClick={() => handleStatusChange(u.uid, "active")}
                                     >
                                       <CheckCircle2 className="h-4 w-4" />
@@ -3355,7 +3296,7 @@ export default function AdminPage() {
                                       </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" className="rounded-xl p-1 shadow-xl border-zinc-200 dark:border-zinc-800">
-                                      <DropdownMenuLabel className="text-xs">Ações</DropdownMenuLabel>
+                                      <DropdownMenuLabel className="text-xs">{tAdmin("common.actions")}</DropdownMenuLabel>
                                       <DropdownMenuSeparator />
                                       {canImpersonateUsers && u.uid !== userProfile?.uid && (
                                         <>
@@ -3364,7 +3305,7 @@ export default function AdminPage() {
                                             disabled={!canEditThisUser}
                                             className="cursor-pointer rounded-lg text-xs font-medium"
                                           >
-                                            <User className="mr-2 h-4 w-4" /> Impersonar
+                                            <User className="mr-2 h-4 w-4" /> {tAdmin("users.menu.impersonate")}
                                           </DropdownMenuItem>
                                         </>
                                       )}
@@ -3374,7 +3315,7 @@ export default function AdminPage() {
                                             onClick={() => setUserToReset(u)}
                                             disabled={!canResetThisUser}
                                             className="cursor-pointer rounded-lg text-xs font-medium disabled:opacity-50">
-                                            <RefreshCcw className="mr-2 h-4 w-4" /> Resetar Dados
+                                            <RefreshCcw className="mr-2 h-4 w-4" /> {tAdmin("users.menu.resetData")}
                                           </DropdownMenuItem>
                                           <DropdownMenuSeparator />
                                           <DropdownMenuItem
@@ -3382,11 +3323,11 @@ export default function AdminPage() {
                                             disabled={!canDeleteThisUser}
                                             className="text-red-600 focus:text-red-700 focus:bg-red-50 cursor-pointer rounded-lg text-xs font-medium dark:focus:bg-red-900/20 disabled:opacity-50"
                                           >
-                                            <Trash2 className="mr-2 h-4 w-4" /> Excluir Conta
+                                            <Trash2 className="mr-2 h-4 w-4" /> {tAdmin("users.menu.deleteAccount")}
                                           </DropdownMenuItem>
                                         </>
                                       )}
-                                      {!canImpersonateUsers && <p className="p-2 text-xs text-zinc-400 italic">Somente administradores.</p>}
+                                      {!canImpersonateUsers && <p className="p-2 text-xs text-zinc-400 italic">{tAdmin("users.adminOnly")}</p>}
                                     </DropdownMenuContent>
                                   </DropdownMenu>
                                 </div>
@@ -3397,7 +3338,7 @@ export default function AdminPage() {
                       </TableBody>
                     </Table>
                     <div className="app-panel-subtle flex flex-col gap-3 border-t border-border/70 p-4 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-xs text-zinc-500 font-medium">Página {currentPage} de {totalPages || 1}</p>
+                      <p className="text-xs text-zinc-500 font-medium">{tAdmin("common.pageSummary", { page: currentPage, totalPages: totalPages || 1 })}</p>
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" className="h-8 w-8 p-0 rounded-lg" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
                           <ChevronLeft className="h-4 w-4" />
@@ -3419,14 +3360,14 @@ export default function AdminPage() {
               <Card className="app-panel-soft overflow-hidden rounded-3xl border border-orange-200/70 shadow-lg shadow-orange-500/10 dark:border-orange-900/30">
                 <CardHeader className="border-b border-orange-100 bg-orange-50/50 px-4 py-4 dark:border-orange-900/30 dark:bg-orange-900/10 sm:px-6">
                   <CardTitle className="text-lg font-semibold text-orange-600 flex items-center gap-2">
-                    <ArchiveRestore className="h-5 w-5" /> Usuários Excluídos & Arquivados
+                    <ArchiveRestore className="h-5 w-5" /> {tAdmin("restore.title")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="md:hidden p-3 space-y-3">
                     {deletedUsers.length === 0 ? (
                       <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-muted-foreground">
-                        Nenhum usuário excluído encontrado.
+                        {tAdmin("restore.empty")}
                       </div>
                     ) : (
                       deletedUsers.map((u) => (
@@ -3435,7 +3376,9 @@ export default function AdminPage() {
                             <div className="min-w-0">
                               <p className="font-semibold text-zinc-900 truncate">{u.displayName}</p>
                               <p className="text-xs text-zinc-500 truncate">{u.email}</p>
-                              <p className="text-[11px] text-orange-700/80">Restauravel ate {getRestoreDeadlineLabel(u)}</p>
+                              <p className="text-[11px] text-orange-700/80">
+                                {tAdmin("restore.deadlineLabel", { date: getRestoreDeadlineLabel(u) })}
+                              </p>
                             </div>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -3444,24 +3387,24 @@ export default function AdminPage() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="rounded-xl border-orange-100 dark:border-orange-900/30">
-                                <DropdownMenuLabel className="text-orange-700 dark:text-orange-400">Ações de Restauração</DropdownMenuLabel>
+                                <DropdownMenuLabel className="text-orange-700 dark:text-orange-400">{tAdmin("restore.actionsLabel")}</DropdownMenuLabel>
                                 <DropdownMenuSeparator className="bg-orange-100 dark:bg-orange-900/30" />
                                 <DropdownMenuItem onClick={() => setRestoreDetailsUser(u)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
-                                  <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
+                                  <Eye className="mr-2 h-4 w-4" /> {tAdmin("restore.viewDetails")}
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator className="bg-orange-100 dark:bg-orange-900/30" />
                                 <DropdownMenuItem disabled={isRestoreExpired(u)} onClick={() => handleRestoreUser(u, false)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
-                                  <UserIcon className="mr-2 h-4 w-4" /> Restaurar Somente a Conta
+                                  <UserIcon className="mr-2 h-4 w-4" /> {tAdmin("restore.restoreAccountOnlyAction")}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem disabled={isRestoreExpired(u)} onClick={() => handleRestoreUser(u, true)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
-                                  <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar Conta e Dados
+                                  <ArchiveRestore className="mr-2 h-4 w-4" /> {tAdmin("restore.restoreAccountAndData")}
                                 </DropdownMenuItem>
                                 {canDeleteRecords && (
                                   <DropdownMenuItem
                                     onClick={() => setUserToPermanentDelete(u)}
                                     className="cursor-pointer rounded-lg text-xs font-medium text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20"
                                   >
-                                    <Trash2 className="mr-2 h-4 w-4" /> Excluir Permanentemente
+                                    <Trash2 className="mr-2 h-4 w-4" /> {tAdmin("restore.permanentDelete")}
                                   </DropdownMenuItem>
                                 )}
                               </DropdownMenuContent>
@@ -3469,10 +3412,10 @@ export default function AdminPage() {
                           </div>
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <Badge variant="outline" className="border-orange-200 text-orange-700 bg-orange-50">
-                              {u.transactionCount} Transações
+                              {tAdmin("restore.transactionsLabel", { count: u.transactionCount ?? "..." })}
                             </Badge>
                             <Badge variant="outline" className="border-zinc-200 text-zinc-600 bg-white">
-                              {isRestoreExpired(u) ? "Prazo expirado" : `Ate ${getRestoreDeadlineLabel(u)}`}
+                              {isRestoreExpired(u) ? tAdmin("restore.expired") : tAdmin("restore.availableUntilShort", { date: getRestoreDeadlineLabel(u) })}
                             </Badge>
                             <span className="uppercase text-xs font-bold text-zinc-500">{u.plan}</span>
                           </div>
@@ -3485,18 +3428,18 @@ export default function AdminPage() {
                     <Table className="min-w-[820px]">
                       <TableHeader>
                         <TableRow className="border-orange-100 dark:border-orange-900/30 hover:bg-transparent">
-                          <TableHead className="pl-6 font-semibold">Usuário</TableHead>
-                          <TableHead className="font-semibold">Email</TableHead>
-                          <TableHead className="font-semibold">Prazo de Restauração</TableHead>
-                          <TableHead className="font-semibold">Plano Anterior</TableHead>
-                          <TableHead className="text-right pr-6 font-semibold">Ação</TableHead>
+                          <TableHead className="pl-6 font-semibold">{tAdmin("common.user")}</TableHead>
+                          <TableHead className="font-semibold">{tAdmin("common.email")}</TableHead>
+                          <TableHead className="font-semibold">{tAdmin("restore.deadline")}</TableHead>
+                          <TableHead className="font-semibold">{tAdmin("restore.previousPlan")}</TableHead>
+                          <TableHead className="text-right pr-6 font-semibold">{tAdmin("common.actions")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {deletedUsers.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={5} className="h-32 text-center text-zinc-500">
-                              Nenhum usuário excluído encontrado.
+                              {tAdmin("restore.empty")}
                             </TableCell>
                           </TableRow>
                         ) : (
@@ -3509,13 +3452,13 @@ export default function AdminPage() {
                                 <div className="space-y-1">
                                   <p className="max-w-[260px] truncate" title={u.email}>{u.email}</p>
                                   <p className="text-[11px] text-zinc-500/80">
-                                    Registros arquivados: {Number.isNaN(u.transactionCount) ? "..." : (u.transactionCount ?? "...")}
+                                    {tAdmin("restore.archivedRecordsLabel", { count: Number.isNaN(u.transactionCount) ? "..." : (u.transactionCount ?? "...") })}
                                   </p>
                                 </div>
                               </TableCell>
                               <TableCell>
                                 <Badge variant="outline" className="border-orange-200 text-orange-700 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-400">
-                                  {isRestoreExpired(u) ? "Prazo expirado" : `Disponível até ${getRestoreDeadlineLabel(u)}`}
+                                  {isRestoreExpired(u) ? tAdmin("restore.expired") : tAdmin("restore.availableUntil", { date: getRestoreDeadlineLabel(u) })}
                                 </Badge>
                               </TableCell>
                               <TableCell className="uppercase text-xs font-bold text-zinc-400">{u.plan}</TableCell>
@@ -3527,24 +3470,24 @@ export default function AdminPage() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" className="rounded-xl border-orange-100 dark:border-orange-900/30">
-                                    <DropdownMenuLabel className="text-orange-700 dark:text-orange-400">Ações de Restauração</DropdownMenuLabel>
+                                    <DropdownMenuLabel className="text-orange-700 dark:text-orange-400">{tAdmin("restore.actionsLabel")}</DropdownMenuLabel>
                                     <DropdownMenuSeparator className="bg-orange-100 dark:bg-orange-900/30" />
                                     <DropdownMenuItem onClick={() => setRestoreDetailsUser(u)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
-                                      <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
+                                      <Eye className="mr-2 h-4 w-4" /> {tAdmin("restore.viewDetails")}
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator className="bg-orange-100 dark:bg-orange-900/30" />
                                     <DropdownMenuItem disabled={isRestoreExpired(u)} onClick={() => handleRestoreUser(u, false)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
-                                      <UserIcon className="mr-2 h-4 w-4" /> Restaurar Somente a Conta
+                                      <UserIcon className="mr-2 h-4 w-4" /> {tAdmin("restore.restoreAccountOnlyAction")}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem disabled={isRestoreExpired(u)} onClick={() => handleRestoreUser(u, true)} className="cursor-pointer rounded-lg text-xs font-medium focus:bg-orange-50 dark:focus:bg-orange-900/20">
-                                      <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar Conta e Dados
+                                      <ArchiveRestore className="mr-2 h-4 w-4" /> {tAdmin("restore.restoreAccountAndData")}
                                     </DropdownMenuItem>
                                     {canDeleteRecords && (
                                       <DropdownMenuItem
                                         onClick={() => setUserToPermanentDelete(u)}
                                         className="cursor-pointer rounded-lg text-xs font-medium text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20"
                                       >
-                                        <Trash2 className="mr-2 h-4 w-4" /> Excluir Permanentemente
+                                        <Trash2 className="mr-2 h-4 w-4" /> {tAdmin("restore.permanentDelete")}
                                       </DropdownMenuItem>
                                     )}
                                   </DropdownMenuContent>
@@ -3571,7 +3514,7 @@ export default function AdminPage() {
                   className="w-full gap-2 rounded-xl bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-700 sm:w-auto sm:hover:scale-105"
                 >
                   {isSavingPlans ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  Salvar Alterações
+                  {tAdmin("plans.saveChanges")}
                 </Button>
               </div>
 
@@ -3581,28 +3524,28 @@ export default function AdminPage() {
                   <CardHeader className="flex flex-col gap-3 rounded-t-3xl border-b border-amber-100/50 bg-amber-50 p-4 dark:bg-amber-900/10 dark:border-amber-900/20 sm:flex-row sm:items-center sm:justify-between sm:p-6">
                     <div className="flex flex-col justify-center">
                       <CardTitle className="text-amber-700 font-bold text-lg">
-                        Plano {plans.free.name} · Bronze
+                        {tAdmin("plans.planTier", { name: plans.free.name, tier: tAdmin("plans.tiers.bronze") })}
                       </CardTitle>
-                      <CardDescription className="text-amber-600/70">Configurações</CardDescription>
+                      <CardDescription className="text-amber-600/70">{tAdmin("plans.settings")}</CardDescription>
                     </div>
                     <Switch checked={editedPlans.free.active} onCheckedChange={(c) => handlePlanEdit("free", "active", c)} className="data-[state=checked]:bg-amber-600" />
                   </CardHeader>
 
                   <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.free.active ? "opacity-50 pointer-events-none" : ""}`}>
                     <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">Nome</Label>
+                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.name")}</Label>
                       <Input className="rounded-xl h-10" value={editedPlans.free.name ?? ""} onChange={(e) => handlePlanEdit("free", "name", e.target.value)} />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">Descrição</Label>
+                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.description")}</Label>
                       <Input className="rounded-xl h-10" value={editedPlans.free.description ?? ""} onChange={(e) => handlePlanEdit("free", "description", e.target.value)} />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">Limite Lançamentos</Label>
+                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.launchLimit")}</Label>
                       <Input className="rounded-xl h-10" type="number" value={editedPlans.free.limit ?? 0} onChange={(e) => handlePlanEdit("free", "limit", Number(e.target.value))} />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">Benefícios (linha a linha)</Label>
+                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.benefitsLineByLine")}</Label>
                       <textarea
                         className="flex min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs resize-none"
                         value={editedPlans.free.features?.join("\n") ?? ""}
@@ -3617,9 +3560,9 @@ export default function AdminPage() {
                   <CardHeader className="flex flex-col gap-3 rounded-t-3xl border-b border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/20 sm:flex-row sm:items-center sm:justify-between sm:p-6">
                     <div className="flex flex-col justify-center">
                       <CardTitle className="text-slate-600 dark:text-slate-400 font-bold text-lg">
-                        Plano {plans.premium.name} · Prata
+                        {tAdmin("plans.planTier", { name: plans.premium.name, tier: tAdmin("plans.tiers.silver") })}
                       </CardTitle>
-                      <CardDescription className="text-slate-500/70">Configurações</CardDescription>
+                      <CardDescription className="text-slate-500/70">{tAdmin("plans.settings")}</CardDescription>
                     </div>
                     <Switch checked={editedPlans.premium.active} onCheckedChange={(c) => handlePlanEdit("premium", "active", c)} className="data-[state=checked]:bg-slate-600" />
                   </CardHeader>
@@ -3627,27 +3570,27 @@ export default function AdminPage() {
                   <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.premium.active ? "opacity-50 pointer-events-none" : ""}`}>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-zinc-400">Nome</Label>
+                        <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.name")}</Label>
                         <Input className="rounded-xl h-10" value={editedPlans.premium.name ?? ""} onChange={(e) => handlePlanEdit("premium", "name", e.target.value)} />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-zinc-400">Preço</Label>
+                        <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.price")}</Label>
                         <Input className="rounded-xl h-10" type="number" value={editedPlans.premium.price ?? 0} onChange={(e) => handlePlanEdit("premium", "price", Number(e.target.value))} />
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">Link Pagamento</Label>
+                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.paymentLink")}</Label>
                       <Input className="rounded-xl h-10 font-mono text-xs text-emerald-600" value={editedPlans.premium.paymentLink ?? ""} onChange={(e) => handlePlanEdit("premium", "paymentLink", e.target.value)} />
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">Descrição</Label>
+                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.description")}</Label>
                       <Input className="rounded-xl h-10" value={editedPlans.premium.description ?? ""} onChange={(e) => handlePlanEdit("premium", "description", e.target.value)} />
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">Benefícios</Label>
+                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.benefits")}</Label>
                       <textarea
                         className="flex min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs resize-none"
                         value={editedPlans.premium.features?.join("\n") ?? ""}
@@ -3662,9 +3605,9 @@ export default function AdminPage() {
                   <CardHeader className="flex flex-col gap-3 rounded-t-3xl border-b border-yellow-200 bg-yellow-100 p-4 dark:border-yellow-900/30 dark:bg-yellow-900/20 sm:flex-row sm:items-center sm:justify-between sm:p-6">
                     <div className="flex flex-col justify-center">
                       <CardTitle className="text-yellow-600 font-bold text-lg">
-                        Plano {editedPlans.pro.name} · Ouro
+                        {tAdmin("plans.planTier", { name: editedPlans.pro.name, tier: tAdmin("plans.tiers.gold") })}
                       </CardTitle>
-                      <CardDescription className="text-yellow-600/70">Configurações</CardDescription>
+                      <CardDescription className="text-yellow-600/70">{tAdmin("plans.settings")}</CardDescription>
                     </div>
                     <Switch checked={editedPlans.pro.active} onCheckedChange={(c) => handlePlanEdit("pro", "active", c)} className="data-[state=checked]:bg-yellow-500" />
                   </CardHeader>
@@ -3672,27 +3615,27 @@ export default function AdminPage() {
                   <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.pro.active ? "opacity-50 pointer-events-none" : ""}`}>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-zinc-400">Nome</Label>
+                        <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.name")}</Label>
                         <Input className="rounded-xl h-10" value={editedPlans.pro.name ?? ""} onChange={(e) => handlePlanEdit("pro", "name", e.target.value)} />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-zinc-400">Preço</Label>
+                        <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.price")}</Label>
                         <Input className="rounded-xl h-10" type="number" value={editedPlans.pro.price ?? 0} onChange={(e) => handlePlanEdit("pro", "price", Number(e.target.value))} />
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">Link Pagamento</Label>
+                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.paymentLink")}</Label>
                       <Input className="rounded-xl h-10 font-mono text-xs text-yellow-600" value={editedPlans.pro.paymentLink ?? ""} onChange={(e) => handlePlanEdit("pro", "paymentLink", e.target.value)} />
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">Descrição</Label>
+                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.description")}</Label>
                       <Input className="rounded-xl h-10" value={editedPlans.pro.description ?? ""} onChange={(e) => handlePlanEdit("pro", "description", e.target.value)} />
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">Benefícios</Label>
+                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.benefits")}</Label>
                       <textarea
                         className="flex min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs resize-none"
                         value={editedPlans.pro.features?.join("\n") ?? ""}
@@ -3704,7 +3647,7 @@ export default function AdminPage() {
 
                 {plans && plans.pro.active && (
                   <div className="col-span-1 text-center text-xs italic text-zinc-500 xl:col-span-3">
-                    O Plano Pro oferece benefícios exclusivos. Certifique-se de configurar corretamente o link de pagamento.
+                    {tAdmin("plans.proWarning")}
                   </div>
                 )}
               </div>
@@ -3716,14 +3659,14 @@ export default function AdminPage() {
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold text-foreground">Controle de Acesso</h2>
+                  <h2 className="text-xl font-semibold text-foreground">{tAdmin("access.title")}</h2>
                   <p className="text-sm text-muted-foreground">
-                    Escolha um plano, cargo ou usuário e defina o que ele pode fazer em cada tela.
+                    {tAdmin("access.description")}
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Button type="button" variant="outline" className="w-full rounded-xl sm:w-auto" onClick={handleAddAccessRole} disabled={!canManagePermissions}>
-                    Novo cargo
+                    {tAdmin("access.addRole")}
                   </Button>
                   <Button
                     type="button"
@@ -3732,7 +3675,7 @@ export default function AdminPage() {
                     className="w-full rounded-xl sm:w-auto"
                   >
                     {isSavingAccessControl ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    Salvar Permissões
+                    {tAdmin("access.savePermissions")}
                   </Button>
                 </div>
               </div>
@@ -3741,10 +3684,10 @@ export default function AdminPage() {
                 <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                   <CardHeader className="app-panel-subtle border-b border-color:var(--app-panel-border)">
                     <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                      <Lock className="h-5 w-5 text-primary" /> Cargos da plataforma
+                      <Lock className="h-5 w-5 text-primary" /> {tAdmin("access.rolesTitle")}
                     </CardTitle>
                     <CardDescription>
-                      Cargo é o conjunto base de acesso para equipe interna e usuários customizados.
+                      {tAdmin("access.rolesDescription")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3 p-4">
@@ -3761,7 +3704,7 @@ export default function AdminPage() {
                             </button>
                           </CollapsibleTrigger>
                           <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
-                            <Badge variant="secondary" className="rounded-full">{role.system ? "Sistema" : "Custom"}</Badge>
+                            <Badge variant="secondary" className="rounded-full">{role.system ? tAdmin("access.systemRole") : tAdmin("access.customRole")}</Badge>
                             <Switch
                               checked={role.active}
                               onCheckedChange={(checked) => handleAccessRoleEdit(index, "active", checked)}
@@ -3772,7 +3715,7 @@ export default function AdminPage() {
                         <CollapsibleContent>
                           <div className="space-y-3 border-t border-color:var(--app-panel-border) p-4 pt-3">
                             <div className="space-y-2">
-                              <Label className="text-xs font-bold uppercase text-muted-foreground">Chave interna</Label>
+                              <Label className="text-xs font-bold uppercase text-muted-foreground">{tAdmin("access.fields.internalKey")}</Label>
                               <Input
                                 value={role.key}
                                 disabled={role.system || !canManagePermissions}
@@ -3781,7 +3724,7 @@ export default function AdminPage() {
                               />
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-xs font-bold uppercase text-muted-foreground">Nome do cargo</Label>
+                              <Label className="text-xs font-bold uppercase text-muted-foreground">{tAdmin("access.fields.roleName")}</Label>
                               <Input
                                 value={role.name}
                                 disabled={!canManagePermissions}
@@ -3790,7 +3733,7 @@ export default function AdminPage() {
                               />
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-xs font-bold uppercase text-muted-foreground">Descrição</Label>
+                              <Label className="text-xs font-bold uppercase text-muted-foreground">{tAdmin("access.fields.description")}</Label>
                               <Input
                                 value={role.description || ""}
                                 disabled={!canManagePermissions}
@@ -3807,7 +3750,7 @@ export default function AdminPage() {
                                 className="w-full rounded-xl border-red-200 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-45"
                                 onClick={() => handleRemoveAccessRole(role.key)}
                               >
-                                Remover cargo
+                                {tAdmin("access.removeRole")}
                               </Button>
                             )}
                           </div>
@@ -3821,10 +3764,10 @@ export default function AdminPage() {
                   <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
                     <CardHeader className="app-panel-subtle border-b border-color:var(--app-panel-border)">
                       <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                        <ShieldCheck className="h-5 w-5 text-primary" /> Quem recebe o acesso?
+                        <ShieldCheck className="h-5 w-5 text-primary" /> {tAdmin("access.targetTitle")}
                       </CardTitle>
                       <CardDescription>
-                        Plano define recursos. Cargo ou usuário podem liberar exceções como isenção de cobrança.
+                        {tAdmin("access.targetDescription")}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="grid gap-4 p-4 xl:grid-cols-[1fr_1.2fr]">
@@ -3847,7 +3790,7 @@ export default function AdminPage() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-muted-foreground">Alvo configurado</Label>
+                        <Label className="text-xs font-bold uppercase text-muted-foreground">{tAdmin("access.configuredTarget")}</Label>
                         {accessSubjectType === "plan" ? (
                           <Select value={accessSubjectId} onValueChange={setAccessSubjectId}>
                             <SelectTrigger className="h-11 rounded-xl">
@@ -3873,7 +3816,7 @@ export default function AdminPage() {
                         ) : accessSubjectType === "user" ? (
                           <Select value={accessSubjectId || undefined} onValueChange={setAccessSubjectId}>
                             <SelectTrigger className="h-11 rounded-xl">
-                              <SelectValue placeholder={isLoadingUsers ? "Carregando usuários..." : "Selecionar usuário"} />
+                              <SelectValue placeholder={isLoadingUsers ? tAdmin("common.loadingUsers") : tAdmin("common.selectUser")} />
                             </SelectTrigger>
                             <SelectContent className="max-h-80">
                               {users.map((user) => (
@@ -3884,7 +3827,7 @@ export default function AdminPage() {
                             </SelectContent>
                           </Select>
                         ) : (
-                          <Input value="Todos os usuários" disabled className="h-11 rounded-xl" />
+                          <Input value={tAdmin("access.allUsers")} disabled className="h-11 rounded-xl" />
                         )}
                       </div>
                     </CardContent>
@@ -3902,7 +3845,7 @@ export default function AdminPage() {
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <CardTitle className="text-lg font-semibold text-foreground">{screen.label}</CardTitle>
-                                  <Badge variant="secondary" className="rounded-full">{permissionView.total} funcionalidades</Badge>
+                                  <Badge variant="secondary" className="rounded-full">{tAdmin("access.featuresCount", { count: permissionView.total })}</Badge>
                                 </div>
                                 <CardDescription className="mt-1">{screen.description}</CardDescription>
                               </div>
@@ -3914,7 +3857,7 @@ export default function AdminPage() {
                           {permissionView.groupNames.length > 1 && (
                             <div className="border-t border-color:var(--app-panel-border) app-panel-subtle px-4 py-3">
                             <div className="w-full max-w-sm space-y-2">
-                                <Label className="text-xs font-bold uppercase text-muted-foreground">Grupo de funcionalidades</Label>
+                                <Label className="text-xs font-bold uppercase text-muted-foreground">{tAdmin("access.featureGroup")}</Label>
                                 <Select
                                   value={permissionView.selectedGroup}
                                   onValueChange={(value) => setPermissionGroupByScreen((prev) => ({ ...prev, [screen.id]: value }))}
@@ -3947,19 +3890,19 @@ export default function AdminPage() {
                                       <p className="font-semibold text-foreground">{resource.label}</p>
                                       {isBillingExemption ? (
                                         billingExemptionValue === "inherit" ? (
-                                          <Badge variant="secondary" className="rounded-full">Padrão</Badge>
+                                          <Badge variant="secondary" className="rounded-full">{tAdmin("access.defaultBadge")}</Badge>
                                         ) : (
-                                          <Badge className="rounded-full bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/10">Não cobrar</Badge>
+                                          <Badge className="rounded-full bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/10">{tAdmin("access.noCharge")}</Badge>
                                         )
                                       ) : value === "inherit" ? (
-                                        <Badge variant="secondary" className="rounded-full">Herdando</Badge>
+                                        <Badge variant="secondary" className="rounded-full">{tAdmin("access.inheriting")}</Badge>
                                       ) : (
                                         <Badge className="rounded-full bg-primary/10 text-primary hover:bg-primary/10">{tAdmin(ACCESS_LEVEL_LABELS[value])}</Badge>
                                       )}
                                     </div>
                                     <p className="mt-1 text-sm text-muted-foreground">{resource.description}</p>
                                     {explicitRule?.label && (
-                                      <p className="mt-1 text-xs text-muted-foreground">Regra: {explicitRule.label}</p>
+                                      <p className="mt-1 text-xs text-muted-foreground">{tAdmin("access.ruleLabel", { label: explicitRule.label })}</p>
                                     )}
                                     <p className="mt-1 font-mono text-[11px] text-muted-foreground">{inheritedLabel}</p>
                                   </div>
@@ -3973,8 +3916,8 @@ export default function AdminPage() {
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="inherit">Padrão</SelectItem>
-                                        <SelectItem value="exempt">Não cobrar</SelectItem>
+                                        <SelectItem value="inherit">{tAdmin("access.defaultBadge")}</SelectItem>
+                                        <SelectItem value="exempt">{tAdmin("access.noCharge")}</SelectItem>
                                       </SelectContent>
                                     </Select>
                                   ) : (
@@ -3987,7 +3930,7 @@ export default function AdminPage() {
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="inherit">Herdar</SelectItem>
+                                        <SelectItem value="inherit">{tAdmin("access.inherit")}</SelectItem>
                                         {Object.entries(ACCESS_LEVEL_LABELS).map(([level, label]) => (
                                           <SelectItem key={level} value={level}>{tAdmin(label)}</SelectItem>
                                         ))}
@@ -4024,7 +3967,7 @@ export default function AdminPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })} className="w-full rounded-xl hover:cursor-pointer">Entendido</Button>
+            <Button onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })} className="w-full rounded-xl hover:cursor-pointer">{tAdmin("common.understood")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -4034,17 +3977,15 @@ export default function AdminPage() {
         <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} max-w-[460px]`}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-600">
-              <Wrench className="h-5 w-5" /> Normalizar Banco de Dados?
+              <Wrench className="h-5 w-5" /> {tAdmin("users.normalization.confirmTitle")}
             </DialogTitle>
             <DialogDescription className="pt-2">
-              Isso irá verificar <strong>todos os usuários</strong> e adicionar campos ausentes (telefone, nome completo, etc.) com valores padrão.
-              <br /><br />
-              Essa operação pode levar alguns segundos se houver muitos usuários.
+              {tAdmin("users.normalization.confirmDescription")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setShowNormalizeConfirm(false)} className="rounded-xl hover:cursor-pointer">Cancelar</Button>
-            <Button onClick={confirmNormalizeDB} className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl hover:cursor-pointer">Iniciar Normalização</Button>
+            <Button variant="ghost" onClick={() => setShowNormalizeConfirm(false)} className="rounded-xl hover:cursor-pointer">{tAdmin("common.cancel")}</Button>
+            <Button onClick={confirmNormalizeDB} className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl hover:cursor-pointer">{tAdmin("users.normalization.start")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -4057,7 +3998,7 @@ export default function AdminPage() {
               <ArchiveRestore className="h-5 w-5" /> {tAdmin("restore.confirmTitle")}
             </DialogTitle>
             <DialogDescription className="pt-2">
-              Você está prestes a restaurar a conta de <strong>{userToRestore?.user.displayName}</strong>.
+              {tAdmin("restore.confirmDescription", { name: userToRestore?.user.displayName || "" })}
               <br /><br />
               <strong>{tAdmin("restore.selectedAction")}</strong> {userToRestore?.withData ? tAdmin("restore.restoreAccountWithData") : tAdmin("restore.restoreAccountOnly")}
             </DialogDescription>
@@ -4301,7 +4242,7 @@ export default function AdminPage() {
                     onValueChange={(value) => void handleChangeTicketStatus(viewTicket.id, value as TicketStatus)}
                     disabled={!canEditTicketStatus(viewTicket)}
                   >
-                    <SelectTrigger className="mt-1 h-10 rounded-xl border-[color:var(--app-field-border)] bg-[var(--app-field-bg)]">
+                    <SelectTrigger className="mt-1 h-10 rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -4322,7 +4263,7 @@ export default function AdminPage() {
                     onValueChange={(value) => void handleChangeTicketPriority(viewTicket.id, value as TicketPriority)}
                     disabled={!canEditTicketPriority}
                   >
-                    <SelectTrigger className="mt-1 h-10 rounded-xl border-[color:var(--app-field-border)] bg-[var(--app-field-bg)]">
+                    <SelectTrigger className="mt-1 h-10 rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -4339,7 +4280,7 @@ export default function AdminPage() {
                       value={viewTicket.assignedTo || "unassigned"}
                       onValueChange={(value) => void handleAssignTicket(viewTicket.id, value)}
                     >
-                      <SelectTrigger className="mt-1 h-10 rounded-xl border-[color:var(--app-field-border)] bg-[var(--app-field-bg)]">
+                      <SelectTrigger className="mt-1 h-10 rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)">
                         <SelectValue placeholder={tAdmin("common.selectUser")} />
                       </SelectTrigger>
                       <SelectContent>
