@@ -4,6 +4,7 @@ import { type TouchEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnboarding } from "@/hooks/useOnboarding";
+import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { useTransactions } from "@/hooks/useTransactions";
 import { syncCreditCardAmountForLimit } from "@/services/transactionService";
@@ -23,8 +24,7 @@ import { PaymentCard, PaymentCardType } from "@/types/paymentCard";
 import { PiContactlessPaymentFill } from "react-icons/pi";
 import { useTranslations } from "@/i18n/T";
 import { useFormatters } from "@/i18n/useFormatters";
-import { getCurrencySymbol, normalizeCurrency, type CurrencyCode } from "@/lib/money/formatMoney";
-import { getUserSettings } from "@/services/transactionService";
+import { getCurrencySymbol } from "@/lib/money/formatMoney";
 
 type BankCardTheme = {
   background: string;
@@ -313,7 +313,7 @@ function CardsPageSkeleton() {
 export function CardsClient() {
   const { user, userProfile, loading: authLoading } = useAuth();
   const tCards = useTranslations("cards");
-  const [currency, setCurrency] = useState<CurrencyCode>("BRL");
+  const currency = usePreferredCurrency();
   const { money, date: formatDate, number: formatNumber } = useFormatters(currency);
   const {
     status: onboardingStatus,
@@ -402,21 +402,6 @@ export function CardsClient() {
     disabled: onboardingLoading || isOnboardingActive,
     onComplete: completeTour,
   });
-
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    void getUserSettings(user.uid)
-      .then((settings) => {
-        if (!cancelled) setCurrency(normalizeCurrency(settings.currency));
-      })
-      .catch(() => {
-        if (!cancelled) setCurrency("BRL");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
 
   useEffect(() => {
     if (!user) {

@@ -48,8 +48,13 @@ import { formatPhone, normalizePhone } from "@/lib/phone";
 import { ACCOUNT_DELETION_GRACE_DAYS } from "@/lib/account-deletion/policy";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
+import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { useAppearance } from "@/hooks/useAppearance";
 import { AppearanceAccent, AppearanceThemeMode } from "@/types/appearance";
+import { useFormatters } from "@/i18n/useFormatters";
+import { getPlanPrice } from "@/lib/billing/prices";
+import { getLocalizedPlanCopy, getPlanTone } from "@/lib/plans/display";
+import { useTranslations } from "@/i18n/T";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -61,34 +66,38 @@ type FeedbackData = {
 
 const APPEARANCE_THEME_OPTIONS: Array<{
   value: AppearanceThemeMode;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   icon: typeof Monitor;
 }> = [
-    { value: "system", label: "Automático (sistema)", description: "Acompanha o tema do seu celular ou computador.", icon: Monitor },
-    { value: "light", label: "Claro", description: "Mais leve para ambientes claros e leitura prolongada.", icon: Sun },
-    { value: "dark", label: "Escuro", description: "Mais contraste visual e menos brilho no uso noturno.", icon: Moon },
+    { value: "system", labelKey: "appearance.system.label", descriptionKey: "appearance.system.description", icon: Monitor },
+    { value: "light", labelKey: "appearance.light.label", descriptionKey: "appearance.light.description", icon: Sun },
+    { value: "dark", labelKey: "appearance.dark.label", descriptionKey: "appearance.dark.description", icon: Moon },
   ];
 
 const APPEARANCE_ACCENT_OPTIONS: Array<{
   value: AppearanceAccent;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   swatchClass: string;
 }> = [
-    { value: "violet", label: "Violet", description: "A cor principal da identidade do app.", swatchClass: "from-violet-500 to-fuchsia-500" },
-    { value: "indigo", label: "Indigo", description: "Mais frio e discreto.", swatchClass: "from-indigo-500 to-blue-500" },
-    { value: "fuchsia", label: "Fuchsia", description: "Mais vibrante e premium.", swatchClass: "from-fuchsia-500 to-pink-500" },
-    { value: "emerald", label: "Emerald", description: "Mais limpo e fresco.", swatchClass: "from-emerald-500 to-teal-500" },
-    { value: "amber", label: "Amber", description: "Mais quente e chamativo.", swatchClass: "from-amber-500 to-orange-500" },
+    { value: "violet", labelKey: "appearance.violet.label", descriptionKey: "appearance.violet.description", swatchClass: "from-violet-500 to-fuchsia-500" },
+    { value: "indigo", labelKey: "appearance.indigo.label", descriptionKey: "appearance.indigo.description", swatchClass: "from-indigo-500 to-blue-500" },
+    { value: "fuchsia", labelKey: "appearance.fuchsia.label", descriptionKey: "appearance.fuchsia.description", swatchClass: "from-fuchsia-500 to-pink-500" },
+    { value: "emerald", labelKey: "appearance.emerald.label", descriptionKey: "appearance.emerald.description", swatchClass: "from-emerald-500 to-teal-500" },
+    { value: "amber", labelKey: "appearance.amber.label", descriptionKey: "appearance.amber.description", swatchClass: "from-amber-500 to-orange-500" },
   ];
 
 export default function SettingsPage() {
+  const t = useTranslations("settings");
+  const tGlobal = useTranslations();
   const { user, userProfile, logout, privacyMode, togglePrivacyMode, refreshProfile } = useAuth();
   const { completeTour, isActive: isOnboardingActive, loading: onboardingLoading } = useOnboarding();
   const { appearancePreferences, appearanceLoading, updateAppearance } = useAppearance();
   const { isImpersonating } = useImpersonation();
   const { plans } = usePlans();
+  const currency = usePreferredCurrency();
+  const { date, money } = useFormatters(currency);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -100,7 +109,7 @@ export default function SettingsPage() {
   const [completeName, setCompleteName] = useState("");
   const [phone, setPhone] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [keyFingerprint, setKeyFingerprint] = useState("Carregando identificador seguro...");
+  const [keyFingerprint, setKeyFingerprint] = useState(t("security.internalIdLoading"));
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
@@ -140,12 +149,14 @@ export default function SettingsPage() {
     ? (userProfile?.email || "")
     : (userProfile?.email || user?.email || "");
   const effectiveProfileDisplayName = isImpersonating
-    ? (userProfile?.displayName || "Usuário")
-    : (userProfile?.displayName || user?.displayName || "Usuário");
+    ? (userProfile?.displayName || t("common.userFallback"))
+    : (userProfile?.displayName || user?.displayName || t("common.userFallback"));
 
-  // Constantes de Animação (Padrão do Sistema)
+  // Constantes de animação.
   const fadeInUp = "animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both";
   const zoomIn = "animate-in fade-in zoom-in-50 duration-500 fill-mode-both";
+  const formatPlanPrice = (planId: "premium" | "pro") =>
+    money(getPlanPrice(planId, currency)?.amount ?? plans[planId].price);
 
   usePlatformTour({
     route: "settings",
@@ -176,24 +187,24 @@ export default function SettingsPage() {
     const eventType = item.eventType.toLowerCase();
     const paymentStatus = (item.paymentStatus || "").toLowerCase();
 
-    if (action.includes("cancel")) return "Assinatura cancelada";
-    if (action.includes("confirm") || action.includes("authorized")) return "Assinatura confirmada";
-    if (action.includes("pending") || paymentStatus === "pending") return "Pagamento pendente";
-    if (action.includes("rejected") || action.includes("fail") || paymentStatus === "rejected") return "Pagamento recusado";
-    if (eventType.includes("subscription")) return "Atualização de assinatura";
-    return "Evento de cobrança";
+    if (action.includes("cancel")) return t("billing.events.canceled");
+    if (action.includes("confirm") || action.includes("authorized")) return t("billing.events.confirmed");
+    if (action.includes("pending") || paymentStatus === "pending") return t("billing.events.pending");
+    if (action.includes("rejected") || action.includes("fail") || paymentStatus === "rejected") return t("billing.events.rejected");
+    if (eventType.includes("subscription")) return t("billing.events.subscriptionUpdate");
+    return t("billing.events.chargeEvent");
   };
 
   const formatSupportStatus = (status: string) => {
     const normalized = String(status || "").toLowerCase();
-    if (normalized === "pending") return "Pendente";
-    if (normalized === "in_progress") return "Em progresso";
-    if (normalized === "resolved") return "Resolvido";
-    if (normalized === "rejected") return "Rejeitado";
-    if (normalized === "under_review") return "Em análise";
-    if (normalized === "approved") return "Aprovado";
-    if (normalized === "implemented") return "Implementado";
-    return "Aberto";
+    if (normalized === "pending") return t("supportStatus.pending");
+    if (normalized === "in_progress") return t("supportStatus.inProgress");
+    if (normalized === "resolved") return t("supportStatus.resolved");
+    if (normalized === "rejected") return t("supportStatus.rejected");
+    if (normalized === "under_review") return t("supportStatus.underReview");
+    if (normalized === "approved") return t("supportStatus.approved");
+    if (normalized === "implemented") return t("supportStatus.implemented");
+    return t("supportStatus.open");
   };
 
   const getSupportStatusBadgeClass = (status: string) => {
@@ -211,9 +222,9 @@ export default function SettingsPage() {
   };
 
   const formatTicketType = (ticket: SupportTicket) => {
-    if (ticket.type === "feature") return "Ideia / sugestão";
-    if (ticket.supportKind === "account_restore") return "Recuperação de conta";
-    return "Suporte técnico";
+    if (ticket.type === "feature") return t("ticketTypes.feature");
+    if (ticket.supportKind === "account_restore") return t("ticketTypes.accountRestore");
+    return t("ticketTypes.support");
   };
 
   const handleTabChange = (tab: "account" | "billing" | "security" | "help") => {
@@ -233,10 +244,10 @@ export default function SettingsPage() {
         phone: normalizePhone(phone),
       });
       await refreshProfile();
-      showFeedback('success', 'Sucesso', 'Perfil atualizado com sucesso!');
+      showFeedback('success', t("feedback.success"), t("feedback.profileSaved"));
     } catch (error) {
       console.error("Erro ao salvar perfil:", error);
-      showFeedback('error', 'Erro', 'Falha ao salvar as alterações.');
+      showFeedback("error", t("feedback.error"), t("feedback.profileSaveError"));
     } finally {
       setIsSaving(false);
     }
@@ -254,9 +265,9 @@ export default function SettingsPage() {
       await refreshProfile();
       router.push("/goodbye");
     } catch (error) {
-      let errorMessage = "Ocorreu um erro ao tentar excluir sua conta.";
+      let errorMessage = t("feedback.deleteErrorMessage");
       if (error instanceof Error) errorMessage = error.message;
-      showFeedback('error', 'Erro na Exclusão', errorMessage);
+      showFeedback("error", t("feedback.deleteErrorTitle"), errorMessage);
       setIsDeleting(false);
       setShowDeleteModal(false);
     }
@@ -268,10 +279,10 @@ export default function SettingsPage() {
     try {
       const token = await user?.getIdToken();
       await cancelSubscription(token);
-      showFeedback("success", "Assinatura cancelada", "Seu plano foi alterado para Free.");
+      showFeedback("success", t("feedback.subscriptionCanceledTitle"), t("feedback.subscriptionCanceledMessage"));
     } catch (error) {
       console.error(error);
-      showFeedback("error", "Falha no cancelamento", "Não foi possível cancelar a assinatura agora.");
+      showFeedback("error", t("feedback.cancelSubscriptionErrorTitle"), t("feedback.cancelSubscriptionErrorMessage"));
     } finally {
       setIsCancelingSubscription(false);
     }
@@ -282,10 +293,10 @@ export default function SettingsPage() {
     setIsMigrating(true);
     try {
       const count = await migrateCryptography(effectiveProfileUid);
-      showFeedback('success', 'Migração Concluída', `${count} transações foram atualizadas para a nova segurança.`);
+      showFeedback("success", t("feedback.migrationSuccessTitle"), t("feedback.migrationSuccessMessage", { count }));
     } catch (e) {
       console.error(e);
-      showFeedback('error', 'Erro na Migração', 'Não foi possível completar a migração de criptografia.');
+      showFeedback("error", t("feedback.migrationErrorTitle"), t("feedback.migrationErrorMessage"));
     } finally {
       setIsMigrating(false);
     }
@@ -299,7 +310,7 @@ export default function SettingsPage() {
       await updateAppearance((current) => ({ ...current, ...patch }));
     } catch (error) {
       console.error("Erro ao salvar aparência:", error);
-      showFeedback("error", "Falha ao aplicar aparência", "Não foi possível salvar seu tema agora.");
+      showFeedback("error", t("feedback.appearanceErrorTitle"), t("feedback.appearanceErrorMessage"));
     } finally {
       setIsSavingAppearance(false);
     }
@@ -313,7 +324,7 @@ export default function SettingsPage() {
       router.push("/first-access?intent=change-password&requested=1");
     } catch (error) {
       console.error("Erro ao enviar link de senha:", error);
-      showFeedback("error", "Falha ao enviar link", "Não foi possível enviar o link para definir sua nova senha.");
+      showFeedback("error", t("feedback.passwordLinkErrorTitle"), t("feedback.passwordLinkErrorMessage"));
     } finally {
       setIsSendingPasswordEmail(false);
     }
@@ -329,10 +340,10 @@ export default function SettingsPage() {
     try {
       const token = await user?.getIdToken(true);
       await navigator.clipboard.writeText(token);
-      showFeedback("success", "Token copiado", "Cole no Authorize do Swagger sem o prefixo Bearer.");
+      showFeedback("success", t("feedback.tokenCopiedTitle"), t("feedback.tokenCopiedMessage"));
     } catch (error) {
       console.error("Erro ao copiar token para Swagger:", error);
-      showFeedback("error", "Falha ao copiar token", "Não foi possível copiar o token agora.");
+      showFeedback("error", t("feedback.tokenCopyErrorTitle"), t("feedback.tokenCopyErrorMessage"));
     } finally {
       setIsCopyingSwaggerToken(false);
     }
@@ -340,7 +351,7 @@ export default function SettingsPage() {
 
   const handleSendSupport = async () => {
     if (!supportMessage.trim()) {
-      showFeedback('error', 'Mensagem Vazia', 'Por favor, descreva o motivo do contato.');
+      showFeedback("error", t("feedback.emptyMessageTitle"), t("feedback.emptyMessageText"));
       return;
     }
 
@@ -350,26 +361,26 @@ export default function SettingsPage() {
     try {
       const result = await sendSupportRequest(
         effectiveProfileUid,
-        effectiveProfileEmail || "E-mail não disponível",
-        userProfile?.displayName || "Usuário sem nome",
+        effectiveProfileEmail || t("support.unavailableEmail"),
+        userProfile?.displayName || t("support.unnamedUser"),
         supportMessage
       );
       setIsSupportModalOpen(false);
       setSupportMessage("");
       showFeedback(
-        'success',
-        'Solicitação Enviada',
-        `Nossa equipe de suporte entrará em contato em breve.${result.protocol ? ` Protocolo: ${result.protocol}.` : ''}`
+        "success",
+        t("feedback.supportSentTitle"),
+        t("feedback.supportSentMessage", { protocol: result.protocol ? ` ${t("help.protocol", { protocol: result.protocol })}.` : "" })
       );
     } catch (error) {
       console.error("Erro ao enviar solicitação de suporte:", error);
-      showFeedback('error', 'Erro', 'Não foi possível enviar a solicitação. Tente novamente mais tarde.');
+      showFeedback("error", t("feedback.error"), t("feedback.supportSendError"));
     } finally {
       setIsSendingSupport(false);
     }
   }; const handleSendFeature = async () => {
     if (!featureMessage.trim()) {
-      showFeedback('error', 'Campo Obrigatório', 'Por favor, descreva sua ideia.');
+      showFeedback("error", t("feedback.requiredFieldTitle"), t("feedback.requiredFieldText"));
       return;
     }
     if (!user) return;
@@ -378,20 +389,20 @@ export default function SettingsPage() {
     try {
       const result = await sendFeatureRequest(
         effectiveProfileUid,
-        effectiveProfileEmail || "Sem email",
-        userProfile?.displayName || "Usuário",
+        effectiveProfileEmail || t("support.unavailableEmail"),
+        userProfile?.displayName || t("common.userFallback"),
         featureMessage
       );
       setIsFeatureModalOpen(false);
       setFeatureMessage("");
       showFeedback(
-        'success',
-        'Ideia Recebida!',
-        `Obrigado por contribuir! Sua sugestão foi enviada para nosso time de produto.${result.protocol ? ` Protocolo: ${result.protocol}.` : ''}`
+        "success",
+        t("feedback.featureSentTitle"),
+        t("feedback.featureSentMessage", { protocol: result.protocol ? ` ${t("help.protocol", { protocol: result.protocol })}.` : "" })
       );
     } catch (error) {
       console.error(error);
-      showFeedback('error', 'Erro', 'Não foi possível enviar sua sugestão. Tente novamente.');
+      showFeedback("error", t("feedback.error"), t("feedback.featureSendError"));
     } finally {
       setIsSendingFeature(false);
     }
@@ -399,11 +410,11 @@ export default function SettingsPage() {
 
   const handleStartCheckout = async (plan: "premium" | "pro") => {
     if (!user) {
-      showFeedback("error", "Sessão expirada", "Faça login novamente para continuar.");
+      showFeedback("error", t("feedback.expiredSessionTitle"), t("feedback.expiredSessionMessage"));
       return;
     }
     if (isBillingExemptRole) {
-      showFeedback("info", "Conta isenta", "Administradores e moderadores não precisam de pagamento.");
+      showFeedback("info", t("feedback.exemptAccountTitle"), t("feedback.exemptAccountMessage"));
       return;
     }
 
@@ -413,7 +424,7 @@ export default function SettingsPage() {
       router.push(buildUpgradeCheckoutPath(plan));
     } catch (error) {
       console.error(error);
-      showFeedback("error", "Falha no checkout", "Não foi possível abrir o pagamento agora.");
+      showFeedback("error", t("feedback.checkoutErrorTitle"), t("feedback.checkoutErrorMessage"));
     } finally {
       setIsOpeningCheckout(null);
     }
@@ -436,10 +447,10 @@ export default function SettingsPage() {
         checkoutAttemptId
       );
       await refreshProfile();
-      showFeedback("success", "Assinatura confirmada", `Plano atualizado para ${result.targetPlan}.`);
+      showFeedback("success", t("feedback.subscriptionConfirmedTitle"), t("feedback.subscriptionConfirmedMessage", { plan: result.targetPlan }));
     } catch (error) {
       console.error(error);
-      showFeedback("error", "Falha na confirmação", "Não foi possível validar a assinatura agora.");
+      showFeedback("error", t("feedback.confirmationErrorTitle"), t("feedback.confirmationErrorMessage"));
     } finally {
       setIsConfirmingPreapproval(false);
     }
@@ -458,16 +469,22 @@ export default function SettingsPage() {
       ? "not_paid"
       : (userProfile?.paymentStatus || billingPaymentStatus || "pending");
   const canUpgrade = !isBillingExemptRole && effectivePlan !== "pro";
+  const currentPlanCopy = getLocalizedPlanCopy(tGlobal, effectivePlan, plans[effectivePlan]);
+  const premiumPlanCopy = getLocalizedPlanCopy(tGlobal, "premium", plans.premium);
+  const proPlanCopy = getLocalizedPlanCopy(tGlobal, "pro", plans.pro);
+  const effectivePlanTone = getPlanTone(effectivePlan);
+  const premiumPlanTone = getPlanTone("premium");
+  const proPlanTone = getPlanTone("pro");
   const planRoleLabel = effectivePlan === "free"
-    ? "Registrar"
+    ? t("billing.role.free")
     : effectivePlan === "premium"
-      ? "Organizar"
-      : "Decidir";
+      ? t("billing.role.premium")
+      : t("billing.role.pro");
   const planValueSummary = effectivePlan === "free"
-    ? "Registre o essencial do mês e sinta valor rápido sem complicação."
+    ? t("billing.summary.free")
     : effectivePlan === "premium"
-      ? "Organize cartões, parcelas, vencimentos e metas com mais clareza."
-      : "Decida melhor no dia a dia com direção prática para gastar com mais segurança.";
+      ? t("billing.summary.premium")
+      : t("billing.summary.pro");
   const pendingPreapprovalId = userProfile?.billing?.pendingPreapprovalId;
   const pendingCheckoutAttemptId = userProfile?.billing?.pendingCheckoutAttemptId;
   const pendingPlan = userProfile?.billing?.pendingPlan;
@@ -641,15 +658,15 @@ export default function SettingsPage() {
         {/* Header */}
         <div id="tour-settings-header" className={`${fadeInUp} flex flex-col md:flex-row justify-between items-start md:items-center gap-4`}>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Configurações</h1>
-            <p className="text-zinc-500 dark:text-zinc-400">Gerencie sua conta, privacidade e assinatura.</p>
+            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">{t("title")}</h1>
+            <p className="text-zinc-500 dark:text-zinc-400">{t("subtitle")}</p>
           </div>
           <Button
             variant="destructive"
             onClick={logout}
             className="gap-2 rounded-xl shadow-sm hover:shadow-red-500/20 transition-all hover:cursor-pointer hover:scale-105 duration-200"
           >
-            <LogOut className="h-4 w-4" /> Sair da Conta
+            <LogOut className="h-4 w-4" /> {t("common.logout")}
           </Button>
         </div>
 
@@ -657,16 +674,16 @@ export default function SettingsPage() {
         <div className={`${fadeInUp} delay-150 space-y-6`}>
           <div id="tour-settings-tabs" className="app-panel-subtle grid min-w-full w-full grid-cols-1 gap-1 rounded-2xl border p-1.5 shadow-sm sm:grid-cols-2 md:grid-cols-4">
             <button id="tour-settings-account-tab" type="button" aria-pressed={activeTab === "account"} onClick={() => handleTabChange("account")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "account" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
-              <User className="h-4 w-4" /> Geral
+              <User className="h-4 w-4" /> {t("tabs.account")}
             </button>
             <button id="tour-settings-billing-tab" type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "billing" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
-              <CreditCard className="h-4 w-4" /> Planos
+              <CreditCard className="h-4 w-4" /> {t("tabs.billing")}
             </button>
             <button id="tour-settings-security-tab" type="button" aria-pressed={activeTab === "security"} onClick={() => handleTabChange("security")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "security" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
-              <ShieldCheck className="h-4 w-4" /> Privacidade
+              <ShieldCheck className="h-4 w-4" /> {t("tabs.security")}
             </button>
             <button id="tour-settings-help-tab" type="button" aria-pressed={activeTab === "help"} onClick={() => handleTabChange("help")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "help" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
-              <HelpCircle className="h-4 w-4" /> Ajuda
+              <HelpCircle className="h-4 w-4" /> {t("tabs.help")}
             </button>
           </div>
 
@@ -675,9 +692,8 @@ export default function SettingsPage() {
             <Card id="tour-settings-panel" className={`${zoomIn} delay-200 app-panel-soft rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20`}>
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-2 text-xl">
-                  <div className="rounded-full bg-primary/10 p-2"><User className="h-5 w-5 text-primary" /></div> Perfil do Usuário
-                </CardTitle>
-                <CardDescription>Suas informações pessoais visíveis.</CardDescription>
+                  <div className="rounded-full bg-primary/10 p-2"><User className="h-5 w-5 text-primary" /></div> {t("account.title")}</CardTitle>
+                <CardDescription>{t("account.description")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-8">
                 <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
@@ -686,20 +702,20 @@ export default function SettingsPage() {
                       <AvatarImage src={isImpersonating ? (userProfile?.photoURL || "") : (userProfile?.photoURL || user?.photoURL || "")} className="object-cover" />
                       <AvatarFallback className="text-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500">{effectiveProfileDisplayName.charAt(0) || "U"}</AvatarFallback>
                     </Avatar>
-                    <div className="absolute bottom-0 right-0 p-1.5 bg-green-500 border-4 border-white dark:border-zinc-900 rounded-full animate-pulse" title="Online"></div>
+                    <div className="absolute bottom-0 right-0 p-1.5 bg-green-500 border-4 border-white dark:border-zinc-900 rounded-full animate-pulse" title={t("account.online")}></div>
                   </div>
                   <div className="space-y-1 text-center sm:text-left">
-                    <h3 className="font-bold text-2xl text-zinc-900 dark:text-zinc-100">{displayName || "Usuário"}</h3>
+                    <h3 className="font-bold text-2xl text-zinc-900 dark:text-zinc-100">{displayName || t("common.userFallback")}</h3>
                     <p className="text-sm text-zinc-500 font-medium">{effectiveProfileEmail}</p>
                     <div className="flex flex-wrap justify-center sm:justify-start gap-2 pt-2">
                       <Badge variant="secondary" className={`uppercase text-[10px] tracking-wider border ${effectivePlan === 'free' ? 'bg-zinc-100 text-zinc-600 border-zinc-200' : 'border-primary/20 bg-accent text-primary'}`}>
-                        {isBillingExemptRole ? "Plano Staff (Isento)" : `Plano ${effectivePlan}`}
+                        {isBillingExemptRole ? t("account.staffPlan") : t("account.plan", { plan: currentPlanCopy.name })}
                       </Badge>
                       <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 gap-1">
                         {(isImpersonating ? userProfile?.verifiedEmail : user?.emailVerified) ? (
-                          <><CheckCircle2 className="h-3 w-3" /> Verificado</>
+                          <><CheckCircle2 className="h-3 w-3" /> {t("account.verified")}</>
                         ) : (
-                          <><X className="h-3 w-3" /> Não Verificado</>
+                          <><X className="h-3 w-3" /> {t("account.notVerified")}</>
                         )}
                       </Badge>
                     </div>
@@ -708,15 +724,15 @@ export default function SettingsPage() {
                 <Separator className="bg-border/70" />
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label className="text-zinc-500">Nome de Exibição (Apelido)</Label>
+                    <Label className="text-zinc-500">{t("account.displayName")}</Label>
                     <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="h-11 rounded-xl" />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-zinc-500">Nome Completo</Label>
+                    <Label className="text-zinc-500">{t("account.completeName")}</Label>
                     <Input value={completeName} onChange={(e) => setCompleteName(e.target.value)} className="h-11 rounded-xl" />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-zinc-500">Celular</Label>
+                    <Label className="text-zinc-500">{t("account.phone")}</Label>
                     <Input
                       value={formatPhone(phone)}
                       onChange={(e) => setPhone(normalizePhone(e.target.value))}
@@ -725,7 +741,7 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-zinc-500">E-mail de Acesso</Label>
+                    <Label className="text-zinc-500">{t("account.accessEmail")}</Label>
                     <Input defaultValue={effectiveProfileEmail || ""} disabled className="h-11 rounded-xl opacity-70 cursor-not-allowed" />
                   </div>
                 </div>
@@ -736,23 +752,22 @@ export default function SettingsPage() {
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 text-primary">
                         <Palette className="h-4 w-4" />
-                        <p className="text-sm font-semibold">Aparência do app</p>
+                        <p className="text-sm font-semibold">{t("appearance.title")}</p>
                       </div>
                       <p className="text-sm text-zinc-500">
-                        Escolha o tema geral e a cor principal para os campos, focos e destaques do app.
+                        {t("appearance.description")}
                       </p>
                     </div>
                     {isSavingAppearance || appearanceLoading ? (
                       <div className="inline-flex items-center gap-2 text-xs text-zinc-500">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Salvando preferência...
-                      </div>
+                        {t("appearance.saving")}</div>
                     ) : null}
                   </div>
 
                   <div className="mt-5 space-y-5">
                     <div className="space-y-3">
-                      <Label className="text-zinc-500">Tema</Label>
+                      <Label className="text-zinc-500">{t("appearance.theme")}</Label>
                       <div className="grid gap-3 sm:grid-cols-3">
                         {APPEARANCE_THEME_OPTIONS.map((option) => {
                           const Icon = option.icon;
@@ -773,9 +788,9 @@ export default function SettingsPage() {
                                 <div className={`inline-flex h-9 w-9 items-center justify-center rounded-2xl ${selected ? "bg-primary text-primary-foreground" : "app-panel-subtle text-zinc-600 dark:text-zinc-300"}`}>
                                   <Icon className="h-4 w-4" />
                                 </div>
-                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{option.label}</p>
+                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{t(option.labelKey)}</p>
                               </div>
-                              <p className="mt-3 text-xs leading-5 text-zinc-500">{option.description}</p>
+                              <p className="mt-3 text-xs leading-5 text-zinc-500">{t(option.descriptionKey)}</p>
                             </button>
                           );
                         })}
@@ -783,7 +798,7 @@ export default function SettingsPage() {
                     </div>
 
                     <div className="space-y-3">
-                      <Label className="text-zinc-500">Cor principal</Label>
+                      <Label className="text-zinc-500">{t("appearance.accent")}</Label>
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         {APPEARANCE_ACCENT_OPTIONS.map((option) => {
                           const selected = appearancePreferences.accent === option.value;
@@ -801,8 +816,8 @@ export default function SettingsPage() {
                             >
                               <div className={`h-10 w-10 rounded-2xl bg-linear-to-br ${option.swatchClass}`} />
                               <div className="min-w-0">
-                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{option.label}</p>
-                                <p className="text-xs leading-5 text-zinc-500">{option.description}</p>
+                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{t(option.labelKey)}</p>
+                                <p className="text-xs leading-5 text-zinc-500">{t(option.descriptionKey)}</p>
                               </div>
                             </button>
                           );
@@ -820,10 +835,10 @@ export default function SettingsPage() {
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 text-primary">
                             <KeyRound className="h-4 w-4" />
-                            <p className="text-sm font-semibold">Acesso por senha</p>
+                            <p className="text-sm font-semibold">{t("password.title")}</p>
                           </div>
                           <p className="text-sm text-primary/80">
-                            Receba um link seguro para criar ou trocar sua senha em `/first-access`.
+                            {t("password.description")}
                           </p>
                         </div>
                         <Button
@@ -832,7 +847,7 @@ export default function SettingsPage() {
                           disabled={isSendingPasswordEmail}
                           className="h-11 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground"
                         >
-                          {isSendingPasswordEmail ? "Enviando link..." : "Alterar senha"}
+                          {isSendingPasswordEmail ? t("password.sending") : t("password.action")}
                         </Button>
                       </div>
                     </div>
@@ -852,11 +867,11 @@ export default function SettingsPage() {
                     ) : (
                       <Copy className="mr-2 h-4 w-4" />
                     )}
-                    Copiar Token Swagger
+                    {t("account.swaggerToken")}
                   </Button>
                 )}
                 <Button onClick={handleSaveProfile} disabled={isSaving} className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl px-8 h-11 shadow-lg shadow-primary/10 transition-all active:scale-95 hover:cursor-pointer duration-200">
-                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Salvar Alterações"}
+                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t("common.save")}
                 </Button>
               </CardFooter>
             </Card>
@@ -866,12 +881,7 @@ export default function SettingsPage() {
           {activeTab === "billing" && (
             <div id="tour-settings-panel" className={`${fadeInUp} delay-200 space-y-6`}>
               <Card
-                className={`border-none shadow-xl rounded-3xl relative overflow-hidden text-white flex flex-col justify-center min-h-2.5 ${effectivePlan === "free"
-                  ? "bg-linear-to-br from-amber-700 to-amber-900 shadow-amber-700/30"
-                  : effectivePlan === "premium"
-                    ? "bg-linear-to-br from-slate-600 to-slate-800 shadow-slate-500/30"
-                    : "bg-linear-to-br from-yellow-500 to-amber-600 shadow-yellow-500/30"
-                  }`}
+                className={`border-none shadow-xl rounded-3xl relative overflow-hidden text-white flex flex-col justify-center min-h-2.5 ${effectivePlanTone.shell}`}
               >
                 <div className="absolute top-0 right-0 p-40 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
                 <CardHeader className="relative z-10 flex-1 flex items-center">
@@ -880,13 +890,11 @@ export default function SettingsPage() {
                     {/* BLOCO PRINCIPAL */}
                     <div className="space-y-3">
                       <CardTitle className="text-3xl font-bold flex items-center gap-3">
-                        {effectivePlan === 'free' && <Medal className="h-8 w-8 text-amber-400" />}
-                        {effectivePlan === 'premium' && <Medal className="h-8 w-8 text-slate-200" />}
-                        {effectivePlan === 'pro' && <Medal className="h-8 w-8 text-yellow-300" />}
+                        <Medal className={`h-8 w-8 ${effectivePlanTone.medal}`} />
                         <span>
-                          Plano{' '}
+                          {t("billing.planLabel")}{" "}
                           <span className="opacity-90">
-                            {isBillingExemptRole ? "Staff" : effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)}
+                            {isBillingExemptRole ? "Staff" : currentPlanCopy.name}
                           </span>
                         </span>
                       </CardTitle>
@@ -900,15 +908,15 @@ export default function SettingsPage() {
                       <CardDescription className="text-base text-white/75 max-w-md leading-relaxed">
                         {effectivePlan === 'free'
                           ? planValueSummary
-                          : isBillingExemptRole ? 'Conta da equipe com acesso isento de cobrança.' : planValueSummary}
+                          : isBillingExemptRole ? t("billing.summary.staff") : planValueSummary}
                       </CardDescription>
                     </div>
 
                     {/* FEATURES */}
-                    {plans[effectivePlan].features && (
+                    {currentPlanCopy.features.length > 0 && (
                       <nav className="lg:pt-0">
                         <ul className="space-y-2 text-sm text-white/70">
-                          {plans[effectivePlan].features.map((feature, index) => (
+                          {currentPlanCopy.features.map((feature, index) => (
                             <li key={index} className="flex items-start gap-2">
                               <CheckCircle2 className="h-4 w-4 mt-0.5 text-white/60" />
                               <span>{feature}</span>
@@ -926,35 +934,35 @@ export default function SettingsPage() {
                         {isBillingExemptRole && (
                           <>
                             <ShieldCheck className="h-4 w-4 text-emerald-300" />
-                            Isento de Pagamento
+                            {t("billing.status.exempt")}
                           </>
                         )}
 
                         {!isBillingExemptRole && effectivePaymentStatus === 'paid' && (
                           <>
                             <CheckCircle className="h-4 w-4 text-emerald-300" />
-                            Pagamento Confirmado
+                            {t("billing.status.paid")}
                           </>
                         )}
 
                         {!isBillingExemptRole && effectivePaymentStatus === 'pending' && (
                           <>
                             <Clock className="h-4 w-4 text-amber-300" />
-                            Pagamento Pendente
+                            {t("billing.status.pending")}
                           </>
                         )}
 
                         {!isBillingExemptRole && effectivePaymentStatus === 'overdue' && (
                           <>
                             <AlertTriangle className="h-4 w-4 text-red-300" />
-                            Pagamento Atrasado
+                            {t("billing.status.overdue")}
                           </>
                         )}
 
                         {!isBillingExemptRole && (effectivePaymentStatus === 'not_paid' || effectivePaymentStatus === 'canceled') && (
                           <>
                             <AlertTriangle className="h-4 w-4 text-red-300" />
-                            Pagamento com Falha
+                            {t("billing.status.failed")}
                           </>
                         )}
                       </Badge>
@@ -962,9 +970,9 @@ export default function SettingsPage() {
                       {/* Plano ativo */}
                       <Badge className="bg-white/10 backdrop-blur-md text-white border-none flex gap-2 items-center px-3 py-1.5 text-xs">
                         {userProfile?.status === 'active' ? (
-                          <><CheckCircle className="h-4 w-4 text-white/70" />Plano {effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)} Ativo</>
+                          <><CheckCircle className="h-4 w-4 text-white/70" />{t("billing.status.active", { plan: currentPlanCopy.name })}</>
                         ) : (
-                          <><AlertTriangle className="h-4 w-4 text-white/70" />Plano {effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)} Inativo</>
+                          <><AlertTriangle className="h-4 w-4 text-white/70" />{t("billing.status.inactive", { plan: currentPlanCopy.name })}</>
                         )}
 
                       </Badge>
@@ -973,11 +981,11 @@ export default function SettingsPage() {
                       <Badge className="bg-white/10 backdrop-blur-md text-white border-none flex gap-2 items-center px-3 py-1.5 text-xs">
                         {(isBillingExemptRole || effectivePaymentStatus === 'paid') ? (
                           <>
-                            <RefreshCw className="h-4 w-4 text-white/70" /> Renovação Automática
+                            <RefreshCw className="h-4 w-4 text-white/70" /> {t("billing.status.autoRenew")}
                           </>
                         ) : (
                           <>
-                            <AlertTriangle className="h-4 w-4 text-white/70" /> Renovação Desativada
+                            <AlertTriangle className="h-4 w-4 text-white/70" /> {t("billing.status.renewalDisabled")}
                           </>
                         )}
                       </Badge>
@@ -989,7 +997,7 @@ export default function SettingsPage() {
                   {!isBillingExemptRole && effectivePlan === "free" && (
                     <div className="mt-4">
                       <p className="text-sm text-zinc-300 mb-2">
-                        Free registra o básico. Premium organiza cartões, parcelas, vencimentos e metas. Pro adiciona direção diária para você decidir melhor.
+                        {t("billing.plans.freePitch")}
                       </p>
                     </div>
                   )}
@@ -997,38 +1005,38 @@ export default function SettingsPage() {
                     {isBillingExemptRole && (
                       <>
                         <p>
-                          Regra de cobrança: <strong>Isento para {userProfile?.role === "admin" ? "Admin" : "Moderador"}</strong>
+                          {t("billing.details.chargeRule")} <strong>{t("billing.details.exemptFor", { role: userProfile?.role === "admin" ? t("billing.details.admin") : t("billing.details.moderator") })}</strong>
                         </p>
                         <p>
-                          Origem do plano:{" "}
+                          {t("billing.details.planSource")}{" "}
                           <strong>
                             {userProfile?.billing?.source === "mercadopago_webhook"
-                              ? "Webhook Mercado Pago"
+                              ? t("billing.details.mercadoWebhook")
                               : userProfile?.billing?.source === "mercadopago_confirm"
-                                ? "Confirmação Mercado Pago"
+                                ? t("billing.details.mercadoConfirm")
                                 : userProfile?.billing?.source === "mercadopago_cancel"
-                                  ? "Cancelamento Mercado Pago"
+                                  ? t("billing.details.mercadoCancel")
                                   : userProfile?.billing?.source === "system"
-                                    ? "Sistema"
-                                    : "Administração manual"}
+                                    ? t("billing.details.system")
+                                    : t("billing.details.manualAdmin")}
                           </strong>
                         </p>
                       </>
                     )}
                     <p>
-                      Última atualização da assinatura:{" "}
-                      <strong>{userProfile?.billing?.lastSyncAt ? new Date(userProfile?.billing?.lastSyncAt).toLocaleString() : "Ainda sem atualização automática"}</strong>
+                      {t("billing.details.lastSync")}{" "}
+                      <strong>{userProfile?.billing?.lastSyncAt ? date(userProfile?.billing?.lastSyncAt) : t("billing.details.noAutomaticUpdate")}</strong>
                     </p>
                   </div>
                   {shouldShowRecoveryCTA && (
                     <div className="rounded-xl border border-amber-200/30 bg-amber-500/10 p-3 text-xs text-white/90 space-y-2">
                       <p className="font-semibold">
-                        {isAutoReconcilingBilling ? "Verificando sua assinatura..." : "Pagamento em aberto detectado."}
+                        {isAutoReconcilingBilling ? t("billing.recovery.checkingTitle") : t("billing.recovery.openTitle")}
                       </p>
                       <p>
                         {isAutoReconcilingBilling
-                          ? "Estamos tentando confirmar automaticamente seu pagamento no Mercado Pago."
-                          : "Se a confirmação automática atrasar, você pode pedir uma nova verificação sem preencher códigos."}
+                          ? t("billing.recovery.checkingDescription")
+                          : t("billing.recovery.openDescription")}
                       </p>
                       <Button
                         onClick={() => void handleRecoverPayment()}
@@ -1036,14 +1044,14 @@ export default function SettingsPage() {
                         className="h-9 bg-amber-500 hover:bg-amber-600 text-white"
                       >
                         {isAutoReconcilingBilling
-                          ? "Verificando automaticamente..."
+                          ? t("billing.recovery.checkingAction")
                           : isConfirmingPreapproval
-                            ? "Validando pagamento..."
+                            ? t("billing.recovery.validatingAction")
                             : isOpeningCheckout
-                              ? "Abrindo checkout..."
+                              ? t("billing.recovery.openingAction")
                               : effectivePaymentStatus === "pending"
-                                ? "Verificar assinatura novamente"
-                                : "Regularizar pagamento agora"}
+                                ? t("billing.recovery.verifyAgain")
+                                : t("billing.recovery.regularize")}
                       </Button>
                     </div>
                   )}
@@ -1054,7 +1062,7 @@ export default function SettingsPage() {
                         disabled={isCancelingSubscription}
                         className="h-9 bg-red-600 hover:bg-red-700 text-white"
                       >
-                        {isCancelingSubscription ? "Cancelando assinatura..." : "Cancelar Assinatura"}
+                        {isCancelingSubscription ? t("billing.cancel.canceling") : t("billing.cancel.action")}
                       </Button>
                     </div>
                   )}
@@ -1065,20 +1073,20 @@ export default function SettingsPage() {
                 <Card className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) shadow-lg">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-zinc-600" /> Histórico de cobrança
+                      <Clock className="h-4 w-4 text-zinc-600" /> {t("billing.history.title")}
                     </CardTitle>
                     <CardDescription>
-                      Últimos eventos de assinatura e pagamento.
+                      {t("billing.history.description")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {isLoadingBillingHistory ? (
                       <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-zinc-500">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando histórico...
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" /> {t("billing.history.loading")}
                       </div>
                     ) : billingHistory.length === 0 ? (
                       <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-zinc-500">
-                        Nenhum evento encontrado.
+                        {t("billing.history.empty")}
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -1087,13 +1095,13 @@ export default function SettingsPage() {
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <p className="text-sm font-semibold text-foreground">{formatBillingEventLabel(item)}</p>
                               <Badge variant="secondary" className="text-[10px] uppercase">
-                                {item.paymentStatus || "n/a"}
+                                {item.paymentStatus || t("billing.history.unavailable")}
                               </Badge>
                             </div>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              {item.createdAt ? new Date(item.createdAt).toLocaleString() : "Data indisponível"}
-                              {item.plan ? ` • Plano ${item.plan}` : ""}
-                              {typeof item.amount === "number" ? ` • ${item.currency || "BRL"} ${item.amount.toFixed(2)}` : ""}
+                              {item.createdAt ? date(item.createdAt) : t("common.unavailableDate")}
+                              {item.plan ? ` • ${t("billing.history.planPrefix")} ${item.plan}` : ""}
+                              {typeof item.amount === "number" ? ` • ${money(item.amount, (item.currency || "BRL") as "BRL" | "USD" | "EUR")}` : ""}
                             </p>
                           </div>
                         ))}
@@ -1102,7 +1110,12 @@ export default function SettingsPage() {
                     {!isLoadingBillingHistory && billingHistoryTotal > billingHistoryPerPage && (
                       <div className="app-panel-subtle mt-2 flex items-center justify-between rounded-xl border border-color:var(--app-panel-border) px-3 py-2">
                         <p className="text-xs text-zinc-500">
-                          Página {billingHistoryPage} de {Math.max(1, Math.ceil(billingHistoryTotal / billingHistoryPerPage))} • {billingHistoryTotal} evento(s)
+                          {t("common.pageStatus", {
+                            page: billingHistoryPage,
+                            total: Math.max(1, Math.ceil(billingHistoryTotal / billingHistoryPerPage)),
+                            count: billingHistoryTotal,
+                            item: t("billing.history.eventCount"),
+                          })}
                         </p>
                         <div className="flex items-center gap-2">
                           <Button
@@ -1113,7 +1126,7 @@ export default function SettingsPage() {
                             disabled={billingHistoryPage <= 1}
                             onClick={() => setBillingHistoryPage((prev) => Math.max(1, prev - 1))}
                           >
-                            Anterior
+                            {t("common.previous")}
                           </Button>
                           <Button
                             type="button"
@@ -1127,7 +1140,7 @@ export default function SettingsPage() {
                               )
                             }
                           >
-                            Próxima
+                            {t("common.next")}
                           </Button>
                         </div>
                       </div>
@@ -1141,47 +1154,47 @@ export default function SettingsPage() {
                   <div className="grid gap-3 md:grid-cols-3">
                     <div className="app-panel-subtle rounded-2xl border-slate-200 bg-slate-50/80 px-4 py-4">
                       <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Free</p>
-                      <p className="mt-2 text-base font-semibold text-zinc-900">Registrar</p>
-                      <p className="mt-1 text-sm text-zinc-600">Para sair do caos e registrar o essencial do mês.</p>
+                      <p className="mt-2 text-base font-semibold text-zinc-900">{t("billing.plans.freeTitle")}</p>
+                      <p className="mt-1 text-sm text-zinc-600">{t("billing.plans.freeDescription")}</p>
                     </div>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Premium</p>
-                      <p className="mt-2 text-base font-semibold text-zinc-900">Organizar</p>
-                      <p className="mt-1 text-sm text-zinc-600">Para controlar cartões, parcelas, vencimentos e metas com clareza.</p>
+                    <div className={`rounded-2xl border px-4 py-4 ${premiumPlanTone.softCard}`}>
+                      <p className={`text-[10px] uppercase tracking-[0.2em] ${premiumPlanTone.accentText}`}>{premiumPlanCopy.title}</p>
+                      <p className="mt-2 text-base font-semibold text-zinc-900 dark:text-white">{premiumPlanCopy.tag}</p>
+                      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{premiumPlanCopy.description}</p>
                     </div>
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-4">
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-amber-600">Pro</p>
-                      <p className="mt-2 text-base font-semibold text-zinc-900">Decidir</p>
-                      <p className="mt-1 text-sm text-zinc-600">Para saber quanto ainda pode gastar hoje e agir com mais segurança.</p>
+                    <div className={`rounded-2xl border px-4 py-4 ${proPlanTone.softCard}`}>
+                      <p className={`text-[10px] uppercase tracking-[0.2em] ${proPlanTone.accentText}`}>{proPlanCopy.title}</p>
+                      <p className="mt-2 text-base font-semibold text-zinc-900 dark:text-white">{proPlanCopy.tag}</p>
+                      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{proPlanCopy.description}</p>
                     </div>
                   </div>
 
                   <div className="grid gap-6 md:grid-cols-2">
                     {effectivePlan !== 'premium' && (
-                      <Card className="app-panel-soft relative overflow-hidden h-full flex flex-col border-2 border-slate-300/40 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-slate-400" />
+                      <Card className={`app-panel-soft relative overflow-hidden h-full flex flex-col border-2 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300 ${premiumPlanTone.border}`}>
+                        <div className={`absolute top-0 left-0 w-full h-1 ${premiumPlanTone.topBar}`} />
                         <CardHeader className="flex-1">
                           <CardTitle className="flex justify-between items-center">
                             <span className="flex items-center gap-2">
-                              <Medal className="h-5 w-5 text-slate-500" /> Premium · Organizar
+                              <Medal className={`h-5 w-5 ${premiumPlanTone.accentText}`} /> {premiumPlanCopy.title}
                             </span>
                             <span className="text-xl font-bold text-zinc-900 dark:text-white">
-                              R$ {plans.premium.price.toFixed(2).toString().replace(".", ",")}
+                              {formatPlanPrice("premium")}
                             </span>
                           </CardTitle>
                           <CardDescription>
-                            {plans.premium.description}
+                            {premiumPlanCopy.description}
                           </CardDescription>
-                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                            Ideal para quem quer parar de se perder em cartões, parcelas e vencimentos.
+                          <p className={`text-xs font-medium uppercase tracking-[0.18em] ${premiumPlanTone.accentText}`}>
+                            {premiumPlanCopy.tag}
                           </p>
                           <nav>
-                            {plans.premium.features &&
+                            {premiumPlanCopy.features.length > 0 &&
                               (
                                 <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
-                                  {plans.premium.features.map((feature, index) => (
+                                  {premiumPlanCopy.features.map((feature, index) => (
                                     <li key={index} className="flex items-center gap-2">
-                                      <CheckCircle2 className="h-4 w-4 text-slate-500" /> {feature}
+                                      <CheckCircle2 className={`h-4 w-4 ${premiumPlanTone.accentText}`} /> {feature}
                                     </li>
                                   ))}
                                 </ul>
@@ -1192,37 +1205,37 @@ export default function SettingsPage() {
                           <Button
                             onClick={() => handleStartCheckout("premium")}
                             disabled={isOpeningCheckout === "premium"}
-                            className="w-full h-11 rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-lg shadow-slate-500/20 hover:cursor-pointer transition-all active:scale-[0.98]"
+                            className={`w-full h-11 rounded-xl shadow-lg hover:cursor-pointer transition-all active:scale-[0.98] ${premiumPlanTone.action}`}
                           >
-                            {isOpeningCheckout === "premium" ? "Abrindo checkout..." : "Ir para o Premium"}
+                            {isOpeningCheckout === "premium" ? t("billing.plans.openingCheckout") : t("billing.plans.premiumAction")}
                           </Button>
                         </CardFooter>
                       </Card>
                     )}
-                    <Card className="app-panel-soft relative overflow-hidden h-full flex flex-col border-2 border-yellow-300/40 dark:border-yellow-700/30 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300">
-                      <div className="absolute top-0 left-0 w-full h-1 bg-yellow-400" />
+                    <Card className={`app-panel-soft relative overflow-hidden h-full flex flex-col border-2 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300 ${proPlanTone.border}`}>
+                      <div className={`absolute top-0 left-0 w-full h-1 ${proPlanTone.topBar}`} />
                       <CardHeader className="flex-1">
                         <CardTitle className="flex justify-between items-center">
                           <span className="flex items-center gap-2">
-                            <Medal className="h-5 w-5 text-yellow-500" /> Pro · Decidir
+                            <Medal className={`h-5 w-5 ${proPlanTone.accentText}`} /> {proPlanCopy.title}
                           </span>
                           <span className="text-xl font-bold text-zinc-900 dark:text-white">
-                            R$ {plans.pro.price.toFixed(2).toString().replace(".", ",")}
+                            {formatPlanPrice("pro")}
                           </span>
                         </CardTitle>
                         <CardDescription>
-                          {plans.pro.description}
+                          {proPlanCopy.description}
                         </CardDescription>
-                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-yellow-600">
-                          Ideal para quem quer direção prática no dia a dia, não só histórico do mês.
+                        <p className={`text-xs font-medium uppercase tracking-[0.18em] ${proPlanTone.accentText}`}>
+                          {proPlanCopy.tag}
                         </p>
                         <nav>
-                          {plans.pro.features &&
+                          {proPlanCopy.features.length > 0 &&
                             (
                               <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
-                                {plans.pro.features.map((feature, index) => (
+                                {proPlanCopy.features.map((feature, index) => (
                                   <li key={index} className="flex items-center gap-2">
-                                    <CheckCircle2 className="h-4 w-4 text-yellow-500" /> {feature}
+                                    <CheckCircle2 className={`h-4 w-4 ${proPlanTone.accentText}`} /> {feature}
                                   </li>
                                 ))}
                               </ul>
@@ -1234,9 +1247,9 @@ export default function SettingsPage() {
                           onClick={() => handleStartCheckout("pro")}
                           disabled={isOpeningCheckout === "pro"}
                           variant="outline"
-                          className="w-full h-11 rounded-xl border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 hover:cursor-pointer transition-all active:scale-[0.98]"
+                          className={`w-full h-11 rounded-xl hover:cursor-pointer transition-all active:scale-[0.98] ${proPlanTone.actionOutline}`}
                         >
-                          {isOpeningCheckout === "pro" ? "Abrindo checkout..." : "Ir para o Pro"}
+                          {isOpeningCheckout === "pro" ? t("billing.plans.openingCheckout") : t("billing.plans.proAction")}
                         </Button>
                       </CardFooter>
                     </Card>
@@ -1254,38 +1267,38 @@ export default function SettingsPage() {
                   <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-full">
                     <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   </div>
-                  Privacidade de Dados
+                  {t("security.title")}
                 </CardTitle>
                 <CardDescription>
-                  Controle como seus dados são exibidos e armazenados.
+                  {t("security.description")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-8">
 
                 <div className="app-panel-subtle flex items-center justify-between rounded-2xl border p-5 transition-all hover:border-primary/20">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2"><EyeOff className="h-5 w-5 text-zinc-600 dark:text-zinc-400" /><Label className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Modo Discreto (Blur)</Label></div>
-                    <p className="text-sm text-zinc-500">Oculta valores monetários no Dashboard para privacidade.</p>
+                    <div className="flex items-center gap-2"><EyeOff className="h-5 w-5 text-zinc-600 dark:text-zinc-400" /><Label className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{t("security.discreetMode")}</Label></div>
+                    <p className="text-sm text-zinc-500">{t("security.discreetDescription")}</p>
                   </div>
                   <Switch checked={privacyMode} onCheckedChange={togglePrivacyMode} className="hover:cursor-pointer" />
                 </div>
                 <Separator className="bg-zinc-300 dark:bg-zinc-800" />
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2"><Lock className="h-4 w-4 text-primary" /><h3 className="font-semibold text-sm uppercase tracking-wider text-zinc-500">Segurança de Dados</h3></div>
+                  <div className="flex items-center gap-2"><Lock className="h-4 w-4 text-primary" /><h3 className="font-semibold text-sm uppercase tracking-wider text-zinc-500">{t("security.dataSecurity")}</h3></div>
                   <div className="p-5 rounded-2xl bg-zinc-950 text-zinc-400 font-mono text-xs break-all relative border border-zinc-800 shadow-inner group transition-all hover:border-zinc-700">
-                    <div className="absolute top-3 right-3"><Badge variant="outline" className="text-[10px] border-zinc-700 text-emerald-500 font-bold px-2 py-0.5">PRIVACIDADE NO APP</Badge></div>
-                    <p className="mb-2 text-zinc-600 uppercase tracking-widest text-[10px] font-bold">Identificador interno</p>
+                    <div className="absolute top-3 right-3"><Badge variant="outline" className="text-[10px] border-zinc-700 text-emerald-500 font-bold px-2 py-0.5">{t("security.privacyBadge")}</Badge></div>
+                    <p className="mb-2 text-zinc-600 uppercase tracking-widest text-[10px] font-bold">{t("security.internalId")}</p>
                     {keyFingerprint}
                   </div>
-                  <p className="text-xs text-zinc-500 leading-relaxed">* Este identificador ajuda o aplicativo a reconhecer e recuperar dados exibidos como protegidos.</p>
+                  <p className="text-xs text-zinc-500 leading-relaxed">{t("security.internalIdHelp")}</p>
                   <Separator className="bg-zinc-300 dark:bg-zinc-800" />
 
                   <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-900/50">
                     <h4 className="text-sm font-bold text-blue-700 dark:text-blue-300 mb-2 flex items-center gap-2">
-                      <RefreshCw className="h-4 w-4" /> Recuperação de dados protegidos
+                      <RefreshCw className="h-4 w-4" /> {t("security.recoveryTitle")}
                     </h4>
                     <p className="text-xs text-blue-600/80 dark:text-blue-400 mb-4">
-                      Se você trocou de dispositivo e seus dados antigos aparecem como &quot;Dados Protegidos&quot;, clique abaixo.
+                      {t("security.recoveryDescription")}
                     </p>
                     <Button
                       size="sm"
@@ -1293,17 +1306,17 @@ export default function SettingsPage() {
                       disabled={isMigrating}
                       className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg w-full sm:w-auto hover:cursor-pointer transition-all active:scale-95"
                     >
-                      {isMigrating ? "Corrigindo..." : "Corrigir dados protegidos"}
+                      {isMigrating ? t("security.fixing") : t("security.fixProtectedData")}
                     </Button>
                   </div>
 
                 </div>
                 <Separator className="bg-zinc-300 dark:bg-zinc-800" />
                 <div className="space-y-4">
-                  <h3 className="text-red-600 font-bold text-sm flex items-center gap-2 mb-3"><AlertTriangle className="h-4 w-4" /> Zona de Perigo</h3>
+                  <h3 className="text-red-600 font-bold text-sm flex items-center gap-2 mb-3"><AlertTriangle className="h-4 w-4" /> {t("security.dangerZone")}</h3>
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-950/10 rounded-2xl">
-                    <p className="text-xs text-red-600/80 dark:text-red-400">A exclusão da conta é <strong>irreversível</strong>. Seu acesso será removido e a conta deixará de existir para você.</p>
-                    <Button variant="outline" onClick={() => setShowDeleteModal(true)} className="text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 dark:hover:bg-red-900/40 dark:border-red-900 whitespace-nowrap rounded-xl hover:cursor-pointer transition-all active:scale-95">Excluir Minha Conta</Button>
+                    <p className="text-xs text-red-600/80 dark:text-red-400">{t("security.deleteWarning")}</p>
+                    <Button variant="outline" onClick={() => setShowDeleteModal(true)} className="text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 dark:hover:bg-red-900/40 dark:border-red-900 whitespace-nowrap rounded-xl hover:cursor-pointer transition-all active:scale-95">{t("security.deleteAction")}</Button>
                   </div>
                 </div>
               </CardContent>
@@ -1317,23 +1330,23 @@ export default function SettingsPage() {
               <Card className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20 overflow-hidden hover:shadow-2xl transition-shadow">
                 <CardHeader className="bg-linear-to-r from-primary/10 to-primary/5 p-4">
                   <CardTitle className="flex items-center gap-2 text-primary">
-                    <PlayCircle className="h-6 w-6" /> Tutorial Interativo
+                    <PlayCircle className="h-6 w-6" /> {t("help.tutorialTitle")}
                   </CardTitle>
                   <CardDescription className="text-zinc-600 dark:text-zinc-400">
-                    Escolha as partes do guia que você quer rever e monte um tour sob medida.
+                    {t("help.tutorialDescription")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="-mt-4">
                   <div className="app-panel-subtle flex flex-col items-center justify-between gap-4 rounded-2xl border border-color:var(--app-panel-border) p-6 shadow-sm sm:flex-row">
                     <div className="space-y-1">
-                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tour da plataforma</h4>
-                      <p className="text-sm text-zinc-500">Escolha entre ver tudo ou apenas dashboard, configurações, lançamentos, cartões e metas.</p>
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">{t("help.platformTourTitle")}</h4>
+                      <p className="text-sm text-zinc-500">{t("help.platformTourDescription")}</p>
                     </div>
                     <Button
                       onClick={handleReplayTour}
                       className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-lg shadow-black/10 hover:scale-105 transition-all"
                     >
-                      Escolher Tour
+                      {t("help.chooseTour")}
                     </Button>
                   </div>
                 </CardContent>
@@ -1342,17 +1355,17 @@ export default function SettingsPage() {
               <Card className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20 overflow-hidden">
                 <CardHeader className="bg-linear-to-r from-primary/10 to-primary/5 p-4">
                   <CardTitle className="flex items-center gap-2 text-primary">
-                    <Sparkles className="h-6 w-6" /> Explorar o App
+                    <Sparkles className="h-6 w-6" /> {t("help.exploreTitle")}
                   </CardTitle>
                   <CardDescription className="text-zinc-600 dark:text-zinc-400">
-                    Veja o que cada área faz e personalize a barra rápida com os atalhos que fazem mais sentido para você.
+                    {t("help.exploreDescription")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="-mt-4">
                   <div className="app-panel-subtle flex flex-col items-center justify-between gap-4 rounded-2xl border border-color:var(--app-panel-border) p-6 shadow-sm sm:flex-row">
                     <div className="space-y-1">
-                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Tela de funcionalidades e atalhos</h4>
-                      <p className="text-sm text-zinc-500">Acesse a visão geral das páginas e ajuste a barra rápida do seu jeito.</p>
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">{t("help.exploreCardTitle")}</h4>
+                      <p className="text-sm text-zinc-500">{t("help.exploreCardDescription")}</p>
                     </div>
                     <Button
                       type="button"
@@ -1360,7 +1373,7 @@ export default function SettingsPage() {
                       variant="outline"
                       className="w-full sm:w-auto rounded-xl border-primary/20 text-primary hover:bg-accent"
                     >
-                      Abrir Explorar App
+                      {t("help.openExplore")}
                     </Button>
                   </div>
                 </CardContent>
@@ -1370,7 +1383,7 @@ export default function SettingsPage() {
               <Card className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200">
-                    <MessageCircle className="h-5 w-5" /> Fale Conosco
+                    <MessageCircle className="h-5 w-5" /> {t("help.contactTitle")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1380,12 +1393,12 @@ export default function SettingsPage() {
                       <MessageCircle className="h-6 w-6" />
                     </div>
                     <div>
-                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">WhatsApp Suporte</h4>
-                      <p className="text-sm text-zinc-500">Fale diretamente com nossa equipe técnica.</p>
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">{t("help.whatsappTitle")}</h4>
+                      <p className="text-sm text-zinc-500">{t("help.whatsappDescription")}</p>
                     </div>
                   </a>
 
-                  {/* Solicitar Suporte via Sistema */}
+                  {/* {t("support.title")} via Sistema */}
                   <button
                     type="button"
                     onClick={() => setIsSupportModalOpen(true)}
@@ -1395,12 +1408,12 @@ export default function SettingsPage() {
                       <LifeBuoy className="h-6 w-6" />
                     </div>
                     <div>
-                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Abrir Chamado</h4>
-                      <p className="text-sm text-zinc-500">Relate problemas ou tire dúvidas técnicas.</p>
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">{t("help.openTicketTitle")}</h4>
+                      <p className="text-sm text-zinc-500">{t("help.openTicketDescription")}</p>
                     </div>
                   </button>
 
-                  {/* Enviar Ideia / Sugestão */}
+                  {/* {t("feature.send")} / Sugestão */}
                   <button
                     type="button"
                     onClick={() => setIsFeatureModalOpen(true)}
@@ -1410,8 +1423,8 @@ export default function SettingsPage() {
                       <Lightbulb className="h-6 w-6" />
                     </div>
                     <div>
-                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">Enviar Ideia ou Sugestão</h4>
-                      <p className="text-sm text-zinc-500">Tem uma ideia incrível? Queremos ouvir você.</p>
+                      <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">{t("help.sendIdeaTitle")}</h4>
+                      <p className="text-sm text-zinc-500">{t("help.sendIdeaDescription")}</p>
                     </div>
                   </button>
                 </CardContent>
@@ -1420,20 +1433,20 @@ export default function SettingsPage() {
               <Card className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200">
-                    <HelpCircle className="h-5 w-5" /> Meus chamados
+                    <HelpCircle className="h-5 w-5" /> {t("help.myTicketsTitle")}
                   </CardTitle>
                   <CardDescription>
-                    Acompanhe apenas as solicitações abertas por você neste perfil.
+                    {t("help.myTicketsDescription")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {isLoadingMySupportTickets ? (
                     <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-zinc-500">
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" /> Carregando chamados...
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" /> {t("help.loadingTickets")}
                     </div>
                   ) : mySupportTickets.length === 0 ? (
                     <div className="app-panel-subtle flex h-20 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-zinc-500">
-                      Nenhum chamado aberto ainda.
+                      {t("help.noTickets")}
                     </div>
                   ) : (
                     mySupportTickets.map((ticket) => (
@@ -1441,7 +1454,7 @@ export default function SettingsPage() {
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-foreground">
-                              Protocolo {ticket.protocol || `#${ticket.id.slice(0, 8)}`}
+                              {t("help.protocol", { protocol: ticket.protocol || `#${ticket.id.slice(0, 8)}` })}
                             </p>
                             <p className="mt-0.5 text-[11px] font-medium text-primary">
                               {formatTicketType(ticket)}
@@ -1451,12 +1464,12 @@ export default function SettingsPage() {
                             {ticket.assignedTo || ticket.assignedToName ? (
                               <Badge variant="outline" className="gap-1 border-primary/25 bg-primary/10 text-primary">
                                 <UserCheck className="h-3 w-3" />
-                                Responsável: {ticket.assignedToName || "Equipe de suporte"}
+                                {t("help.assignedTo", { name: ticket.assignedToName || t("help.supportTeam") })}
                               </Badge>
                             ) : (
                               <Badge variant="outline" className="gap-1 border-border/70 bg-background/60 text-muted-foreground">
                                 <Clock className="h-3 w-3" />
-                                Aguardando responsável
+                                {t("help.waitingAssignee")}
                               </Badge>
                             )}
                             <Badge variant="outline" className={getSupportStatusBadgeClass(ticket.status)}>
@@ -1466,9 +1479,9 @@ export default function SettingsPage() {
                         </div>
                         <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{ticket.message}</p>
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                          <span>Aberto em {ticket.createdAt.toLocaleString("pt-BR")}</span>
-                          {ticket.firstResponseAt ? <span>Primeira resposta registrada</span> : null}
-                          {ticket.resolvedAt ? <span>Resolvido em {new Date(ticket.resolvedAt).toLocaleString("pt-BR")}</span> : null}
+                          <span>{t("help.openedAt", { date: date(ticket.createdAt) })}</span>
+                          {ticket.firstResponseAt ? <span>{t("help.firstResponse")}</span> : null}
+                          {ticket.resolvedAt ? <span>{t("help.resolvedAt", { date: date(ticket.resolvedAt) })}</span> : null}
                         </div>
                       </div>
                     ))
@@ -1476,7 +1489,12 @@ export default function SettingsPage() {
                   {!isLoadingMySupportTickets && mySupportTotal > mySupportPerPage && (
                     <div className="app-panel-subtle mt-3 flex items-center justify-between rounded-xl border border-color:var(--app-panel-border) px-3 py-2">
                       <p className="text-xs text-zinc-500">
-                        Página {mySupportPage} de {Math.max(1, Math.ceil(mySupportTotal / mySupportPerPage))} • {mySupportTotal} chamado(s)
+                        {t("common.pageStatus", {
+                          page: mySupportPage,
+                          total: Math.max(1, Math.ceil(mySupportTotal / mySupportPerPage)),
+                          count: mySupportTotal,
+                          item: t("help.ticketCount"),
+                        })}
                       </p>
                       <div className="flex items-center gap-2">
                         <Button
@@ -1487,7 +1505,7 @@ export default function SettingsPage() {
                           disabled={mySupportPage <= 1}
                           onClick={() => setMySupportPage((prev) => Math.max(1, prev - 1))}
                         >
-                          Anterior
+                          {t("common.previous")}
                         </Button>
                         <Button
                           type="button"
@@ -1499,7 +1517,7 @@ export default function SettingsPage() {
                             setMySupportPage((prev) => Math.min(Math.ceil(mySupportTotal / mySupportPerPage), prev + 1))
                           }
                         >
-                          Próxima
+                          {t("common.next")}
                         </Button>
                       </div>
                     </div>
@@ -1515,38 +1533,38 @@ export default function SettingsPage() {
           <DialogContent className="w-[calc(100vw-1rem)] max-w-[500px] rounded-3xl p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-primary">
-                <LifeBuoy className="h-6 w-6" /> Solicitar Suporte
+                <LifeBuoy className="h-6 w-6" /> {t("support.title")}
               </DialogTitle>
               <DialogDescription className="pt-2">
-                Descreva seu problema ou dúvida abaixo. Nossa equipe analisará e retornará o contato.
+                {t("support.description")}
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="support-reason">Motivo do Contato</Label>
+                <Label htmlFor="support-reason">{t("support.reason")}</Label>
                 <textarea
                   id="support-reason"
                   className="app-field-surface flex min-h-[120px] w-full rounded-xl border px-3 py-2 text-sm placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:placeholder:text-zinc-400"
-                  placeholder="Ex: Não consigo editar uma transação parcelada..."
+                  placeholder={t("support.placeholder")}
                   value={supportMessage}
                   onChange={(e) => setSupportMessage(e.target.value)}
                 />
               </div>
               <p className="text-xs text-zinc-500">
-                * Ao enviar, compartilharemos seu ID de usuário e email para facilitar o atendimento.
+                {t("support.privacyNote")}
               </p>
             </div>
 
             <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="ghost" onClick={() => setIsSupportModalOpen(false)} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
+              <Button variant="ghost" onClick={() => setIsSupportModalOpen(false)} className="w-full rounded-xl sm:w-auto">{t("common.cancel")}</Button>
               <Button
                 onClick={handleSendSupport}
                 disabled={isSendingSupport}
                 className="w-full rounded-xl bg-primary text-primary-foreground gap-2 hover:bg-primary/90 sm:w-auto"
               >
                 {isSendingSupport ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
-                Enviar Solicitação
+                {isSendingSupport ? t("support.sending") : t("support.send")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1557,13 +1575,13 @@ export default function SettingsPage() {
           <DialogContent className="w-[calc(100vw-1rem)] max-w-[425px] rounded-3xl p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="text-red-600 flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" /> Cancelar assinatura
+                <AlertTriangle className="h-5 w-5" /> {t("billing.cancel.title")}
               </DialogTitle>
               <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
-                Sua assinatura recorrente no Mercado Pago será cancelada.
+                {t("billing.cancel.description1")}
               </DialogDescription>
               <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
-                O plano voltará para Free e os recursos Premium/Pro serão removidos.
+                {t("billing.cancel.description2")}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 mt-4">
@@ -1572,7 +1590,7 @@ export default function SettingsPage() {
                 onClick={() => setShowCancelSubscriptionModal(false)}
                 className="rounded-xl h-10 w-full sm:w-auto hover:cursor-pointer transition-all duration-200"
               >
-                Manter assinatura
+                {t("billing.cancel.keep")}
               </Button>
               <Button
                 variant="destructive"
@@ -1583,7 +1601,7 @@ export default function SettingsPage() {
                 disabled={isCancelingSubscription}
                 className="rounded-xl h-10 w-full sm:w-auto bg-red-600 hover:bg-red-700 hover:cursor-pointer transition-all duration-200"
               >
-                {isCancelingSubscription ? "Cancelando..." : "Sim, cancelar"}
+                {isCancelingSubscription ? t("billing.cancel.cancelingShort") : t("billing.cancel.confirm")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1594,20 +1612,20 @@ export default function SettingsPage() {
           <DialogContent className="w-[calc(100vw-1rem)] max-w-[500px] rounded-3xl p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-                <Sparkles className="h-6 w-6" /> Enviar Sugestão
+                <Sparkles className="h-6 w-6" /> {t("feature.title")}
               </DialogTitle>
               <DialogDescription className="pt-2">
-                Compartilhe suas ideias para tornar o WevenFinance ainda melhor. Adoramos inovar com você!
+                {t("feature.description")}
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="feature-idea">Sua Ideia Brilhante</Label>
+                <Label htmlFor="feature-idea">{t("feature.label")}</Label>
                 <textarea
                   id="feature-idea"
                   className="app-field-surface flex min-h-[120px] w-full rounded-xl border px-3 py-2 text-sm placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50 dark:placeholder:text-zinc-400 dark:focus-visible:ring-amber-600"
-                  placeholder="Ex: Gostaria de ver um gráfico de gastos por categoria..."
+                  placeholder={t("feature.placeholder")}
                   value={featureMessage}
                   onChange={(e) => setFeatureMessage(e.target.value)}
                 />
@@ -1615,14 +1633,14 @@ export default function SettingsPage() {
             </div>
 
             <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="ghost" onClick={() => setIsFeatureModalOpen(false)} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
+              <Button variant="ghost" onClick={() => setIsFeatureModalOpen(false)} className="w-full rounded-xl sm:w-auto">{t("common.cancel")}</Button>
               <Button
                 onClick={handleSendFeature}
                 disabled={isSendingFeature}
                 className="w-full rounded-xl bg-amber-600 text-white gap-2 hover:bg-amber-700 sm:w-auto"
               >
                 {isSendingFeature ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
-                Enviar Ideia
+                {t("feature.send")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1633,29 +1651,29 @@ export default function SettingsPage() {
           <DialogContent className="w-[calc(100vw-1rem)] max-w-[425px] rounded-3xl p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="text-red-600 flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" /> Tem certeza absoluta?
+                <AlertTriangle className="h-5 w-5" /> {t("delete.title")}
               </DialogTitle>
               <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
-                Esta ação não pode ser desfeita!
+                {t("delete.irreversible")}
               </DialogDescription>
               <DialogDescription className="pt-3 font-medium text-zinc-700 dark:text-zinc-300">
-                Sua conta será encerrada imediatamente e este acesso não poderá mais ser utilizado.
+                {t("delete.description")}
               </DialogDescription>
               <DialogDescription className="pt-3 text-sm text-zinc-600 dark:text-zinc-400">
-                Seus dados ficam indisponíveis por até {ACCOUNT_DELETION_GRACE_DAYS} dias para corrigir exclusões acidentais. Após esse prazo, a exclusão permanente acontece automaticamente.
+                {t("delete.grace", { days: ACCOUNT_DELETION_GRACE_DAYS })}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 mt-4">
               <Button variant="outline"
                 onClick={() => setShowDeleteModal(false)}
                 className="rounded-xl h-10 w-full sm:w-auto hover:cursor-pointer transition-all duration-200">
-                Cancelar
+                {t("common.cancel")}
               </Button>
               <Button variant="destructive"
                 onClick={handleDeleteAccount}
                 disabled={isDeleting}
                 className="rounded-xl h-10 w-full sm:w-auto bg-red-600 hover:bg-red-700 hover:cursor-pointer transition-all duration-200">
-                {isDeleting ? "Excluindo..." : "Sim, excluir conta!"}
+                {isDeleting ? t("delete.deleting") : t("delete.confirm")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1678,7 +1696,7 @@ export default function SettingsPage() {
                 onClick={() => setFeedbackModal({ ...feedbackModal, isOpen: false })}
                 className="w-full rounded-xl hover:cursor-pointer transition-all duration-200"
               >
-                Entendido
+                {t("common.understood")}
               </Button>
             </DialogFooter>
           </DialogContent>

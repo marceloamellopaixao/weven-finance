@@ -39,6 +39,7 @@ import {
 import { ACCESS_RESOURCE_LABEL_BY_KEY, ACCESS_SCREENS, hasAccess, hasBillingExemption } from "@/lib/access-control/config";
 import { CREATOR_SUPREME_UID, canAccessAdminArea, isCreatorSupremeUid } from "@/lib/access-control/roles";
 import { computePermanentDeleteAt } from "@/lib/account-deletion/policy";
+import { getPlanTone } from "@/lib/plans/display";
 import { cn } from "@/lib/utils";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -289,6 +290,9 @@ export default function AdminPage() {
   const { plans } = usePlans();
   const tAdmin = useTranslations("admin");
   const { locale } = useI18n();
+  const freePlanTone = getPlanTone("free");
+  const premiumPlanTone = getPlanTone("premium");
+  const proPlanTone = getPlanTone("pro");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -3520,15 +3524,15 @@ export default function AdminPage() {
 
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
                 {/* FREE */}
-                <Card className="app-panel-soft rounded-3xl border-2 border-amber-700/30 shadow-xl shadow-amber-700/5 transition-shadow hover:shadow-amber-700/10">
-                  <CardHeader className="flex flex-col gap-3 rounded-t-3xl border-b border-amber-100/50 bg-amber-50 p-4 dark:bg-amber-900/10 dark:border-amber-900/20 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <Card className={`app-panel-soft rounded-3xl border-2 shadow-xl transition-shadow ${freePlanTone.border}`}>
+                  <CardHeader className={`flex flex-col gap-3 rounded-t-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${freePlanTone.header}`}>
                     <div className="flex flex-col justify-center">
-                      <CardTitle className="text-amber-700 font-bold text-lg">
+                      <CardTitle className={`${freePlanTone.headerTitle} font-bold text-lg`}>
                         {tAdmin("plans.planTier", { name: plans.free.name, tier: tAdmin("plans.tiers.bronze") })}
                       </CardTitle>
-                      <CardDescription className="text-amber-600/70">{tAdmin("plans.settings")}</CardDescription>
+                      <CardDescription className={freePlanTone.headerDescription}>{tAdmin("plans.settings")}</CardDescription>
                     </div>
-                    <Switch checked={editedPlans.free.active} onCheckedChange={(c) => handlePlanEdit("free", "active", c)} className="data-[state=checked]:bg-amber-600" />
+                    <Switch checked={editedPlans.free.active} onCheckedChange={(c) => handlePlanEdit("free", "active", c)} className={freePlanTone.switchChecked} />
                   </CardHeader>
 
                   <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.free.active ? "opacity-50 pointer-events-none" : ""}`}>
@@ -3556,15 +3560,15 @@ export default function AdminPage() {
                 </Card>
 
                 {/* PREMIUM */}
-                <Card className="app-panel-soft rounded-3xl border-2 border-slate-400/40 shadow-xl shadow-slate-400/5 transition-shadow hover:shadow-slate-400/10">
-                  <CardHeader className="flex flex-col gap-3 rounded-t-3xl border-b border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/20 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <Card className={`app-panel-soft rounded-3xl border-2 shadow-xl transition-shadow ${premiumPlanTone.border}`}>
+                  <CardHeader className={`flex flex-col gap-3 rounded-t-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${premiumPlanTone.header}`}>
                     <div className="flex flex-col justify-center">
-                      <CardTitle className="text-slate-600 dark:text-slate-400 font-bold text-lg">
+                      <CardTitle className={`${premiumPlanTone.headerTitle} font-bold text-lg`}>
                         {tAdmin("plans.planTier", { name: plans.premium.name, tier: tAdmin("plans.tiers.silver") })}
                       </CardTitle>
-                      <CardDescription className="text-slate-500/70">{tAdmin("plans.settings")}</CardDescription>
+                      <CardDescription className={premiumPlanTone.headerDescription}>{tAdmin("plans.settings")}</CardDescription>
                     </div>
-                    <Switch checked={editedPlans.premium.active} onCheckedChange={(c) => handlePlanEdit("premium", "active", c)} className="data-[state=checked]:bg-slate-600" />
+                    <Switch checked={editedPlans.premium.active} onCheckedChange={(c) => handlePlanEdit("premium", "active", c)} className={premiumPlanTone.switchChecked} />
                   </CardHeader>
 
                   <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.premium.active ? "opacity-50 pointer-events-none" : ""}`}>
@@ -3601,15 +3605,15 @@ export default function AdminPage() {
                 </Card>
 
                 {/* PRO */}
-                <Card className="app-panel-soft rounded-3xl border-2 border-yellow-500/40 shadow-xl shadow-yellow-500/10 transition-shadow hover:shadow-yellow-500/20">
-                  <CardHeader className="flex flex-col gap-3 rounded-t-3xl border-b border-yellow-200 bg-yellow-100 p-4 dark:border-yellow-900/30 dark:bg-yellow-900/20 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <Card className={`app-panel-soft rounded-3xl border-2 shadow-xl transition-shadow ${proPlanTone.border}`}>
+                  <CardHeader className={`flex flex-col gap-3 rounded-t-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${proPlanTone.header}`}>
                     <div className="flex flex-col justify-center">
-                      <CardTitle className="text-yellow-600 font-bold text-lg">
+                      <CardTitle className={`${proPlanTone.headerTitle} font-bold text-lg`}>
                         {tAdmin("plans.planTier", { name: editedPlans.pro.name, tier: tAdmin("plans.tiers.gold") })}
                       </CardTitle>
-                      <CardDescription className="text-yellow-600/70">{tAdmin("plans.settings")}</CardDescription>
+                      <CardDescription className={proPlanTone.headerDescription}>{tAdmin("plans.settings")}</CardDescription>
                     </div>
-                    <Switch checked={editedPlans.pro.active} onCheckedChange={(c) => handlePlanEdit("pro", "active", c)} className="data-[state=checked]:bg-yellow-500" />
+                    <Switch checked={editedPlans.pro.active} onCheckedChange={(c) => handlePlanEdit("pro", "active", c)} className={proPlanTone.switchChecked} />
                   </CardHeader>
 
                   <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.pro.active ? "opacity-50 pointer-events-none" : ""}`}>

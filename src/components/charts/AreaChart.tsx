@@ -13,19 +13,13 @@ import {
 
 import type { Payload } from "recharts/types/component/DefaultTooltipContent";
 import { useUiText } from "@/i18n/T";
+import { useFormatters } from "@/i18n/useFormatters";
+import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 
 interface ChartData {
   name: string;
   amount: number;
 }
-
-// Formatador de Moeda
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-};
 
 // Tipos do seu gráfico: value = number (amount), name = string (dataKey/label)
 type TooltipPayload = Payload<number, string>;
@@ -38,6 +32,8 @@ type CustomTooltipProps = {
 
 function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   const tt = useUiText();
+  const currency = usePreferredCurrency();
+  const { money } = useFormatters(currency);
   if (!active || !payload || payload.length === 0) return null;
 
   const raw = payload[0]?.value;
@@ -58,7 +54,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
         <div className="flex flex-col">
           <span className="text-[10px] uppercase text-zinc-400 font-bold tracking-wider">{tt("Saldo Acumulado")}</span>
           <span className={`text-xl font-bold tracking-tight ${colorClass}`}>
-            {formatCurrency(value)}
+            {money(value)}
           </span>
         </div>
       </div>
@@ -68,6 +64,8 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 
 const AreaChartComponent = ({ data }: { data: ChartData[] }) => {
   const tt = useUiText();
+  const currency = usePreferredCurrency();
+  const { number } = useFormatters(currency);
 
   if (!data || data.length === 0) {
     return (
@@ -110,10 +108,10 @@ const AreaChartComponent = ({ data }: { data: ChartData[] }) => {
             tickLine={false}
             tick={{ fill: "#a1a1aa", fontSize: 11, fontWeight: 500 }}
             tickFormatter={(value) =>
-              new Intl.NumberFormat("pt-BR", {
+              number(Number(value), {
                 notation: "compact",
                 compactDisplay: "short",
-              }).format(value)
+              })
             }
           />
 

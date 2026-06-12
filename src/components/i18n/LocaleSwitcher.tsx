@@ -5,9 +5,12 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useTranslations } from "@/i18n/T";
 import { LOCALE_LABELS, Locale } from "@/i18n/config";
+import { getDefaultCurrencyForLocale } from "@/lib/money/formatMoney";
+import { getUserSettings, updateUserRegionalPreferences } from "@/services/transactionService";
 
 type LocaleSwitcherProps = {
   className?: string;
@@ -15,11 +18,26 @@ type LocaleSwitcherProps = {
 
 export function LocaleSwitcher({ className }: LocaleSwitcherProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const { locale, setLocale } = useI18n();
   const tLocale = useTranslations("locale");
 
-  const handleLocaleChange = (option: Locale) => {
+  const handleLocaleChange = async (option: Locale) => {
     setLocale(option);
+    if (user) {
+      try {
+        const settings = await getUserSettings(user.uid).catch(() => null);
+        await updateUserRegionalPreferences(user.uid, {
+          locale: option,
+          currency: getDefaultCurrencyForLocale(option),
+          country: settings?.country,
+          region: settings?.region,
+          regionConfigured: settings?.regionConfigured,
+        });
+      } catch {
+        // A troca visual de idioma já foi aplicada. A persistência regional pode ser refeita em Configurações.
+      }
+    }
     router.refresh();
   };
 

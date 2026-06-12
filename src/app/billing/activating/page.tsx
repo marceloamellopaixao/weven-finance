@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, CheckCircle2, CreditCard, Loader2 } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useTranslations } from "@/i18n/T";
 import { Button } from "@/components/ui/button";
 import { confirmPreapproval } from "@/services/billingService";
 
@@ -18,11 +19,12 @@ function sleep(ms: number) {
 }
 
 export default function BillingActivatingPage() {
+  const t = useTranslations("billing");
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, userProfile, loading, refreshProfile, canPreviewRestrictedPages } = useAuth();
   const [state, setState] = useState<ActivationState>("preparing");
-  const [message, setMessage] = useState("Estamos validando sua assinatura com o Mercado Pago.");
+  const [message, setMessage] = useState(t("activating.initialMessage"));
   const startedKeyRef = useRef("");
 
   const expectedPlanFromQuery = useMemo(() => {
@@ -51,7 +53,7 @@ export default function BillingActivatingPage() {
 
     const run = async () => {
       setState("confirming");
-      setMessage("Confirmando sua assinatura. Isso pode levar alguns segundos.");
+      setMessage(t("activating.confirmingMessage"));
 
       try {
         const token = await user.getIdToken();
@@ -66,7 +68,7 @@ export default function BillingActivatingPage() {
 
             await refreshProfile();
             setState("success");
-            setMessage(`Plano ${result.targetPlan} ativado com sucesso. Redirecionando para o painel...`);
+            setMessage(t("activating.successMessage", { plan: result.targetPlan }));
             window.setTimeout(() => {
               window.location.assign("/dashboard");
             }, 1200);
@@ -78,17 +80,17 @@ export default function BillingActivatingPage() {
 
         console.error("Falha ao ativar assinatura:", lastError);
         setState("error");
-        setMessage("Ainda não conseguimos confirmar seu pagamento automaticamente. Tente verificar novamente.");
+        setMessage(t("activating.autoConfirmErrorMessage"));
       } catch (error) {
         console.error("Falha ao preparar confirmação da assinatura:", error);
         setState("error");
-        setMessage("Não foi possível validar sua assinatura agora.");
+        setMessage(t("activating.validationErrorMessage"));
       }
     };
 
     void run();
 
-  }, [canPreviewRestrictedPages, checkoutAttemptId, expectedPlan, loading, refreshProfile, router, user]);
+  }, [canPreviewRestrictedPages, checkoutAttemptId, expectedPlan, loading, refreshProfile, router, t, user]);
 
   const resolvedState: ActivationState =
     canPreviewRestrictedPages
@@ -101,11 +103,11 @@ export default function BillingActivatingPage() {
 
   const resolvedMessage =
     canPreviewRestrictedPages
-      ? "Pré-visualização administrativa. Nenhuma confirmação real será executada nesta visualização."
+      ? t("activating.previewMessage")
       : !loading && !user
-      ? "Faça login para concluir a ativação do seu plano."
+      ? t("activating.loginRequiredMessage")
       : !loading && !expectedPlan
-        ? "Não foi possível identificar qual plano deve ser ativado."
+        ? t("activating.missingPlanMessage")
         : message;
 
   const isLoadingState = !canPreviewRestrictedPages && (resolvedState === "preparing" || resolvedState === "confirming");
@@ -131,14 +133,14 @@ export default function BillingActivatingPage() {
 
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
             {canPreviewRestrictedPages
-              ? "Pré-visualização da ativação"
+              ? t("activating.previewTitle")
               : resolvedState === "success"
-              ? "Plano ativado"
+              ? t("activating.successTitle")
               : resolvedState === "error"
-                ? "Ainda estamos validando"
+                ? t("activating.validatingTitle")
                 : resolvedState === "login_required"
-                  ? "Entre para continuar"
-                  : "Ativando seu plano"}
+                  ? t("activating.loginRequiredTitle")
+                  : t("activating.activatingTitle")}
           </h1>
 
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{resolvedMessage}</p>
@@ -146,7 +148,7 @@ export default function BillingActivatingPage() {
           {isLoadingState && (
             <div className="mt-6 flex items-center justify-center gap-2 text-sm font-medium text-primary">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Processando assinatura
+              {t("activating.processing")}
             </div>
           )}
 
@@ -156,11 +158,11 @@ export default function BillingActivatingPage() {
                 onClick={() => window.location.reload()}
                 className="h-11 w-full rounded-xl bg-primary font-medium text-primary-foreground hover:bg-primary/90"
               >
-                Verificar novamente
+                {t("activating.checkAgain")}
               </Button>
               <Link href="/settings?tab=billing" className="block">
                 <Button variant="outline" className="w-full h-11 rounded-xl">
-                  Ir para assinatura
+                  {t("activating.goToSubscription")}
                 </Button>
               </Link>
             </div>
@@ -170,12 +172,12 @@ export default function BillingActivatingPage() {
             <div className="mt-6 space-y-3">
               <Link href="/login" className="block">
                 <Button className="h-11 w-full rounded-xl bg-primary font-medium text-primary-foreground hover:bg-primary/90">
-                  Entrar na conta
+                  {t("activating.login")}
                 </Button>
               </Link>
               <Link href="/" className="block">
                 <Button variant="outline" className="w-full h-11 rounded-xl">
-                  Voltar ao início
+                  {t("activating.backHome")}
                 </Button>
               </Link>
             </div>

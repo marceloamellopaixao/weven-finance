@@ -2,56 +2,62 @@ import type { Metadata } from "next";
 import { Database, EyeOff, Lock, ShieldCheck } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { translate } from "@/i18n/getDictionary";
+import { getRequestLocale } from "@/i18n/server";
 
-export const metadata: Metadata = {
-  title: "Seguranca",
-  description: "Como o WevenFinance trata acesso, privacidade e protecao dos dados da plataforma.",
-  alternates: {
-    canonical: "/security",
-  },
-  openGraph: {
-    title: "Seguranca | WevenFinance",
-    description: "Como o WevenFinance trata acesso, privacidade e protecao dos dados da plataforma.",
-    url: "/security",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const description = translate(locale, "security.metadata.description");
+
+  return {
+    title: translate(locale, "security.metadata.title"),
+    description,
+    alternates: {
+      canonical: "/security",
+    },
+    openGraph: {
+      title: translate(locale, "security.metadata.openGraphTitle"),
+      description,
+      url: "/security",
+    },
+  };
+}
 
 const ITEMS = [
   {
     icon: ShieldCheck,
-    title: "Proteção por camadas",
-    description:
-      "O WevenFinance aplica autenticação, regras de acesso, proteção de rotas e controles internos para reduzir exposição indevida dos seus dados.",
+    titleKey: "security.items.layered.title",
+    descriptionKey: "security.items.layered.description",
   },
   {
     icon: Lock,
-    title: "Acesso vinculado à conta",
-    description:
-      "Seu acesso é controlado pela sua conta autenticada. Recursos sensíveis, como cobrança e suporte administrativo, passam por validações adicionais no backend.",
+    titleKey: "security.items.accountAccess.title",
+    descriptionKey: "security.items.accountAccess.description",
   },
   {
     icon: EyeOff,
-    title: "Privacidade no aplicativo",
-    description:
-      "O app oferece modo discreto, separação de dados por usuário e controles de exibição para evitar exposição visual em ambientes públicos.",
+    titleKey: "security.items.privacy.title",
+    descriptionKey: "security.items.privacy.description",
   },
   {
     icon: Database,
-    title: "Armazenamento e operação",
-    description:
-      "Os dados operacionais são armazenados na nuvem e processados pela WevenFinance para funcionalidades como dashboard, cartões, metas e assinatura.",
+    titleKey: "security.items.storage.title",
+    descriptionKey: "security.items.storage.description",
   },
 ];
 
-export default function SecurityPage() {
+export default async function SecurityPage() {
+  const locale = await getRequestLocale();
+  const t = (key: string) => translate(locale, key);
+
   return (
     <div className="bg-transparent px-4 py-16 sm:py-20 lg:py-24">
       <div className="mx-auto max-w-5xl space-y-8">
         <div className="space-y-3 text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">Segurança</p>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">Como protegemos sua conta e seus dados</h1>
+          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">{t("security.eyebrow")}</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">{t("security.title")}</h1>
           <p className="mx-auto max-w-3xl text-base leading-7 text-muted-foreground">
-            Esta página resume, em linguagem direta, como o WevenFinance trata acesso, privacidade e operação da plataforma.
+            {t("security.description")}
           </p>
         </div>
 
@@ -59,18 +65,18 @@ export default function SecurityPage() {
           {ITEMS.map((item) => {
             const Icon = item.icon;
             return (
-              <Card key={item.title} className="app-panel-soft rounded-3xl border-color:var(--app-panel-border) shadow-sm transition-all duration-300 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10">
+              <Card key={item.titleKey} className="app-panel-soft rounded-3xl border-color:var(--app-panel-border) shadow-sm transition-all duration-300 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-3 text-foreground">
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent text-primary">
                       <Icon className="h-5 w-5" />
                     </span>
-                    {item.title}
+                    {t(item.titleKey)}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <CardDescription className="text-sm leading-6 text-muted-foreground">
-                    {item.description}
+                    {t(item.descriptionKey)}
                   </CardDescription>
                 </CardContent>
               </Card>
@@ -80,9 +86,9 @@ export default function SecurityPage() {
 
         <Card className="app-panel-soft rounded-3xl border-color:var(--app-panel-border) shadow-sm">
           <CardHeader>
-            <CardTitle className="text-foreground">Importante</CardTitle>
+            <CardTitle className="text-foreground">{t("security.important.title")}</CardTitle>
             <CardDescription className="text-muted-foreground">
-              Segurança é um compromisso contínuo. O produto ainda está evoluindo e algumas camadas seguem sendo aprimoradas conforme a plataforma cresce.
+              {t("security.important.description")}
             </CardDescription>
           </CardHeader>
         </Card>

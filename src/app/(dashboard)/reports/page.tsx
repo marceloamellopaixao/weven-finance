@@ -25,14 +25,16 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnboarding } from "@/hooks/useOnboarding";
+import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useI18n } from "@/i18n/I18nProvider";
-import { useUiText } from "@/i18n/T";
+import { useTranslations } from "@/i18n/T";
 import { translateDefaultCategoryValue } from "@/lib/categories/defaultCategories";
 import { buildMonthlyReport, formatPaymentMethodLabel, formatReportCurrency } from "@/lib/reports/monthlyReport";
 import { exportMonthlyReportToExcel, exportMonthlyReportToPdf } from "@/services/reportExportService";
+import type { Workspace } from "@/types/workspace";
 
 const REPORT_COLORS = {
   primary: "#f8b600",
@@ -52,6 +54,40 @@ function getMonthLabel(month: string, locale = "pt-BR") {
 
 function getTransactionTitle(transaction?: { title?: string; description?: string } | null) {
   return transaction?.title || transaction?.description || "-";
+}
+
+function getPaymentMethodTranslationKey(label: string) {
+  const normalized = label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  const keys: Record<string, string> = {
+    pix: "paymentMethods.Pix",
+    boleto: "paymentMethods.Boleto",
+    dinheiro: "paymentMethods.Dinheiro",
+    transferencia: "paymentMethods.Transferencia",
+    "cartao de debito": "paymentMethods.CartaoDebito",
+    "cartao de credito": "paymentMethods.CartaoCredito",
+    outro: "paymentMethods.Outro",
+  };
+
+  return keys[normalized] || "";
+}
+
+const DEFAULT_WORKSPACE_NAMES = new Set([
+  "Minha vida financeira",
+  "Meu trabalho",
+  "Igreja / Ministério",
+  "Família / Casa",
+  "Meu negócio",
+  "Pessoal",
+  "Profissional / Autônomo",
+  "Pequeno negócio",
+]);
+
+function isDefaultWorkspaceName(name?: string) {
+  return Boolean(name && DEFAULT_WORKSPACE_NAMES.has(name));
 }
 
 function StatCard({
@@ -87,7 +123,8 @@ function StatCard({
 export default function ReportsPage() {
   const reportRef = useRef<HTMLDivElement>(null);
   const { locale } = useI18n();
-  const tt = useUiText();
+  const currency = usePreferredCurrency();
+  const t = useTranslations("reports");
   const { userProfile, privacyMode } = useAuth();
   const { transactions, loading: transactionsLoading } = useTransactions();
   const { workspaces, defaultWorkspace, loading: workspacesLoading } = useWorkspaces();
@@ -129,19 +166,27 @@ export default function ReportsPage() {
 
   const report = useMemo(() => buildMonthlyReport(transactions, selectedMonth), [selectedMonth, transactions]);
   const loading = transactionsLoading || workspacesLoading;
-  const money = (value: number) => formatReportCurrency(value, locale);
+  const money = (value: number) => formatReportCurrency(value, locale, currency);
   const translatedCategoryExpenses = report.categoryExpenses.map((item) => ({ ...item, name: translateDefaultCategoryValue(item.name, locale) }));
   const translatedCategoryIncomes = report.categoryIncomes.map((item) => ({ ...item, name: translateDefaultCategoryValue(item.name, locale) }));
-  const translatedPaymentMethods = report.paymentMethods.map((item) => ({ ...item, name: tt(item.name) }));
+  const translatedPaymentMethods = report.paymentMethods.map((item) => {
+    const key = getPaymentMethodTranslationKey(item.name);
+    return { ...item, name: key ? t(key) : item.name };
+  });
+  const getWorkspaceDisplayName = (workspace?: Workspace | null) => {
+    if (!workspace) return t("filters.personal");
+    if (isDefaultWorkspaceName(workspace.name)) return t(`workspaces.${workspace.type}`);
+    return workspace.name;
+  };
 
   const incomeExpenseData = [
-    { name: tt("Receitas"), value: report.totals.income },
-    { name: tt("Despesas"), value: report.totals.expense },
+    { name: t("stats.income"), value: report.totals.income },
+    { name: t("stats.expenses"), value: report.totals.expense },
   ];
 
   const privacyConfirm = () => {
     if (!privacyMode) return true;
-    return window.confirm(tt("O modo privacidade está ativo. A exportação vai incluir valores reais no arquivo. Deseja continuar?"));
+    return window.confirm(t("privacy.exportConfirm"));
   };
 
   const handlePdf = async () => {
@@ -151,13 +196,14 @@ export default function ReportsPage() {
     try {
       await exportMonthlyReportToPdf(report, {
         element: reportRef.current,
-        workspaceName: selectedWorkspace?.name,
         userName: userProfile?.displayName,
+        workspaceName: getWorkspaceDisplayName(selectedWorkspace),
         locale,
-        t: tt,
+        currency,
+        t,
       });
     } catch (error) {
-      setExportError(error instanceof Error ? error.message : tt("Não foi possível exportar PDF"));
+      setExportError(error instanceof Error ? error.message : t("errors.pdfExport"));
     } finally {
       setExporting(null);
     }
@@ -169,13 +215,14 @@ export default function ReportsPage() {
     setExportError(null);
     try {
       await exportMonthlyReportToExcel(report, {
-        workspaceName: selectedWorkspace?.name,
+        workspaceName: getWorkspaceDisplayName(selectedWorkspace),
         userName: userProfile?.displayName,
         locale,
-        t: tt,
+        currency,
+        t,
       });
     } catch (error) {
-      setExportError(error instanceof Error ? error.message : tt("Não foi possível exportar Excel"));
+      setExportError(error instanceof Error ? error.message : t("errors.excelExport"));
     } finally {
       setExporting(null);
     }
@@ -193,18 +240,18 @@ export default function ReportsPage() {
             </div>
             <div>
               <p className="text-sm font-semibold text-primary">
-                {tt("Relatórios")}
+                {t("header.eyebrow")}
               </p>
-              <h1 id="tour-reports-header" className="text-3xl font-bold tracking-tight sm:text-4xl">{tt("Relatório financeiro mensal")}</h1>
+              <h1 id="tour-reports-header" className="text-3xl font-bold tracking-tight sm:text-4xl">{t("header.title")}</h1>
             </div>
           </div>
           <p className="max-w-2xl text-muted-foreground">
-            {tt("Resumo do mês, gráficos e exportação profissional em PDF ou Excel.")}
+            {t("header.description")}
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[520px]">
           <div className="space-y-2">
-            <Label htmlFor="report-month">{tt("Mês")}</Label>
+            <Label htmlFor="report-month">{t("filters.month")}</Label>
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger id="report-month" className="h-11 rounded-xl">
                 <SelectValue />
@@ -219,18 +266,18 @@ export default function ReportsPage() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="report-workspace">{tt("Tipo da conta")}</Label>
+            <Label htmlFor="report-workspace">{t("filters.accountType")}</Label>
             <Select value={selectedWorkspace?.id || "default"} onValueChange={setSelectedWorkspaceId}>
               <SelectTrigger id="report-workspace" className="h-11 rounded-xl">
-                <SelectValue placeholder={tt("Pessoal")} />
+                <SelectValue placeholder={t("filters.personal")} />
               </SelectTrigger>
               <SelectContent>
                 {workspaceOptions.length === 0 ? (
-                  <SelectItem value="default">{defaultWorkspace?.name || tt("Pessoal")}</SelectItem>
+                  <SelectItem value="default">{getWorkspaceDisplayName(defaultWorkspace)}</SelectItem>
                 ) : null}
                 {workspaceOptions.map((workspace) => (
                   <SelectItem key={workspace.id} value={workspace.id}>
-                    {workspace.name}
+                    {getWorkspaceDisplayName(workspace)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -241,7 +288,7 @@ export default function ReportsPage() {
 
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
-          {selectedWorkspace?.name || "WevenFinance"} - {getMonthLabel(selectedMonth, locale)}
+          {getWorkspaceDisplayName(selectedWorkspace) || "WevenFinance"} - {getMonthLabel(selectedMonth, locale)}
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button id="tour-reports-export" variant="outline" className="h-11 rounded-xl" onClick={handleExcel} disabled={loading || exporting !== null}>
@@ -263,21 +310,21 @@ export default function ReportsPage() {
 
       <section ref={reportRef} className="space-y-6 bg-background p-1">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard title={tt("Receitas")} value={money(report.totals.income)} tone="income" />
-          <StatCard title={tt("Despesas")} value={money(report.totals.expense)} tone="expense" />
-          <StatCard title={tt("Saldo do mês")} value={money(report.totals.balance)} tone="neutral" />
-          <StatCard title={tt("Lançamentos")} value={String(report.highlights.transactionCount)} tone="neutral" />
-          <StatCard title={tt("Despesas pagas")} value={money(report.totals.paidExpense)} tone="expense" />
-          <StatCard title={tt("Despesas pendentes")} value={money(report.totals.pendingExpense)} tone="expense" />
-          <StatCard title={tt("Receitas recebidas")} value={money(report.totals.paidIncome)} tone="income" />
-          <StatCard title={tt("Receitas pendentes")} value={money(report.totals.pendingIncome)} tone="income" />
+          <StatCard title={t("stats.income")} value={money(report.totals.income)} tone="income" />
+          <StatCard title={t("stats.expenses")} value={money(report.totals.expense)} tone="expense" />
+          <StatCard title={t("stats.monthBalance")} value={money(report.totals.balance)} tone="neutral" />
+          <StatCard title={t("stats.transactions")} value={String(report.highlights.transactionCount)} tone="neutral" />
+          <StatCard title={t("stats.paidExpenses")} value={money(report.totals.paidExpense)} tone="expense" />
+          <StatCard title={t("stats.pendingExpenses")} value={money(report.totals.pendingExpense)} tone="expense" />
+          <StatCard title={t("stats.receivedIncome")} value={money(report.totals.paidIncome)} tone="income" />
+          <StatCard title={t("stats.pendingIncome")} value={money(report.totals.pendingIncome)} tone="income" />
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
           <Card id="tour-reports-summary-chart" className="app-panel-subtle rounded-xl lg:col-span-2">
             <CardHeader>
-              <CardTitle>{tt("Receitas x despesas")}</CardTitle>
-              <CardDescription>{tt("Comparativo do mês selecionado")}</CardDescription>
+              <CardTitle>{t("charts.incomeVsExpenses")}</CardTitle>
+              <CardDescription>{t("charts.selectedMonthComparison")}</CardDescription>
             </CardHeader>
             <CardContent className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -298,32 +345,32 @@ export default function ReportsPage() {
 
           <Card className="app-panel-subtle rounded-xl">
             <CardHeader>
-              <CardTitle>{tt("Destaques")}</CardTitle>
-              <CardDescription>{tt("Leituras rápidas do período")}</CardDescription>
+              <CardTitle>{t("highlights.title")}</CardTitle>
+              <CardDescription>{t("highlights.description")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               <div>
-                <p className="font-semibold">{tt("Maior categoria de despesa")}</p>
+                <p className="font-semibold">{t("highlights.topExpenseCategory")}</p>
                 <p className="text-muted-foreground">
                   {report.highlights.topExpenseCategory
                     ? `${translateDefaultCategoryValue(report.highlights.topExpenseCategory.name, locale)} - ${money(report.highlights.topExpenseCategory.value)}`
-                    : tt("Sem despesas no mês")}
+                    : t("highlights.noExpenses")}
                 </p>
               </div>
               <div>
-                <p className="font-semibold">{tt("Maior transação")}</p>
+                <p className="font-semibold">{t("highlights.largestTransaction")}</p>
                 <p className="text-muted-foreground">
                   {report.highlights.largestTransaction
                     ? `${getTransactionTitle(report.highlights.largestTransaction)} - ${money(report.highlights.largestTransaction.amount)}`
-                    : tt("Nenhum lançamento encontrado")}
+                    : t("highlights.noTransactions")}
                 </p>
               </div>
               <div>
-                <p className="font-semibold">{tt("Variação vs mês anterior")}</p>
+                <p className="font-semibold">{t("highlights.previousMonthVariation")}</p>
                 <p className="text-muted-foreground">
                   {report.comparison
-                    ? `${tt("Saldo")} ${money(report.comparison.balanceChange)}`
-                    : tt("Sem dados suficientes para comparar")}
+                    ? `${t("stats.balance")} ${money(report.comparison.balanceChange)}`
+                    : t("highlights.insufficientComparisonData")}
                 </p>
               </div>
             </CardContent>
@@ -334,7 +381,7 @@ export default function ReportsPage() {
           <Card className="app-panel-soft rounded-xl">
             <CardContent className="flex min-h-[220px] items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              {tt("Carregando relatório...")}
+              {t("states.loading")}
             </CardContent>
           </Card>
         ) : report.transactions.length === 0 ? (
@@ -342,8 +389,8 @@ export default function ReportsPage() {
             <CardContent className="flex min-h-[220px] flex-col items-center justify-center gap-3 text-center">
               <Download className="h-8 w-8 text-primary" />
               <div>
-                <p className="font-semibold">{tt("Nenhum lançamento encontrado neste mês")}</p>
-                <p className="text-sm text-muted-foreground">{tt("Escolha outro mês ou registre novas receitas e despesas.")}</p>
+                <p className="font-semibold">{t("states.emptyTitle")}</p>
+                <p className="text-sm text-muted-foreground">{t("states.emptyDescription")}</p>
               </div>
             </CardContent>
           </Card>
@@ -352,7 +399,7 @@ export default function ReportsPage() {
             <div className="grid gap-4 lg:grid-cols-2">
               <Card id="tour-reports-categories" className="app-panel-subtle rounded-xl">
                 <CardHeader>
-                  <CardTitle>{tt("Despesas por categoria")}</CardTitle>
+                  <CardTitle>{t("charts.expensesByCategory")}</CardTitle>
                 </CardHeader>
                 <CardContent className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
@@ -371,7 +418,7 @@ export default function ReportsPage() {
 
               <Card className="app-panel-subtle rounded-xl">
                 <CardHeader>
-                  <CardTitle>{tt("Receitas por categoria")}</CardTitle>
+                  <CardTitle>{t("charts.incomeByCategory")}</CardTitle>
                 </CardHeader>
                 <CardContent className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
@@ -392,7 +439,7 @@ export default function ReportsPage() {
             <div className="grid gap-4 lg:grid-cols-2">
               <Card className="app-panel-subtle rounded-xl">
                 <CardHeader>
-                  <CardTitle>{tt("Evolução diária")}</CardTitle>
+                  <CardTitle>{t("charts.dailyEvolution")}</CardTitle>
                 </CardHeader>
                 <CardContent className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
@@ -401,8 +448,8 @@ export default function ReportsPage() {
                       <XAxis dataKey="date" />
                       <YAxis />
                       <RechartsTooltip formatter={(value) => money(Number(value))} />
-                      <Area type="monotone" dataKey="income" stackId="1" stroke={REPORT_COLORS.income} fill={REPORT_COLORS.income} fillOpacity={0.25} name={tt("Receitas")} />
-                      <Area type="monotone" dataKey="expense" stackId="2" stroke={REPORT_COLORS.expense} fill={REPORT_COLORS.expense} fillOpacity={0.2} name={tt("Despesas")} />
+                      <Area type="monotone" dataKey="income" stackId="1" stroke={REPORT_COLORS.income} fill={REPORT_COLORS.income} fillOpacity={0.25} name={t("stats.income")} />
+                      <Area type="monotone" dataKey="expense" stackId="2" stroke={REPORT_COLORS.expense} fill={REPORT_COLORS.expense} fillOpacity={0.2} name={t("stats.expenses")} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -410,7 +457,7 @@ export default function ReportsPage() {
 
               <Card className="app-panel-subtle rounded-xl">
                 <CardHeader>
-                  <CardTitle>{tt("Métodos de pagamento")}</CardTitle>
+                  <CardTitle>{t("charts.paymentMethods")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {translatedPaymentMethods.map((method, index) => (
@@ -428,7 +475,7 @@ export default function ReportsPage() {
                           }}
                         />
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">{tt("{percentage}% do volume do mês", { percentage: method.percentage })}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{t("charts.monthVolumePercentage", { percentage: method.percentage })}</p>
                     </div>
                   ))}
                 </CardContent>
@@ -437,33 +484,33 @@ export default function ReportsPage() {
 
             <Card className="app-panel-subtle rounded-xl">
               <CardHeader>
-                <CardTitle>{tt("Tabela de transações")}</CardTitle>
-                <CardDescription>{tt("Dados usados no relatório exportável")}</CardDescription>
+                <CardTitle>{t("table.title")}</CardTitle>
+                <CardDescription>{t("table.description")}</CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto">
                 <table className="w-full min-w-[760px] text-sm">
                   <thead className="border-b text-left text-xs uppercase text-muted-foreground">
                     <tr>
-                      <th className="py-3 pr-4">{tt("Data")}</th>
-                      <th className="py-3 pr-4">{tt("Tipo")}</th>
-                      <th className="py-3 pr-4">{tt("Categoria")}</th>
-                      <th className="py-3 pr-4">{tt("Descrição")}</th>
-                      <th className="py-3 pr-4">{tt("Método")}</th>
-                      <th className="py-3 pr-4">{tt("Status")}</th>
-                      <th className="py-3 text-right">{tt("Valor")}</th>
+                      <th className="py-3 pr-4">{t("table.date")}</th>
+                      <th className="py-3 pr-4">{t("table.type")}</th>
+                      <th className="py-3 pr-4">{t("table.category")}</th>
+                      <th className="py-3 pr-4">{t("table.descriptionColumn")}</th>
+                      <th className="py-3 pr-4">{t("table.method")}</th>
+                      <th className="py-3 pr-4">{t("table.status")}</th>
+                      <th className="py-3 text-right">{t("table.amount")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {report.transactions.map((transaction) => (
                       <tr key={transaction.id || `${transaction.dueDate}-${transaction.description}`} className="border-b last:border-0 hover:bg-muted/80">
                         <td className="py-3 pr-4">{transaction.dueDate}</td>
-                        <td className="py-3 pr-4">{transaction.type === "income" ? tt("Receita") : tt("Despesa")}</td>
+                        <td className="py-3 pr-4">{transaction.type === "income" ? t("table.income") : t("table.expense")}</td>
                         <td className="py-3 pr-4">
                           <CategoryLabel value={transaction.category} className="max-w-52 gap-1.5" iconClassName="h-3 w-3" />
                         </td>
                         <td className="py-3 pr-4">{getTransactionTitle(transaction)}</td>
-                        <td className="py-3 pr-4">{tt(formatPaymentMethodLabel(transaction.paymentMethod))}</td>
-                        <td className="py-3 pr-4">{transaction.status === "paid" ? tt("Pago") : tt("Pendente")}</td>
+                        <td className="py-3 pr-4">{(getPaymentMethodTranslationKey(formatPaymentMethodLabel(transaction.paymentMethod)) ? t(getPaymentMethodTranslationKey(formatPaymentMethodLabel(transaction.paymentMethod))) : formatPaymentMethodLabel(transaction.paymentMethod))}</td>
+                        <td className="py-3 pr-4">{transaction.status === "paid" ? t("table.paid") : t("table.pending")}</td>
                         <td
                           className="financial-value py-3 text-right font-semibold"
                           style={{ color: transaction.type === "income" ? REPORT_COLORS.income : REPORT_COLORS.expense }}

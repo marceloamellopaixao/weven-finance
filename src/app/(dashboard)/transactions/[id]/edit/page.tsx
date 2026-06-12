@@ -14,8 +14,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
+import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useCategories } from "@/hooks/useCategories";
+import { useFormatters } from "@/i18n/useFormatters";
+import { useTranslations } from "@/i18n/T";
 import { PaymentMethod, Transaction } from "@/types/transaction";
 import { subscribeToPaymentCards } from "@/services/paymentCardService";
 import { PaymentCard } from "@/types/paymentCard";
@@ -23,32 +26,24 @@ import { deleteTransaction, updateTransaction } from "@/services/transactionServ
 import { getCreditCardDueDateFromSelectedCard, isCreditCapableCard } from "@/lib/credit-card/due-date";
 import { addMonthsUTC } from "@/lib/transactions/recurring";
 import { orderCategoryNames } from "@/lib/category-utils";
+import { getCurrencySymbol } from "@/lib/money/formatMoney";
 
-const PAYMENT_METHODS: { value: PaymentMethod; label: string; hasDueDate: boolean }[] = [
-  { value: "pix", label: "Pix", hasDueDate: false },
-  { value: "boleto", label: "Boleto", hasDueDate: true },
-  { value: "cash", label: "Dinheiro", hasDueDate: false },
-  { value: "transfer", label: "Transferência", hasDueDate: false },
-  { value: "debit_card", label: "Cartão de Débito", hasDueDate: false },
-  { value: "credit_card", label: "Cartão de Crédito", hasDueDate: false },
+const PAYMENT_METHODS: { value: PaymentMethod; labelKey: string; hasDueDate: boolean }[] = [
+  { value: "pix", labelKey: "paymentMethods.pix", hasDueDate: false },
+  { value: "boleto", labelKey: "paymentMethods.boleto", hasDueDate: true },
+  { value: "cash", labelKey: "paymentMethods.cash", hasDueDate: false },
+  { value: "transfer", labelKey: "paymentMethods.transfer", hasDueDate: false },
+  { value: "debit_card", labelKey: "paymentMethods.debitCard", hasDueDate: false },
+  { value: "credit_card", labelKey: "paymentMethods.creditCard", hasDueDate: false },
 ];
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value || 0);
-
-const formatDateDisplay = (dateString: string) => {
-  if (!dateString) return "-";
-  return new Date(`${dateString}T12:00:00`).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-};
-
 export default function EditTransactionPage() {
+  const t = useTranslations("transactions");
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const { user, privacyMode, togglePrivacyMode } = useAuth();
+  const currency = usePreferredCurrency();
+  const { date, money } = useFormatters(currency);
   const { transactions, loading: loadingTransactions } = useTransactions();
   const {
     categories,
@@ -69,7 +64,7 @@ export default function EditTransactionPage() {
   const [resolvedTransaction, setResolvedTransaction] = useState(false);
 
   const txId = String(params?.id || "");
-  const formatCurrencyDisplay = (value: number) => (privacyMode ? "R$ ******" : formatCurrency(value));
+  const formatCurrencyDisplay = (value: number) => (privacyMode ? `${getCurrencySymbol(currency)} ******` : money(value));
 
   useEffect(() => {
     if (!user) return;
@@ -160,11 +155,11 @@ export default function EditTransactionPage() {
     if (!user || !editingTx?.id) return;
     setError("");
     if (editingTx.paymentMethod === "credit_card" && !selectedCard) {
-      setError("Selecione um cartão de crédito para definir o vencimento da fatura.");
+      setError(t("edit.errors.selectCreditCard"));
       return;
     }
     if (editingTx.paymentMethod === "credit_card" && !creditCardDueDate) {
-      setError("O cartão de crédito selecionado não tem vencimento de fatura configurado.");
+      setError(t("edit.errors.missingCreditDueDate"));
       return;
     }
     setSaving(true);
@@ -189,7 +184,7 @@ export default function EditTransactionPage() {
       );
       router.push("/dashboard");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Não foi possível salvar.");
+      setError(e instanceof Error ? e.message : t("edit.errors.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -203,7 +198,7 @@ export default function EditTransactionPage() {
       await deleteTransaction(user.uid, editingTx.id, deleteGroup);
       router.push("/dashboard");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Não foi possível excluir.");
+      setError(e instanceof Error ? e.message : t("edit.errors.deleteFailed"));
     } finally {
       setDeleting(false);
     }
@@ -215,7 +210,7 @@ export default function EditTransactionPage() {
       <div className="flex min-h-screen items-center justify-center bg-transparent p-4 pt-32 md:p-8">
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-          <p className="text-sm text-zinc-500 font-medium">Buscando detalhes da transação</p>
+          <p className="text-sm text-zinc-500 font-medium">{t("edit.loading")}</p>
         </div>
       </div>
     );
@@ -229,10 +224,10 @@ export default function EditTransactionPage() {
           <div className="h-16 w-16 bg-red-400 text-red-600 rounded-full flex items-center justify-center mx-auto">
             <AlertCircle className="h-8 w-8" />
           </div>
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Lançamento não encontrado</h2>
-          <p className="text-zinc-500">Este registro pode ter sido excluído ou você não tem permissão para acessá-lo.</p>
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">{t("edit.notFoundTitle")}</h2>
+          <p className="text-zinc-500">{t("edit.notFoundDescription")}</p>
           <Button variant="default" className="mt-4 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => router.back()}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
+            <ArrowLeft className="mr-2 h-4 w-4" /> {t("common.back")}
           </Button>
         </div>
       </div>
@@ -245,9 +240,9 @@ export default function EditTransactionPage() {
   const groupLabel = editingTx.groupId
     ? isRecurringGroup
       ? isEndedRecurring
-        ? "Recorrência encerrada"
-        : "Recorrência mensal"
-      : `Parcela ${editingTx.installmentCurrent || 1}/${editingTx.installmentTotal || groupedItems.length || 1}`
+        ? t("edit.recurringEnded")
+        : t("edit.recurringMonthly")
+      : t("edit.installmentLabel", { current: editingTx.installmentCurrent || 1, total: editingTx.installmentTotal || groupedItems.length || 1 })
     : null;
   const nextRecurringDueDate = isRecurringGroup && !isEndedRecurring ? addMonthsUTC(editingTx.dueDate, 1) : null;
 
@@ -262,11 +257,11 @@ export default function EditTransactionPage() {
               <ArrowLeft className="h-5 w-5 text-muted-foreground" />
             </Button>
             <h1 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-              Editar Lançamento
+              {t("edit.title")}
             </h1>
           </div>
           <Badge variant="secondary" className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase border-none ${isIncome ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-            {isIncome ? "Receita" : "Despesa"}
+            {isIncome ? t("types.income") : t("types.expense")}
           </Badge>
         </div>
 
@@ -290,7 +285,7 @@ export default function EditTransactionPage() {
             {isRecurringGroup ? <Repeat className="h-4 w-4" /> : <Layers className="h-4 w-4" />}
             <span>
               {groupLabel}
-              {nextRecurringDueDate ? ` · Próxima cobrança: ${formatDateDisplay(nextRecurringDueDate)}` : ""}
+              {nextRecurringDueDate ? ` · ${t("edit.nextCharge", { date: date(`${nextRecurringDueDate}T12:00:00`) })}` : ""}
             </span>
           </div>
         )}
@@ -301,10 +296,10 @@ export default function EditTransactionPage() {
           {/* HERO: VALOR */}
           <div className={`p-8 pb-6 border-b border-border/70 ${isIncome ? 'bg-emerald-400/30' : 'bg-red-400/30'}`}>
             <div className="mb-2 flex items-center justify-between gap-3">
-              <Label className="flex justify-start text-sm font-medium">Valor da transação</Label>
+              <Label className="flex justify-start text-sm font-medium">{t("edit.amount")}</Label>
               <button
                 type="button"
-                aria-label={privacyMode ? "Mostrar valores" : "Ocultar valores"}
+                aria-label={privacyMode ? t("edit.showValues") : t("edit.hideValues")}
                 onClick={togglePrivacyMode}
                 className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
               >
@@ -312,7 +307,7 @@ export default function EditTransactionPage() {
               </button>
             </div>
             <div className="flex items-center justify-center gap-2">
-              <span className={`text-2xl font-bold sm:text-3xl ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>R$</span>
+              <span className={`text-2xl font-bold sm:text-3xl ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>{getCurrencySymbol(currency)}</span>
               <Input 
                 type={privacyMode ? "text" : "number"}
                 value={privacyMode ? "******" : editingTx.amount}
@@ -328,25 +323,25 @@ export default function EditTransactionPage() {
             
             <div className="space-y-2">
               <Label className="flex items-center gap-2 text-sm text-foreground/85">
-                <AlignLeft className="h-4 w-4 text-zinc-400" /> Título
+                <AlignLeft className="h-4 w-4 text-zinc-400" /> {t("common.title")}
               </Label>
               <Input 
                 value={editingTx.title || ""} 
                 onChange={(e) => setEditingTx({ ...editingTx, title: e.target.value })} 
                 className="h-12 rounded-xl text-base"
-                placeholder="Ex: Valorant Points"
+                placeholder={t("common.exampleTitle")}
               />
             </div>
 
             <div className="space-y-2">
               <Label className="flex items-center gap-2 text-sm text-foreground/85">
-                <ReceiptText className="h-4 w-4 text-zinc-400" /> Descrição
+                <ReceiptText className="h-4 w-4 text-zinc-400" /> {t("common.description")}
               </Label>
               <textarea
                 value={editingTx.description || ""}
                 onChange={(e) => setEditingTx({ ...editingTx, description: e.target.value })}
-                className="min-h-[96px] w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                placeholder="Ex: lembrar por que esse lançamento foi feito."
+                className="min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                placeholder={t("edit.notesPlaceholder")}
               />
             </div>
 
@@ -355,15 +350,15 @@ export default function EditTransactionPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label className="flex items-center gap-2 text-sm text-foreground/85">
-                    <Tag className="h-4 w-4 text-zinc-400" /> Categoria
+                    <Tag className="h-4 w-4 text-zinc-400" /> {t("common.category")}
                   </Label>
                   <button type="button" onClick={() => setIsCategoryManagerOpen(true)} className="text-xs font-semibold text-primary hover:text-primary/80 flex items-center gap-1">
-                    <Settings2 className="h-3 w-3" /> Gerenciar
+                    <Settings2 className="h-3 w-3" /> {t("common.manage")}
                   </button>
                 </div>
                 <Select value={editingTx.category} onValueChange={(v) => setEditingTx({ ...editingTx, category: v })}>
                   <SelectTrigger className="h-12 rounded-xl">
-                    <SelectValue placeholder="Selecione..." />
+                    <SelectValue placeholder={t("common.select")} />
                   </SelectTrigger>
                   <SelectContent>
                     {monthCategories.map((cat) => (
@@ -378,7 +373,7 @@ export default function EditTransactionPage() {
               {/* DATA */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2 text-sm text-foreground/85">
-                  <Calendar className="h-4 w-4 text-zinc-400" /> Data da Compra
+                  <Calendar className="h-4 w-4 text-zinc-400" /> {t("common.purchaseDate")}
                 </Label>
                 <Input 
                   type="date" 
@@ -391,7 +386,7 @@ export default function EditTransactionPage() {
               {/* MÉTODO DE PAGAMENTO */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2 text-sm text-foreground/85">
-                  <CreditCard className="h-4 w-4 text-zinc-400" /> Pagamento
+                  <CreditCard className="h-4 w-4 text-zinc-400" /> {t("common.payment")}
                 </Label>
                 <Select
                   value={editingTx.paymentMethod}
@@ -410,7 +405,7 @@ export default function EditTransactionPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {PAYMENT_METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                    {PAYMENT_METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{t(m.labelKey)}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -419,7 +414,7 @@ export default function EditTransactionPage() {
               {showDueDate && (
                 <div className="space-y-2 animate-in fade-in zoom-in-95">
                   <Label className="flex items-center gap-2 text-sm text-foreground/85">
-                    <Calendar className="h-4 w-4 text-zinc-400" /> Vencimento
+                    <Calendar className="h-4 w-4 text-zinc-400" /> {t("common.dueDate")}
                   </Label>
                   <Input 
                     type="date" 
@@ -433,14 +428,14 @@ export default function EditTransactionPage() {
               {isCreditCardPayment && (
                 <div className="space-y-2 animate-in fade-in zoom-in-95">
                   <Label className="flex items-center gap-2 text-sm text-foreground/85">
-                    <Calendar className="h-4 w-4 text-zinc-400" /> Vencimento da Fatura
+                    <Calendar className="h-4 w-4 text-zinc-400" /> {t("common.invoiceDueDate")}
                   </Label>
                   <div className="flex min-h-12 items-center rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm font-medium text-muted-foreground">
                     {selectedCard?.dueDate
                       ? selectedCard.closingDay
-                        ? `Compras até o dia ${String(selectedCard.closingDay).padStart(2, "0")} entram na próxima fatura com vencimento dia ${String(selectedCard.dueDate).padStart(2, "0")}.`
-                        : `Esta compra será considerada na fatura com vencimento dia ${String(selectedCard.dueDate).padStart(2, "0")}.`
-                      : "Selecione um cartão de crédito para definir o vencimento da fatura."}
+                        ? t("new.creditCardClosingHelp", { closingDay: String(selectedCard.closingDay).padStart(2, "0"), dueDay: String(selectedCard.dueDate).padStart(2, "0") })
+                        : t("new.creditCardDueHelp", { dueDay: String(selectedCard.dueDate).padStart(2, "0") })
+                      : t("new.creditCardSelectHelp")}
                   </div>
                 </div>
               )}
@@ -449,7 +444,7 @@ export default function EditTransactionPage() {
               {(editingTx.paymentMethod === "credit_card" || editingTx.paymentMethod === "debit_card") && (
                 <div className="space-y-2 md:col-span-2 animate-in fade-in zoom-in-95">
                   <Label className="flex items-center gap-2 text-sm text-foreground/85">
-                    <ReceiptText className="h-4 w-4 text-zinc-400" /> Cartão Vinculado
+                    <ReceiptText className="h-4 w-4 text-zinc-400" /> {t("common.linkedCard")}
                   </Label>
                   <Select
                     value={editingTx.cardId || ""}
@@ -465,11 +460,11 @@ export default function EditTransactionPage() {
                     }}
                   >
                     <SelectTrigger className="h-12 rounded-xl">
-                      <SelectValue placeholder="Selecione um cartão" />
+                      <SelectValue placeholder={t("edit.cardPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
                       {availablePaymentCards.length === 0 ? (
-                        <SelectItem value="__none" disabled>Nenhum cartão cadastrado</SelectItem>
+                        <SelectItem value="__none" disabled>{t("edit.noCards")}</SelectItem>
                       ) : (
                         availablePaymentCards.map((card) => (
                           <SelectItem key={card.id} value={card.id}>{card.bankName} •••• {card.last4}</SelectItem>
@@ -491,7 +486,7 @@ export default function EditTransactionPage() {
             <div className="flex items-center gap-2 mb-4">
               <Info className="h-6 w-5 text-primary" />
               <h3 className="font-semibold text-foreground">
-                {isRecurringGroup ? "Visão da recorrência" : "Visão do parcelamento"}
+                {isRecurringGroup ? t("edit.recurringOverview") : t("edit.installmentOverview")}
               </h3>
             </div>
             <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
@@ -514,7 +509,7 @@ export default function EditTransactionPage() {
                           isCurrent ? "text-primary" : "text-zinc-500"
                         }`}
                       >
-                        {isRecurringGroup ? "Mensal" : `${String(item.installmentCurrent).padStart(2, '0')}/${String(item.installmentTotal).padStart(2, '0')}`}
+                        {isRecurringGroup ? t("edit.monthly") : `${String(item.installmentCurrent).padStart(2, '0')}/${String(item.installmentTotal).padStart(2, '0')}`}
                       </span>
                       <span className={isCurrent ? "font-semibold text-foreground" : "text-muted-foreground"}>
                         {item.dueDate || item.date}
@@ -538,15 +533,15 @@ export default function EditTransactionPage() {
         <div className="space-y-4 pt-2">
           {!editingTx.groupId ? (
             <Button onClick={() => save(false)} disabled={saving} className="w-full h-14 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground text-base shadow-sm">
-              <Save className="mr-2 h-5 w-5" /> {saving ? "Salvando..." : "Salvar Alterações"}
+              <Save className="mr-2 h-5 w-5" /> {saving ? t("common.saving") : t("edit.saveChanges")}
             </Button>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Button variant="outline" onClick={() => save(false)} disabled={saving} className="h-14 rounded-2xl">
-                {isRecurringGroup ? "Salvar só esta ocorrência" : "Salvar só esta parcela"}
+                {isRecurringGroup ? t("edit.saveOnlyOccurrence") : t("edit.saveOnlyInstallment")}
               </Button>
               <Button onClick={() => save(true)} disabled={saving} className="h-14 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
-                {isRecurringGroup ? "Salvar toda a recorrência" : "Salvar todas as parcelas"}
+                {isRecurringGroup ? t("edit.saveAllRecurring") : t("edit.saveAllInstallments")}
               </Button>
             </div>
           )}
@@ -554,15 +549,15 @@ export default function EditTransactionPage() {
           <div className="pt-4 border-t border-border/70">
             {!editingTx.groupId ? (
               <Button variant="outline" onClick={() => remove(false)} disabled={deleting} className="w-full h-12 rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-colors">
-                <Trash2 className="mr-2 h-4 w-4" /> {deleting ? "Excluindo..." : "Excluir Lançamento"}
+                <Trash2 className="mr-2 h-4 w-4" /> {deleting ? t("common.deleting") : t("edit.deleteTransaction")}
               </Button>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Button variant="outline" onClick={() => remove(false)} disabled={deleting} className="h-12 rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700">
-                  {isRecurringGroup ? "Excluir só esta ocorrência" : "Excluir só esta parcela"}
+                  {isRecurringGroup ? t("edit.deleteOnlyOccurrence") : t("edit.deleteOnlyInstallment")}
                 </Button>
                 <Button variant="outline" onClick={() => remove(true)} disabled={deleting} className="h-12 rounded-xl border-red-200 bg-red-50 text-red-700 hover:bg-red-100">
-                  {isRecurringGroup ? "Excluir toda a recorrência" : "Excluir todas as parcelas"}
+                  {isRecurringGroup ? t("edit.deleteAllRecurring") : t("edit.deleteAllInstallments")}
                 </Button>
               </div>
             )}
