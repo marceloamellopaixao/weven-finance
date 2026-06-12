@@ -44,6 +44,21 @@ export const billing = {
       },
     },
   },
+  planLimits: {
+    higherPlan: "plan superior",
+    generic: "Tu plan {currentPlan} permite hasta {quantity}. Sube a {nextPlan} para liberar más {resourcePlural}.",
+    monthlyTransactions: "Tu plan {currentPlan} permite hasta {max} movimientos por mes. Sube a {nextPlan} para seguir registrando sin este límite.",
+    resources: {
+      cards: {
+        one: "tarjeta",
+        many: "tarjetas",
+      },
+      goals: {
+        one: "meta",
+        many: "metas",
+      },
+    },
+  },
   checkout: {
     preparing: "Preparando tu contratación.",
     redirecting: "Redirigiendo a la contratación del plan {plan}.",

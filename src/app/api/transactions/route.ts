@@ -365,6 +365,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const meta = getRequestMeta(request);
   const startedAt = Date.now();
+  const requestLocale = request.headers.get("accept-language")?.split(",")[0];
   try {
     const rate = await checkRateLimit(request, { key: "api:transactions:post", max: 90, windowMs: 60_000 });
     if (!rate.allowed) {
@@ -454,6 +455,7 @@ export async function POST(request: NextRequest) {
                 error: buildMonthlyTransactionLimitMessage({
                   plan: planContext.plan,
                   max: capabilities.maxTransactionsPerMonth,
+                  locale: requestLocale,
                 }),
               },
               { status: 403 }

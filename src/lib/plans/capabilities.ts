@@ -1,3 +1,6 @@
+import type { Locale } from "@/i18n/config";
+import { DEFAULT_LOCALE, normalizeLocale } from "@/i18n/config";
+import { translate } from "@/i18n/getDictionary";
 import { DEFAULT_FEATURE_ACCESS_CONFIG, FeatureAccessConfig, DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
 import { UserPlan } from "@/types/user";
 
@@ -45,6 +48,10 @@ export function formatPlanName(plan: UserPlan) {
   return PLAN_NAMES[plan] ?? "Free";
 }
 
+export function formatLocalizedPlanName(plan: UserPlan, locale: Locale = DEFAULT_LOCALE) {
+  return translate(locale, `billing.planCatalog.${plan}.name`);
+}
+
 export function getNextUpgradePlan(plan: UserPlan): Exclude<UserPlan, "free"> | null {
   if (plan === "free") return "premium";
   if (plan === "premium") return "pro";
@@ -84,22 +91,42 @@ export function buildPlanLimitMessage(params: {
   resourceLabel: string;
   resourcePluralLabel: string;
   max: number;
+  locale?: Locale | string;
+  resourceKey?: "cards" | "goals";
 }) {
-  const currentPlanName = formatPlanName(params.plan);
+  const locale = normalizeLocale(params.locale || DEFAULT_LOCALE);
+  const currentPlanName = formatLocalizedPlanName(params.plan, locale);
   const nextPlan = getNextUpgradePlan(params.plan);
-  const nextPlanName = nextPlan ? formatPlanName(nextPlan) : "plano superior";
-  const quantityLabel = params.max === 1 ? `1 ${params.resourceLabel}` : `${params.max} ${params.resourcePluralLabel}`;
+  const nextPlanName = nextPlan ? formatLocalizedPlanName(nextPlan, locale) : translate(locale, "billing.planLimits.higherPlan");
+  const resourceLabel = params.resourceKey
+    ? translate(locale, `billing.planLimits.resources.${params.resourceKey}.${params.max === 1 ? "one" : "many"}`)
+    : params.max === 1 ? params.resourceLabel : params.resourcePluralLabel;
+  const resourcePlural = params.resourceKey
+    ? translate(locale, `billing.planLimits.resources.${params.resourceKey}.many`)
+    : params.resourcePluralLabel;
+  const quantityLabel = `${params.max} ${resourceLabel}`;
 
-  return `Seu plano ${currentPlanName} permite até ${quantityLabel}. Faça upgrade para o ${nextPlanName} para liberar mais ${params.resourcePluralLabel}.`;
+  return translate(locale, "billing.planLimits.generic", {
+    currentPlan: currentPlanName,
+    quantity: quantityLabel,
+    nextPlan: nextPlanName,
+    resourcePlural,
+  });
 }
 
 export function buildMonthlyTransactionLimitMessage(params: {
   plan: UserPlan;
   max: number;
+  locale?: Locale | string;
 }) {
-  const currentPlanName = formatPlanName(params.plan);
+  const locale = normalizeLocale(params.locale || DEFAULT_LOCALE);
+  const currentPlanName = formatLocalizedPlanName(params.plan, locale);
   const nextPlan = getNextUpgradePlan(params.plan);
-  const nextPlanName = nextPlan ? formatPlanName(nextPlan) : "plano superior";
+  const nextPlanName = nextPlan ? formatLocalizedPlanName(nextPlan, locale) : translate(locale, "billing.planLimits.higherPlan");
 
-  return `Seu plano ${currentPlanName} permite até ${params.max} lançamentos por mês. Faça upgrade para o ${nextPlanName} para continuar registrando sem esse limite.`;
+  return translate(locale, "billing.planLimits.monthlyTransactions", {
+    currentPlan: currentPlanName,
+    max: params.max,
+    nextPlan: nextPlanName,
+  });
 }

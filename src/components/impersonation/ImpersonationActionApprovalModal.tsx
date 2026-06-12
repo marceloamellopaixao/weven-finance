@@ -17,11 +17,13 @@ import {
   respondImpersonationActionRequest,
   type ImpersonationActionRequest,
 } from "@/services/impersonationService";
+import { useTranslations } from "@/i18n/T";
 
 const POLLING_INTERVAL_MS = 20000;
 
 export function ImpersonationActionApprovalModal() {
   const { user, userProfile } = useAuth();
+  const t = useTranslations("components.impersonation.actionApproval");
   const { isPlatformTourActive } = usePlatformExperience();
   const [pending, setPending] = useState<ImpersonationActionRequest[]>([]);
   const [isResponding, setIsResponding] = useState(false);
@@ -68,15 +70,15 @@ export function ImpersonationActionApprovalModal() {
     <Dialog open={!!currentRequest} onOpenChange={() => {}}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Aprovar alteração do suporte?</DialogTitle>
+          <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>
             {currentRequest
-              ? `${currentRequest.requesterDisplayName} quer executar: ${currentRequest.actionLabel}.`
+              ? t("description", { name: currentRequest.requesterDisplayName, action: currentRequest.actionLabel })
               : ""}
           </DialogDescription>
         </DialogHeader>
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700">
-          Apenas aprove se você reconhece esta ação. Toda tentativa fica registrada em log.
+          {t("warning")}
         </div>
         <DialogFooter className="gap-2 sm:justify-end">
           <Button
@@ -85,14 +87,14 @@ export function ImpersonationActionApprovalModal() {
             onClick={() => void handleRespond(false)}
             className="hover:cursor-pointer"
           >
-            Recusar
+            {t("reject")}
           </Button>
           <Button
             disabled={isResponding}
             onClick={() => void handleRespond(true)}
             className="bg-emerald-600 text-white hover:cursor-pointer hover:bg-emerald-700"
           >
-            Aprovar
+            {t("approve")}
           </Button>
         </DialogFooter>
       </DialogContent>

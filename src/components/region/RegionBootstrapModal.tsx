@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { useI18n } from "@/i18n/I18nProvider";
 import { Locale } from "@/i18n/config";
+import { useTranslations } from "@/i18n/T";
 import { CurrencyCode } from "@/lib/money/formatMoney";
 import {
   COUNTRY_OPTIONS,
@@ -23,6 +24,7 @@ import { updateUserRegionalPreferences } from "@/services/transactionService";
 
 export function RegionBootstrapModal() {
   const { user, loading } = useAuth();
+  const t = useTranslations("components.regionBootstrap");
   const { settings, loading: settingsLoading } = useUserSettings();
   const { setLocale } = useI18n();
   const [country, setCountry] = useState<CountryCode>("BR");
@@ -79,31 +81,31 @@ export function RegionBootstrapModal() {
           <div className="mb-2 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
             <Globe2 className="h-5 w-5" />
           </div>
-          <DialogTitle>Defina sua localidade</DialogTitle>
+          <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>
-            Vamos usar país e estado para sugerir idioma, moeda e experiências regionais. Você poderá alterar isso depois em Configurações.
+            {t("description")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
           <div className="space-y-2">
-            <Label>País</Label>
+            <Label>{t("country")}</Label>
             <Select value={country} onValueChange={handleCountryChange}>
               <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {COUNTRY_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  <SelectItem key={option.value} value={option.value}>{t(`countries.${option.value}`)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
-            <Label>Estado ou região</Label>
+            <Label>{t("region")}</Label>
             <Select value={region || "__none"} onValueChange={(value) => setRegion(value === "__none" ? "" : value)}>
               <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none">Selecionar depois</SelectItem>
+                <SelectItem value="__none">{t("selectLater")}</SelectItem>
                 {regionOptions.map((option) => (
                   <SelectItem key={option.code} value={option.code}>{option.name}</SelectItem>
                 ))}
@@ -113,7 +115,7 @@ export function RegionBootstrapModal() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Idioma</Label>
+              <Label>{t("language")}</Label>
               <Select value={selectedLocale} onValueChange={(value) => setSelectedLocale(value as Locale)}>
                 <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -124,7 +126,7 @@ export function RegionBootstrapModal() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Moeda</Label>
+              <Label>{t("currency")}</Label>
               <Select value={currency} onValueChange={(value) => setCurrency(value as CurrencyCode)}>
                 <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -139,7 +141,7 @@ export function RegionBootstrapModal() {
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
             <div className="flex gap-2">
               <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
-              <p>A moeda altera apenas exibição e novos lançamentos. Ela não converte valores antigos.</p>
+              <p>{t("currencyWarning")}</p>
             </div>
           </div>
         </div>
@@ -147,7 +149,7 @@ export function RegionBootstrapModal() {
         <DialogFooter>
           <Button onClick={handleSave} disabled={saving} className="h-11 w-full rounded-xl">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Continuar
+            {t("continue")}
           </Button>
         </DialogFooter>
       </DialogContent>

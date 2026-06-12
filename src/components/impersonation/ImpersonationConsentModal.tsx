@@ -18,11 +18,13 @@ import {
   type SupportAccessRequest,
 } from "@/services/impersonationService";
 import { toast } from "react-toastify";
+import { useTranslations } from "@/i18n/T";
 
 const POLLING_INTERVAL_MS = 30000;
 
 export function ImpersonationConsentModal() {
   const { user, userProfile } = useAuth();
+  const t = useTranslations("components.impersonation.consent");
   const { isPlatformTourActive } = usePlatformExperience();
   const [pending, setPending] = useState<SupportAccessRequest[]>([]);
   const [isResponding, setIsResponding] = useState(false);
@@ -61,9 +63,9 @@ export function ImpersonationConsentModal() {
       await respondImpersonationRequest(currentRequest.id, approved);
       setPending((prev) => prev.filter((item) => item.id !== currentRequest.id));
       if (approved) {
-        toast.success("Acesso do suporte aprovado.");
+        toast.success(t("approved"));
       } else {
-        toast.info("Acesso do suporte negado.");
+        toast.info(t("denied"));
       }
     } finally {
       setIsResponding(false);
@@ -74,15 +76,15 @@ export function ImpersonationConsentModal() {
     <Dialog open={!!currentRequest} onOpenChange={() => {}}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Você solicitou acesso do suporte técnico?</DialogTitle>
+          <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>
             {currentRequest
-              ? `${currentRequest.requesterDisplayName} (${currentRequest.requesterRole}) solicitou acesso temporario para auxiliar sua conta.`
+              ? t("description", { name: currentRequest.requesterDisplayName, role: currentRequest.requesterRole })
               : ""}
           </DialogDescription>
         </DialogHeader>
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700">
-          Se você aprovar, a equipe podera visualizar e operar sua tela por tempo limitado com auditoria em log.
+          {t("warning")}
         </div>
         <DialogFooter className="gap-2 sm:justify-end">
           <Button
@@ -91,14 +93,14 @@ export function ImpersonationConsentModal() {
             onClick={() => void handleRespond(false)}
             className="hover:cursor-pointer"
           >
-            Não solicitei
+            {t("deny")}
           </Button>
           <Button
             disabled={isResponding}
             onClick={() => void handleRespond(true)}
             className="bg-emerald-600 hover:bg-emerald-700 text-white hover:cursor-pointer"
           >
-            Sim, autorizar suporte
+            {t("approve")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -12,25 +12,24 @@ type SeoLandingPageProps = {
   keyword: string;
   benefits: string[];
   sections: Array<{ title: string; text: string }>;
-  primaryCta?: string;
-  secondaryCta?: string;
-  finalTitle?: string;
-  finalDescription?: string;
-  finalCta?: string;
+  primaryCta: string;
+  secondaryCta: string;
+  finalTitle: string;
+  finalDescription: string;
+  finalCta: string;
 };
 
 export function SeoLandingPage({
   eyebrow,
   title,
   description,
-  keyword,
   benefits,
   sections,
-  primaryCta = "Começar grátis",
-  secondaryCta = "Calcular quanto posso gastar",
+  primaryCta,
+  secondaryCta,
   finalTitle,
   finalDescription,
-  finalCta = "Salvar meu controle no WevenFinance",
+  finalCta,
 }: SeoLandingPageProps) {
   return (
     <main className="bg-transparent px-4 py-16 sm:px-6 sm:py-24">
@@ -75,9 +74,9 @@ export function SeoLandingPage({
 
         <section className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) p-6 text-center shadow-xl shadow-primary/10 sm:p-8">
           <Calculator className="mx-auto h-8 w-8 text-primary" />
-          <h2 className="mt-4 text-2xl font-bold">{finalTitle ?? `Transforme ${keyword} em uma decisão diária.`}</h2>
+          <h2 className="mt-4 text-2xl font-bold">{finalTitle}</h2>
           <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
-            {finalDescription ?? "O WevenFinance organiza o que entra, o que sai e o que vence para responder o que importa: quanto você pode gastar hoje sem apertar o fim do mês."}
+            {finalDescription}
           </p>
           <Button asChild className="mt-6 h-12 rounded-full px-7">
             <Link href="/register">{finalCta}</Link>
