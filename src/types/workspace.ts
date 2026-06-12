@@ -1,7 +1,9 @@
+import type { CurrencyCode } from "@/lib/money/formatMoney";
+
 export type WorkspaceType = "personal" | "professional" | "church" | "family" | "business";
 
 export type WorkspaceSettings = {
-  currency?: "BRL";
+  currency?: CurrencyCode;
   monthlyReportEnabled?: boolean;
   categoriesPresetApplied?: boolean;
 };

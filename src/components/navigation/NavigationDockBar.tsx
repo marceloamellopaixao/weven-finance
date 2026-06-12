@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { getNavigationAppItem } from "@/lib/navigation/apps";
 import { useAppearance } from "@/hooks/useAppearance";
 import { NavigationAppId, NavigationDockAccent, NavigationPreferences } from "@/types/navigation";
+import { useTranslations } from "@/i18n/T";
 
 type NavigationDockBarProps = {
   preferences: NavigationPreferences;
@@ -118,6 +119,7 @@ export function NavigationDockBar({
   className,
 }: NavigationDockBarProps) {
   const { appearancePreferences } = useAppearance();
+  const tApps = useTranslations("apps");
   const resolvedAccent = resolveDockAccent(preferences, appearancePreferences.accent);
   const items = preferences.shortcuts.map((id) => getNavigationAppItem(id));
   const isSidebar = !mobile && preferences.position !== "center";
@@ -173,7 +175,7 @@ export function NavigationDockBar({
         const content = (
           <>
             <Icon className={cn(compact ? "h-3.5 w-3.5" : "h-4 w-4")} />
-            {showLabels && <span className={labelClass}>{item.shortLabel}</span>}
+            {showLabels && <span className={labelClass}>{tApps(`navigation.${item.id}.shortLabel`)}</span>}
           </>
         );
 

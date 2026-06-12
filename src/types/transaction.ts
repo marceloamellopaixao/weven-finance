@@ -57,4 +57,9 @@ export type CreateTransactionDTO = Omit<Transaction, "id" | "createdAt" | "userI
 
 export interface UserSettings {
   currentBalance: number;
+  locale?: "pt-BR" | "en-US" | "es";
+  currency?: "BRL" | "USD" | "EUR";
+  country?: "BR" | "US" | "ES" | "OTHER";
+  region?: string;
+  regionConfigured?: boolean;
 }

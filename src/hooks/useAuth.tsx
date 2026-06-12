@@ -17,6 +17,9 @@ import { buildBrowserRedirectUrl, clearPostAuthRedirect, readPostAuthRedirect, r
 import { buildEmailVerificationRedirectUrl, rememberPendingVerificationEmail } from "@/services/auth/emailVerification";
 import { buildUpgradeCheckoutPath, readPendingUpgradePlan } from "@/services/billing/checkoutIntent";
 import { getDefaultWorkspace } from "@/services/workspaceService";
+import { canAccessAdminArea, isCreatorSupremeUid } from "@/lib/access-control/roles";
+import { canAccessLevel } from "@/lib/access-control/config";
+import { getMyAccessControl } from "@/services/systemService";
 
 const BLOCKED_STATUSES = new Set(["inactive", "blocked"]);
 const PUBLIC_ROUTES = [
@@ -36,7 +39,7 @@ const PUBLIC_ROUTES = [
   "/terms",
   "/quanto-posso-gastar-hoje",
   "/calculadora/quanto-posso-gastar-hoje",
-  "/controle-financeiro-simples",
+  "/controle-financeiro",
   "/organizar-cartao-de-credito",
   "/app-para-sair-das-dividas",
 ];
@@ -58,6 +61,7 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   loading: boolean;
   privacyMode: boolean;
+  canPreviewRestrictedPages: boolean;
   togglePrivacyMode: () => void;
   refreshProfile: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -124,6 +128,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [privacyMode, setPrivacyMode] = useState(false);
+  const [pagePreviewAccess, setPagePreviewAccess] = useState(false);
+  const [pagePreviewAccessUid, setPagePreviewAccessUid] = useState<string | null>(null);
   const [impersonationTargetUid, setImpersonationTargetUid] = useState<string | null>(() =>
     getImpersonationTargetUid()
   );
@@ -232,6 +238,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [supabase]);
 
   useEffect(() => {
+    if (!user || !userProfile) {
+      setPagePreviewAccess(false);
+      setPagePreviewAccessUid(null);
+      return;
+    }
+
+    if (isCreatorSupremeUid(userProfile.uid)) {
+      setPagePreviewAccess(true);
+      setPagePreviewAccessUid(userProfile.uid);
+      return;
+    }
+
+    let cancelled = false;
+    getMyAccessControl()
+      .then((data) => {
+        if (cancelled) return;
+        setPagePreviewAccess(canAccessLevel(data.access["admin.pages.preview"] ?? "none", "read"));
+        setPagePreviewAccessUid(userProfile.uid);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPagePreviewAccess(false);
+          setPagePreviewAccessUid(userProfile.uid);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, userProfile]);
+
+  const authReady = !loading && (!user || !userProfile || pagePreviewAccessUid === userProfile.uid);
+
+  useEffect(() => {
     if (!user) return;
     let cancelled = false;
 
@@ -332,7 +372,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [impersonationTargetUid, supabase, user]);
 
   useEffect(() => {
-    if (loading) return;
+    if (!authReady) return;
     const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
 
     if (!user) {
@@ -341,34 +381,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (!userProfile) return;
+    const hasPrivilegedAccess = pagePreviewAccess;
 
-    if (userProfile.status === "deleted") {
+    if (userProfile.status === "deleted" && !hasPrivilegedAccess) {
       if (pathname !== "/goodbye") router.replace("/goodbye");
       return;
     }
 
-    if (BLOCKED_STATUSES.has(userProfile.status)) {
+    if (BLOCKED_STATUSES.has(userProfile.status) && !hasPrivilegedAccess) {
       if (pathname !== "/blocked") router.replace("/blocked");
       return;
     }
 
-    if (userProfile.needsPasswordSetup) {
+    if (userProfile.needsPasswordSetup && !hasPrivilegedAccess) {
       if (pathname !== "/first-access") router.replace("/first-access?intent=first-access");
       return;
     }
 
-    if (!userProfile.verifiedEmail) {
+    if (!userProfile.verifiedEmail && !hasPrivilegedAccess) {
       if (pathname !== "/verify-email" && pathname !== "/first-access") router.replace("/verify-email");
       return;
     }
 
-    if (pathname === "/verify-email") {
+    if (pathname === "/verify-email" && !hasPrivilegedAccess) {
       router.replace(resolvePostAuthPath());
       return;
     }
 
     const postAuthRedirect = readPostAuthRedirect();
-    if (postAuthRedirect) {
+    if (postAuthRedirect && !hasPrivilegedAccess) {
       const postAuthPathname = postAuthRedirect.split("?")[0] || postAuthRedirect;
       clearPostAuthRedirect();
       if (pathname !== postAuthPathname) {
@@ -377,26 +418,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    if (["/login", "/register", "/goodbye", "/blocked"].includes(pathname)) {
+    if (["/login", "/register", "/goodbye", "/blocked"].includes(pathname) && !hasPrivilegedAccess) {
       router.replace(resolvePostAuthPath());
       return;
     }
 
     if (pathname.startsWith("/admin")) {
-      if (userProfile.role !== "admin" && userProfile.role !== "moderator" && userProfile.role !== "support") {
+      if (!canAccessAdminArea(userProfile)) {
         router.replace("/dashboard");
       }
     }
-  }, [loading, pathname, resolvePostAuthPath, router, supabase.auth, user, userProfile]);
+  }, [authReady, pagePreviewAccess, pathname, resolvePostAuthPath, router, supabase.auth, user, userProfile]);
 
   useEffect(() => {
-    if (loading || !user || !userProfile) return;
-    if (userProfile.status === "deleted" || BLOCKED_STATUSES.has(userProfile.status)) return;
-    if (userProfile.needsPasswordSetup || !userProfile.verifiedEmail) return;
+    if (!authReady || !user || !userProfile) return;
+    const hasPrivilegedAccess = pagePreviewAccess;
+    if (!hasPrivilegedAccess && (userProfile.status === "deleted" || BLOCKED_STATUSES.has(userProfile.status))) return;
+    if (!hasPrivilegedAccess && (userProfile.needsPasswordSetup || !userProfile.verifiedEmail)) return;
     if (pathname.startsWith("/billing")) return;
+    if (hasPrivilegedAccess) return;
 
     const isMarketingOrAuthRoute = PUBLIC_ROUTES.includes(pathname);
-    const shouldCheckWorkspace = pathname === "/account-context" || !isMarketingOrAuthRoute;
+    const shouldCheckWorkspace = pathname === "/account-profile" || !isMarketingOrAuthRoute;
     if (!shouldCheckWorkspace) return;
 
     let cancelled = false;
@@ -404,11 +447,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const workspace = await getDefaultWorkspace();
         if (cancelled) return;
-        if (!workspace && pathname !== "/account-context") {
-          router.replace("/account-context");
+        if (!workspace && pathname !== "/account-profile") {
+          router.replace("/account-profile");
           return;
         }
-        if (workspace && pathname === "/account-context") {
+        if (workspace && pathname === "/account-profile") {
           router.replace(resolvePostAuthPath());
         }
       } catch (error) {
@@ -420,7 +463,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [loading, pathname, resolvePostAuthPath, router, user, userProfile]);
+  }, [authReady, pagePreviewAccess, pathname, resolvePostAuthPath, router, user, userProfile]);
 
   const togglePrivacyMode = () => {
     setPrivacyMode((prev) => {
@@ -534,8 +577,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         userProfile,
-        loading,
+        loading: !authReady,
         privacyMode,
+        canPreviewRestrictedPages: pagePreviewAccess,
         togglePrivacyMode,
         refreshProfile,
         signInWithGoogle,
@@ -544,7 +588,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
       }}
     >
-      {!loading && children}
+      {authReady && children}
     </AuthContext.Provider>
   );
 }

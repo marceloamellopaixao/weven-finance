@@ -7,6 +7,7 @@ import { AlertTriangle, CreditCard, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useTranslations } from "@/i18n/T";
 import { getCheckoutLink } from "@/services/billingService";
 import {
   buildUpgradeCheckoutPath,
@@ -25,11 +26,12 @@ const PLAN_RANK: Record<"free" | "premium" | "pro", number> = {
 };
 
 export default function BillingCheckoutPage() {
+  const t = useTranslations("billing");
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, userProfile, loading } = useAuth();
+  const { user, userProfile, loading, canPreviewRestrictedPages } = useAuth();
   const [state, setState] = useState<CheckoutState>("preparing");
-  const [message, setMessage] = useState("Preparando sua contratação.");
+  const [message, setMessage] = useState(t("checkout.preparing"));
   const startedRef = useRef("");
 
   const planFromQuery = useMemo(() => parseUpgradePlan(searchParams.get("plan")), [searchParams]);
@@ -42,12 +44,12 @@ export default function BillingCheckoutPage() {
   }, [planFromQuery]);
 
   useEffect(() => {
-    if (loading || plan) return;
+    if (loading || canPreviewRestrictedPages || plan) return;
     router.replace(user ? "/settings?tab=billing" : "/login");
-  }, [loading, plan, router, user]);
+  }, [canPreviewRestrictedPages, loading, plan, router, user]);
 
   useEffect(() => {
-    if (loading || !plan) return;
+    if (loading || canPreviewRestrictedPages || !plan) return;
 
     rememberPendingUpgradePlan(plan);
 
@@ -74,7 +76,7 @@ export default function BillingCheckoutPage() {
 
     const run = async () => {
       setState("redirecting");
-      setMessage(`Redirecionando para a contratação do plano ${plan === "premium" ? "Premium" : "Pro"}.`);
+      setMessage(t("checkout.redirecting", { plan: plan === "premium" ? "Premium" : "Pro" }));
 
       try {
         const token = await user.getIdToken();
@@ -87,22 +89,24 @@ export default function BillingCheckoutPage() {
         if (errorCode === "role_billing_exempt") {
           clearPendingUpgradePlan();
           setState("exempt");
-          setMessage("Esta conta possui cargo interno e não precisa passar pelo checkout de assinatura.");
+          setMessage(t("checkout.exemptMessage"));
           return;
         }
         setState("error");
-        setMessage("Não foi possível abrir o checkout agora. Tente novamente em alguns instantes.");
+        setMessage(t("checkout.errorMessage"));
       }
     };
 
     void run();
 
-  }, [loading, plan, router, user, userProfile]);
+  }, [canPreviewRestrictedPages, loading, plan, router, t, user, userProfile]);
 
   const resolvedState: CheckoutState = !loading && !plan ? "error" : state;
   const resolvedMessage =
-    !loading && !plan
-      ? "Não foi possível identificar qual plano você quer contratar."
+    canPreviewRestrictedPages
+      ? t("checkout.previewMessage")
+      : !loading && !plan
+      ? t("checkout.missingPlanMessage")
       : message;
 
   return (
@@ -123,19 +127,21 @@ export default function BillingCheckoutPage() {
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            {resolvedState === "error"
-              ? "Não foi possível continuar"
+            {canPreviewRestrictedPages
+              ? t("checkout.previewTitle")
+              : resolvedState === "error"
+              ? t("checkout.errorTitle")
               : resolvedState === "exempt"
-                ? "Checkout dispensado"
-                : "Continuando sua contratação"}
+                ? t("checkout.exemptTitle")
+                : t("checkout.continuingTitle")}
           </h1>
 
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{resolvedMessage}</p>
 
-          {resolvedState !== "error" && resolvedState !== "exempt" && (
+          {!canPreviewRestrictedPages && resolvedState !== "error" && resolvedState !== "exempt" && (
             <div className="mt-6 flex items-center justify-center gap-2 text-sm font-medium text-primary">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Abrindo checkout
+              {t("checkout.opening")}
             </div>
           )}
 
@@ -145,11 +151,11 @@ export default function BillingCheckoutPage() {
                 onClick={() => window.location.assign(buildUpgradeCheckoutPath(plan))}
                 className="h-11 w-full rounded-xl bg-primary font-medium text-primary-foreground hover:bg-primary/90"
               >
-                Tentar novamente
+                {t("checkout.retry")}
               </Button>
               <Link href="/settings?tab=billing" className="block">
                 <Button variant="outline" className="w-full h-11 rounded-xl">
-                  Ir para assinatura
+                  {t("checkout.goToSubscription")}
                 </Button>
               </Link>
             </div>
@@ -159,12 +165,12 @@ export default function BillingCheckoutPage() {
             <div className="mt-6 space-y-3">
               <Link href="/dashboard" className="block">
                 <Button className="h-11 w-full rounded-xl bg-primary font-medium text-primary-foreground hover:bg-primary/90">
-                  Ir para o painel
+                  {t("checkout.goToDashboard")}
                 </Button>
               </Link>
               <Link href="/settings?tab=billing" className="block">
                 <Button variant="outline" className="w-full h-11 rounded-xl">
-                  Ir para assinatura
+                  {t("checkout.goToSubscription")}
                 </Button>
               </Link>
             </div>

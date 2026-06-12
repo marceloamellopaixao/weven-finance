@@ -17,9 +17,27 @@ export async function GET(request: NextRequest) {
     });
 
     const activeRow = rows.find((row) => !isArchivedJsonRecord(row, "data"));
-    const data = readSecureSettingData<{ currentBalance?: unknown }>(activeRow?.data);
+    const data = readSecureSettingData<{
+      currentBalance?: unknown;
+      locale?: unknown;
+      currency?: unknown;
+      country?: unknown;
+      region?: unknown;
+      regionConfigured?: unknown;
+    }>(activeRow?.data);
     const currentBalance = typeof data.currentBalance === "number" ? data.currentBalance : 0;
-    return NextResponse.json({ ok: true, currentBalance }, { status: 200 });
+    return NextResponse.json(
+      {
+        ok: true,
+        currentBalance,
+        locale: typeof data.locale === "string" ? data.locale : undefined,
+        currency: typeof data.currency === "string" ? data.currency : undefined,
+        country: typeof data.country === "string" ? data.country : undefined,
+        region: typeof data.region === "string" ? data.region : undefined,
+        regionConfigured: typeof data.regionConfigured === "boolean" ? data.regionConfigured : false,
+      },
+      { status: 200 }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     const status = message === "missing_auth_token" ? 401 : 500;
@@ -41,8 +59,15 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });
     }
 
-    const body = (await request.json()) as { currentBalance?: number };
-    if (typeof body.currentBalance !== "number" || Number.isNaN(body.currentBalance)) {
+    const body = (await request.json()) as {
+      currentBalance?: number;
+      locale?: string;
+      currency?: string;
+      country?: string;
+      region?: string;
+      regionConfigured?: boolean;
+    };
+    if (body.currentBalance !== undefined && (typeof body.currentBalance !== "number" || Number.isNaN(body.currentBalance))) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
 
@@ -53,6 +78,17 @@ export async function PUT(request: NextRequest) {
     });
     const existing = existingRows.find((row) => !isArchivedJsonRecord(row, "data"));
 
+    const currentData = readSecureSettingData<Record<string, unknown>>(existing?.data);
+    const nextData = {
+      ...currentData,
+      ...(body.currentBalance !== undefined ? { currentBalance: body.currentBalance } : {}),
+      ...(body.locale ? { locale: body.locale } : {}),
+      ...(body.currency ? { currency: body.currency } : {}),
+      ...(body.country ? { country: body.country } : {}),
+      ...(body.region !== undefined ? { region: body.region } : {}),
+      ...(body.regionConfigured !== undefined ? { regionConfigured: body.regionConfigured } : {}),
+    };
+
     await supabaseUpsertRows(
       "user_settings",
       [
@@ -60,10 +96,7 @@ export async function PUT(request: NextRequest) {
           id: String(existing?.id || `${uid}__finance`),
           uid,
           setting_key: "finance",
-          data: writeSecureSettingData(
-            { currentBalance: body.currentBalance },
-            { isArchived: false }
-          ),
+          data: writeSecureSettingData(nextData, { isArchived: false }),
           updated_at: new Date().toISOString(),
         },
       ],

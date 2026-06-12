@@ -7,63 +7,69 @@ import { BriefcaseBusiness, Building2, CheckCircle2, Home, Loader2, UsersRound, 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
+import { useI18n } from "@/i18n/I18nProvider";
+import { useTranslations } from "@/i18n/T";
+import { getDefaultCurrencyForLocale } from "@/lib/money/formatMoney";
 import { createWorkspace } from "@/services/workspaceService";
 import type { WorkspaceType } from "@/types/workspace";
 
 const OPTIONS: Array<{
   type: WorkspaceType;
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
   icon: typeof WalletCards;
   accent: string;
 }> = [
   {
     type: "personal",
-    title: "Pessoal",
-    description: "Controle salário, gastos, cartões, metas, dívidas e limite diário inteligente.",
+    titleKey: "options.personal.title",
+    descriptionKey: "options.personal.description",
     icon: WalletCards,
     accent: "from-emerald-500/15 to-teal-500/10 text-emerald-700",
   },
   {
     type: "professional",
-    title: "Profissional / Autônomo",
-    description: "Controle receitas de clientes, despesas de trabalho, impostos, caixa mensal e relatórios.",
+    titleKey: "options.professional.title",
+    descriptionKey: "options.professional.description",
     icon: BriefcaseBusiness,
     accent: "from-sky-500/15 to-cyan-500/10 text-sky-700",
   },
   {
     type: "church",
-    title: "Igreja / Ministério",
-    description: "Controle dízimos, ofertas, missões, cantina, departamentos, eventos e despesas por área.",
+    titleKey: "options.church.title",
+    descriptionKey: "options.church.description",
     icon: Building2,
     accent: "from-violet-500/15 to-indigo-500/10 text-violet-700",
   },
   {
     type: "family",
-    title: "Família / Casa",
-    description: "Controle contas compartilhadas, mercado, aluguel, escola, transporte e metas familiares.",
+    titleKey: "options.family.title",
+    descriptionKey: "options.family.description",
     icon: Home,
     accent: "from-amber-500/15 to-orange-500/10 text-amber-700",
   },
   {
     type: "business",
-    title: "Pequeno negócio",
-    description: "Controle vendas, custos, contas a pagar e receber, fluxo de caixa e lucro estimado.",
+    titleKey: "options.business.title",
+    descriptionKey: "options.business.description",
     icon: UsersRound,
     accent: "from-fuchsia-500/15 to-pink-500/10 text-fuchsia-700",
   },
 ];
 
-export default function AccountContextPage() {
+export function AccountProfileClient() {
   const router = useRouter();
+  const { locale } = useI18n();
   const { userProfile } = useAuth();
+  const tProfile = useTranslations("accountProfile");
+  const tCommon = useTranslations("common");
   const [selectedType, setSelectedType] = useState<WorkspaceType>("personal");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedOption = useMemo(
     () => OPTIONS.find((option) => option.type === selectedType) || OPTIONS[0],
-    [selectedType]
+    [selectedType],
   );
 
   const handleContinue = async () => {
@@ -71,11 +77,11 @@ export default function AccountContextPage() {
     setError(null);
     try {
       await createWorkspace({
-        name: selectedOption.title,
+        name: tProfile(selectedOption.titleKey),
         type: selectedOption.type,
         isDefault: true,
         settings: {
-          currency: "BRL",
+          currency: getDefaultCurrencyForLocale(locale),
           monthlyReportEnabled: true,
           categoriesPresetApplied: true,
         },
@@ -83,7 +89,7 @@ export default function AccountContextPage() {
       router.replace("/dashboard");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível criar o contexto da conta");
+      setError(err instanceof Error ? err.message : tProfile("createError"));
       setSubmitting(false);
     }
   };
@@ -94,22 +100,22 @@ export default function AccountContextPage() {
         <section className="max-w-3xl space-y-4">
           <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
             <CheckCircle2 className="h-4 w-4" />
-            Primeiro contexto de uso
+            {tProfile("badge")}
           </div>
           <div className="space-y-3">
             <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
-              Como você quer organizar o WevenFinance?
+              {tProfile("title")}
             </h1>
             <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Vamos preparar categorias, relatórios e atalhos para o jeito que você usa dinheiro no dia a dia.
+              {tProfile("description")}
             </p>
           </div>
           {userProfile?.displayName ? (
-            <p className="text-sm font-medium text-muted-foreground">Olá, {userProfile.displayName}. Escolha uma opção para continuar.</p>
+            <p className="text-sm font-medium text-muted-foreground">{tProfile("greeting", { name: userProfile.displayName })}</p>
           ) : null}
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {OPTIONS.map((option) => {
             const Icon = option.icon;
             const selected = option.type === selectedType;
@@ -119,7 +125,7 @@ export default function AccountContextPage() {
                 type="button"
                 onClick={() => setSelectedType(option.type)}
                 disabled={submitting}
-                className={`group min-h-[220px] rounded-2xl border p-1 text-left transition-all duration-300 ${
+                className={`group min-h-[150px] rounded-2xl border p-1 text-left transition-all duration-300 ${
                   selected
                     ? "border-primary/60 bg-primary/10 shadow-xl shadow-primary/10"
                     : "border-border/80 bg-card/80 hover:border-primary/35 hover:bg-accent/60"
@@ -131,11 +137,11 @@ export default function AccountContextPage() {
                       <Icon className="h-6 w-6" />
                     </div>
                     <div className="space-y-2">
-                      <h2 className="text-lg font-bold text-foreground">{option.title}</h2>
-                      <p className="text-sm leading-relaxed text-muted-foreground">{option.description}</p>
+                      <h2 className="text-lg font-bold text-foreground">{tProfile(option.titleKey)}</h2>
+                      <p className="text-sm leading-relaxed text-muted-foreground">{tProfile(option.descriptionKey)}</p>
                     </div>
                     <div className="mt-auto flex items-center gap-2 text-sm font-semibold text-primary">
-                      <span>{selected ? "Selecionado" : "Escolher"}</span>
+                      <span>{selected ? tProfile("selected") : tProfile("choose")}</span>
                       {selected ? <CheckCircle2 className="h-4 w-4" /> : null}
                     </div>
                   </CardContent>
@@ -147,16 +153,16 @@ export default function AccountContextPage() {
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Você poderá criar outros contextos depois. Este será usado como padrão para relatórios mensais e categorias iniciais.
+            {tProfile("notice")}
           </p>
           <Button className="h-12 rounded-xl px-8 text-base font-semibold" onClick={handleContinue} disabled={submitting}>
             {submitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Preparando...
+                {tProfile("preparing")}
               </>
             ) : (
-              "Continuar"
+              tCommon("continue")
             )}
           </Button>
         </div>

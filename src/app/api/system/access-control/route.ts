@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { hasAccess, normalizeAccessControlConfig } from "@/lib/access-control/config";
+import { CREATOR_SUPREME_UID } from "@/lib/access-control/roles";
 import { DEFAULT_ACCESS_CONTROL_CONFIG, AccessControlConfig } from "@/types/system";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
-const CREATOR_SUPREME = "Z3ciyXudWuZZywhojA6iWJTurH52";
 const ACCESS_CONTROL_CACHE_TTL_MS = 60000;
 let accessControlCache: { at: number; value: AccessControlConfig } | null = null;
 
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const uid = await getUidFromBearer(request);
     const [profile, accessControl] = await Promise.all([getProfile(uid), getCurrentConfig()]);
     if (
-      uid !== CREATOR_SUPREME &&
+      uid !== CREATOR_SUPREME_UID &&
       !hasAccess(accessControl, { uid, plan: profile.plan, role: profile.role }, "admin.permissions.read", "read")
     ) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
@@ -70,7 +70,7 @@ export async function PUT(request: NextRequest) {
     const current = await getCurrentConfig();
     const profile = await getProfile(uid);
     if (
-      uid !== CREATOR_SUPREME &&
+      uid !== CREATOR_SUPREME_UID &&
       !hasAccess(current, { uid, plan: profile.plan, role: profile.role }, "admin.permissions.write", "write")
     ) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
@@ -83,7 +83,7 @@ export async function PUT(request: NextRequest) {
 
     const normalized = normalizeAccessControlConfig(body.accessControl);
 
-    if (uid !== CREATOR_SUPREME) {
+    if (uid !== CREATOR_SUPREME_UID) {
       const incomingRuleIds = new Set(normalized.rules.map((rule) => rule.id));
       const incomingRoleKeys = new Set(normalized.roles.map((roleDefinition) => roleDefinition.key));
       const removedRule = current.rules.some((rule) => !incomingRuleIds.has(rule.id));

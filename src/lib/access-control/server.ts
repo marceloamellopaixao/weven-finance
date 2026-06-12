@@ -10,8 +10,9 @@ import {
 } from "@/types/system";
 import { supabaseSelect } from "@/services/supabase/admin";
 import { BillingInfo, UserPaymentStatus } from "@/types/user";
+import { CREATOR_SUPREME_UID } from "@/lib/access-control/roles";
 
-export const CREATOR_SUPREME_UID = "Z3ciyXudWuZZywhojA6iWJTurH52";
+export { CREATOR_SUPREME_UID } from "@/lib/access-control/roles";
 
 export type ServerAccessProfile = {
   uid: string;

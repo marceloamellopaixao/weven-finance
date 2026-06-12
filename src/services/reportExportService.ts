@@ -2,7 +2,10 @@
 
 import type { Row as ExcelRow, Worksheet as ExcelWorksheet } from "exceljs";
 import type { MonthlyReport, ReportSlice } from "@/types/report";
+import type { Locale } from "@/i18n/config";
+import { getCurrencySymbol, type CurrencyCode } from "@/lib/money/formatMoney";
 import { formatCategoryLabel } from "@/lib/category-utils";
+import { translateDefaultCategoryValue } from "@/lib/categories/defaultCategories";
 import { formatPaymentMethodLabel, formatReportCurrency } from "@/lib/reports/monthlyReport";
 
 const BRAND = {
@@ -24,6 +27,9 @@ type ExportOptions = {
   element?: HTMLElement;
   workspaceName?: string;
   userName?: string;
+  locale?: Locale;
+  currency?: CurrencyCode;
+  t?: (text: string, values?: Record<string, string | number>) => string;
 };
 
 type PdfDoc = {
@@ -50,24 +56,66 @@ type PdfDoc = {
   save: (fileName: string) => void;
 };
 
-function getReportFileName(report: MonthlyReport, extension: "pdf" | "xlsx") {
-  return `wevenfinance-relatorio-${report.month}.${extension}`;
+function translate(options: ExportOptions | undefined, text: string, values?: Record<string, string | number>) {
+  return options?.t ? options.t(text, values) : text;
 }
 
-function formatDate(value?: string) {
+function category(value: string, options?: ExportOptions) {
+  return translateDefaultCategoryValue(value, options?.locale || "pt-BR");
+}
+
+function getPaymentMethodTranslationKey(label: string) {
+  const normalized = label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  const keys: Record<string, string> = {
+    pix: "paymentMethods.Pix",
+    boleto: "paymentMethods.Boleto",
+    dinheiro: "paymentMethods.Dinheiro",
+    transferencia: "paymentMethods.Transferencia",
+    "cartao de debito": "paymentMethods.CartaoDebito",
+    "cartao de credito": "paymentMethods.CartaoCredito",
+    outro: "paymentMethods.Outro",
+  };
+
+  return keys[normalized] || "";
+}
+
+function paymentMethod(value: string, options?: ExportOptions) {
+  const key = getPaymentMethodTranslationKey(value);
+  return key ? translate(options, key) : value;
+}
+
+function money(value: number, options?: ExportOptions) {
+  return formatReportCurrency(value, options?.locale || "pt-BR", options?.currency);
+}
+
+function getReportFileName(report: MonthlyReport, extension: "pdf" | "xlsx", options?: ExportOptions) {
+  const slug = translate(options, "export.fileSlug")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `wevenfinance-${slug || "report"}-${report.month}.${extension}`;
+}
+
+function formatDate(value?: string, locale: Locale = "pt-BR") {
   if (!value) return "";
-  return new Date(`${value}T12:00:00`).toLocaleDateString("pt-BR");
+  return new Date(`${value}T12:00:00`).toLocaleDateString(locale);
 }
 
-function getMonthLabel(month: string) {
+function getMonthLabel(month: string, locale: Locale = "pt-BR") {
   const [year, monthIndex] = month.split("-").map(Number);
   const date = new Date(year, monthIndex - 1, 2);
-  const label = date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const label = date.toLocaleDateString(locale, { month: "long", year: "numeric" });
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-function getTransactionTitle(transaction: MonthlyReport["transactions"][number]) {
-  return transaction.title || transaction.description || "Lançamento";
+function getTransactionTitle(transaction: MonthlyReport["transactions"][number], options?: ExportOptions) {
+  return transaction.title || transaction.description || translate(options, "table.transactionFallback");
 }
 
 function stripDataUrl(dataUrl: string) {
@@ -112,7 +160,7 @@ function drawWalletLogo(pdf: PdfDoc, x: number, y: number) {
   pdf.roundedRect(x + 6.7, y + 4.4, 1.2, 1.2, 0.6, 0.6, "F");
 }
 
-function createPieChartImage(rows: ReportSlice[], title: string) {
+function createPieChartImage(rows: ReportSlice[], title: string, options?: ExportOptions) {
   if (typeof document === "undefined" || rows.length === 0) return null;
 
   const canvas = document.createElement("canvas");
@@ -151,10 +199,10 @@ function createPieChartImage(rows: ReportSlice[], title: string) {
   ctx.fillStyle = BRAND.muted;
   ctx.font = "bold 22px Arial";
   ctx.textAlign = "center";
-  ctx.fillText("Total", centerX, centerY - 8);
+  ctx.fillText(translate(options, "charts.total"), centerX, centerY - 8);
   ctx.fillStyle = BRAND.ink;
   ctx.font = "bold 26px Arial";
-  ctx.fillText(formatReportCurrency(total), centerX, centerY + 26);
+  ctx.fillText(money(total, options), centerX, centerY + 26);
   ctx.textAlign = "left";
 
   const legendX = 470;
@@ -166,18 +214,19 @@ function createPieChartImage(rows: ReportSlice[], title: string) {
     ctx.fillRect(legendX, legendY - 13, 16, 16);
     ctx.fillStyle = BRAND.ink;
     ctx.font = "bold 17px Arial";
-    const label = row.name.length > 32 ? `${row.name.slice(0, 32)}...` : row.name;
+    const translatedName = category(row.name, options);
+    const label = translatedName.length > 32 ? `${translatedName.slice(0, 32)}...` : translatedName;
     ctx.fillText(label, legendX + 26, legendY);
     ctx.fillStyle = BRAND.muted;
     ctx.font = "16px Arial";
-    ctx.fillText(`${formatReportCurrency(row.value)} · ${row.percentage}%`, legendX + 26, legendY + 22);
+    ctx.fillText(`${money(row.value, options)} · ${row.percentage}%`, legendX + 26, legendY + 22);
     legendY += 50;
   });
 
   return canvas.toDataURL("image/png");
 }
 
-function createBarChartImage(rows: ReportSlice[], title: string) {
+function createBarChartImage(rows: ReportSlice[], title: string, options?: ExportOptions) {
   if (typeof document === "undefined" || rows.length === 0) return null;
 
   const canvas = document.createElement("canvas");
@@ -200,10 +249,11 @@ function createBarChartImage(rows: ReportSlice[], title: string) {
     ctx.fillRect(260, y - 18, barWidth, 22);
     ctx.fillStyle = BRAND.ink;
     ctx.font = "bold 17px Arial";
-    ctx.fillText(row.name.length > 25 ? `${row.name.slice(0, 25)}...` : row.name, 34, y);
+    const translatedName = paymentMethod(row.name, options);
+    ctx.fillText(translatedName.length > 25 ? `${translatedName.slice(0, 25)}...` : translatedName, 34, y);
     ctx.fillStyle = BRAND.muted;
     ctx.font = "16px Arial";
-    ctx.fillText(`${formatReportCurrency(row.value)} · ${row.percentage}%`, 260 + barWidth + 14, y);
+    ctx.fillText(`${money(row.value, options)} · ${row.percentage}%`, 260 + barWidth + 14, y);
     y += 38;
   });
 
@@ -217,7 +267,9 @@ function drawHorizontalChart(
   x: number,
   y: number,
   width: number,
-  colorOffset = 0
+  colorOffset = 0,
+  options?: ExportOptions,
+  labelKind: "category" | "text" = "text"
 ) {
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(11);
@@ -228,7 +280,7 @@ function drawHorizontalChart(
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(9);
     pdf.setTextColor(BRAND.muted);
-    pdf.text("Sem dados no período.", x, y + 8);
+    pdf.text(translate(options, "charts.noPeriodData"), x, y + 8);
     return y + 18;
   }
 
@@ -242,15 +294,16 @@ function drawHorizontalChart(
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
     pdf.setTextColor(BRAND.ink);
-    pdf.text(truncate(pdf, row.name, 48), x, cursorY + 9);
+    const label = labelKind === "category" ? category(row.name, options) : paymentMethod(row.name, options);
+    pdf.text(truncate(pdf, label, 48), x, cursorY + 9);
     pdf.setTextColor(BRAND.muted);
-    pdf.text(`${formatReportCurrency(row.value)} (${row.percentage}%)`, x + width, cursorY + 9, { align: "right" });
+    pdf.text(`${money(row.value, options)} (${row.percentage}%)`, x + width, cursorY + 9, { align: "right" });
     cursorY += 15;
   });
   return cursorY + 2;
 }
 
-function addFooter(pdf: PdfDoc, margin: number) {
+function addFooter(pdf: PdfDoc, margin: number, options?: ExportOptions) {
   const totalPages = pdf.getNumberOfPages();
   const pageHeight = pdf.internal.pageSize.getHeight();
   for (let page = 1; page <= totalPages; page += 1) {
@@ -260,7 +313,11 @@ function addFooter(pdf: PdfDoc, margin: number) {
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
     pdf.setTextColor(BRAND.muted);
-    pdf.text(`Gerado em ${new Date().toLocaleString("pt-BR")} · Página ${page}/${totalPages}`, margin, pageHeight - 7);
+    pdf.text(translate(options, "export.generatedOn", {
+      date: new Date().toLocaleString(options?.locale || "pt-BR"),
+      page,
+      total: totalPages,
+    }), margin, pageHeight - 7);
   }
 }
 
@@ -270,7 +327,8 @@ export async function exportMonthlyReportToPdf(report: MonthlyReport, options: E
   const pageWidth = pdf.internal.pageSize.getWidth();
   const margin = 12;
   const contentWidth = pageWidth - margin * 2;
-  const contextName = options.workspaceName || options.userName || "Relatório financeiro";
+  const locale = options.locale || "pt-BR";
+  const contextName = options.workspaceName || options.userName || translate(options, "export.fallbackTitle");
 
   pdf.setFillColor(BRAND.ink);
   pdf.rect(0, 0, pageWidth, 31, "F");
@@ -284,29 +342,29 @@ export async function exportMonthlyReportToPdf(report: MonthlyReport, options: E
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(9);
   pdf.setTextColor("#cbd5e1");
-  pdf.text(`${contextName} · ${getMonthLabel(report.month)}`, margin + 14, 22);
+  pdf.text(`${contextName} · ${getMonthLabel(report.month, locale)}`, margin + 14, 22);
 
   let y = 42;
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(18);
   pdf.setTextColor(BRAND.ink);
-  pdf.text("Relatório financeiro mensal", margin, y);
+  pdf.text(translate(options, "export.title"), margin, y);
   y += 8;
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(10);
   pdf.setTextColor(BRAND.muted);
-  pdf.text("Resumo executivo, gráficos e lançamentos do período.", margin, y);
+  pdf.text(translate(options, "export.subtitle"), margin, y);
   y += 10;
 
   const cards = [
-    ["Receitas", report.totals.income, BRAND.income],
-    ["Despesas", report.totals.expense, BRAND.expense],
-    ["Saldo", report.totals.balance, BRAND.balance],
-    ["Lançamentos", report.highlights.transactionCount, BRAND.primary],
-    ["Despesas pagas", report.totals.paidExpense, BRAND.expense],
-    ["Despesas pendentes", report.totals.pendingExpense, BRAND.expense],
-    ["Receitas recebidas", report.totals.paidIncome, BRAND.income],
-    ["Receitas pendentes", report.totals.pendingIncome, BRAND.income],
+    ["stats.income", report.totals.income, BRAND.income],
+    ["stats.expenses", report.totals.expense, BRAND.expense],
+    ["stats.balance", report.totals.balance, BRAND.balance],
+    ["stats.transactions", report.highlights.transactionCount, BRAND.primary],
+    ["stats.paidExpenses", report.totals.paidExpense, BRAND.expense],
+    ["stats.pendingExpenses", report.totals.pendingExpense, BRAND.expense],
+    ["stats.receivedIncome", report.totals.paidIncome, BRAND.income],
+    ["stats.pendingIncome", report.totals.pendingIncome, BRAND.income],
   ] as const;
   const cardW = (contentWidth - 9) / 4;
   cards.forEach(([label, value, color], index) => {
@@ -320,10 +378,10 @@ export async function exportMonthlyReportToPdf(report: MonthlyReport, options: E
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(7.5);
     pdf.setTextColor(BRAND.muted);
-    pdf.text(label.toUpperCase(), x + 4, cy + 6);
+    pdf.text(translate(options, label).toUpperCase(), x + 4, cy + 6);
     pdf.setFontSize(11);
     pdf.setTextColor(color);
-    pdf.text(typeof value === "number" && label !== "Lançamentos" ? formatReportCurrency(value) : String(value), x + 4, cy + 14);
+    pdf.text(typeof value === "number" && label !== "stats.transactions" ? money(value, options) : String(value), x + 4, cy + 14);
   });
   y += 54;
 
@@ -331,36 +389,36 @@ export async function exportMonthlyReportToPdf(report: MonthlyReport, options: E
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(12);
   pdf.setTextColor(BRAND.ink);
-  pdf.text("Receitas x despesas", margin, y);
+  pdf.text(translate(options, "charts.incomeVsExpenses"), margin, y);
   y += 7;
   [
-    { label: "Receitas", value: report.totals.income, color: BRAND.income },
-    { label: "Despesas", value: report.totals.expense, color: BRAND.expense },
+    { label: "stats.income", value: report.totals.income, color: BRAND.income },
+    { label: "stats.expenses", value: report.totals.expense, color: BRAND.expense },
   ].forEach((item) => {
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(9);
     pdf.setTextColor(BRAND.ink);
-    pdf.text(item.label, margin, y + 4);
+    pdf.text(translate(options, item.label), margin, y + 4);
     pdf.setFillColor("#eef2f7");
     pdf.roundedRect(margin + 25, y, contentWidth - 67, 6, 2, 2, "F");
     pdf.setFillColor(item.color);
     pdf.roundedRect(margin + 25, y, Math.max(3, ((contentWidth - 67) * item.value) / totalBar), 6, 2, 2, "F");
     pdf.setFont("helvetica", "bold");
-    pdf.text(formatReportCurrency(item.value), pageWidth - margin, y + 4.5, { align: "right" });
+    pdf.text(money(item.value, options), pageWidth - margin, y + 4.5, { align: "right" });
     y += 11;
   });
 
   y += 6;
   const pieWidth = contentWidth;
   const pieHeight = (pieWidth * PIE_CANVAS_HEIGHT) / PIE_CANVAS_WIDTH;
-  const expensePie = createPieChartImage(report.categoryExpenses, "Despesas por categoria");
-  const incomePie = createPieChartImage(report.categoryIncomes, "Receitas por categoria");
+  const expensePie = createPieChartImage(report.categoryExpenses, translate(options, "charts.expensesByCategory"), options);
+  const incomePie = createPieChartImage(report.categoryIncomes, translate(options, "charts.incomeByCategory"), options);
   if (expensePie || incomePie) {
     y = ensurePdfSpace(pdf, y, 7 + pieHeight, margin);
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(14);
     pdf.setTextColor(BRAND.ink);
-    pdf.text("Categorias", margin, y);
+    pdf.text(translate(options, "charts.categories"), margin, y);
     y += 7;
     if (expensePie) {
       pdf.addImage(expensePie, "PNG", margin, y, pieWidth, pieHeight);
@@ -372,31 +430,31 @@ export async function exportMonthlyReportToPdf(report: MonthlyReport, options: E
       y += pieHeight + 8;
     }
   } else {
-    const leftY = drawHorizontalChart(pdf, "Despesas por categoria", report.categoryExpenses, margin, y, 84, 0);
-    const rightY = drawHorizontalChart(pdf, "Receitas por categoria", report.categoryIncomes, margin + 100, y, 84, 2);
+    const leftY = drawHorizontalChart(pdf, translate(options, "charts.expensesByCategory"), report.categoryExpenses, margin, y, 84, 0, options, "category");
+    const rightY = drawHorizontalChart(pdf, translate(options, "charts.incomeByCategory"), report.categoryIncomes, margin + 100, y, 84, 2, options, "category");
     y = Math.max(leftY, rightY) + 4;
   }
 
   y = ensurePdfSpace(pdf, y, 75, margin);
-  y = drawHorizontalChart(pdf, "Métodos de pagamento", report.paymentMethods, margin, y, contentWidth, 4);
+  y = drawHorizontalChart(pdf, translate(options, "charts.paymentMethods"), report.paymentMethods, margin, y, contentWidth, 4, options);
   y += 4;
 
   y = ensurePdfSpace(pdf, y, 46, margin);
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(12);
   pdf.setTextColor(BRAND.ink);
-  pdf.text("Destaques", margin, y);
+  pdf.text(translate(options, "highlights.title"), margin, y);
   y += 7;
   const highlights = [
-    ["Maior categoria de despesa", report.highlights.topExpenseCategory ? `${report.highlights.topExpenseCategory.name} · ${formatReportCurrency(report.highlights.topExpenseCategory.value)}` : "Sem despesas no mês"],
-    ["Maior transação", report.highlights.largestTransaction ? `${getTransactionTitle(report.highlights.largestTransaction)} · ${formatReportCurrency(report.highlights.largestTransaction.amount)}` : "Nenhum lançamento encontrado"],
-    ["Variação vs mês anterior", report.comparison ? `Saldo ${formatReportCurrency(report.comparison.balanceChange)}` : "Sem dados suficientes para comparar"],
+    ["highlights.topExpenseCategory", report.highlights.topExpenseCategory ? `${category(report.highlights.topExpenseCategory.name, options)} · ${money(report.highlights.topExpenseCategory.value, options)}` : translate(options, "highlights.noExpenses")],
+    ["highlights.largestTransaction", report.highlights.largestTransaction ? `${getTransactionTitle(report.highlights.largestTransaction, options)} · ${money(report.highlights.largestTransaction.amount, options)}` : translate(options, "highlights.noTransactions")],
+    ["highlights.previousMonthVariation", report.comparison ? `${translate(options, "stats.balance")} ${money(report.comparison.balanceChange, options)}` : translate(options, "highlights.insufficientComparisonData")],
   ];
   highlights.forEach(([label, value]) => {
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(8.5);
     pdf.setTextColor(BRAND.ink);
-    pdf.text(label, margin, y);
+    pdf.text(translate(options, label), margin, y);
     pdf.setFont("helvetica", "normal");
     pdf.setTextColor(BRAND.muted);
     pdf.text(truncate(pdf, value, contentWidth), margin, y + 5);
@@ -409,16 +467,16 @@ export async function exportMonthlyReportToPdf(report: MonthlyReport, options: E
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(13);
     pdf.setTextColor(BRAND.ink);
-    pdf.text("Transações", margin, y);
+    pdf.text(translate(options, "export.transactions"), margin, y);
     y += 8;
     const columns = [
-      { label: "Data", x: margin, width: 18 },
-      { label: "Tipo", x: margin + 21, width: 20 },
-      { label: "Categoria", x: margin + 44, width: 34 },
-      { label: "Descrição", x: margin + 81, width: 44 },
-      { label: "Método", x: margin + 128, width: 28 },
-      { label: "Status", x: margin + 159, width: 18 },
-      { label: "Valor", x: pageWidth - margin, width: 28, align: "right" as const },
+      { label: "table.date", x: margin, width: 18 },
+      { label: "table.type", x: margin + 21, width: 20 },
+      { label: "table.category", x: margin + 44, width: 34 },
+      { label: "table.descriptionColumn", x: margin + 81, width: 44 },
+      { label: "table.method", x: margin + 128, width: 28 },
+      { label: "table.status", x: margin + 159, width: 18 },
+      { label: "export.value", x: pageWidth - margin, width: 28, align: "right" as const },
     ];
     pdf.setFillColor(BRAND.panel);
     pdf.rect(margin, y - 5, contentWidth, 8, "F");
@@ -426,7 +484,7 @@ export async function exportMonthlyReportToPdf(report: MonthlyReport, options: E
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(7.5);
       pdf.setTextColor(BRAND.muted);
-      pdf.text(column.label, column.x, y, { align: column.align });
+      pdf.text(translate(options, column.label), column.x, y, { align: column.align });
     });
     y += 6;
 
@@ -439,21 +497,21 @@ export async function exportMonthlyReportToPdf(report: MonthlyReport, options: E
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(7.5);
       pdf.setTextColor(BRAND.ink);
-      pdf.text(formatDate(transaction.dueDate), columns[0].x, y);
-      pdf.text(transaction.type === "income" ? "Receita" : "Despesa", columns[1].x, y);
-      pdf.text(truncate(pdf, formatCategoryLabel(transaction.category || "-"), columns[2].width), columns[2].x, y);
-      pdf.text(truncate(pdf, getTransactionTitle(transaction), columns[3].width), columns[3].x, y);
-      pdf.text(truncate(pdf, formatPaymentMethodLabel(transaction.paymentMethod), columns[4].width), columns[4].x, y);
-      pdf.text(transaction.status === "paid" ? "Pago" : "Pendente", columns[5].x, y);
+      pdf.text(formatDate(transaction.dueDate, locale), columns[0].x, y);
+      pdf.text(transaction.type === "income" ? translate(options, "table.income") : translate(options, "table.expense"), columns[1].x, y);
+      pdf.text(truncate(pdf, category(formatCategoryLabel(transaction.category || "-"), options), columns[2].width), columns[2].x, y);
+      pdf.text(truncate(pdf, getTransactionTitle(transaction, options), columns[3].width), columns[3].x, y);
+      pdf.text(truncate(pdf, paymentMethod(formatPaymentMethodLabel(transaction.paymentMethod), options), columns[4].width), columns[4].x, y);
+      pdf.text(transaction.status === "paid" ? translate(options, "table.paid") : translate(options, "table.pending"), columns[5].x, y);
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(transaction.type === "income" ? BRAND.income : BRAND.expense);
-      pdf.text(formatReportCurrency(transaction.amount), columns[6].x, y, { align: "right" });
+      pdf.text(money(transaction.amount, options), columns[6].x, y, { align: "right" });
       y += 8;
     });
   }
 
-  addFooter(pdf, margin);
-  pdf.save(getReportFileName(report, "pdf"));
+  addFooter(pdf, margin, options);
+  pdf.save(getReportFileName(report, "pdf", options));
 }
 
 function styleHeader(row: ExcelRow) {
@@ -461,10 +519,11 @@ function styleHeader(row: ExcelRow) {
   row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
 }
 
-function formatWorksheetCurrency(worksheet: ExcelWorksheet, columnKeys: string[]) {
+function formatWorksheetCurrency(worksheet: ExcelWorksheet, columnKeys: string[], currency: CurrencyCode = "BRL") {
+  const symbol = getCurrencySymbol(currency);
   columnKeys.forEach((key) => {
     const column = worksheet.getColumn(key);
-    column.numFmt = '"R$" #,##0.00;-"R$" #,##0.00';
+    column.numFmt = `"${symbol}" #,##0.00;-"${symbol}" #,##0.00`;
   });
 }
 
@@ -482,45 +541,47 @@ function autosizeColumns(worksheet: ExcelWorksheet) {
 
 export async function exportMonthlyReportToExcel(report: MonthlyReport, options: ExportOptions = {}) {
   const ExcelJS = await import("exceljs");
+  const locale = options.locale || "pt-BR";
+  const currency = options.currency || "BRL";
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "WevenFinance";
   workbook.created = new Date();
 
-  const summary = workbook.addWorksheet("Resumo", { views: [{ state: "frozen", ySplit: 5 }] });
+  const summary = workbook.addWorksheet(translate(options, "export.summary"), { views: [{ state: "frozen", ySplit: 5 }] });
   summary.mergeCells("A1:B1");
-  summary.getCell("A1").value = "WevenFinance - Relatório mensal";
+  summary.getCell("A1").value = `WevenFinance - ${translate(options, "export.monthlyReport")}`;
   summary.getCell("A1").font = { bold: true, size: 16, color: { argb: "FF111827" } };
-  summary.getCell("A2").value = "Contexto";
+  summary.getCell("A2").value = translate(options, "export.context");
   summary.getCell("B2").value = options.workspaceName || options.userName || "WevenFinance";
-  summary.getCell("A3").value = "Mês";
-  summary.getCell("B3").value = getMonthLabel(report.month);
+  summary.getCell("A3").value = translate(options, "filters.month");
+  summary.getCell("B3").value = getMonthLabel(report.month, locale);
   summary.addRow([]);
-  const summaryHeader = summary.addRow(["Indicador", "Valor"]);
+  const summaryHeader = summary.addRow([translate(options, "export.indicator"), translate(options, "export.value")]);
   styleHeader(summaryHeader);
   [
-    ["Receitas", report.totals.income],
-    ["Despesas", report.totals.expense],
-    ["Saldo", report.totals.balance],
-    ["Despesas pagas", report.totals.paidExpense],
-    ["Despesas pendentes", report.totals.pendingExpense],
-    ["Receitas recebidas", report.totals.paidIncome],
-    ["Receitas pendentes", report.totals.pendingIncome],
-    ["Quantidade de lançamentos", report.highlights.transactionCount],
-    ["Maior categoria de despesa", report.highlights.topExpenseCategory?.name || ""],
-    ["Maior transação", report.highlights.largestTransaction ? getTransactionTitle(report.highlights.largestTransaction) : ""],
-    ["Receitas vs mês anterior", report.comparison?.incomeChange ?? ""],
-    ["Despesas vs mês anterior", report.comparison?.expenseChange ?? ""],
-    ["Saldo vs mês anterior", report.comparison?.balanceChange ?? ""],
-  ].forEach((row) => summary.addRow(row));
-  formatWorksheetCurrency(summary, ["B"]);
+    ["stats.income", report.totals.income],
+    ["stats.expenses", report.totals.expense],
+    ["stats.balance", report.totals.balance],
+    ["stats.paidExpenses", report.totals.paidExpense],
+    ["stats.pendingExpenses", report.totals.pendingExpense],
+    ["stats.receivedIncome", report.totals.paidIncome],
+    ["stats.pendingIncome", report.totals.pendingIncome],
+    ["stats.transactionCount", report.highlights.transactionCount],
+    ["highlights.topExpenseCategory", report.highlights.topExpenseCategory ? category(report.highlights.topExpenseCategory.name, options) : ""],
+    ["highlights.largestTransaction", report.highlights.largestTransaction ? getTransactionTitle(report.highlights.largestTransaction, options) : ""],
+    ["stats.income", report.comparison?.incomeChange ?? ""],
+    ["stats.expenses", report.comparison?.expenseChange ?? ""],
+    ["stats.balance", report.comparison?.balanceChange ?? ""],
+  ].forEach(([label, value]) => summary.addRow([translate(options, String(label)), value]));
+  formatWorksheetCurrency(summary, ["B"], currency);
   autosizeColumns(summary);
 
-  const charts = workbook.addWorksheet("Gráficos");
-  charts.getCell("A1").value = "Gráficos do relatório";
+  const charts = workbook.addWorksheet(translate(options, "export.charts"));
+  charts.getCell("A1").value = translate(options, "charts.reportCharts");
   charts.getCell("A1").font = { bold: true, size: 16 };
-  const expensePie = createPieChartImage(report.categoryExpenses, "Despesas por categoria");
-  const incomePie = createPieChartImage(report.categoryIncomes, "Receitas por categoria");
-  const methodsBar = createBarChartImage(report.paymentMethods, "Métodos de pagamento");
+  const expensePie = createPieChartImage(report.categoryExpenses, translate(options, "charts.expensesByCategory"), options);
+  const incomePie = createPieChartImage(report.categoryIncomes, translate(options, "charts.incomeByCategory"), options);
+  const methodsBar = createBarChartImage(report.paymentMethods, translate(options, "charts.paymentMethods"), options);
   let chartRow = 3;
   for (const imageData of [expensePie, incomePie, methodsBar]) {
     if (!imageData) continue;
@@ -533,58 +594,58 @@ export async function exportMonthlyReportToExcel(report: MonthlyReport, options:
   }
   charts.columns = [{ width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }];
 
-  const categories = workbook.addWorksheet("Categorias", { views: [{ state: "frozen", ySplit: 1 }] });
+  const categories = workbook.addWorksheet(translate(options, "charts.categories"), { views: [{ state: "frozen", ySplit: 1 }] });
   categories.columns = [
-    { header: "Tipo", key: "type", width: 14 },
-    { header: "Categoria", key: "category", width: 30 },
-    { header: "Valor", key: "value", width: 16 },
-    { header: "Percentual", key: "percentage", width: 14 },
+    { header: translate(options, "table.type"), key: "type", width: 14 },
+    { header: translate(options, "table.category"), key: "category", width: 30 },
+    { header: translate(options, "export.value"), key: "value", width: 16 },
+    { header: translate(options, "export.percentage"), key: "percentage", width: 14 },
   ];
   styleHeader(categories.getRow(1));
-  [...report.categoryIncomes.map((item) => ({ type: "Receita", category: item.name, value: item.value, percentage: item.percentage / 100 })),
-    ...report.categoryExpenses.map((item) => ({ type: "Despesa", category: item.name, value: item.value, percentage: item.percentage / 100 }))]
+  [...report.categoryIncomes.map((item) => ({ type: translate(options, "table.income"), category: category(item.name, options), value: item.value, percentage: item.percentage / 100 })),
+    ...report.categoryExpenses.map((item) => ({ type: translate(options, "table.expense"), category: category(item.name, options), value: item.value, percentage: item.percentage / 100 }))]
     .forEach((row) => categories.addRow(row));
-  formatWorksheetCurrency(categories, ["C"]);
+  formatWorksheetCurrency(categories, ["C"], currency);
   categories.getColumn("D").numFmt = "0.0%";
 
-  const methods = workbook.addWorksheet("Métodos", { views: [{ state: "frozen", ySplit: 1 }] });
+  const methods = workbook.addWorksheet(translate(options, "export.methods"), { views: [{ state: "frozen", ySplit: 1 }] });
   methods.columns = [
-    { header: "Método", key: "method", width: 24 },
-    { header: "Valor", key: "value", width: 16 },
-    { header: "Percentual", key: "percentage", width: 14 },
+    { header: translate(options, "table.method"), key: "method", width: 24 },
+    { header: translate(options, "export.value"), key: "value", width: 16 },
+    { header: translate(options, "export.percentage"), key: "percentage", width: 14 },
   ];
   styleHeader(methods.getRow(1));
-  report.paymentMethods.forEach((item) => methods.addRow({ method: item.name, value: item.value, percentage: item.percentage / 100 }));
-  formatWorksheetCurrency(methods, ["B"]);
+  report.paymentMethods.forEach((item) => methods.addRow({ method: paymentMethod(item.name, options), value: item.value, percentage: item.percentage / 100 }));
+  formatWorksheetCurrency(methods, ["B"], currency);
   methods.getColumn("C").numFmt = "0.0%";
 
-  const transactions = workbook.addWorksheet("Transações", { views: [{ state: "frozen", ySplit: 1 }] });
+  const transactions = workbook.addWorksheet(translate(options, "export.transactions"), { views: [{ state: "frozen", ySplit: 1 }] });
   transactions.columns = [
-    { header: "Data", key: "date", width: 12 },
-    { header: "Vencimento", key: "dueDate", width: 12 },
-    { header: "Tipo", key: "type", width: 12 },
-    { header: "Categoria", key: "category", width: 30 },
-    { header: "Descrição/Título", key: "title", width: 34 },
-    { header: "Método de pagamento", key: "paymentMethod", width: 22 },
-    { header: "Status", key: "status", width: 16 },
-    { header: "Valor", key: "amount", width: 16 },
+    { header: translate(options, "table.date"), key: "date", width: 12 },
+    { header: translate(options, "table.dueDate"), key: "dueDate", width: 12 },
+    { header: translate(options, "table.type"), key: "type", width: 12 },
+    { header: translate(options, "table.category"), key: "category", width: 30 },
+    { header: translate(options, "table.descriptionTitle"), key: "title", width: 34 },
+    { header: translate(options, "table.paymentMethod"), key: "paymentMethod", width: 22 },
+    { header: translate(options, "table.status"), key: "status", width: 16 },
+    { header: translate(options, "export.value"), key: "amount", width: 16 },
   ];
   styleHeader(transactions.getRow(1));
   report.transactions.forEach((transaction) => {
     transactions.addRow({
-      date: formatDate(transaction.date),
-      dueDate: formatDate(transaction.dueDate),
-      type: transaction.type === "income" ? "Receita" : "Despesa",
-      category: formatCategoryLabel(transaction.category),
-      title: getTransactionTitle(transaction),
-      paymentMethod: formatPaymentMethodLabel(transaction.paymentMethod),
-      status: transaction.status === "paid" ? "Pago/Recebido" : "Pendente",
+      date: formatDate(transaction.date, locale),
+      dueDate: formatDate(transaction.dueDate, locale),
+      type: transaction.type === "income" ? translate(options, "table.income") : translate(options, "table.expense"),
+      category: category(formatCategoryLabel(transaction.category), options),
+      title: getTransactionTitle(transaction, options),
+      paymentMethod: paymentMethod(formatPaymentMethodLabel(transaction.paymentMethod), options),
+      status: transaction.status === "paid" ? translate(options, "table.paidOrReceived") : translate(options, "table.pending"),
       amount: transaction.amount,
     });
   });
-  formatWorksheetCurrency(transactions, ["H"]);
+  formatWorksheetCurrency(transactions, ["H"], currency);
   transactions.autoFilter = "A1:H1";
 
   const buffer = await workbook.xlsx.writeBuffer();
-  triggerDownload(buffer, getReportFileName(report, "xlsx"));
+  triggerDownload(buffer, getReportFileName(report, "xlsx", options));
 }

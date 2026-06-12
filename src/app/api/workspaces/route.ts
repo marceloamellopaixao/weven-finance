@@ -4,6 +4,7 @@ import { resolveApiErrorStatus } from "@/lib/api/error";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
+import { normalizeCurrency } from "@/lib/money/formatMoney";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
@@ -104,7 +105,7 @@ function parseType(value: unknown): WorkspaceType | null {
 function parseSettings(value: unknown): WorkspaceSettings {
   const data = (value as WorkspaceSettings | null) || {};
   return {
-    currency: data.currency === "BRL" ? "BRL" : "BRL",
+    currency: normalizeCurrency(data.currency),
     monthlyReportEnabled: data.monthlyReportEnabled !== false,
     categoriesPresetApplied: Boolean(data.categoriesPresetApplied),
   };
