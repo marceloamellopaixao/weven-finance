@@ -71,7 +71,7 @@ export async function generateMetadata(): Promise<Metadata> {
     applicationName: SITE_NAME,
     title: {
       default: metadata.title,
-      template: `%s | ${SITE_NAME}`,
+      template: `%s`,
     },
     description: metadata.description,
     keywords: [...metadata.keywords],
