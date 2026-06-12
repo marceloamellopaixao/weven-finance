@@ -150,7 +150,7 @@ export function Header() {
             <div className="rounded-xl bg-primary p-2 text-primary-foreground shadow-lg shadow-primary/20">
               <Wallet className="h-5 w-5" />
             </div>
-          <span className="hidden text-xl font-bold tracking-tight text-foreground md:block">
+          <span className="hidden text-xl font-bold tracking-tight text-foreground sm:block">
             Weven<span className="text-primary">Finance</span>
           </span>
         </Link>

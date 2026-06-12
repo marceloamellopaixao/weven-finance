@@ -231,13 +231,10 @@ export default function ReportsPage() {
   const legendFormatter = (value: string) => <span className="text-xs text-muted-foreground">{value}</span>;
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-4 py-8 pb-32 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-7xl px-4 py-8 pb-20 sm:px-6 lg:px-8">
       <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-              <Wallet className="h-5 w-5" />
-            </div>
             <div>
               <p className="text-sm font-semibold text-primary">
                 {t("header.eyebrow")}
@@ -308,7 +305,7 @@ export default function ReportsPage() {
         </div>
       ) : null}
 
-      <section ref={reportRef} className="space-y-6 bg-background p-1">
+      <section ref={reportRef} className="space-y-6 p-1">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard title={t("stats.income")} value={money(report.totals.income)} tone="income" />
           <StatCard title={t("stats.expenses")} value={money(report.totals.expense)} tone="expense" />

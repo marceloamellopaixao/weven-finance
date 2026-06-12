@@ -137,7 +137,7 @@ export function PiggyBankClient() {
   }
 
   return (
-    <div className="min-h-screen bg-transparent p-3 sm:p-6 md:p-8">
+    <div className="min-h-screen bg-transparent p-3 pb-20 sm:p-6 md:p-8">
       <div className="mx-auto max-w-5xl space-y-6">
         <div id="tour-piggy-header" className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>

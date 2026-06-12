@@ -2027,6 +2027,7 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* Active Admin Nav Item */}
             {activeAdminNavItem ? (
               <div className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border) px-5 py-4 shadow-sm">
                 <div className="flex items-center gap-3">
@@ -2043,6 +2044,7 @@ export default function AdminPage() {
                 </div>
               </div>
             ) : null}
+
           {/* --- SUPPORT TAB --- */}
           {activeTab === "support" && hasAdminPermission("support", "read") && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
@@ -2493,7 +2495,7 @@ export default function AdminPage() {
                       </TableBody>
                     </Table>
                   </div>
-                  <div className="flex flex-col gap-3 border-t border-color:var(--app-panel-border) px-4 pb-4 sm:flex-row sm:items-center sm:justify-between md:px-6">
+                  <div className="app-panel-subtle flex flex-col gap-3 border-t border-border/70 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-xs font-medium text-muted-foreground">
                       {tAdmin("support.pageSummary", { page: supportPage, totalPages: supportTotalPages || 1, total: ticketsTotal })}
                     </p>
@@ -2654,7 +2656,7 @@ export default function AdminPage() {
                     )}
                   </div>
 
-                  <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="app-panel-subtle flex flex-col gap-3 border-t border-border/70 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-xs text-zinc-500">
                       {tAdmin("audit.pageSummary", { page: auditPage, totalPages: Math.max(1, Math.ceil(auditTotal / auditPerPage)) })}
                     </p>
@@ -2990,9 +2992,9 @@ export default function AdminPage() {
                           <div key={u.uid} className="app-panel-subtle space-y-3 rounded-2xl border border-color:var(--app-panel-border) p-3">
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
-                                <p className="font-semibold text-zinc-900 truncate">{u.displayName}</p>
-                                <p className="text-xs text-zinc-500 truncate">{u.email}</p>
-                                <p className="text-[11px] text-zinc-400 mt-0.5">
+                                <p className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">{u.displayName}</p>
+                                <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{u.email}</p>
+                                <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">
                                   {tAdmin("users.registrationLabel", { date: new Date(u.createdAt).toLocaleDateString() })}
                                 </p>
                               </div>
@@ -3039,7 +3041,7 @@ export default function AdminPage() {
 
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                               <div>
-                                <p className="text-[10px] text-zinc-400 uppercase">{tAdmin("common.plan")}</p>
+                                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase">{tAdmin("common.plan")}</p>
                                 {canChangePlan ? (
                                   <Select value={u.plan} onValueChange={(val) => handlePlanChange(u.uid, val)}>
                                     <SelectTrigger className="w-full h-8 text-xs rounded-lg"><SelectValue /></SelectTrigger>
@@ -3659,6 +3661,7 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* Access Control - Permissions */}
           {activeTab === "permissions" && canViewPermissions && editedAccessControl && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -3686,7 +3689,7 @@ export default function AdminPage() {
 
               <div className="grid gap-4 2xl:grid-cols-[360px_minmax(0,1fr)]">
                 <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
-                  <CardHeader className="app-panel-subtle border-b border-color:var(--app-panel-border)">
+                  <CardHeader className="app-panel-subtle border-t border-b border-color:var(--app-panel-border) flex flex-col gap-3 p-4 sm:justify-between">
                     <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
                       <Lock className="h-5 w-5 text-primary" /> {tAdmin("access.rolesTitle")}
                     </CardTitle>
@@ -3766,7 +3769,7 @@ export default function AdminPage() {
 
                 <div className="space-y-4">
                   <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
-                    <CardHeader className="app-panel-subtle border-b border-color:var(--app-panel-border)">
+                    <CardHeader className="app-panel-subtle border-t border-b border-color:var(--app-panel-border) flex flex-col gap-3 p-4 sm:justify-between">
                       <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
                         <ShieldCheck className="h-5 w-5 text-primary" /> {tAdmin("access.targetTitle")}
                       </CardTitle>

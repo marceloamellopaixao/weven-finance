@@ -652,7 +652,7 @@ export default function SettingsPage() {
   }, [activeTab]);
 
   return (
-    <div className="font-sans p-4 md:p-8 pb-28 md:pb-32">
+    <div className="min-h-screen p-3 font-sans md:p-8 pb-20">
       <div className="max-w-5xl mx-auto space-y-8">
 
         {/* Header */}
@@ -672,17 +672,17 @@ export default function SettingsPage() {
 
         {/* Navegação de Abas Personalizada */}
         <div className={`${fadeInUp} delay-150 space-y-6`}>
-          <div id="tour-settings-tabs" className="app-panel-subtle grid min-w-full w-full grid-cols-1 gap-1 rounded-2xl border p-1.5 shadow-sm sm:grid-cols-2 md:grid-cols-4">
-            <button id="tour-settings-account-tab" type="button" aria-pressed={activeTab === "account"} onClick={() => handleTabChange("account")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "account" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+          <div id="tour-settings-tabs" className="app-panel-subtle grid min-w-full w-full grid-cols-2 gap-1 rounded-2xl border p-1.5 shadow-sm sm:grid-cols-4">
+            <button id="tour-settings-account-tab" type="button" aria-pressed={activeTab === "account"} onClick={() => handleTabChange("account")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "account" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <User className="h-4 w-4" /> {t("tabs.account")}
             </button>
-            <button id="tour-settings-billing-tab" type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "billing" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+            <button id="tour-settings-billing-tab" type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "billing" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <CreditCard className="h-4 w-4" /> {t("tabs.billing")}
             </button>
-            <button id="tour-settings-security-tab" type="button" aria-pressed={activeTab === "security"} onClick={() => handleTabChange("security")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "security" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+            <button id="tour-settings-security-tab" type="button" aria-pressed={activeTab === "security"} onClick={() => handleTabChange("security")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "security" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <ShieldCheck className="h-4 w-4" /> {t("tabs.security")}
             </button>
-            <button id="tour-settings-help-tab" type="button" aria-pressed={activeTab === "help"} onClick={() => handleTabChange("help")} className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "help" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+            <button id="tour-settings-help-tab" type="button" aria-pressed={activeTab === "help"} onClick={() => handleTabChange("help")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "help" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <HelpCircle className="h-4 w-4" /> {t("tabs.help")}
             </button>
           </div>
