@@ -168,7 +168,7 @@ export async function POST(request: NextRequest) {
 
       const cardRow = cardRows[0];
       const cardRaw = readSecureCardPayload(cardRow.raw);
-      const bankName = String(cardRow.bank_name || cardRaw.bankName || "Cartao");
+      const bankName = String(cardRow.bank_name || cardRaw.bankName || "Cartão");
       const last4 = String(cardRow.last4 || cardRaw.last4 || "");
       const currentLimit = Number(cardRow.credit_limit || cardRaw.creditLimit || 0);
       const nextLimit = currentLimit + amount;

@@ -32,7 +32,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/controle-financeiro-simples`,
+      url: `${baseUrl}/controle-financeiro`,
       lastModified,
       changeFrequency: "weekly",
       priority: 0.85,

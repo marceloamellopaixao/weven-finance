@@ -21,6 +21,7 @@ import {
 import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { extractAuthProviders } from "@/lib/auth/providers";
 import { resolvePendingUpgradePath } from "@/services/billing/checkoutIntent";
+import { useTranslations } from "@/i18n/T";
 
 type PageIntent = PasswordAccessIntent;
 
@@ -35,6 +36,7 @@ export default function FirstAccessPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, userProfile, loading, refreshProfile } = useAuth();
+  const t = useTranslations("auth.firstAccess");
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -54,18 +56,10 @@ export default function FirstAccessPage() {
   const searchCode = useMemo(() => searchParams.get("code"), [searchParams]);
   const requiresPasswordSetup = Boolean(userProfile?.needsPasswordSetup);
   const intent = useMemo<PageIntent>(() => {
-    if (requiresPasswordSetup) {
-      return "first-access";
-    }
-    if (searchIntent !== "first-access") {
-      return searchIntent;
-    }
-    if (storedIntent) {
-      return storedIntent;
-    }
-    if (isRecoveryMode) {
-      return storedIntent === "change-password" ? "change-password" : "recovery";
-    }
+    if (requiresPasswordSetup) return "first-access";
+    if (searchIntent !== "first-access") return searchIntent;
+    if (storedIntent) return storedIntent;
+    if (isRecoveryMode) return storedIntent === "change-password" ? "change-password" : "recovery";
     return searchIntent;
   }, [isRecoveryMode, requiresPasswordSetup, searchIntent, storedIntent]);
   const canSetPasswordNow = Boolean(user && requiresPasswordSetup);
@@ -75,29 +69,29 @@ export default function FirstAccessPage() {
 
   const pageTitle =
     intent === "change-password"
-      ? "Alterar Senha"
+      ? t("titles.changePassword")
       : intent === "recovery"
-        ? "Redefinir Senha"
-        : "Primeiro Acesso";
+        ? t("titles.recovery")
+        : t("titles.firstAccess");
 
   const pageDescription =
     intent === "change-password"
-      ? "Enviamos um link seguro para você definir sua nova senha."
+      ? t("descriptions.changePassword")
       : intent === "recovery"
-        ? "Use o link recebido por e-mail para criar uma nova senha."
-        : "Defina uma senha para também entrar com e-mail e senha, além do Google.";
+        ? t("descriptions.recovery")
+        : t("descriptions.firstAccess");
 
-  const successTitle = intent === "change-password" ? "Senha atualizada" : "Senha definida";
+  const successTitle = intent === "change-password" ? t("success.passwordChangedTitle") : t("success.passwordSetTitle");
   const successDescription =
     intent === "change-password"
-      ? "Sua nova senha já está ativa. Você pode voltar ao painel."
-      : "Tudo certo. Seu acesso por e-mail e senha já está disponível.";
+      ? t("success.passwordChangedDescription")
+      : t("success.passwordSetDescription");
 
   const nextPath = resolvePendingUpgradePath() || "/dashboard";
 
   const handleSendEmail = useCallback(async () => {
     if (!user?.email) {
-      setError("Não encontramos um e-mail válido para enviar o link.");
+      setError(t("errors.missingEmail"));
       return;
     }
 
@@ -109,12 +103,12 @@ export default function FirstAccessPage() {
       setStoredIntent(emailIntent);
       setEmailSent(true);
     } catch (sendError) {
-      const message = sendError instanceof Error ? sendError.message : "Erro ao enviar e-mail.";
+      const message = sendError instanceof Error ? sendError.message : t("errors.sendEmail");
       setError(message);
     } finally {
       setIsSendingEmail(false);
     }
-  }, [intent, user?.email]);
+  }, [intent, t, user?.email]);
 
   useEffect(() => {
     setStoredIntent(readPasswordAccessIntent());
@@ -141,7 +135,7 @@ export default function FirstAccessPage() {
         setEmailSent(true);
         router.replace("/first-access");
       } catch {
-        setError("Nao foi possivel validar o link de recuperacao. Solicite um novo envio.");
+        setError(t("errors.invalidRecoveryLink"));
       }
     };
 
@@ -157,7 +151,7 @@ export default function FirstAccessPage() {
     });
 
     return () => subscription.unsubscribe();
-  }, [router, searchCode, searchType]);
+  }, [router, searchCode, searchType, t]);
 
   useEffect(() => {
     if (loading || isComplete) return;
@@ -173,22 +167,22 @@ export default function FirstAccessPage() {
     setError("");
 
     if (!password.trim()) {
-      setError("Por favor, informe a nova senha.");
+      setError(t("errors.missingPassword"));
       return;
     }
 
     if (!confirmPassword.trim()) {
-      setError("Por favor, confirme a nova senha.");
+      setError(t("errors.missingConfirmPassword"));
       return;
     }
 
     if (password.length < 6) {
-      setError("A senha deve ter no mínimo 6 caracteres.");
+      setError(t("errors.passwordTooShort"));
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("As senhas não coincidem.");
+      setError(t("errors.passwordMismatch"));
       return;
     }
 
@@ -227,7 +221,7 @@ export default function FirstAccessPage() {
         window.location.assign(nextPath);
       }, 900);
     } catch (submitError) {
-      const message = submitError instanceof Error ? submitError.message : "Não foi possível atualizar a senha.";
+      const message = submitError instanceof Error ? submitError.message : t("errors.updatePassword");
       setError(message);
     } finally {
       setIsSubmitting(false);
@@ -236,160 +230,146 @@ export default function FirstAccessPage() {
 
   return (
     <AuthPageShell maxWidthClassName="max-w-[440px]">
-        <div className={`${zoomIn} ${authPanelClassName}`}>
-          {loading ? (
-            <div className="flex flex-col items-center justify-center gap-4 py-10 text-muted-foreground">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm">Preparando seu acesso...</p>
+      <div className={`${zoomIn} ${authPanelClassName}`}>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center gap-4 py-10 text-muted-foreground">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm">{t("loading")}</p>
+          </div>
+        ) : isComplete ? (
+          <div className={`${fadeInUp} space-y-6 py-4 text-center`}>
+            <div className="mx-auto w-fit rounded-full bg-primary/10 p-4 text-primary">
+              <CheckCircle2 className="h-10 w-10" />
             </div>
-          ) : isComplete ? (
-            <div className={`${fadeInUp} text-center space-y-6 py-4`}>
-              <div className="mx-auto w-fit rounded-full bg-primary/10 p-4 text-primary">
-                <CheckCircle2 className="h-10 w-10" />
+            <div className="space-y-2">
+              <h1 className="text-2xl font-bold text-foreground">{successTitle}</h1>
+              <p className="text-sm leading-relaxed text-muted-foreground">{successDescription}</p>
+            </div>
+            <Button
+              onClick={() => window.location.assign(nextPath)}
+              className="h-11 w-full rounded-xl bg-primary font-medium text-primary-foreground shadow-lg shadow-black/10 hover:bg-primary/90"
+            >
+              {nextPath === "/dashboard" ? t("actions.continueToDashboard") : t("actions.continueCheckout")}
+            </Button>
+          </div>
+        ) : showPasswordForm ? (
+          <>
+            <div className="mb-6 space-y-2 text-center">
+              <div className={`${zoomIn} ${authIconClassName} mb-4`}>
+                <KeyRound className="h-6 w-6" />
               </div>
+              <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-foreground`}>{pageTitle}</h1>
+              <p className={`${fadeInUp} delay-200 text-sm text-muted-foreground`}>
+                {requiresPasswordSetup ? t("descriptions.setupPassword") : t("descriptions.createNewPassword")}
+              </p>
+            </div>
+
+            {requiresPasswordSetup && emailSent && (
+              <div className="mb-5 flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/10 p-4 text-sm text-primary">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                {t("securityLinkSent", { email: user?.email || t("emailInstructions.sentFallbackEmail") })}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className={`${fadeInUp} delay-300 space-y-5`}>
               <div className="space-y-2">
-                <h1 className="text-2xl font-bold text-foreground">{successTitle}</h1>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {successDescription}
-                </p>
-              </div>
-              <Button
-                onClick={() => window.location.assign(nextPath)}
-                className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium shadow-lg shadow-black/10"
-              >
-                {nextPath === "/dashboard" ? "Ir para o painel" : "Continuar contratacao"}
-              </Button>
-            </div>
-          ) : showPasswordForm ? (
-            <>
-              <div className="text-center mb-6 space-y-2">
-                <div className={`${zoomIn} ${authIconClassName} mb-4`}>
-                  <KeyRound className="h-6 w-6" />
-                </div>
-                <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-foreground`}>
-                  {pageTitle}
-                </h1>
-                <p className={`${fadeInUp} delay-200 text-sm text-muted-foreground`}>
-                  {requiresPasswordSetup
-                    ? "Defina sua senha agora para liberar acesso por Google e também por e-mail e senha."
-                    : "Crie sua nova senha com segurança e volte ao painel."}
-                </p>
+                <Label htmlFor="password">{t("fields.password")}</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder={t("placeholders.password")}
+                  className="app-field-surface h-11 rounded-xl"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
               </div>
 
-              {requiresPasswordSetup && emailSent && (
-                <div className="mb-5 flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/10 p-4 text-sm text-primary">
-                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                  Também enviamos um link de segurança para <strong>{user?.email}</strong>, caso você prefira concluir por e-mail.
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">{t("fields.confirmPassword")}</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder={t("placeholders.confirmPassword")}
+                  className="app-field-surface h-11 rounded-xl"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+              </div>
+
+              {error && (
+                <div role="alert" className="animate-in fade-in slide-in-from-top-2 rounded-lg border border-destructive/20 bg-destructive/10 p-2 text-center text-xs font-medium text-destructive">
+                  {error}
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className={`${fadeInUp} delay-300 space-y-5`}>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Nova senha</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder="Mínimo de 6 caracteres"
-                    className="app-field-surface h-11 rounded-xl"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="h-11 w-full rounded-xl bg-primary font-medium text-primary-foreground shadow-lg shadow-black/10 transition-all duration-200 hover:cursor-pointer hover:bg-primary/90 active:scale-[0.98]"
+              >
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t("actions.savePassword")}
+              </Button>
 
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirmar senha</Label>
-                  <Input
-                    id="confirm-password"
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder="Repita a nova senha"
-                    className="app-field-surface h-11 rounded-xl"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                  />
-                </div>
-
-                {error && (
-                  <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-2 text-center text-xs font-medium text-destructive animate-in fade-in slide-in-from-top-2">
-                    {error}
-                  </div>
-                )}
-
+              {canRequestEmailLink && (
                 <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium shadow-lg shadow-black/10 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
+                  type="button"
+                  variant="outline"
+                  onClick={handleSendEmail}
+                  disabled={isSendingEmail}
+                  className="h-11 w-full rounded-xl"
                 >
-                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Salvar nova senha"}
+                  {isSendingEmail ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t("actions.receiveEmailLink")}
                 </Button>
+              )}
+            </form>
+          </>
+        ) : (
+          <>
+            <div className="mb-6 space-y-2 text-center">
+              <div className={`${zoomIn} ${authIconClassName} mb-4`}>
+                <Mail className="h-6 w-6" />
+              </div>
+              <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-foreground`}>{pageTitle}</h1>
+              <p className={`${fadeInUp} delay-200 text-sm text-muted-foreground`}>{pageDescription}</p>
+            </div>
 
-                {canRequestEmailLink && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleSendEmail}
-                    disabled={isSendingEmail}
-                    className="h-11 w-full rounded-xl"
-                  >
-                    {isSendingEmail ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Receber link por e-mail"}
-                  </Button>
-                )}
-              </form>
-            </>
-          ) : (
-            <>
-              <div className="text-center mb-6 space-y-2">
-                <div className={`${zoomIn} ${authIconClassName} mb-4`}>
-                  <Mail className="h-6 w-6" />
-                </div>
-                <h1 className={`${fadeInUp} delay-150 text-2xl font-bold tracking-tight text-foreground`}>
-                  {pageTitle}
-                </h1>
-                <p className={`${fadeInUp} delay-200 text-sm text-muted-foreground`}>
-                  {pageDescription}
-                </p>
+            <div className={`${fadeInUp} delay-300 space-y-4`}>
+              <div className="app-panel-subtle rounded-2xl border p-4 text-sm text-muted-foreground">
+                {emailSent
+                  ? t("emailInstructions.sent", { email: user?.email || t("emailInstructions.sentFallbackEmail") })
+                  : t("emailInstructions.pending")}
               </div>
 
-              <div className={`${fadeInUp} delay-300 space-y-4`}>
-                <div className="app-panel-subtle rounded-2xl border p-4 text-sm text-muted-foreground">
-                  {emailSent ? (
-                    <>
-                      Enviamos um link seguro para <strong>{user?.email || "seu e-mail"}</strong>. Abra a mensagem para definir sua nova senha aqui no WevenFinance.
-                    </>
-                  ) : (
-                    <>Abra o link recebido no seu e-mail para continuar. Se precisar, você pode solicitar um novo envio.</>
-                  )}
+              {error && (
+                <div role="alert" className="animate-in fade-in slide-in-from-top-2 rounded-lg border border-destructive/20 bg-destructive/10 p-2 text-center text-xs font-medium text-destructive">
+                  {error}
                 </div>
+              )}
 
-                {error && (
-                  <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-2 text-center text-xs font-medium text-destructive animate-in fade-in slide-in-from-top-2">
-                    {error}
-                  </div>
-                )}
+              {canRequestEmailLink && (
+                <Button
+                  onClick={handleSendEmail}
+                  disabled={isSendingEmail}
+                  className="h-11 w-full rounded-xl bg-primary font-medium text-primary-foreground shadow-lg shadow-black/10 transition-all duration-200 hover:cursor-pointer hover:bg-primary/90 active:scale-[0.98]"
+                >
+                  {isSendingEmail ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t("actions.resendEmailLink")}
+                </Button>
+              )}
+            </div>
+          </>
+        )}
 
-                {canRequestEmailLink && (
-                  <Button
-                    onClick={handleSendEmail}
-                    disabled={isSendingEmail}
-                    className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium shadow-lg shadow-black/10 active:scale-[0.98] hover:cursor-pointer transition-all duration-200"
-                  >
-                    {isSendingEmail ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Enviar link novamente"}
-                  </Button>
-                )}
-              </div>
-            </>
-          )}
-
-          <div className={`${fadeInUp} delay-500 mt-8 text-center`}>
-            <Link
-              href={user ? "/dashboard" : "/login"}
-              className="flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground hover:cursor-pointer transition-colors duration-200"
-            >
-              <ArrowLeft className="w-3 h-3" /> {user ? "Voltar ao painel" : "Voltar para login"}
-            </Link>
-          </div>
+        <div className={`${fadeInUp} delay-500 mt-8 text-center`}>
+          <Link
+            href={user ? "/dashboard" : "/login"}
+            className="flex items-center justify-center gap-1 text-sm text-muted-foreground transition-colors duration-200 hover:cursor-pointer hover:text-foreground"
+          >
+            <ArrowLeft className="h-3 w-3" /> {user ? t("actions.backToDashboard") : t("actions.backToLogin")}
+          </Link>
         </div>
+      </div>
     </AuthPageShell>
   );
 }

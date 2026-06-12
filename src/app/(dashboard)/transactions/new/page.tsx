@@ -20,10 +20,14 @@ import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useCategories } from "@/hooks/useCategories";
 import { useOnboarding } from "@/hooks/useOnboarding";
+import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { usePlatformExperience } from "@/hooks/usePlatformExperience";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
+import { useFormatters } from "@/i18n/useFormatters";
+import { useTranslations } from "@/i18n/T";
 import { getCreditCardDueDateFromSelectedCard, isCreditCapableCard } from "@/lib/credit-card/due-date";
 import { formatCurrencyInput, parseCurrencyInput } from "@/lib/money";
+import { getCurrencySymbol } from "@/lib/money/formatMoney";
 import { getPlanCapabilities } from "@/lib/plans/capabilities";
 import { buildInstallmentPlan } from "@/lib/transactions/installments";
 import { getCurrentMonthKey, getMonthKey } from "@/lib/transactions/recurring";
@@ -34,19 +38,17 @@ import { InstallmentValueMode, PaymentMethod, TransactionType } from "@/types/tr
 import { orderCategoryNames } from "@/lib/category-utils";
 import { calculateDailyLimit } from "@/lib/finance/daily-limit";
 
-const PAYMENT_METHODS: { value: PaymentMethod; label: string; hasDueDate: boolean }[] = [
-  { value: "pix", label: "Pix", hasDueDate: false },
-  { value: "boleto", label: "Boleto", hasDueDate: true },
-  { value: "cash", label: "Dinheiro", hasDueDate: false },
-  { value: "transfer", label: "Transferência", hasDueDate: false },
-  { value: "debit_card", label: "Cartão de Débito", hasDueDate: false },
-  { value: "credit_card", label: "Cartão de Crédito", hasDueDate: false },
+const PAYMENT_METHODS: { value: PaymentMethod; labelKey: string; hasDueDate: boolean }[] = [
+  { value: "pix", labelKey: "paymentMethods.pix", hasDueDate: false },
+  { value: "boleto", labelKey: "paymentMethods.boleto", hasDueDate: true },
+  { value: "cash", labelKey: "paymentMethods.cash", hasDueDate: false },
+  { value: "transfer", labelKey: "paymentMethods.transfer", hasDueDate: false },
+  { value: "debit_card", labelKey: "paymentMethods.debitCard", hasDueDate: false },
+  { value: "credit_card", labelKey: "paymentMethods.creditCard", hasDueDate: false },
 ];
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value || 0);
-
 export default function NewTransactionPage() {
+  const t = useTranslations("transactions");
   const router = useRouter();
   const { user, userProfile } = useAuth();
   const { isPlatformTourActive } = usePlatformExperience();
@@ -61,6 +63,8 @@ export default function NewTransactionPage() {
     completeTour,
   } = useOnboarding();
   const { transactions } = useTransactions();
+  const currency = usePreferredCurrency();
+  const { money } = useFormatters(currency);
   const {
     categories,
     defaultCategories,
@@ -324,7 +328,7 @@ export default function NewTransactionPage() {
   // Funções de Exclusividade Mútua mantidas intactas
   const handleToggleInstallment = (checked: boolean) => {
     if (checked && !canUseInstallments) {
-      setError("Parcelamentos estão disponíveis apenas nos planos Premium e Pro.");
+      setError(t("new.errors.installmentsPremium"));
       return;
     }
     setIsInstallment(checked);
@@ -340,8 +344,8 @@ export default function NewTransactionPage() {
     if (isTransactionOnboardingActive || isPlatformTourActive) {
       setError(
         isPlatformTourActive
-          ? "Conclua o tour guiado antes de abrir outros modais."
-          : "Conclua sua primeira transação antes de abrir outros modais."
+          ? t("new.errors.tourModal")
+          : t("new.errors.onboardingModal")
       );
       return;
     }
@@ -357,21 +361,21 @@ export default function NewTransactionPage() {
     if (!user) return;
     setError("");
     if (!description.trim() || parsedAmount <= 0 || !category) {
-      setError("Preencha título, valor e categoria.");
+      setError(t("new.errors.requiredFields"));
       return;
     }
 
     const isCardPayment = paymentMethod === "credit_card" || paymentMethod === "debit_card";
     if (paymentMethod === "credit_card" && !selectedCard) {
-      setError("Selecione um cartão de crédito para definir o vencimento da fatura.");
+      setError(t("new.errors.selectCreditCard"));
       return;
     }
     if (paymentMethod === "credit_card" && !creditCardDueDate) {
-      setError("O cartão de crédito selecionado não tem vencimento de fatura configurado.");
+      setError(t("new.errors.missingCreditDueDate"));
       return;
     }
     if (isCardPayment && !selectedCard) {
-      setError("Selecione um cartão para continuar.");
+      setError(t("new.errors.selectCard"));
       return;
     }
 
@@ -383,15 +387,15 @@ export default function NewTransactionPage() {
     const totalAmountToReserve = installmentPlan ? installmentPlan.totalAmount : value;
 
     if (isInstallment && !canUseInstallments) {
-      setError("Parcelamentos estão disponíveis apenas nos planos Premium e Pro.");
+      setError(t("new.errors.installmentsPremium"));
       return;
     }
 
     if (isCardPayment && selectedCard && !validateLimit(selectedCard, paymentMethod, totalAmountToReserve)) {
       setError(
         paymentMethod === "debit_card"
-          ? `Saldo insuficiente no débito. Disponível: ${formatCurrency(currentBalance)}`
-          : "Limite insuficiente para esta compra."
+          ? t("new.errors.debitInsufficient", { amount: money(currentBalance) })
+          : t("new.errors.creditInsufficient")
       );
       return;
     }
@@ -426,7 +430,7 @@ export default function NewTransactionPage() {
       }
       router.push("/dashboard");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Não foi possível salvar a transação.");
+      setError(e instanceof Error ? e.message : t("new.errors.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -435,7 +439,7 @@ export default function NewTransactionPage() {
   const isIncome = type === "income";
 
   return (
-    <div className="min-h-screen bg-transparent p-4 pb-32 font-sans md:p-8">
+    <div className="min-h-screen bg-transparent p-4 pb-[calc(env(safe-area-inset-bottom)+10rem)] font-sans md:p-8 md:pb-25">
       <div className="mx-auto max-w-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
         
         {/* HEADER NOVO DESIGN */}
@@ -444,7 +448,7 @@ export default function NewTransactionPage() {
             <ArrowLeft className="h-5 w-5 text-muted-foreground" />
           </Button>
           <h1 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Novo Lançamento
+            {t("new.title")}
           </h1>
         </div>
 
@@ -456,7 +460,7 @@ export default function NewTransactionPage() {
               : "border-primary/20 bg-primary/6 text-primary/90"
           }`}>
             <Info className="h-5 w-5 shrink-0 text-primary" />
-            <p><strong>Etapa atual:</strong> salve sua primeira transação para concluir o início guiado.</p>
+            <p><strong>{t("new.onboardingStep")}</strong> {t("new.onboardingDescription")}</p>
           </div>
         )}
 
@@ -482,48 +486,48 @@ export default function NewTransactionPage() {
                     onClick={() => setType("expense")}
                     className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all hover:cursor-pointer ${!isIncome ? 'bg-card text-red-600 shadow-sm' : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground'}`}
                   >
-                  <TrendingDown className="h-4 w-4" /> Despesa
+                  <TrendingDown className="h-4 w-4" /> {t("types.expense")}
                 </button>
                   <button
                     type="button"
                     onClick={() => setType("income")}
                     className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all hover:cursor-pointer ${isIncome ? 'bg-card text-emerald-600 shadow-sm' : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground'}`}
                   >
-                  <TrendingUp className="h-4 w-4" /> Receita
+                  <TrendingUp className="h-4 w-4" /> {t("types.income")}
                 </button>
               </div>
             </div>
 
             {/* INPUT DE VALOR SEM BORDAS */}
             <Label className="text-zinc-500 font-medium text-sm flex justify-start mb-2">
-              {isInstallment && installmentValueMode === "repeat_value" ? "Valor de cada parcela" : "Valor do lancamento"}
+              {isInstallment && installmentValueMode === "repeat_value" ? t("new.amountPerInstallment") : t("new.amount")}
             </Label>
             <div id="tour-transactions-amount" className="flex items-center justify-center gap-2">
-              <span className={`text-2xl font-bold transition-colors sm:text-3xl ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>R$</span>
+              <span className={`text-2xl font-bold transition-colors sm:text-3xl ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>{getCurrencySymbol(currency)}</span>
               <Input 
                 type="text"
                 inputMode="decimal"
                 value={amountInput}
                 onChange={(e) => setAmountInput(formatCurrencyInput(e.target.value))}
-                placeholder="0,00"
+                placeholder={t("new.amountPlaceholder")}
                 className={`financial-value w-full max-w-full h-auto p-0 border-none shadow-none text-3xl sm:text-4xl md:text-5xl font-bold bg-transparent focus-visible:ring-0 text-start ${isIncome ? 'text-emerald-500 placeholder:text-emerald-500' : 'text-red-500 placeholder:text-red-500'}`}
               />
             </div>
             <p className="mt-3 text-sm text-zinc-500">
               {isInstallment
                 ? installmentValueMode === "split_total"
-                  ? "Você informa o valor total e o sistema divide automaticamente entre as parcelas."
-                  : "Você informa o valor de cada parcela e o sistema repete esse valor nas próximas parcelas."
+                  ? t("new.splitTotalHelp")
+                  : t("new.repeatValueHelp")
                 : isRecurring
-                  ? "Esse valor será usado como modelo mensal. O sistema cria apenas a cobrança necessária do mês."
-                  : "Esse valor será salvo exatamente como você digitou."}
+                  ? t("new.recurringHelp")
+                  : t("new.simpleAmountHelp")}
             </p>
           </div>
 
           {dailyLimitAfterTransaction !== null && !isInstallment && !isRecurring && (
             <div className="border-b border-border/70 px-6 py-3 md:px-8">
               <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
-                Esse gasto reduz seu limite diário estimado para {formatCurrency(dailyLimitAfterTransaction)}.
+                {t("new.dailyLimitAfter", { amount: money(dailyLimitAfterTransaction) })}
               </p>
             </div>
           )}
@@ -534,25 +538,25 @@ export default function NewTransactionPage() {
             {/* DESCRIÇÃO */}
             <div id="tour-transactions-description" className="space-y-2">
               <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
-                <AlignLeft className="h-4 w-4 text-zinc-400" /> Título
+                <AlignLeft className="h-4 w-4 text-zinc-400" /> {t("common.title")}
               </Label>
               <Input 
                 value={description} 
                 onChange={(e) => setDescription(e.target.value)} 
                 className="h-12 rounded-xl text-base font-medium"
-                placeholder="Ex: Valorant Points"
+                placeholder={t("common.exampleTitle")}
               />
             </div>
 
             <div className="space-y-2">
               <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
-                <ReceiptText className="h-4 w-4 text-zinc-400" /> Descrição
+                <ReceiptText className="h-4 w-4 text-zinc-400" /> {t("common.description")}
               </Label>
               <textarea
                 value={transactionNotes}
                 onChange={(e) => setTransactionNotes(e.target.value)}
-                className="min-h-[96px] w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                placeholder="Ex: pacote comprado na promoção, lembrar de conferir na fatura."
+                className="min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                placeholder={t("new.notesPlaceholder")}
               />
             </div>
 
@@ -562,7 +566,7 @@ export default function NewTransactionPage() {
               <div id="tour-transactions-category" className="space-y-2">
                 <div className="flex items-center justify-start gap-2">
                   <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
-                    <Tag className="h-4 w-4 text-zinc-400" /> Categoria
+                    <Tag className="h-4 w-4 text-zinc-400" /> {t("common.category")}
                   </Label>
                   <button
                     type="button"
@@ -570,12 +574,12 @@ export default function NewTransactionPage() {
                     disabled={isTransactionOnboardingActive}
                     className="text-xs font-semibold text-primary hover:text-primary/80 flex items-center gap-1 hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <Settings2 className="h-4 w-4" /> Gerenciar
+                    <Settings2 className="h-4 w-4" /> {t("common.manage")}
                   </button>
                 </div>
                 <Select value={category} onValueChange={setCategory}>
                   <SelectTrigger className="h-12 rounded-xl font-medium">
-                    <SelectValue placeholder="Selecione..." />
+                    <SelectValue placeholder={t("common.select")} />
                   </SelectTrigger>
                   <SelectContent>
                     {monthCategories.map((cat) => (
@@ -590,7 +594,7 @@ export default function NewTransactionPage() {
               {/* DATA */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
-                  <Calendar className="h-4 w-4 text-zinc-400" /> Data da Compra
+                  <Calendar className="h-4 w-4 text-zinc-400" /> {t("common.purchaseDate")}
                 </Label>
                 <Input 
                   type="date" 
@@ -603,7 +607,7 @@ export default function NewTransactionPage() {
               {/* MÉTODO DE PAGAMENTO */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
-                  <CreditCard className="h-4 w-4 text-zinc-400" /> Forma de Pagamento
+                  <CreditCard className="h-4 w-4 text-zinc-400" /> {t("common.paymentMethod")}
                 </Label>
                 <Select
                   value={paymentMethod}
@@ -613,7 +617,7 @@ export default function NewTransactionPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {PAYMENT_METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                    {PAYMENT_METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{t(m.labelKey)}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -622,7 +626,7 @@ export default function NewTransactionPage() {
               {showDueDateInput && (
                 <div className="space-y-2 animate-in fade-in zoom-in-95">
                   <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
-                    <Calendar className="h-4 w-4 text-zinc-400" /> Data de Vencimento
+                    <Calendar className="h-4 w-4 text-zinc-400" /> {t("common.dueDate")}
                   </Label>
                   <Input 
                     type="date" 
@@ -636,14 +640,14 @@ export default function NewTransactionPage() {
               {isCreditCardPayment && (
                 <div className="space-y-2 animate-in fade-in zoom-in-95">
                   <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
-                    <Calendar className="h-4 w-4 text-zinc-400" /> Vencimento da Fatura
+                    <Calendar className="h-4 w-4 text-zinc-400" /> {t("common.invoiceDueDate")}
                   </Label>
                   <div className="flex min-h-12 items-center rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm font-medium text-muted-foreground">
                     {selectedCard?.dueDate
                       ? selectedCard.closingDay
-                        ? `Compras até o dia ${String(selectedCard.closingDay).padStart(2, "0")} entram na próxima fatura com vencimento dia ${String(selectedCard.dueDate).padStart(2, "0")}.`
-                        : `Esta compra será considerada na fatura com vencimento dia ${String(selectedCard.dueDate).padStart(2, "0")}.`
-                      : "Selecione um cartão de crédito para definir o vencimento da fatura."}
+                        ? t("new.creditCardClosingHelp", { closingDay: String(selectedCard.closingDay).padStart(2, "0"), dueDay: String(selectedCard.dueDate).padStart(2, "0") })
+                        : t("new.creditCardDueHelp", { dueDay: String(selectedCard.dueDate).padStart(2, "0") })
+                      : t("new.creditCardSelectHelp")}
                   </div>
                 </div>
               )}
@@ -652,18 +656,18 @@ export default function NewTransactionPage() {
               {(paymentMethod === "credit_card" || paymentMethod === "debit_card") && (
                 <div className="space-y-2 md:col-span-2 animate-in fade-in slide-in-from-top-2">
                   <Label className="flex items-center gap-2 text-sm font-medium text-foreground/85">
-                    <ReceiptText className="h-4 w-4 text-zinc-400" /> Cartão Vinculado
+                    <ReceiptText className="h-4 w-4 text-zinc-400" /> {t("common.linkedCard")}
                   </Label>
                   <Select
                     value={selectedCardId}
                     onValueChange={setSelectedCardId}
                   >
                     <SelectTrigger className="h-12 rounded-xl font-medium">
-                      <SelectValue placeholder="Selecione um cartão para vincular" />
+                      <SelectValue placeholder={t("new.cardPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
                       {availablePaymentCards.length === 0 ? (
-                        <SelectItem value="__none" disabled>Nenhum cartão cadastrado</SelectItem>
+                        <SelectItem value="__none" disabled>{t("new.noCards")}</SelectItem>
                       ) : (
                         availablePaymentCards.map((card) => (
                           <SelectItem key={card.id} value={card.id}>{card.bankName} •••• {card.last4}</SelectItem>
@@ -683,8 +687,8 @@ export default function NewTransactionPage() {
                 onClick={() => setShowAdvancedOptions((value) => !value)}
               >
                 <span>
-                  <span className="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Opções avançadas</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">Parcelamento e lançamento fixo ficam aqui para manter o modo simples rápido.</span>
+                  <span className="block text-xs font-semibold uppercase tracking-wider text-zinc-500">{t("new.advanced.title")}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">{t("new.advanced.description")}</span>
                 </span>
                 <Settings2 className={`h-4 w-4 text-muted-foreground transition-transform ${showAdvancedOptions ? "rotate-45" : ""}`} />
               </button>
@@ -696,13 +700,13 @@ export default function NewTransactionPage() {
                 <div className="flex items-center justify-between">
                   <Label className="flex items-center gap-2 text-sm font-medium cursor-pointer text-foreground/85">
                     <Repeat className={`h-4 w-4 ${isRecurring ? 'text-primary' : 'text-zinc-400'}`} /> 
-                    Lançamento Fixo / Assinatura
+                    {t("new.advanced.recurringTitle")}
                   </Label>
                   <Switch className="data-[state=checked]:bg-primary" checked={isRecurring} onCheckedChange={handleToggleRecurring} onClick={(e) => e.stopPropagation()} />
                 </div>
                 {isRecurring && (
                   <p className="mt-2 ml-6 animate-in fade-in text-xs text-primary">
-                    Este lançamento será repetido automaticamente, criando apenas a cobrança necessária do mês. Próxima cobrança: {showDueDateInput ? dueDate : date}.
+                    {t("new.advanced.recurringActive", { date: showDueDateInput ? dueDate : date })}
                   </p>
                 )}
               </div>
@@ -723,7 +727,7 @@ export default function NewTransactionPage() {
                   <div className="flex items-center justify-between">
                     <Label className="flex items-center gap-2 text-sm font-medium cursor-pointer text-foreground/85">
                       <Layers className={`h-4 w-4 ${isInstallment ? 'text-primary' : 'text-zinc-400'}`} /> 
-                      Compra Parcelada
+                      {t("new.advanced.installmentTitle")}
                     </Label>
                     <Switch checked={isInstallment} disabled={!canUseInstallments} onCheckedChange={handleToggleInstallment} onClick={(e) => e.stopPropagation()} />
                   </div>
@@ -732,10 +736,10 @@ export default function NewTransactionPage() {
                     <div className="mt-3 rounded-xl border border-primary/20 bg-primary/8 px-3 py-3 text-sm text-primary">
                       <p className="flex items-center gap-2 font-semibold">
                         <Crown className="h-4 w-4 text-primary" />
-                        Disponível no Premium e no Pro
+                        {t("new.advanced.premiumTitle")}
                       </p>
                       <p className="mt-1 text-xs text-primary/80">
-                        Faça upgrade para lançar compras parceladas e acompanhar o mês com mais precisão.
+                        {t("new.advanced.premiumDescription")}
                       </p>
                       <Button
                         type="button"
@@ -746,31 +750,31 @@ export default function NewTransactionPage() {
                           router.push("/settings?tab=billing");
                         }}
                       >
-                        Ver planos
+                        {t("new.advanced.viewPlans")}
                       </Button>
                     </div>
                   )}
 
                   {canUseInstallments && isInstallment && (
                     <div className="pt-4 mt-3 border-t border-primary/12 animate-in fade-in slide-in-from-top-2" onClick={(e) => e.stopPropagation()}>
-                      <Label className="text-zinc-500 text-xs mb-1.5 block">Em quantas vezes?</Label>
+                      <Label className="text-zinc-500 text-xs mb-1.5 block">{t("new.advanced.countLabel")}</Label>
                       <Input
                         type="number"
                         min={2}
                         max={360}
                         value={installmentsCount}
                         onChange={(e) => setInstallmentsCount(e.target.value)}
-                        placeholder="Número de parcelas"
+                        placeholder={t("new.advanced.countPlaceholder")}
                         className="h-11 rounded-xl border-primary/20 font-medium"
                       />
                       <div className="mt-3 rounded-xl border border-primary/20 bg-primary/8 px-3 py-3">
                         <div className="flex items-center justify-between gap-4">
                           <div>
                             <Label htmlFor="installment-split-mode" className="text-sm font-semibold text-primary">
-                              Dividir o valor total
+                              {t("new.advanced.splitModeLabel")}
                             </Label>
                             <p className="mt-1 text-xs text-primary/80">
-                              Ative para informar o valor total da compra. Desative se o valor digitado já for o de cada parcela.
+                              {t("new.advanced.splitModeDescription")}
                             </p>
                           </div>
                           <Switch
@@ -794,7 +798,7 @@ export default function NewTransactionPage() {
         {/* ACTIONS */}
         <div className="flex flex-col sm:flex-row gap-3 pt-2">
           <Button variant="outline" onClick={() => router.back()} className="h-14 text-base shadow-sm hover:cursor-pointer sm:flex-1 rounded-2xl">
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button
             id="tour-transactions-submit"
@@ -806,10 +810,10 @@ export default function NewTransactionPage() {
           >
             {saving ? (
               <span className="flex items-center gap-2">
-                <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> Salvando...
+                <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> {t("common.saving")}
               </span>
             ) : (
-              <span className="flex items-center gap-2">{saving ? <><div className="h-10 w-10 rounded-full border-4 border-white/30 border-t-white animate-spin" /> Salvando...</> : <><Plus className="h-5 w-5" /> Adicionar Lançamento</>}</span>
+              <span className="flex items-center gap-2">{saving ? <><div className="h-10 w-10 rounded-full border-4 border-white/30 border-t-white animate-spin" /> {t("common.saving")}</> : <><Plus className="h-5 w-5" /> {t("new.actions.add")}</>}</span>
             )}
           </Button>
         </div>

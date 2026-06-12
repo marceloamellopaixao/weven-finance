@@ -15,6 +15,7 @@ export const PLATFORM_TOUR_ROUTE_HREFS: Record<PlatformTourRouteKey, string> = {
   dashboard: "/dashboard?tour=1",
   settings: "/settings?tab=account&tour=1",
   "transactions-new": "/transactions/new?tour=1",
+  reports: "/reports?tour=1",
   cards: "/cards?tour=1",
   "piggy-bank": "/piggy-bank?tour=1",
 };
@@ -226,8 +227,8 @@ export function getPlatformTourConfig(
       ],
     },
     "transactions-new": {
-      nextRoute: "cards",
-      nextHref: "/cards",
+      nextRoute: "reports",
+      nextHref: "/reports",
       steps: [
         {
           element: "#tour-transactions-header",
@@ -270,7 +271,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Escolha a categoria",
             description:
-              "As categorias ajudam você a entender para onde o dinheiro esta indo.",
+              "As categorias ajudam você a entender para onde o dinheiro está indo.",
             side: "bottom",
           },
         },
@@ -307,8 +308,51 @@ export function getPlatformTourConfig(
           popover: {
             title: "Salvar e continuar",
             description:
-              "Depois de salvar, isso já aparece no extrato e impacta o seu mês. Agora vamos ver os cartões.",
+              "Depois de salvar, isso já aparece no extrato e impacta o seu mês. Agora vamos ver os relatórios.",
             side: "top",
+          },
+        },
+      ],
+    },
+    reports: {
+      nextRoute: "cards",
+      nextHref: "/cards",
+      steps: [
+        {
+          element: "#tour-reports-header",
+          popover: {
+            title: "Relatórios mensais",
+            description:
+              "Aqui você transforma seus lançamentos em uma leitura clara do mês.",
+            side: "bottom",
+            align: "start",
+          },
+        },
+        {
+          element: "#tour-reports-summary-chart",
+          popover: {
+            title: "Resumo visual",
+            description:
+              "Compare receitas, despesas e saldo para entender rapidamente como o mês fechou.",
+            side: "bottom",
+          },
+        },
+        {
+          element: "#tour-reports-categories",
+          popover: {
+            title: "Categorias",
+            description:
+              "Veja quais categorias mais pesaram no período antes de exportar o relatório.",
+            side: "bottom",
+          },
+        },
+        {
+          element: "#tour-reports-export",
+          popover: {
+            title: "Exportar PDF ou Excel",
+            description:
+              "Use estes botões para gerar arquivos profissionais com resumo, gráficos e transações.",
+            side: "bottom",
           },
         },
       ],

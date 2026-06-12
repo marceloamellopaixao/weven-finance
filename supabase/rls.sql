@@ -60,6 +60,7 @@ $$;
 alter table public.profiles enable row level security;
 alter table public.user_settings enable row level security;
 alter table public.categories enable row level security;
+alter table public.workspaces enable row level security;
 alter table public.transactions enable row level security;
 alter table public.payment_cards enable row level security;
 alter table public.piggy_banks enable row level security;
@@ -82,6 +83,7 @@ drop policy if exists profiles_self_update on public.profiles;
 drop policy if exists profiles_staff_select on public.profiles;
 drop policy if exists user_settings_self_all on public.user_settings;
 drop policy if exists categories_self_all on public.categories;
+drop policy if exists workspaces_self_all on public.workspaces;
 drop policy if exists transactions_self_all on public.transactions;
 drop policy if exists payment_cards_self_all on public.payment_cards;
 drop policy if exists piggy_banks_self_all on public.piggy_banks;
@@ -126,6 +128,17 @@ begin
 
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'categories' and policyname = 'categories_staff_read') then
     create policy categories_staff_read on public.categories
+      for select using (public.is_staff_role());
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'workspaces' and policyname = 'workspaces_own_all') then
+    create policy workspaces_own_all on public.workspaces
+      for all using (public.current_user_uid() = uid)
+      with check (public.current_user_uid() = uid);
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'workspaces' and policyname = 'workspaces_staff_read') then
+    create policy workspaces_staff_read on public.workspaces
       for select using (public.is_staff_role());
   end if;
 

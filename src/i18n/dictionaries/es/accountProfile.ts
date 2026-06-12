@@ -1,0 +1,39 @@
+import type { Dictionary } from "@/i18n/dictionaries/pt-BR";
+
+export const accountProfile: Dictionary["accountProfile"] = {
+  metadata: {
+    title: "WevenFinance | Perfil de la cuenta",
+    description: "Elija el perfil de uso para preparar categorías, informes y accesos iniciales en WevenFinance.",
+  },
+  badge: "¡Seleccione su perfil de uso para comenzar!",
+  title: "¿Cómo quiere organizar WevenFinance?",
+  description: "Prepararemos categorías, informes y accesos rápidos según la forma en que administra su dinero día a día.",
+  greeting: "Hola, {name}. Elija una opción para continuar.",
+  selected: "Seleccionado",
+  choose: "Elegir",
+  notice: "Podrá crear otros perfiles más adelante. Este se usará como predeterminado para informes mensuales y categorías iniciales.",
+  preparing: "Preparando...",
+  createError: "No fue posible crear el perfil de la cuenta",
+  options: {
+    personal: {
+      title: "Perfil personal",
+      description: "Controle ingresos, gastos, tarjetas, metas, deudas y el límite diario inteligente.",
+    },
+    professional: {
+      title: "Perfil profesional / autónomo",
+      description: "Controle ingresos de clientes, gastos de trabajo, impuestos, caja mensual e informes.",
+    },
+    church: {
+      title: "Perfil iglesia / ministerio",
+      description: "Controle diezmos, ofrendas, misiones, cafetería, departamentos, eventos y gastos por área.",
+    },
+    family: {
+      title: "Perfil familia / hogar",
+      description: "Controle cuentas compartidas, supermercado, alquiler, escuela, transporte y metas familiares.",
+    },
+    business: {
+      title: "Perfil pequeño negocio",
+      description: "Controle ventas, costos, cuentas por pagar y cobrar, flujo de caja y beneficio estimado.",
+    },
+  },
+} as const;

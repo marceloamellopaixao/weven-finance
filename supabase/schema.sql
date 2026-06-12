@@ -61,6 +61,20 @@ create table if not exists public.categories (
   unique (uid, source_id)
 );
 
+create table if not exists public.workspaces (
+  id text primary key,
+  uid text not null references public.profiles(uid) on delete cascade,
+  source_id text not null,
+  name text not null,
+  workspace_type text not null default 'personal',
+  is_default boolean not null default false,
+  settings jsonb not null default '{}'::jsonb,
+  raw jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique (uid, source_id)
+);
+
 create table if not exists public.transactions (
   id text primary key,
   uid text not null references public.profiles(uid) on delete cascade,
@@ -312,6 +326,16 @@ alter table if exists public.categories add column if not exists raw jsonb defau
 alter table if exists public.categories add column if not exists created_at timestamptz default timezone('utc', now());
 alter table if exists public.categories add column if not exists updated_at timestamptz default timezone('utc', now());
 
+alter table if exists public.workspaces add column if not exists uid text;
+alter table if exists public.workspaces add column if not exists source_id text;
+alter table if exists public.workspaces add column if not exists name text;
+alter table if exists public.workspaces add column if not exists workspace_type text default 'personal';
+alter table if exists public.workspaces add column if not exists is_default boolean default false;
+alter table if exists public.workspaces add column if not exists settings jsonb default '{}'::jsonb;
+alter table if exists public.workspaces add column if not exists raw jsonb default '{}'::jsonb;
+alter table if exists public.workspaces add column if not exists created_at timestamptz default timezone('utc', now());
+alter table if exists public.workspaces add column if not exists updated_at timestamptz default timezone('utc', now());
+
 alter table if exists public.transactions add column if not exists uid text;
 alter table if exists public.transactions add column if not exists source_id text;
 alter table if exists public.transactions add column if not exists title text;
@@ -487,6 +511,10 @@ for each row execute function public.set_updated_at();
 
 drop trigger if exists trg_categories_set_updated_at on public.categories;
 create trigger trg_categories_set_updated_at before update on public.categories
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_workspaces_set_updated_at on public.workspaces;
+create trigger trg_workspaces_set_updated_at before update on public.workspaces
 for each row execute function public.set_updated_at();
 
 drop trigger if exists trg_transactions_set_updated_at on public.transactions;

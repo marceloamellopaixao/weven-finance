@@ -12,19 +12,14 @@ import {
 } from "recharts";
 
 import type { Payload } from "recharts/types/component/DefaultTooltipContent";
+import { useUiText } from "@/i18n/T";
+import { useFormatters } from "@/i18n/useFormatters";
+import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 
 interface ChartData {
   name: string;
   amount: number;
 }
-
-// Formatador de Moeda
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-};
 
 // Tipos do seu gráfico: value = number (amount), name = string (dataKey/label)
 type TooltipPayload = Payload<number, string>;
@@ -36,6 +31,9 @@ type CustomTooltipProps = {
 };
 
 function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
+  const tt = useUiText();
+  const currency = usePreferredCurrency();
+  const { money } = useFormatters(currency);
   if (!active || !payload || payload.length === 0) return null;
 
   const raw = payload[0]?.value;
@@ -54,9 +52,9 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
       <div className="flex items-center gap-3 mt-2">
         <div className={`w-1.5 h-8 rounded-full ${bgClass}`} />
         <div className="flex flex-col">
-          <span className="text-[10px] uppercase text-zinc-400 font-bold tracking-wider">Saldo Acumulado</span>
+          <span className="text-[10px] uppercase text-zinc-400 font-bold tracking-wider">{tt("Saldo Acumulado")}</span>
           <span className={`text-xl font-bold tracking-tight ${colorClass}`}>
-            {formatCurrency(value)}
+            {money(value)}
           </span>
         </div>
       </div>
@@ -65,10 +63,14 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 }
 
 const AreaChartComponent = ({ data }: { data: ChartData[] }) => {
+  const tt = useUiText();
+  const currency = usePreferredCurrency();
+  const { number } = useFormatters(currency);
+
   if (!data || data.length === 0) {
     return (
       <div className="app-panel-subtle flex h-[300px] w-full flex-col items-center justify-center rounded-2xl border border-dashed text-zinc-400 animate-in fade-in">
-        <p className="text-sm font-medium">Nenhum dado financeiro para exibir.</p>
+        <p className="text-sm font-medium">{tt("Nenhum dado financeiro para exibir.")}</p>
       </div>
     );
   }
@@ -106,10 +108,10 @@ const AreaChartComponent = ({ data }: { data: ChartData[] }) => {
             tickLine={false}
             tick={{ fill: "#a1a1aa", fontSize: 11, fontWeight: 500 }}
             tickFormatter={(value) =>
-              new Intl.NumberFormat("pt-BR", {
+              number(Number(value), {
                 notation: "compact",
                 compactDisplay: "short",
-              }).format(value)
+              })
             }
           />
 
