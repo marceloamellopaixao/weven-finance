@@ -6,6 +6,7 @@ import { billing } from "./billing";
 import { calculator } from "./calculator";
 import { cards } from "./cards";
 import { common } from "./common";
+import { components } from "./components";
 import { contact } from "./contact";
 import { dashboard } from "./dashboard";
 import { errors } from "./errors";
@@ -30,6 +31,7 @@ export const ptBR = {
   calculator,
   cards,
   common,
+  components,
   contact,
   dashboard,
   errors,

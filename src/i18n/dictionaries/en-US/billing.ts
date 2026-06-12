@@ -44,6 +44,21 @@ export const billing = {
       },
     },
   },
+  planLimits: {
+    higherPlan: "higher plan",
+    generic: "Your {currentPlan} plan allows up to {quantity}. Upgrade to {nextPlan} to unlock more {resourcePlural}.",
+    monthlyTransactions: "Your {currentPlan} plan allows up to {max} transactions per month. Upgrade to {nextPlan} to keep recording without this limit.",
+    resources: {
+      cards: {
+        one: "card",
+        many: "cards",
+      },
+      goals: {
+        one: "goal",
+        many: "goals",
+      },
+    },
+  },
   checkout: {
     preparing: "Preparing your subscription.",
     redirecting: "Redirecting to the {plan} plan checkout.",

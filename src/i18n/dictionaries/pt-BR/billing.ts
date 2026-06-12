@@ -44,6 +44,21 @@ export const billing = {
       },
     },
   },
+  planLimits: {
+    higherPlan: "plano superior",
+    generic: "Seu plano {currentPlan} permite até {quantity}. Faça upgrade para o {nextPlan} para liberar mais {resourcePlural}.",
+    monthlyTransactions: "Seu plano {currentPlan} permite até {max} lançamentos por mês. Faça upgrade para o {nextPlan} para continuar registrando sem esse limite.",
+    resources: {
+      cards: {
+        one: "cartão",
+        many: "cartões",
+      },
+      goals: {
+        one: "meta",
+        many: "metas",
+      },
+    },
+  },
   checkout: {
     preparing: "Preparando sua contratação.",
     redirecting: "Redirecionando para a contratação do plano {plan}.",
