@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { canViewFamilyMembers } from "@/lib/workspaces/family";
 import type { Workspace, WorkspaceType } from "@/types/workspace";
 
 const WORKSPACE_ICONS: Record<WorkspaceType, typeof WalletCards> = {
@@ -63,7 +64,10 @@ function WorkspaceAvatar({ workspace, active, compact }: { workspace: Workspace;
 export function WorkspaceProfileSwitcher() {
   const { workspaces, activeWorkspace, activeWorkspaceId, loading, setActiveWorkspace } = useWorkspaces();
   const [open, setOpen] = useState(false);
-  const hasFamilyWorkspace = workspaces.some((workspace) => workspace.type === "family" || workspace.settings?.familyModeEnabled || Boolean(workspace.membership));
+  const canOpenFamilySettings = workspaces.some((workspace) => {
+    if (workspace.type !== "family" && !workspace.settings?.familyModeEnabled && !workspace.membership) return false;
+    return !workspace.membership || canViewFamilyMembers(workspace.membership);
+  });
 
   if (loading || workspaces.length === 0 || !activeWorkspace) return null;
 
@@ -171,7 +175,7 @@ export function WorkspaceProfileSwitcher() {
             Criar novo perfil
           </Button>
         </Link>
-        {hasFamilyWorkspace ? (
+        {canOpenFamilySettings ? (
           <Link href="/settings?tab=family" className="block">
             <Button variant="ghost" className="h-10 w-full justify-start rounded-xl text-sm">
               <UsersRound className="mr-2 h-4 w-4" />

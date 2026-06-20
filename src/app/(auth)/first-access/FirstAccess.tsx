@@ -21,6 +21,7 @@ import {
 import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { extractAuthProviders } from "@/lib/auth/providers";
 import { resolvePendingUpgradePath } from "@/services/billing/checkoutIntent";
+import { acceptFamilyInvitation } from "@/services/familyWorkspaceService";
 import { useTranslations } from "@/i18n/T";
 
 type PageIntent = PasswordAccessIntent;
@@ -54,6 +55,7 @@ export default function FirstAccessPage() {
   const searchIntent = useMemo(() => resolveIntent(searchParams.get("intent")), [searchParams]);
   const searchType = useMemo(() => searchParams.get("type"), [searchParams]);
   const searchCode = useMemo(() => searchParams.get("code"), [searchParams]);
+  const isFamilyInvite = searchParams.get("familyInvite") === "1";
   const requiresPasswordSetup = Boolean(userProfile?.needsPasswordSetup);
   const intent = useMemo<PageIntent>(() => {
     if (requiresPasswordSetup) return "first-access";
@@ -64,8 +66,8 @@ export default function FirstAccessPage() {
   }, [isRecoveryMode, requiresPasswordSetup, searchIntent, storedIntent]);
   const canSetPasswordNow = Boolean(user && requiresPasswordSetup);
   const canManagePasswordInSession = Boolean(user && !requiresPasswordSetup && (intent === "change-password" || intent === "recovery"));
-  const showPasswordForm = isRecoveryMode || canSetPasswordNow || canManagePasswordInSession;
-  const canRequestEmailLink = Boolean(!requiresPasswordSetup && user?.email);
+  const showPasswordForm = isRecoveryMode || canSetPasswordNow || canManagePasswordInSession || Boolean(user && intent === "first-access");
+  const canRequestEmailLink = Boolean(!requiresPasswordSetup && user?.email && intent !== "first-access");
 
   const pageTitle =
     intent === "change-password"
@@ -127,6 +129,10 @@ export default function FirstAccessPage() {
       setEmailSent(true);
     }
 
+    if (isFamilyInvite && user) {
+      setEmailSent(true);
+    }
+
     const exchangeCode = async () => {
       if (!searchCode) return;
       try {
@@ -151,7 +157,7 @@ export default function FirstAccessPage() {
     });
 
     return () => subscription.unsubscribe();
-  }, [router, searchCode, searchType, t]);
+  }, [isFamilyInvite, router, searchCode, searchType, t, user]);
 
   useEffect(() => {
     if (loading || isComplete) return;
@@ -212,6 +218,10 @@ export default function FirstAccessPage() {
           },
         }),
       });
+
+      if (isFamilyInvite) {
+        await acceptFamilyInvitation();
+      }
 
       await refreshProfile();
 

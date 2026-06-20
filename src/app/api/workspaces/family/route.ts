@@ -9,6 +9,7 @@ import { writeApiMetric } from "@/lib/observability/metrics";
 import {
   DEFAULT_FAMILY_ROLE_PERMISSIONS,
   canManageFamilyMembers,
+  canViewFamilyMembers,
   normalizeFamilyPermissions,
   normalizeFamilyRole,
 } from "@/lib/workspaces/family";
@@ -20,7 +21,7 @@ import {
 } from "@/lib/workspaces/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { getSupabaseServiceClient, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
-import { writeSecureProfilePayload } from "@/lib/secure-store/profile";
+import { readSecureProfilePayload, writeSecureProfilePayload } from "@/lib/secure-store/profile";
 import type { FamilyRole, WorkspaceInvitation, WorkspaceMember } from "@/types/workspace";
 
 export const runtime = "nodejs";
@@ -143,6 +144,24 @@ async function assertCanManage(uid: string, workspaceId: string) {
   return { workspaceUid: manager.workspaceUid, workspaceId, owner: false as const, manager };
 }
 
+async function assertCanView(uid: string, workspaceId: string) {
+  const owned = await getOwnedWorkspace(uid, workspaceId);
+  if (owned) {
+    if (owned.workspace_type !== "family") throw new Error("workspace_not_family");
+    return { workspaceUid: uid, workspaceId, owner: true as const, manager: null };
+  }
+
+  const rows = await supabaseSelect("workspace_members", {
+    filters: { member_uid: uid, workspace_id: workspaceId, member_status: "active" },
+    limit: 1,
+  });
+  const manager = rows[0] ? toWorkspaceMember(rows[0]) : null;
+  if (!manager || !canViewFamilyMembers(manager)) throw new Error("forbidden");
+  const familyWorkspace = await getOwnedWorkspace(manager.workspaceUid, workspaceId);
+  if (familyWorkspace?.workspace_type !== "family") throw new Error("workspace_not_family");
+  return { workspaceUid: manager.workspaceUid, workspaceId, owner: false as const, manager };
+}
+
 async function ensureProfileForMember(input: {
   uid: string;
   email: string;
@@ -150,8 +169,31 @@ async function ensureProfileForMember(input: {
   needsPasswordSetup: boolean;
 }) {
   const existing = await supabaseSelect("profiles", { filters: { uid: input.uid }, limit: 1 });
-  if (existing.length > 0) return;
   const now = new Date().toISOString();
+  if (existing.length > 0) {
+    const row = existing[0];
+    const raw = readSecureProfilePayload(row.raw);
+    const nextRaw = writeSecureProfilePayload({
+      ...raw,
+      email: row.email || raw.email || input.email,
+      displayName: row.display_name || raw.displayName || input.displayName,
+      authProviders: Array.from(new Set([...(Array.isArray(raw.authProviders) ? raw.authProviders : []), "email"])),
+      needsPasswordSetup: input.needsPasswordSetup || Boolean(raw.needsPasswordSetup),
+      updatedAt: now,
+    });
+    await supabaseUpsertRows(
+      "profiles",
+      [
+        {
+          uid: input.uid,
+          raw: nextRaw,
+          updated_at: now,
+        },
+      ],
+      { onConflict: "uid" },
+    );
+    return;
+  }
   await supabaseUpsertRows(
     "profiles",
     [
@@ -251,10 +293,11 @@ export async function GET(request: NextRequest) {
     const auth = await verifyRequestAuth(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
     if (!workspaceId) return NextResponse.json({ ok: false, error: "missing_workspace_id" }, { status: 400 });
-    const access = await assertCanManage(auth.uid, workspaceId);
+    const access = await assertCanView(auth.uid, workspaceId);
     const [memberRows, invitationRows] = await Promise.all([
       supabaseSelect("workspace_members", {
-        filters: { workspace_uid: access.workspaceUid, workspace_id: access.workspaceId, member_status: "active" },
+        filters: { workspace_uid: access.workspaceUid, workspace_id: access.workspaceId },
+        conditions: { member_status: "in.(active,pending)" },
         order: "created_at.asc",
       }),
       supabaseSelect("workspace_invitations", {
@@ -308,7 +351,7 @@ export async function POST(request: NextRequest) {
       displayName,
       mode,
       temporaryPassword: body.temporaryPassword,
-      redirectTo: new URL("/first-access", request.nextUrl.origin).toString(),
+      redirectTo: new URL("/first-access?intent=first-access&familyInvite=1", request.nextUrl.origin).toString(),
     });
     if (!authUser.uid) throw new Error("supabase_user_create_failed:missing_user_id");
 
@@ -322,7 +365,7 @@ export async function POST(request: NextRequest) {
       role,
       permissions,
       invitedByUid: auth.uid,
-      status: "active",
+      status: mode === "temporary_password" ? "active" : "pending",
     });
     const invitationRow = toInvitationRow({
       workspaceUid: access.workspaceUid,
@@ -332,7 +375,7 @@ export async function POST(request: NextRequest) {
       permissions,
       invitedByUid: auth.uid,
       invitedMemberUid: authUser.uid,
-      status: mode === "self_setup" ? "pending" : "accepted",
+      status: mode === "temporary_password" ? "accepted" : "pending",
     });
 
     await supabaseUpsertRows("workspace_members", [memberRow], { onConflict: "id" });
@@ -382,7 +425,7 @@ export async function PUT(request: NextRequest) {
       await sendPasswordSetupEmail(
         getSupabaseServiceClient(),
         member.email,
-        new URL("/first-access", request.nextUrl.origin).toString(),
+        new URL("/first-access?intent=first-access&familyInvite=1", request.nextUrl.origin).toString(),
       );
       await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
       return NextResponse.json<{ ok: true; member: WorkspaceMember; emailSent: boolean }>({
@@ -409,7 +452,7 @@ export async function PUT(request: NextRequest) {
     await sendPasswordSetupEmail(
       getSupabaseServiceClient(),
       invitation.email,
-      new URL("/first-access", request.nextUrl.origin).toString(),
+      new URL("/first-access?intent=first-access&familyInvite=1", request.nextUrl.origin).toString(),
     );
 
     const now = new Date().toISOString();

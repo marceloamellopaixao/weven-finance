@@ -59,6 +59,7 @@ import { getLocalizedPlanCopy, getPlanTone } from "@/lib/plans/display";
 import type { UpgradePlan } from "@/services/billing/checkoutIntent";
 import { useTranslations } from "@/i18n/T";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { canViewFamilyMembers } from "@/lib/workspaces/family";
 import { FamilyWorkspacePanel } from "@/components/workspaces/FamilyWorkspacePanel";
 import { WorkspaceSettingsPanel } from "@/components/workspaces/WorkspaceSettingsPanel";
 
@@ -164,13 +165,16 @@ export default function SettingsPage() {
   const zoomIn = "animate-in fade-in zoom-in-50 duration-500 fill-mode-both";
   const formatPlanPrice = (planId: UpgradePlan) =>
     money(getPlanPrice(planId, currency)?.amount ?? plans[planId].price);
-  const hasFamilyWorkspace = workspaces.some((workspace) => workspace.type === "family" || workspace.settings?.familyModeEnabled || Boolean(workspace.membership));
+  const canOpenFamilyWorkspaceSettings = workspaces.some((workspace) => {
+    if (workspace.type !== "family" && !workspace.settings?.familyModeEnabled && !workspace.membership) return false;
+    return !workspace.membership || canViewFamilyMembers(workspace.membership);
+  });
 
   usePlatformTour({
     route: "settings",
     disabled: onboardingLoading || isOnboardingActive || workspacesLoading,
     stepVisibility: {
-      familyWorkspace: hasFamilyWorkspace,
+      familyWorkspace: canOpenFamilyWorkspaceSettings,
     },
     onComplete: completeTour,
   });
@@ -664,10 +668,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (workspacesLoading) return;
-    if (activeTab === "family" && !hasFamilyWorkspace) {
+    if (activeTab === "family" && !canOpenFamilyWorkspaceSettings) {
       setActiveTab("account");
     }
-  }, [activeTab, hasFamilyWorkspace, workspacesLoading]);
+  }, [activeTab, canOpenFamilyWorkspaceSettings, workspacesLoading]);
 
   return (
     <div className="min-h-screen p-3 font-sans md:p-8 pb-20">
@@ -690,14 +694,14 @@ export default function SettingsPage() {
 
         {/* Navegação de Abas Personalizada */}
         <div className={`${fadeInUp} delay-150 space-y-6`}>
-          <div id="tour-settings-tabs" className={`app-panel-subtle grid min-w-full w-full grid-cols-2 gap-1 rounded-2xl border p-1.5 shadow-sm ${hasFamilyWorkspace ? "sm:grid-cols-6" : "sm:grid-cols-5"}`}>
+          <div id="tour-settings-tabs" className={`app-panel-subtle grid min-w-full w-full grid-cols-2 gap-1 rounded-2xl border p-1.5 shadow-sm ${canOpenFamilyWorkspaceSettings ? "sm:grid-cols-6" : "sm:grid-cols-5"}`}>
             <button id="tour-settings-account-tab" type="button" aria-pressed={activeTab === "account"} onClick={() => handleTabChange("account")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "account" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <User className="h-4 w-4" /> {t("tabs.account")}
             </button>
             <button id="tour-settings-profiles-tab" type="button" aria-pressed={activeTab === "profiles"} onClick={() => handleTabChange("profiles")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "profiles" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <WalletCards className="h-4 w-4" /> Perfis
             </button>
-            {hasFamilyWorkspace ? (
+            {canOpenFamilyWorkspaceSettings ? (
               <button id="tour-settings-family-tab" type="button" aria-pressed={activeTab === "family"} onClick={() => handleTabChange("family")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "family" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
                 <UsersRound className="h-4 w-4" /> Familia
               </button>

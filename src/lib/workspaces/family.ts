@@ -283,3 +283,7 @@ export function canEditFamilyTransaction(member: WorkspaceMember | null | undefi
 export function canManageFamilyMembers(member: WorkspaceMember | null | undefined) {
   return !member || hasFamilyPermission(member, "manage_members");
 }
+
+export function canViewFamilyMembers(member: WorkspaceMember | null | undefined) {
+  return !member || hasFamilyPermission(member, "family.view_members") || canManageFamilyMembers(member);
+}

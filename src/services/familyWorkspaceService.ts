@@ -101,3 +101,15 @@ export async function updateFamilyMember(input: {
   const payload = await readPayload<{ ok: true; member: WorkspaceMember }>(response);
   return payload.member;
 }
+
+export async function acceptFamilyInvitation() {
+  const response = await apiFetch("/api/workspaces/family/accept", {
+    method: "POST",
+  });
+  const payload = await readPayload<{
+    ok: true;
+    members: WorkspaceMember[];
+    invitations: WorkspaceInvitation[];
+  }>(response);
+  return payload;
+}
