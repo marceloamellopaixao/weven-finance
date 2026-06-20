@@ -128,7 +128,7 @@ export function ReportClient() {
   const { userProfile, privacyMode } = useAuth();
   const { transactions, loading: transactionsLoading } = useTransactions();
   const { workspaces, defaultWorkspace, loading: workspacesLoading } = useWorkspaces();
-  const { status: onboardingStatus, loading: onboardingLoading, completeTour, isActive: isOnboardingActive } = useOnboarding();
+  const { status: onboardingStatus, completeTour, isActive: isOnboardingActive } = useOnboarding();
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("default");
   const [exporting, setExporting] = useState<"pdf" | "excel" | null>(null);
@@ -136,7 +136,7 @@ export function ReportClient() {
 
   usePlatformTour({
     route: "reports",
-    disabled: onboardingLoading || isOnboardingActive,
+    disabled: isOnboardingActive,
     hasSeen: onboardingStatus.tourCompleted,
     onComplete: completeTour,
   });
@@ -375,14 +375,14 @@ export function ReportClient() {
         </div>
 
         {loading ? (
-          <Card className="app-panel-soft rounded-xl">
+          <Card id="tour-reports-categories-section" className="app-panel-soft rounded-xl">
             <CardContent className="flex min-h-[220px] items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
               {t("states.loading")}
             </CardContent>
           </Card>
         ) : report.transactions.length === 0 ? (
-          <Card className="app-panel-soft rounded-xl">
+          <Card id="tour-reports-categories-section" className="app-panel-soft rounded-xl">
             <CardContent className="flex min-h-[220px] flex-col items-center justify-center gap-3 text-center">
               <Download className="h-8 w-8 text-primary" />
               <div>
@@ -394,7 +394,7 @@ export function ReportClient() {
         ) : (
           <>
             <div className="grid gap-4 lg:grid-cols-2">
-              <Card id="tour-reports-categories" className="app-panel-subtle rounded-xl">
+              <Card id="tour-reports-categories-section" className="app-panel-subtle rounded-xl">
                 <CardHeader>
                   <CardTitle>{t("charts.expensesByCategory")}</CardTitle>
                 </CardHeader>

@@ -44,6 +44,11 @@ export const apps = {
       eyebrow: "Conta e assinatura",
       description: "Veja onde ficam dados pessoais, plano, privacidade, ajuda e ações sensíveis.",
     },
+    "account-profile": {
+      title: "Perfis",
+      eyebrow: "Troca de workspace",
+      description: "Veja como criar perfis pessoal, profissional, igreja, familia ou negocio sem misturar dados.",
+    },
     "transactions-new": {
       title: "Novo lançamento",
       eyebrow: "Registrar entradas e saídas",

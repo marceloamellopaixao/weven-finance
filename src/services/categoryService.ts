@@ -1,5 +1,6 @@
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { getImpersonationActionStatus } from "@/services/impersonationService";
+import { getActiveWorkspaceId } from "@/services/workspaceService";
 
 export interface CustomCategory {
   id?: string;
@@ -47,6 +48,18 @@ async function waitForActionApproval(actionRequestId: string, timeoutMs = 120000
   throw new Error("impersonation_action_timeout");
 }
 
+function withActiveWorkspace(path: string) {
+  const workspaceId = getActiveWorkspaceId();
+  if (!workspaceId) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}workspaceId=${encodeURIComponent(workspaceId)}`;
+}
+
+function withActiveWorkspaceBody(body: Record<string, unknown>) {
+  const workspaceId = getActiveWorkspaceId();
+  return workspaceId ? { ...body, workspaceId } : body;
+}
+
 async function fetchWithOptionalApproval(path: string, idToken: string, init?: RequestInit) {
   const firstResponse = await fetchWithAuth(path, idToken, init);
   const firstPayload = (await firstResponse.json()) as {
@@ -79,7 +92,7 @@ async function fetchWithOptionalApproval(path: string, idToken: string, init?: R
 export const getCategoriesData = async (
   idToken: string
 ): Promise<{ customCategories: CustomCategory[]; hiddenDefaultCategories: string[] }> => {
-  const response = await fetchWithAuth("/api/categories", idToken, { method: "GET" });
+  const response = await fetchWithAuth(withActiveWorkspace("/api/categories"), idToken, { method: "GET" });
   const payload = (await response.json()) as CategoriesResponse;
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível carregar categorias");
@@ -97,7 +110,7 @@ export const addCustomCategory = async (
 ): Promise<void> => {
   const { response, payload } = await fetchWithOptionalApproval("/api/categories", idToken, {
     method: "POST",
-    body: JSON.stringify({ name, type }),
+    body: JSON.stringify(withActiveWorkspaceBody({ name, type })),
   });
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível adicionar categoria");
@@ -110,7 +123,7 @@ export const deleteCustomCategoryByName = async (
   fallbackCategory: string = "Outros"
 ) => {
   const params = new URLSearchParams({ name: categoryName, fallbackCategory });
-  const { response, payload } = await fetchWithOptionalApproval(`/api/categories?${params.toString()}`, idToken, {
+  const { response, payload } = await fetchWithOptionalApproval(withActiveWorkspace(`/api/categories?${params.toString()}`), idToken, {
     method: "DELETE",
   });
   if (!response.ok || !payload.ok) {
@@ -125,7 +138,7 @@ export const renameCustomCategoryByName = async (
 ) => {
   const { response, payload } = await fetchWithOptionalApproval("/api/categories", idToken, {
     method: "PATCH",
-    body: JSON.stringify({ oldName, newName }),
+    body: JSON.stringify(withActiveWorkspaceBody({ oldName, newName })),
   });
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível renomear categoria");
@@ -139,7 +152,7 @@ export const setDefaultCategoryHidden = async (
 ): Promise<void> => {
   const { response, payload } = await fetchWithOptionalApproval("/api/categories/default-visibility", idToken, {
     method: "POST",
-    body: JSON.stringify({ categoryName, hidden }),
+    body: JSON.stringify(withActiveWorkspaceBody({ categoryName, hidden })),
   });
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível atualizar visibilidade da categoria");

@@ -16,6 +16,9 @@ create index if not exists idx_user_settings_uid_key
 create index if not exists idx_categories_uid_name
   on public.categories(uid, name);
 
+create index if not exists idx_categories_uid_workspace_name
+  on public.categories(uid, workspace_id, name);
+
 create index if not exists idx_categories_uid_parent_name
   on public.categories(uid, parent_name);
 
@@ -25,8 +28,26 @@ create index if not exists idx_workspaces_uid_default
 create index if not exists idx_workspaces_uid_type
   on public.workspaces(uid, workspace_type);
 
+create index if not exists idx_workspace_members_member_status
+  on public.workspace_members(member_uid, member_status, created_at asc);
+
+create index if not exists idx_workspace_members_workspace
+  on public.workspace_members(workspace_uid, workspace_id, member_status);
+
+create index if not exists idx_workspace_invitations_workspace_status
+  on public.workspace_invitations(workspace_uid, workspace_id, invitation_status, created_at desc);
+
+create index if not exists idx_workspace_invitations_email_status
+  on public.workspace_invitations(lower(email), invitation_status);
+
 create index if not exists idx_transactions_uid_tx_date_desc
   on public.transactions(uid, tx_date desc);
+
+create index if not exists idx_transactions_uid_workspace_due_date
+  on public.transactions(uid, workspace_id, due_date desc);
+
+create index if not exists idx_transactions_workspace_created_by
+  on public.transactions(uid, workspace_id, created_by_uid);
 
 create index if not exists idx_transactions_uid_due_date_desc
   on public.transactions(uid, due_date desc);
@@ -49,11 +70,20 @@ create index if not exists idx_transactions_uid_group_id
 create index if not exists idx_payment_cards_uid_updated
   on public.payment_cards(uid, updated_at desc);
 
+create index if not exists idx_payment_cards_uid_workspace_updated
+  on public.payment_cards(uid, workspace_id, updated_at desc);
+
 create index if not exists idx_piggy_banks_uid_updated
   on public.piggy_banks(uid, updated_at desc);
 
+create index if not exists idx_piggy_banks_uid_workspace_updated
+  on public.piggy_banks(uid, workspace_id, updated_at desc);
+
 create index if not exists idx_piggy_bank_history_uid_created
   on public.piggy_bank_history(uid, created_at desc);
+
+create index if not exists idx_piggy_bank_history_uid_workspace_created
+  on public.piggy_bank_history(uid, workspace_id, created_at desc);
 
 create index if not exists idx_support_requests_status_priority_created
   on public.support_requests(ticket_status, created_at desc);

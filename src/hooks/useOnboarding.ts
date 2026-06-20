@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { getActiveOnboardingStep } from "@/lib/onboarding/flow";
 import {
   OnboardingStatus,
   subscribeToOnboarding,
@@ -13,13 +12,13 @@ const DEFAULT_STATUS: OnboardingStatus = {
   dismissed: false,
   completed: false,
   progress: 0,
-  total: 4,
+  total: 1,
   tourCompleted: false,
   steps: {
-    firstTransaction: false,
-    firstCard: false,
-    firstGoal: false,
-    profileMenu: false,
+    firstTransaction: true,
+    firstCard: true,
+    firstGoal: true,
+    profileMenu: true,
   },
 };
 
@@ -27,8 +26,8 @@ export function useOnboarding() {
   const { userProfile } = useAuth();
   const [status, setStatus] = useState<OnboardingStatus>(DEFAULT_STATUS);
   const [loading, setLoading] = useState(true);
-  const activeStep = useMemo(() => getActiveOnboardingStep(status), [status]);
-  const isActive = !loading && !status.dismissed && !status.completed && activeStep !== null;
+  const activeStep = null;
+  const isActive = false;
 
   useEffect(() => {
     if (!userProfile?.uid) {
@@ -57,7 +56,6 @@ export function useOnboarding() {
   };
 
   const completeStep = async (step: keyof OnboardingStatus["steps"]) => {
-    await updateOnboardingStatus({ steps: { [step]: true } });
     setStatus((prev) => {
       const steps = { ...prev.steps, [step]: true };
       const progress = Object.values(steps).filter(Boolean).length;

@@ -20,21 +20,22 @@ type OnboardingData = {
 
 function normalizeData(value: unknown): OnboardingData {
   const data = (value as Record<string, unknown> | null) ?? {};
-  const steps = (data.steps as Record<string, unknown> | undefined) ?? {};
   return {
     dismissed: Boolean(data.dismissed),
     tourCompleted: Boolean(data.tourCompleted),
     steps: {
-      firstTransaction: Boolean(steps.firstTransaction),
-      firstCard: Boolean(steps.firstCard),
-      firstGoal: Boolean(steps.firstGoal),
-      profileMenu: Boolean(steps.profileMenu),
+      firstTransaction: true,
+      firstCard: true,
+      firstGoal: true,
+      profileMenu: true,
     },
   };
 }
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const ONBOARDING_SETTING_KEY = "onboarding";
 
 export async function GET(request: NextRequest) {
   const meta = getRequestMeta(request);
@@ -51,39 +52,28 @@ export async function GET(request: NextRequest) {
     await verifyRequestAuth(request);
     const acting = await resolveActingContext(request);
     uid = acting.actingUid;
+    const settingRows = await supabaseSelect("user_settings", {
+      select: "id,setting_key,data",
+      filters: { uid, setting_key: ONBOARDING_SETTING_KEY },
+      limit: 1,
+    });
 
-    const [settingRow, txRows, cardRows, goalRows] = await Promise.all([
-      supabaseSelect("user_settings", {
-        select: "id,data",
-        filters: { uid, setting_key: "onboarding" },
-        limit: 1,
-      }),
-      supabaseSelect("transactions", { select: "id", filters: { uid }, limit: 1 }),
-      supabaseSelect("payment_cards", { select: "id", filters: { uid }, limit: 1 }),
-      supabaseSelect("piggy_banks", { select: "id", filters: { uid }, limit: 1 }),
-    ]);
-
-    const stored = normalizeData(settingRow[0]?.data);
-    const hasFirstTransaction = Boolean(stored.steps?.firstTransaction) || txRows.length > 0;
-    const hasFirstCard = Boolean(stored.steps?.firstCard) || cardRows.length > 0;
-    const hasFirstGoal = Boolean(stored.steps?.firstGoal) || goalRows.length > 0;
-    const hasProfileMenu = Boolean(stored.steps?.profileMenu);
-    const progress = [hasFirstTransaction, hasFirstCard, hasFirstGoal, hasProfileMenu].filter(Boolean).length;
-    const completed = progress === 4;
+    const activeSettingRow = settingRows[0];
+    const stored = normalizeData(activeSettingRow?.data);
 
     const response = {
       ok: true,
       onboarding: {
         dismissed: Boolean(stored.dismissed),
-        completed,
-        progress,
-        total: 4,
+        completed: Boolean(stored.tourCompleted),
+        progress: stored.tourCompleted ? 1 : 0,
+        total: 1,
         tourCompleted: Boolean(stored.tourCompleted),
         steps: {
-          firstTransaction: hasFirstTransaction,
-          firstCard: hasFirstCard,
-          firstGoal: hasFirstGoal,
-          profileMenu: hasProfileMenu,
+          firstTransaction: true,
+          firstCard: true,
+          firstGoal: true,
+          profileMenu: true,
         },
       },
     };
@@ -119,23 +109,24 @@ export async function PUT(request: NextRequest) {
 
     await verifyRequestAuth(request);
     const acting = await resolveActingContext(request);
-    uid = acting.actingUid;
     const body = (await request.json()) as OnboardingData;
+    uid = acting.actingUid;
 
     const rows = await supabaseSelect("user_settings", {
-      select: "id,data",
-      filters: { uid, setting_key: "onboarding" },
+      select: "id,setting_key,data",
+      filters: { uid, setting_key: ONBOARDING_SETTING_KEY },
       limit: 1,
     });
-    const current = normalizeData(rows[0]?.data);
+    const activeRow = rows[0];
+    const current = normalizeData(activeRow?.data);
     const next: OnboardingData = {
       dismissed: typeof body.dismissed === "boolean" ? body.dismissed : current.dismissed,
       tourCompleted: typeof body.tourCompleted === "boolean" ? body.tourCompleted : current.tourCompleted,
       steps: {
-        firstTransaction: Boolean(body.steps?.firstTransaction || current.steps?.firstTransaction),
-        firstCard: Boolean(body.steps?.firstCard || current.steps?.firstCard),
-        firstGoal: Boolean(body.steps?.firstGoal || current.steps?.firstGoal),
-        profileMenu: Boolean(body.steps?.profileMenu || current.steps?.profileMenu),
+        firstTransaction: true,
+        firstCard: true,
+        firstGoal: true,
+        profileMenu: true,
       },
     };
 
@@ -143,9 +134,9 @@ export async function PUT(request: NextRequest) {
       "user_settings",
       [
         {
-          id: String(rows[0]?.id || `${uid}__onboarding`),
+          id: String(activeRow?.id || `${uid}__${ONBOARDING_SETTING_KEY}`),
           uid,
-          setting_key: "onboarding",
+          setting_key: ONBOARDING_SETTING_KEY,
           data: next,
           updated_at: new Date().toISOString(),
         },

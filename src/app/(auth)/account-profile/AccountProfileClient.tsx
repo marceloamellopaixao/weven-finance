@@ -1,16 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { BriefcaseBusiness, Building2, CheckCircle2, Home, Loader2, UsersRound, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
+import { useOnboarding } from "@/hooks/useOnboarding";
+import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useTranslations } from "@/i18n/T";
 import { getDefaultCurrencyForLocale } from "@/lib/money/formatMoney";
-import { createWorkspace } from "@/services/workspaceService";
+import { createWorkspace, setActiveWorkspaceId } from "@/services/workspaceService";
 import type { WorkspaceType } from "@/types/workspace";
 
 const OPTIONS: Array<{
@@ -59,13 +61,25 @@ const OPTIONS: Array<{
 
 export function AccountProfileClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { locale } = useI18n();
   const { userProfile } = useAuth();
+  const { status: onboardingStatus, loading: onboardingLoading, completeTour } = useOnboarding();
   const tProfile = useTranslations("accountProfile");
   const tCommon = useTranslations("common");
   const [selectedType, setSelectedType] = useState<WorkspaceType>("personal");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isCreatingAdditionalWorkspace = searchParams.get("create") === "1";
+  const shouldForceTour = searchParams.get("tour") === "1";
+
+  usePlatformTour({
+    route: "account-profile",
+    disabled: onboardingLoading,
+    hasSeen: onboardingStatus.tourCompleted,
+    forceStart: shouldForceTour,
+    onComplete: completeTour,
+  });
 
   const selectedOption = useMemo(
     () => OPTIONS.find((option) => option.type === selectedType) || OPTIONS[0],
@@ -76,16 +90,18 @@ export function AccountProfileClient() {
     setSubmitting(true);
     setError(null);
     try {
-      await createWorkspace({
+      const workspace = await createWorkspace({
         name: tProfile(selectedOption.titleKey),
         type: selectedOption.type,
-        isDefault: true,
+        isDefault: !isCreatingAdditionalWorkspace,
         settings: {
           currency: getDefaultCurrencyForLocale(locale),
           monthlyReportEnabled: true,
           categoriesPresetApplied: true,
+          familyModeEnabled: selectedOption.type === "family",
         },
       });
+      setActiveWorkspaceId(workspace.id);
       router.replace("/dashboard");
       router.refresh();
     } catch (err) {
@@ -97,7 +113,7 @@ export function AccountProfileClient() {
   return (
     <main className="min-h-[calc(100svh-5rem)] px-4 py-10 sm:px-6">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
-        <section className="max-w-3xl space-y-4">
+        <section id="tour-account-profile-header" className="max-w-3xl space-y-4">
           <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
             <CheckCircle2 className="h-4 w-4" />
             {tProfile("badge")}
@@ -115,7 +131,7 @@ export function AccountProfileClient() {
           ) : null}
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section id="tour-account-profile-options" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {OPTIONS.map((option) => {
             const Icon = option.icon;
             const selected = option.type === selectedType;
@@ -155,7 +171,7 @@ export function AccountProfileClient() {
           <p className="max-w-2xl text-sm text-muted-foreground">
             {tProfile("notice")}
           </p>
-          <Button className="h-12 rounded-xl px-8 text-base font-semibold" onClick={handleContinue} disabled={submitting}>
+          <Button id="tour-account-profile-submit" className="h-12 rounded-xl px-8 text-base font-semibold" onClick={handleContinue} disabled={submitting}>
             {submitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

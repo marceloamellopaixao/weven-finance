@@ -39,7 +39,6 @@ import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getPlanCapabilities } from "@/lib/plans/capabilities";
-import { getOnboardingStepHref } from "@/lib/onboarding/flow";
 import { buildUpgradeCheckoutPath } from "@/services/billing/checkoutIntent";
 import { calculateDailyLimit } from "@/lib/finance/daily-limit";
 import { useTranslations } from "@/i18n/T";
@@ -142,7 +141,7 @@ export function DashboardClient() {
   const { user, userProfile, privacyMode, togglePrivacyMode } = useAuth();
   const currency = usePreferredCurrency();
   const { money } = useFormatters(currency);
-  const { transactions, loading } = useTransactions();
+  const { transactions, loading } = useTransactions({ syncRecurring: true });
   const { plans } = usePlans();
   const { featureAccess } = useFeatureAccess();
   const { categories } = useCategories();
@@ -152,9 +151,7 @@ export function DashboardClient() {
   const {
     status: onboardingStatus,
     loading: onboardingLoading,
-    dismiss: dismissOnboarding,
     completeTour,
-    activeStep: onboardingActiveStep,
     isActive: isOnboardingActive,
   } = useOnboarding();
   const shouldForceTour = searchParams.get("tour") === "1";
@@ -459,14 +456,6 @@ export function DashboardClient() {
   if (loading) return <DashboardSkeleton />;
 
   // --- 6. HANDLERS ---
-  const handleGoToOnboardingStep = (step: "firstTransaction" | "firstCard" | "firstGoal" | "profileMenu") => {
-    if (step === "profileMenu") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-    router.push(getOnboardingStepHref(step));
-  };
-
   const changeMonth = (offset: number) => {
     const currentIndex = availableMonths.findIndex(m => m.value === selectedMonth);
     const safeIndex = currentIndex === -1 ? 0 : currentIndex;
@@ -927,89 +916,7 @@ export function DashboardClient() {
           </div>
         </div>
 
-        {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.completed && (
-          <Card className={`${fadeInUp} delay-100 app-panel-soft rounded-2xl border border-color:var(--app-panel-border) shadow-lg shadow-primary/10`}>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Info className="h-4 w-4 text-primary" /> {tt("onboarding.title")}
-              </CardTitle>
-              <CardDescription>
-                {tt("onboarding.description")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="h-2 w-full rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all duration-300"
-                  style={{ width: `${(onboardingStatus.progress / onboardingStatus.total) * 100}%` }}
-                />
-              </div>
-              <p className="text-xs text-zinc-500">
-                {tt("onboarding.progress")}: {onboardingStatus.progress}/{onboardingStatus.total}
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleGoToOnboardingStep("firstTransaction")}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstTransaction
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : onboardingActiveStep === "firstTransaction"
-                      ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
-                      : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
-                    }`}
-                >
-                  {onboardingStatus.steps.firstTransaction ? "✓ " : onboardingActiveStep === "firstTransaction" ? "• " : ""}{tt("onboarding.steps.firstTransaction")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleGoToOnboardingStep("firstCard")}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstCard
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : onboardingActiveStep === "firstCard"
-                      ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
-                      : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
-                    }`}
-                >
-                  {onboardingStatus.steps.firstCard ? "✓ " : onboardingActiveStep === "firstCard" ? "• " : ""}{tt("onboarding.steps.firstCard")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleGoToOnboardingStep("firstGoal")}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.firstGoal
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : onboardingActiveStep === "firstGoal"
-                      ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
-                      : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
-                    }`}
-                >
-                  {onboardingStatus.steps.firstGoal ? "✓ " : onboardingActiveStep === "firstGoal" ? "• " : ""}{tt("onboarding.steps.firstGoal")}
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleGoToOnboardingStep("profileMenu")}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${onboardingStatus.steps.profileMenu
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : onboardingActiveStep === "profileMenu"
-                      ? "border-primary/35 bg-accent text-primary ring-2 ring-ring/35"
-                      : "app-panel-subtle hover:border-primary/20 hover:bg-accent/70"
-                    }`}
-                >
-                  {onboardingStatus.steps.profileMenu ? "✓ " : onboardingActiveStep === "profileMenu" ? "• " : ""}{tt("onboarding.steps.profileMenu")}
-                </button>
-              </div>
-              <div className="flex justify-end">
-                <Button variant="ghost" size="sm" onClick={() => void dismissOnboarding()} className="text-zinc-500 hover:cursor-pointer">
-                  {tt("onboarding.close")}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {showAutomaticInsights && (
-          <Card className={`${fadeInUp} delay-120 app-panel-soft rounded-2xl border border-color:var(--app-panel-border) shadow-lg`}>
+        {showAutomaticInsights && ( <Card className={`${fadeInUp} delay-120 app-panel-soft rounded-2xl border border-color:var(--app-panel-border) shadow-lg`}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">{tt("insights.title")}</CardTitle>
               <CardDescription className="text-zinc-500">{tt("insights.description")}</CardDescription>

@@ -16,7 +16,6 @@ import { Wallet, LogOut, ShieldAlert, LayoutDashboard, Settings, Home, UserCog, 
 import Link from "next/link";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { useNotifications } from "@/hooks/useNotifications";
-import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePlatformExperience } from "@/hooks/usePlatformExperience";
 import { LocaleSwitcher } from "@/components/i18n/LocaleSwitcher";
 import { useTranslations } from "@/i18n/T";
@@ -24,6 +23,7 @@ import { Bell } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { canAccessAdminArea, isCreatorSupremeUid } from "@/lib/access-control/roles";
+import { WorkspaceProfileSwitcher } from "@/components/workspaces/WorkspaceProfileSwitcher";
 
 const FLOW_ROUTES = new Set(["/login", "/register", "/forgot-password", "/first-access", "/verify-email", "/goodbye", "/blocked"]);
 const PUBLIC_FIXED_HEADER_ROUTES = new Set(["/", "/contact", "/security", "/terms"]);
@@ -38,7 +38,6 @@ export function Header() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const { items: notifications, unreadCount, markOneAsRead, markAllAsRead, clearAll } = useNotifications(isNotificationsOpen);
-  const { status: onboardingStatus, completeStep, activeStep: onboardingActiveStep, isActive: isOnboardingActive } = useOnboarding();
   const { forceAccountMenuOpen, isPlatformTourActive } = usePlatformExperience();
   const isAuthenticated = !!user || !!userProfile;
   const displayName = isImpersonating
@@ -105,8 +104,6 @@ export function Header() {
 
   const handleAccountMenuOpenChange = (open: boolean) => {
     setIsAccountMenuOpen(open);
-    if (!open || onboardingStatus.steps.profileMenu) return;
-    void completeStep("profileMenu");
   };
 
   useEffect(() => {
@@ -154,6 +151,9 @@ export function Header() {
             Weven<span className="text-primary">Finance</span>
           </span>
         </Link>
+        <div className="min-w-0">
+          <WorkspaceProfileSwitcher />
+        </div>
       </div>
 
       <div className="flex items-center gap-4">
@@ -264,11 +264,7 @@ export function Header() {
         <DropdownMenu modal={false} open={isAccountMenuOpen} onOpenChange={handleAccountMenuOpenChange}>
           <DropdownMenuTrigger asChild>
             <div id="tour-account-avatar" className="relative">
-              <Avatar className={`h-9 w-9 cursor-pointer border-2 border-background shadow-sm ring-2 transition-all hover:ring-ring/35 md:h-10 md:w-10 ${
-                isOnboardingActive && onboardingActiveStep === "profileMenu"
-                  ? "ring-ring/70 animate-pulse"
-                  : "ring-transparent"
-              }`}>
+              <Avatar className="h-9 w-9 cursor-pointer border-2 border-background shadow-sm ring-2 ring-transparent transition-all hover:ring-ring/35 md:h-10 md:w-10">
                 <AvatarImage src={displayPhoto} />
                 <AvatarFallback className="bg-muted font-bold text-muted-foreground">
                   {(displayName || "U").charAt(0).toUpperCase()}
@@ -281,9 +277,6 @@ export function Header() {
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium leading-none truncate">{displayName || tHeader("account")}</p>
                 <p className="truncate text-xs leading-none text-muted-foreground">{displayEmail}</p>
-                {isOnboardingActive && onboardingActiveStep === "profileMenu" && (
-                  <p className="text-[11px] font-medium text-primary">{tHeader("profileTourHint")}</p>
-                )}
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />

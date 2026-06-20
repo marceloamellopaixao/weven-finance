@@ -93,6 +93,18 @@ function isCreditCapable(type: PaymentCardPolicyDoc["type"]) {
   return type === "credit_card" || type === "credit_and_debit";
 }
 
+function getCardWorkspaceId(row: Record<string, unknown>) {
+  const raw = readSecureCardPayload(row.raw);
+  return String(row.workspace_id || raw.workspaceId || "");
+}
+
+function belongsToWorkspace(row: Record<string, unknown>, workspaceId?: string | null, includeLegacyRows = true) {
+  if (!workspaceId) return true;
+  const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const rowWorkspaceId = String(row.workspace_id || raw.workspaceId || "");
+  return rowWorkspaceId === workspaceId || (!rowWorkspaceId && includeLegacyRows);
+}
+
 function toPaymentCardPolicyDoc(row: Record<string, unknown>): PaymentCardPolicyDoc {
   const raw = readSecureCardPayload(row.raw);
   const type =
@@ -145,14 +157,15 @@ function mapTxToCard(tx: Record<string, unknown>, cards: PaymentCardPolicyDoc[])
   );
 }
 
-async function getPendingCreditTransactions(uid: string) {
+async function getPendingCreditTransactions(uid: string, workspaceId?: string | null, includeLegacyRows = true) {
   const rows = await supabaseSelect("transactions", {
-    select: "source_id,tx_type,tx_status,payment_method,due_date,tx_date,raw",
+    select: "source_id,workspace_id,tx_type,tx_status,payment_method,due_date,tx_date,raw",
     filters: { uid },
   });
   const currentMonthKey = getCurrentMonthKey();
 
   return rows
+    .filter((row) => belongsToWorkspace(row, workspaceId, includeLegacyRows))
     .map((row) => ({
       raw: ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>,
       monthKey: getMonthKey(String(row.due_date || row.tx_date || "")),
@@ -169,8 +182,8 @@ async function getPendingCreditTransactions(uid: string) {
     .map(({ raw }) => raw);
 }
 
-export async function computeCreditCardSummary(uid: string, limit: number): Promise<CreditCardSummary> {
-  const txs = await getPendingCreditTransactions(uid);
+export async function computeCreditCardSummary(uid: string, limit: number, workspaceId?: string | null, includeLegacyRows = true): Promise<CreditCardSummary> {
+  const txs = await getPendingCreditTransactions(uid, workspaceId, includeLegacyRows);
 
   let used = 0;
   let trackedCount = 0;
@@ -202,17 +215,23 @@ export async function computeCreditCardSummary(uid: string, limit: number): Prom
   };
 }
 
-export async function enforceCreditCardPolicy(uid: string) {
+export async function enforceCreditCardPolicy(uid: string, workspaceId?: string | null, includeLegacyRows = true) {
   const [settings, cardRows, pendingTxs] = await Promise.all([
     getCreditCardSettings(uid),
     supabaseSelect("payment_cards", {
-      select: "source_id,bank_name,last4,card_type,limit_enabled,credit_limit,alert_threshold_pct,block_on_limit_exceeded,raw",
+      select: "source_id,workspace_id,bank_name,last4,card_type,limit_enabled,credit_limit,alert_threshold_pct,block_on_limit_exceeded,raw",
       filters: { uid },
     }),
-    getPendingCreditTransactions(uid),
+    getPendingCreditTransactions(uid, workspaceId, includeLegacyRows),
   ]);
 
-  const cards = cardRows.map((row) => toPaymentCardPolicyDoc(row));
+  const cards = cardRows
+    .filter((row) => {
+      if (!workspaceId) return true;
+      const rowWorkspaceId = getCardWorkspaceId(row);
+      return rowWorkspaceId === workspaceId || (!rowWorkspaceId && includeLegacyRows);
+    })
+    .map((row) => toPaymentCardPolicyDoc(row));
   const creditCards = cards.filter((card) => isCreditCapable(card.type));
 
   const perCardUsed = new Map<string, number>();

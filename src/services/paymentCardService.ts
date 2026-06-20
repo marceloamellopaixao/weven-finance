@@ -2,6 +2,7 @@ import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { PaymentCard, PaymentCardIdentification } from "@/types/paymentCard";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
+import { getActiveWorkspaceId, subscribeToActiveWorkspaceChanged } from "@/services/workspaceService";
 
 const PAYMENT_CARDS_CHANGED_EVENT = "wevenfinance:payment-cards:changed";
 
@@ -27,8 +28,20 @@ async function fetchWithAuth(path: string, init?: RequestInit) {
   });
 }
 
+function withActiveWorkspace(path: string) {
+  const workspaceId = getActiveWorkspaceId();
+  if (!workspaceId) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}workspaceId=${encodeURIComponent(workspaceId)}`;
+}
+
+function withActiveWorkspaceBody<T extends Record<string, unknown>>(body: T): T & { workspaceId?: string } {
+  const workspaceId = getActiveWorkspaceId();
+  return workspaceId ? { ...body, workspaceId } : body;
+}
+
 export async function getPaymentCards() {
-  const response = await fetchWithAuth("/api/payment-cards", { method: "GET" });
+  const response = await fetchWithAuth(withActiveWorkspace("/api/payment-cards"), { method: "GET" });
   const payload = (await response.json()) as { ok: boolean; error?: string; cards?: PaymentCard[] };
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível carregar cartões");
@@ -41,7 +54,7 @@ export async function createPaymentCard(
 ) {
   const response = await fetchWithAuth("/api/payment-cards", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify(withActiveWorkspaceBody(input)),
   });
   const payload = (await response.json()) as { ok: boolean; error?: string; id?: string };
   if (!response.ok || !payload.ok) {
@@ -57,7 +70,7 @@ export async function updatePaymentCard(
 ) {
   const response = await fetchWithAuth("/api/payment-cards", {
     method: "PATCH",
-    body: JSON.stringify({ cardId, updates }),
+    body: JSON.stringify(withActiveWorkspaceBody({ cardId, updates })),
   });
   const payload = (await response.json()) as { ok: boolean; error?: string };
   if (!response.ok || !payload.ok) {
@@ -67,7 +80,7 @@ export async function updatePaymentCard(
 }
 
 export async function deletePaymentCard(cardId: string) {
-  const response = await fetchWithAuth(`/api/payment-cards?cardId=${encodeURIComponent(cardId)}`, {
+  const response = await fetchWithAuth(withActiveWorkspace(`/api/payment-cards?cardId=${encodeURIComponent(cardId)}`), {
     method: "DELETE",
   });
   const payload = (await response.json()) as { ok: boolean; error?: string };
@@ -123,11 +136,13 @@ export const subscribeToPaymentCards = (
     onChange: () => void run(),
   });
   const onChangedEvent = () => void run();
+  const stopActiveWorkspace = subscribeToActiveWorkspaceChanged(() => void run());
   window.addEventListener(PAYMENT_CARDS_CHANGED_EVENT, onChangedEvent);
 
   return () => {
     cancelled = true;
     stopRealtime();
+    stopActiveWorkspace();
     window.removeEventListener(PAYMENT_CARDS_CHANGED_EVENT, onChangedEvent);
   };
 };

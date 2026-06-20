@@ -4,8 +4,8 @@ import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, Plus, Calendar, CreditCard, 
-  Tag, AlignLeft, ReceiptText, AlertCircle, Settings2, 
-  Layers, TrendingDown, TrendingUp, Info, Repeat, Crown
+  Tag, AlignLeft, ReceiptText, AlertCircle, Settings2,
+  Layers, TrendingDown, TrendingUp, Repeat, Crown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CategoryLabel } from "@/components/categories/CategoryLabel";
@@ -23,6 +23,7 @@ import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { usePlatformExperience } from "@/hooks/usePlatformExperience";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
+import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useFormatters } from "@/i18n/useFormatters";
 import { useTranslations } from "@/i18n/T";
 import { getCreditCardDueDateFromSelectedCard, isCreditCapableCard } from "@/lib/credit-card/due-date";
@@ -52,14 +53,12 @@ export default function NewTransactionPage() {
   const router = useRouter();
   const { user, userProfile } = useAuth();
   const { isPlatformTourActive } = usePlatformExperience();
+  const { activeWorkspaceId } = useWorkspaces();
   const { plans } = usePlans();
   const { featureAccess } = useFeatureAccess();
   const {
-    status: onboardingStatus,
     loading: onboardingLoading,
-    activeStep: onboardingActiveStep,
     isActive: isOnboardingActive,
-    completeStep,
     completeTour,
   } = useOnboarding();
   const { transactions } = useTransactions();
@@ -97,8 +96,8 @@ export default function NewTransactionPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const draftStorageKey = useMemo(
-    () => (user ? `wevenfinance:new-transaction-draft:v1:${user.uid}` : null),
-    [user]
+    () => (user ? `wevenfinance:new-transaction-draft:v2:${user.uid}:${activeWorkspaceId || "default"}` : null),
+    [activeWorkspaceId, user]
   );
   const [draftReady, setDraftReady] = useState(false);
 
@@ -291,11 +290,6 @@ export default function NewTransactionPage() {
     [effectivePlan, plans, featureAccess]
   );
   const canUseInstallments = isBillingExemptRole || effectivePlanCapabilities.hasInstallments;
-  const isTransactionOnboardingActive =
-    isOnboardingActive &&
-    onboardingActiveStep === "firstTransaction" &&
-    !onboardingStatus.steps.firstTransaction;
-
   usePlatformTour({
     route: "transactions-new",
     disabled: onboardingLoading || isOnboardingActive,
@@ -341,11 +335,9 @@ export default function NewTransactionPage() {
   };
 
   const handleOpenCategoryManager = () => {
-    if (isTransactionOnboardingActive || isPlatformTourActive) {
+    if (isPlatformTourActive) {
       setError(
-        isPlatformTourActive
-          ? t("new.errors.tourModal")
-          : t("new.errors.onboardingModal")
+        t("new.errors.tourModal")
       );
       return;
     }
@@ -353,7 +345,7 @@ export default function NewTransactionPage() {
   };
 
   const handleCategoryManagerOpenChange = (open: boolean) => {
-    if (open && (isTransactionOnboardingActive || isPlatformTourActive)) return;
+    if (open && isPlatformTourActive) return;
     setIsCategoryManagerOpen(open);
   };
 
@@ -420,11 +412,6 @@ export default function NewTransactionPage() {
         installmentValueMode,
         isRecurring,
       });
-      if (isTransactionOnboardingActive) {
-        try {
-          await completeStep("firstTransaction");
-        } catch {}
-      }
       if (draftStorageKey) {
         window.localStorage.removeItem(draftStorageKey);
       }
@@ -451,18 +438,6 @@ export default function NewTransactionPage() {
             {t("new.title")}
           </h1>
         </div>
-
-        {/* ONBOARDING MESSAGE */}
-        {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.steps.firstTransaction && (
-          <div className={`mb-6 rounded-2xl border p-4 flex items-center gap-3 text-sm shadow-sm ${
-            isTransactionOnboardingActive
-              ? "border-primary/30 bg-primary/8 text-primary ring-2 ring-primary/15"
-              : "border-primary/20 bg-primary/6 text-primary/90"
-          }`}>
-            <Info className="h-5 w-5 shrink-0 text-primary" />
-            <p><strong>{t("new.onboardingStep")}</strong> {t("new.onboardingDescription")}</p>
-          </div>
-        )}
 
         {/* ERROR MESSAGE */}
         {error && (
@@ -569,9 +544,10 @@ export default function NewTransactionPage() {
                     <Tag className="h-4 w-4 text-zinc-400" /> {t("common.category")}
                   </Label>
                   <button
+                    id="tour-transactions-category-manage"
                     type="button"
                     onClick={handleOpenCategoryManager}
-                    disabled={isTransactionOnboardingActive}
+                    disabled={isPlatformTourActive}
                     className="text-xs font-semibold text-primary hover:text-primary/80 flex items-center gap-1 hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Settings2 className="h-4 w-4" /> {t("common.manage")}
@@ -682,6 +658,7 @@ export default function NewTransactionPage() {
             {/* OPÇÕES AVANÇADAS: RECORRÊNCIA E PARCELAMENTO */}
             <div className="pt-6 mt-6 space-y-4 border-t border-border/70">
               <button
+                id="tour-transactions-advanced"
                 type="button"
                 className="flex w-full items-center justify-between rounded-2xl border border-border/70 bg-muted/30 px-4 py-3 text-left"
                 onClick={() => setShowAdvancedOptions((value) => !value)}
@@ -804,9 +781,7 @@ export default function NewTransactionPage() {
             id="tour-transactions-submit"
             onClick={onSubmit}
             disabled={saving}
-            className={`h-14 sm:flex-2 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm text-base hover:cursor-pointer ${
-              isTransactionOnboardingActive ? "ring-2 ring-ring/45 ring-offset-2 ring-offset-background" : ""
-            }`}
+            className="h-14 sm:flex-2 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm text-base hover:cursor-pointer"
           >
             {saving ? (
               <span className="flex items-center gap-2">
@@ -821,7 +796,7 @@ export default function NewTransactionPage() {
       </div>
 
       <CategoryManagerDialog
-        open={isTransactionOnboardingActive || isPlatformTourActive ? false : isCategoryManagerOpen}
+        open={isPlatformTourActive ? false : isCategoryManagerOpen}
         onOpenChange={handleCategoryManagerOpenChange}
         type={type}
         selectedCategory={category}

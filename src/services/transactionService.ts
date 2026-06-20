@@ -6,9 +6,12 @@ import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
 import { buildInstallmentPlan } from "@/lib/transactions/installments";
 import { buildRecurringOccurrenceSourceId, getMonthKey } from "@/lib/transactions/recurring";
+import { getActiveWorkspaceId, subscribeToActiveWorkspaceChanged } from "@/services/workspaceService";
 
 const TRANSACTIONS_CHANGED_EVENT = "wevenfinance:transactions:changed";
 const USER_SETTINGS_CHANGED_EVENT = "wevenfinance:user-settings:changed";
+const RECURRING_SYNC_TTL_MS = 60_000;
+const recurringSyncCache = new Map<string, { syncedAt: number; inFlight: Promise<number> | null }>();
 
 function emitTransactionsChanged() {
   if (typeof window === "undefined") return;
@@ -50,6 +53,18 @@ async function apiFetch(path: string, init?: RequestInit) {
     },
   });
   return response;
+}
+
+function withActiveWorkspace(path: string) {
+  const workspaceId = getActiveWorkspaceId();
+  if (!workspaceId) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}workspaceId=${encodeURIComponent(workspaceId)}`;
+}
+
+function withActiveWorkspaceBody<T extends Record<string, unknown>>(body: T): T & { workspaceId?: string } {
+  const workspaceId = getActiveWorkspaceId();
+  return workspaceId ? { ...body, workspaceId } : body;
 }
 
 async function sleep(ms: number) {
@@ -153,7 +168,7 @@ type TransactionsPage = {
 async function fetchTransactions(uid: string, groupId?: string): Promise<Transaction[]> {
   const cryptoUid = resolveCryptoUid(uid);
   const query = groupId ? `?groupId=${encodeURIComponent(groupId)}` : "";
-  const response = await apiFetch(`/api/transactions${query}`, { method: "GET" });
+  const response = await apiFetch(withActiveWorkspace(`/api/transactions${query}`), { method: "GET" });
   const payload = (await response.json()) as { ok: boolean; error?: string; transactions?: ApiTransaction[] };
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível carregar transações");
@@ -192,7 +207,7 @@ export async function fetchTransactionsPage(
   if (params?.category && params.category !== "all") search.set("category", params.category);
   if (params?.q?.trim()) search.set("q", params.q.trim());
   const query = `?${search.toString()}`;
-  const response = await apiFetch(`/api/transactions${query}`, { method: "GET" });
+  const response = await apiFetch(withActiveWorkspace(`/api/transactions${query}`), { method: "GET" });
   const payload = (await response.json()) as {
     ok: boolean;
     error?: string;
@@ -261,7 +276,7 @@ export const migrateCryptography = async (uid: string) => {
   if (updates.length > 0) {
     const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
       method: "POST",
-      body: JSON.stringify({ action: "updateMany", updates }),
+      body: JSON.stringify(withActiveWorkspaceBody({ action: "updateMany", updates })),
     });
     if (!response.ok || !payload.ok) {
       throw new Error(payload.error || "Não foi possível migrar criptografia");
@@ -274,42 +289,77 @@ export const migrateCryptography = async (uid: string) => {
 export const subscribeToTransactions = (
   uid: string,
   onChange: (data: Transaction[]) => void,
-  onError?: (error: Error) => void
+  onError?: (error: Error) => void,
+  options?: { syncRecurring?: boolean }
 ) => {
   let cancelled = false;
+  let runId = 0;
+  let debounceTimer: number | null = null;
   const effectiveUid = resolveCryptoUid(uid);
 
   const run = async () => {
+    const currentRunId = ++runId;
     try {
-      await syncRecurringTransactions(uid);
+      if (options?.syncRecurring) {
+        await syncRecurringTransactionsOnce(uid);
+      }
       const data = await fetchTransactions(uid);
-      if (!cancelled) onChange(data);
+      if (!cancelled && currentRunId === runId) onChange(data);
     } catch (error) {
-      if (!cancelled) onError?.(error as Error);
+      if (!cancelled && currentRunId === runId) onError?.(error as Error);
     }
+  };
+
+  const scheduleRun = () => {
+    if (debounceTimer) window.clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(() => void run(), 120);
   };
 
   void run();
   const stopRealtime = subscribeToTableChanges({
     table: "transactions",
     filter: `uid=eq.${effectiveUid}`,
-    onChange: () => void run(),
+    onChange: scheduleRun,
   });
-  const onChangedEvent = () => void run();
+  const onChangedEvent = scheduleRun;
   window.addEventListener(TRANSACTIONS_CHANGED_EVENT, onChangedEvent);
+  const stopWorkspaceListener = subscribeToActiveWorkspaceChanged(scheduleRun);
 
   return () => {
     cancelled = true;
+    if (debounceTimer) window.clearTimeout(debounceTimer);
     stopRealtime();
+    stopWorkspaceListener();
     window.removeEventListener(TRANSACTIONS_CHANGED_EVENT, onChangedEvent);
   };
 };
+
+async function syncRecurringTransactionsOnce(uid: string) {
+  const workspaceId = getActiveWorkspaceId() || "default";
+  const key = `${resolveCryptoUid(uid)}:${workspaceId}`;
+  const cached = recurringSyncCache.get(key);
+  const now = Date.now();
+  if (cached?.inFlight) return cached.inFlight;
+  if (cached && now - cached.syncedAt < RECURRING_SYNC_TTL_MS) return 0;
+
+  const inFlight = syncRecurringTransactions(uid)
+    .then((created) => {
+      recurringSyncCache.set(key, { syncedAt: Date.now(), inFlight: null });
+      return created;
+    })
+    .catch((error) => {
+      recurringSyncCache.delete(key);
+      throw error;
+    });
+  recurringSyncCache.set(key, { syncedAt: cached?.syncedAt || 0, inFlight });
+  return inFlight;
+}
 
 export const syncRecurringTransactions = async (_uid: string) => {
   void _uid;
   const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
     method: "POST",
-    body: JSON.stringify({ action: "syncRecurring" }),
+    body: JSON.stringify(withActiveWorkspaceBody({ action: "syncRecurring" })),
   });
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "NÃ£o foi possÃ­vel sincronizar recorrÃªncias");
@@ -404,7 +454,7 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO & { i
 
   const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
     method: "POST",
-    body: JSON.stringify({ action: "createMany", transactions }),
+    body: JSON.stringify(withActiveWorkspaceBody({ action: "createMany", transactions })),
   });
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível adicionar transação");
@@ -423,7 +473,7 @@ export const deleteTransaction = async (
     const selected = all.find((tx) => tx.id === transactionId);
     if (!selected?.groupId) return;
 
-    const { response, payload } = await apiFetchWithOptionalApproval(`/api/transactions?groupId=${encodeURIComponent(selected.groupId)}`, {
+    const { response, payload } = await apiFetchWithOptionalApproval(withActiveWorkspace(`/api/transactions?groupId=${encodeURIComponent(selected.groupId)}`), {
       method: "DELETE",
     });
     if (!response.ok || !payload.ok) {
@@ -434,7 +484,7 @@ export const deleteTransaction = async (
     return;
   }
 
-  const { response, payload } = await apiFetchWithOptionalApproval(`/api/transactions?transactionId=${encodeURIComponent(transactionId)}`, {
+  const { response, payload } = await apiFetchWithOptionalApproval(withActiveWorkspace(`/api/transactions?transactionId=${encodeURIComponent(transactionId)}`), {
     method: "DELETE",
   });
   if (!response.ok || !payload.ok) {
@@ -451,11 +501,11 @@ export const cancelFutureInstallments = async (
 ) => {
   const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
     method: "POST",
-    body: JSON.stringify({
+    body: JSON.stringify(withActiveWorkspaceBody({
       action: "cancelFuture",
       groupId,
       lastInstallmentDate,
-    }),
+    })),
   });
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível cancelar parcelas futuras");
@@ -489,7 +539,7 @@ export const updateTransaction = async (
     }
     const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
       method: "PATCH",
-      body: JSON.stringify({ transactionId, updates }),
+      body: JSON.stringify(withActiveWorkspaceBody({ transactionId, updates })),
     });
     if (!response.ok || !payload.ok) {
       throw new Error(payload.error || "Não foi possível atualizar transação");
@@ -567,7 +617,7 @@ export const updateTransaction = async (
 
   const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
     method: "POST",
-    body: JSON.stringify({ action: "updateMany", updates: bulkUpdates }),
+    body: JSON.stringify(withActiveWorkspaceBody({ action: "updateMany", updates: bulkUpdates })),
   });
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível atualizar grupo de transações");
@@ -583,7 +633,7 @@ export const toggleTransactionStatus = async (
 ) => {
   const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
     method: "POST",
-    body: JSON.stringify({ action: "toggleStatus", transactionId, currentStatus }),
+    body: JSON.stringify(withActiveWorkspaceBody({ action: "toggleStatus", transactionId, currentStatus })),
   });
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível atualizar status da transação");
@@ -608,7 +658,7 @@ export const syncCreditCardAmountForLimit = async (uid: string, transactions: Tr
 
   const { response, payload } = await apiFetchWithOptionalApproval("/api/transactions", {
     method: "POST",
-    body: JSON.stringify({ action: "updateMany", updates }),
+    body: JSON.stringify(withActiveWorkspaceBody({ action: "updateMany", updates })),
   });
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível sincronizar valores do cartão");

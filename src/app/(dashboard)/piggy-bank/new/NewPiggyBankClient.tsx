@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/hooks/useAuth";
 import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { useTransactions } from "@/hooks/useTransactions";
+import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useTranslations } from "@/i18n/T";
 import { useFormatters } from "@/i18n/useFormatters";
 import { formatCurrencyInput, parseCurrencyInput } from "@/lib/money";
@@ -63,6 +64,7 @@ export function NewPiggyBankClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, userProfile } = useAuth();
+  const { activeWorkspaceId } = useWorkspaces();
   const { transactions } = useTransactions();
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -116,7 +118,7 @@ export function NewPiggyBankClient() {
     return () => {
       mounted = false;
     };
-  }, [t, user]);
+  }, [activeWorkspaceId, t, user]);
 
   const canGoStep2 = goalType !== "custom" || goalName.trim().length > 1;
   const canGoStep3 = parsedAmount > 0 && parsedAmount <= Math.max(0, availableBalance) && (goalType !== "card_limit" || Boolean(cardId));

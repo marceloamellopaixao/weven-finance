@@ -435,7 +435,7 @@ export function CategoryManagerDialog({
                   return a.name.localeCompare(b.name, "pt-BR");
                 })
                 .map((cat) => {
-                  const hidden = cat.name !== "Outros" && !compatibleCategories.some((item) => item.name === cat.name);
+                  const hidden = Boolean(cat.hidden);
                   const isOthers = cat.name === "Outros";
 
                   return (
@@ -445,9 +445,9 @@ export function CategoryManagerDialog({
                           {hidden ? <EyeOff className="h-4 w-4 text-zinc-400" /> : <Eye className="h-4 w-4 text-violet-600" />}
                         </div>
                         <div>
-                          <p className={`text-sm font-medium truncate ${hidden ? 'text-zinc-500' : 'text-zinc-900 dark:text-zinc-100'}`}>
-                            {cat.name}
-                          </p>
+                          <div className={`text-sm font-medium truncate ${hidden ? 'text-zinc-500' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                            <CategoryLabel value={cat.name} />
+                          </div>
                           {hidden && <p className="text-[11px] text-zinc-400">Oculta nas listagens</p>}
                         </div>
                       </div>

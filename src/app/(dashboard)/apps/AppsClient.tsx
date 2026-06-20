@@ -23,8 +23,8 @@ export function AppsClient() {
   const router = useRouter();
   const tApps = useTranslations("apps");
   const { userProfile } = useAuth();
-  const { startPlatformTour } = usePlatformExperience();
-  const { resetTour, isActive: isOnboardingActive } = useOnboarding();
+  const { startPlatformTour, isPlatformTourActive } = usePlatformExperience();
+  const { resetTour } = useOnboarding();
   const [selectedRoutes, setSelectedRoutes] = useState<PlatformTourRouteKey[]>([
     ...ALL_PLATFORM_TOUR_ROUTES,
   ]);
@@ -95,11 +95,11 @@ export function AppsClient() {
                   onClick={() =>
                     void handleStartTour([...ALL_PLATFORM_TOUR_ROUTES])
                   }
-                  disabled={isOnboardingActive}
+                  disabled={isPlatformTourActive}
                   className="rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   <PlayCircle className="mr-2 h-4 w-4" />
-                  {isOnboardingActive
+                  {isPlatformTourActive
                     ? tApps("hero.finishGuidedStart")
                     : tApps("hero.startFullTour")}
                 </Button>
@@ -210,7 +210,7 @@ export function AppsClient() {
                       onClick={() =>
                         void handleStartTour(orderedSelectedRoutes)
                       }
-                      disabled={isOnboardingActive || selectedCount === 0}
+                      disabled={isPlatformTourActive || selectedCount === 0}
                       className="rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90"
                     >
                       <PlayCircle className="mr-2 h-4 w-4" />
@@ -219,7 +219,7 @@ export function AppsClient() {
                         : tApps("tour.startSelected")}
                     </Button>
                     <p className="text-sm leading-6 text-muted-foreground">
-                      {isOnboardingActive
+                      {isPlatformTourActive
                         ? tApps("tour.finishCurrentTour")
                         : tApps("tour.selectedOnlyHint")}
                     </p>

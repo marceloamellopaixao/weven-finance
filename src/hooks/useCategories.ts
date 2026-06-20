@@ -1,191 +1,222 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "./useAuth";
+
+import { useI18n } from "@/i18n/I18nProvider";
 import {
-    getCategoriesData,
-    addCustomCategory,
-    deleteCustomCategoryByName,
-    renameCustomCategoryByName,
-    setDefaultCategoryHidden,
-} from "@/services/categoryService";
+  getDefaultCategoriesForWorkspaceType,
+  normalizeDefaultCategoryName,
+  slugifyDefaultCategoryName,
+} from "@/lib/categories/defaultCategories";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
+import { subscribeToActiveWorkspaceChanged } from "@/services/workspaceService";
+import {
+  addCustomCategory,
+  deleteCustomCategoryByName,
+  getCategoriesData,
+  renameCustomCategoryByName,
+  setDefaultCategoryHidden,
+} from "@/services/categoryService";
+import type { WorkspaceType } from "@/types/workspace";
+import { useAuth } from "./useAuth";
+import { useWorkspaces } from "./useWorkspaces";
 
 export const CATEGORY_PATH_SEPARATOR = "::";
 
 export type CategoryType = "income" | "expense" | "both";
 
 export interface Category {
-    name: string;
-    type: CategoryType;
-    color: string;
-    isCustom?: boolean;
-    isDefault?: boolean;
+  name: string;
+  type: CategoryType;
+  color: string;
+  isCustom?: boolean;
+  isDefault?: boolean;
 }
 
-const INITIAL_CATEGORIES: Category[] = [
-    { name: "Dízimo", type: "expense", color: "bg-violet-500/10 text-violet-600 border-violet-200/50 dark:text-violet-400 dark:border-violet-800/50" },
-    { name: "Casa", type: "expense", color: "bg-blue-500/10 text-blue-600 border-blue-200/50 dark:text-blue-400 dark:border-blue-800/50" },
-    { name: "Alimentação", type: "expense", color: "bg-orange-500/10 text-orange-600 border-orange-200/50 dark:text-orange-400 dark:border-orange-800/50" },
-    { name: "Investimento", type: "expense", color: "bg-emerald-500/10 text-emerald-600 border-emerald-200/50 dark:text-emerald-400 dark:border-emerald-800/50" },
-    { name: "Compras", type: "expense", color: "bg-pink-500/10 text-pink-600 border-pink-200/50 dark:text-pink-400 dark:border-pink-800/50" },
-    { name: "Streaming", type: "expense", color: "bg-indigo-500/10 text-indigo-600 border-indigo-200/50 dark:text-indigo-400 dark:border-indigo-800/50" },
-    { name: "Salário", type: "income", color: "bg-green-500/10 text-green-600 border-green-200/50 dark:text-green-400 dark:border-green-800/50" },
-    { name: "Rendimento", type: "income", color: "bg-green-500/10 text-green-600 border-green-200/50 dark:text-green-400 dark:border-green-800/50" },
-    { name: "Vendas", type: "income", color: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50" },
-    { name: "Serviços", type: "income", color: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50" },
-    { name: "Outros", type: "both", color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50" },
-];
+const FALLBACK_WORKSPACE_TYPE: WorkspaceType = "personal";
+const CUSTOM_CATEGORY_COLOR =
+  "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50";
+
+function buildDefaultCategories(workspaceType: WorkspaceType = FALLBACK_WORKSPACE_TYPE): Category[] {
+  return getDefaultCategoriesForWorkspaceType(workspaceType).map((category) => ({
+    name: category.name,
+    type: category.type,
+    color: category.color,
+    isDefault: true,
+  }));
+}
+
+function normalizeCategoryKey(name: string) {
+  return slugifyDefaultCategoryName(normalizeDefaultCategoryName(name));
+}
+
+function categoriesOverlap(left: Category, right: Category) {
+  if (left.name === right.name) return true;
+  if (left.type !== right.type && left.type !== "both" && right.type !== "both") return false;
+  return normalizeCategoryKey(left.name) === normalizeCategoryKey(right.name);
+}
 
 export function useCategories() {
-    const { user, userProfile } = useAuth();
-    const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
-    const [loadingCategories, setLoadingCategories] = useState(true);
-    const [hiddenDefaultCategories, setHiddenDefaultCategories] = useState<string[]>([]);
+  const { user, userProfile } = useAuth();
+  const { locale } = useI18n();
+  const { activeWorkspace } = useWorkspaces();
+  const workspaceType = activeWorkspace?.type || FALLBACK_WORKSPACE_TYPE;
+  const [categories, setCategories] = useState<Category[]>(() => buildDefaultCategories(workspaceType));
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [hiddenDefaultCategories, setHiddenDefaultCategories] = useState<string[]>([]);
 
-    useEffect(() => {
-        const effectiveUid = userProfile?.uid || user?.uid;
-        if (!user || !effectiveUid) return;
-        let cancelled = false;
+  useEffect(() => {
+    const effectiveUid = userProfile?.uid || user?.uid;
+    if (!user || !effectiveUid) {
+      setCategories(buildDefaultCategories(workspaceType));
+      setLoadingCategories(false);
+      return;
+    }
 
-        const loadCategories = async () => {
-            try {
-                const token = await user.getIdToken();
-                const { customCategories: customCats, hiddenDefaultCategories: hiddenDefaults } = await getCategoriesData(token);
+    let cancelled = false;
 
-                const formattedCustom: Category[] = customCats.map((cat) => ({
-                    name: cat.name,
-                    type: cat.type,
-                    color: cat.color,
-                    isCustom: true,
-                }));
-
-                const hiddenSet = new Set(hiddenDefaults);
-                const visibleDefaultCats = INITIAL_CATEGORIES
-                    .map((cat) => ({ ...cat, isDefault: true }))
-                    .filter((cat) => cat.name === "Outros" || !hiddenSet.has(cat.name));
-
-                const allCats: Category[] = [...visibleDefaultCats];
-                formattedCustom.forEach((fc) => {
-                    if (!allCats.some((ac) => ac.name === fc.name)) {
-                        allCats.push(fc);
-                    }
-                });
-
-                if (cancelled) return;
-                setHiddenDefaultCategories(hiddenDefaults);
-                setCategories(allCats);
-            } catch (error) {
-                console.error("Erro ao carregar categorias:", error);
-            } finally {
-                if (!cancelled) setLoadingCategories(false);
-            }
-        };
-
-        void loadCategories();
-        const stopCategories = subscribeToTableChanges({
-            table: "categories",
-            filter: `uid=eq.${effectiveUid}`,
-            onChange: () => void loadCategories(),
-        });
-        const stopSettings = subscribeToTableChanges({
-            table: "user_settings",
-            filter: `uid=eq.${effectiveUid}`,
-            onChange: () => void loadCategories(),
-        });
-
-        return () => {
-            cancelled = true;
-            stopCategories();
-            stopSettings();
-        };
-    }, [user, userProfile?.uid]);
-
-    const addNewCategory = async (
-        name: string,
-        type: CategoryType,
-        parentName?: string
-    ) => {
-        if (!user) return;
-
-        const finalName = parentName
-            ? `${parentName}${CATEGORY_PATH_SEPARATOR}${name}`
-            : name;
-        await addCustomCategory(await user.getIdToken(), finalName, type);
-
-        const newCat: Category = {
-            name: finalName,
-            type,
-            color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50",
-            isCustom: true,
-        };
-
-        setCategories((prev) => {
-            if (prev.some((cat) => cat.name === finalName)) return prev;
-            return [...prev, newCat];
-        });
-    };
-
-    const deleteCategory = async (name: string) => {
-        if (!user) return;
-        await deleteCustomCategoryByName(await user.getIdToken(), name, "Outros");
-        setCategories((prev) => prev.filter((cat) => cat.name !== name && !cat.name.startsWith(`${name}${CATEGORY_PATH_SEPARATOR}`)));
-    };
-
-    const renameCategory = async (oldName: string, newName: string) => {
-        if (!user) return;
-
-        const trimmed = newName.trim();
-        if (!trimmed) return;
-        await renameCustomCategoryByName(await user.getIdToken(), oldName, trimmed);
-        setCategories((prev) =>
-            prev.map((cat) => {
-                if (cat.name === oldName || cat.name.startsWith(`${oldName}${CATEGORY_PATH_SEPARATOR}`)) {
-                    const suffix = cat.name.slice(oldName.length);
-                    return { ...cat, name: `${trimmed}${suffix}` };
-                }
-                return cat;
-            })
+    const loadCategories = async () => {
+      try {
+        const token = await user.getIdToken();
+        const { customCategories: customCats, hiddenDefaultCategories: hiddenDefaults } = await getCategoriesData(token);
+        const hiddenKeys = new Set(hiddenDefaults.map(normalizeCategoryKey));
+        const defaultCats = buildDefaultCategories(workspaceType);
+        const visibleDefaultCats = defaultCats.filter(
+          (cat) => normalizeDefaultCategoryName(cat.name) === "Outros" || !hiddenKeys.has(normalizeCategoryKey(cat.name))
         );
-    };
+        const formattedCustom: Category[] = customCats.map((cat) => ({
+          name: normalizeDefaultCategoryName(cat.name),
+          type: cat.type,
+          color: cat.color,
+          isCustom: true,
+        }));
 
-    const toggleDefaultCategoryVisibility = async (name: string, hidden: boolean) => {
-        if (!user) return;
-        if (name === "Outros") return;
-
-        const defaultCategory = INITIAL_CATEGORIES.find((cat) => cat.name === name);
-        if (!defaultCategory) return;
-
-        setHiddenDefaultCategories((prev) =>
-            hidden ? Array.from(new Set([...prev, name])) : prev.filter((n) => n !== name)
-        );
-
-        setCategories((prev) => {
-            if (hidden) {
-                return prev.filter((cat) => cat.name !== name);
-            }
-
-            if (prev.some((cat) => cat.name === name)) return prev;
-            return [{ ...defaultCategory, isDefault: true }, ...prev];
+        const allCats: Category[] = [...visibleDefaultCats];
+        formattedCustom.forEach((customCategory) => {
+          if (!allCats.some((category) => categoriesOverlap(category, customCategory))) {
+            allCats.push(customCategory);
+          }
         });
 
-        await setDefaultCategoryHidden(await user.getIdToken(), name, hidden);
+        if (cancelled) return;
+        setHiddenDefaultCategories(hiddenDefaults.map(normalizeDefaultCategoryName));
+        setCategories(allCats);
+      } catch (error) {
+        console.error("Erro ao carregar categorias:", error);
+      } finally {
+        if (!cancelled) setLoadingCategories(false);
+      }
     };
 
-    const defaultCategories = INITIAL_CATEGORIES.map((cat) => ({
-        ...cat,
-        isDefault: true,
-        hidden: cat.name === "Outros" ? false : hiddenDefaultCategories.includes(cat.name),
-    }));
+    void loadCategories();
+    const stopCategories = subscribeToTableChanges({
+      table: "categories",
+      filter: `uid=eq.${effectiveUid}`,
+      onChange: () => void loadCategories(),
+    });
+    const stopSettings = subscribeToTableChanges({
+      table: "user_settings",
+      filter: `uid=eq.${effectiveUid}`,
+      onChange: () => void loadCategories(),
+    });
+    const stopActiveWorkspace = subscribeToActiveWorkspaceChanged(() => {
+      setLoadingCategories(true);
+      void loadCategories();
+    });
 
-    return {
-        categories,
-        defaultCategories,
-        hiddenDefaultCategories,
-        loadingCategories,
-        addNewCategory,
-        deleteCategory,
-        renameCategory,
-        toggleDefaultCategoryVisibility,
+    return () => {
+      cancelled = true;
+      stopCategories();
+      stopSettings();
+      stopActiveWorkspace();
     };
+  }, [user, userProfile?.uid, workspaceType, locale]);
+
+  const addNewCategory = async (name: string, type: CategoryType, parentName?: string) => {
+    if (!user) return;
+
+    const finalName = parentName ? `${parentName}${CATEGORY_PATH_SEPARATOR}${name}` : name;
+    await addCustomCategory(await user.getIdToken(), finalName, type);
+
+    const newCat: Category = {
+      name: finalName,
+      type,
+      color: CUSTOM_CATEGORY_COLOR,
+      isCustom: true,
+    };
+
+    setCategories((prev) => {
+      if (prev.some((cat) => categoriesOverlap(cat, newCat))) return prev;
+      return [...prev, newCat];
+    });
+  };
+
+  const deleteCategory = async (name: string) => {
+    if (!user) return;
+    await deleteCustomCategoryByName(await user.getIdToken(), name, "Outros");
+    setCategories((prev) => prev.filter((cat) => cat.name !== name && !cat.name.startsWith(`${name}${CATEGORY_PATH_SEPARATOR}`)));
+  };
+
+  const renameCategory = async (oldName: string, newName: string) => {
+    if (!user) return;
+
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    await renameCustomCategoryByName(await user.getIdToken(), oldName, trimmed);
+    setCategories((prev) =>
+      prev.map((cat) => {
+        if (cat.name === oldName || cat.name.startsWith(`${oldName}${CATEGORY_PATH_SEPARATOR}`)) {
+          const suffix = cat.name.slice(oldName.length);
+          return { ...cat, name: `${trimmed}${suffix}` };
+        }
+        return cat;
+      })
+    );
+  };
+
+  const toggleDefaultCategoryVisibility = async (name: string, hidden: boolean) => {
+    if (!user) return;
+    const canonicalName = normalizeDefaultCategoryName(name);
+    if (canonicalName === "Outros") return;
+
+    const defaultCategory = buildDefaultCategories(workspaceType).find(
+      (cat) => normalizeDefaultCategoryName(cat.name) === canonicalName
+    );
+    if (!defaultCategory) return;
+
+    setHiddenDefaultCategories((prev) =>
+      hidden ? Array.from(new Set([...prev, canonicalName])) : prev.filter((item) => normalizeDefaultCategoryName(item) !== canonicalName)
+    );
+
+    setCategories((prev) => {
+      if (hidden) {
+        return prev.filter((cat) => normalizeDefaultCategoryName(cat.name) !== canonicalName);
+      }
+
+      if (prev.some((cat) => normalizeDefaultCategoryName(cat.name) === canonicalName)) return prev;
+      return [{ ...defaultCategory, isDefault: true }, ...prev];
+    });
+
+    await setDefaultCategoryHidden(await user.getIdToken(), canonicalName, hidden);
+  };
+
+  const defaultCategories = buildDefaultCategories(workspaceType).map((cat) => ({
+    ...cat,
+    isDefault: true,
+    hidden:
+      normalizeDefaultCategoryName(cat.name) === "Outros"
+        ? false
+        : hiddenDefaultCategories.some((name) => normalizeCategoryKey(name) === normalizeCategoryKey(cat.name)),
+  }));
+
+  return {
+    categories,
+    defaultCategories,
+    hiddenDefaultCategories,
+    loadingCategories,
+    addNewCategory,
+    deleteCategory,
+    renameCategory,
+    toggleDefaultCategoryVisibility,
+  };
 }

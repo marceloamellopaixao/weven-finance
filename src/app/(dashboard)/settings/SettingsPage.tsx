@@ -31,6 +31,8 @@ import {
   Moon,
   Palette,
   Sun,
+  UsersRound,
+  WalletCards,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { requestOwnAccountDeletion, updateOwnProfile } from "@/services/userService";
@@ -54,7 +56,11 @@ import { AppearanceAccent, AppearanceThemeMode } from "@/types/appearance";
 import { useFormatters } from "@/i18n/useFormatters";
 import { getPlanPrice } from "@/lib/billing/prices";
 import { getLocalizedPlanCopy, getPlanTone } from "@/lib/plans/display";
+import type { UpgradePlan } from "@/services/billing/checkoutIntent";
 import { useTranslations } from "@/i18n/T";
+import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { FamilyWorkspacePanel } from "@/components/workspaces/FamilyWorkspacePanel";
+import { WorkspaceSettingsPanel } from "@/components/workspaces/WorkspaceSettingsPanel";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -94,6 +100,7 @@ export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode, refreshProfile } = useAuth();
   const { completeTour, isActive: isOnboardingActive, loading: onboardingLoading } = useOnboarding();
   const { appearancePreferences, appearanceLoading, updateAppearance } = useAppearance();
+  const { workspaces, loading: workspacesLoading } = useWorkspaces();
   const { isImpersonating } = useImpersonation();
   const { plans } = usePlans();
   const currency = usePreferredCurrency();
@@ -112,7 +119,7 @@ export default function SettingsPage() {
   const [keyFingerprint, setKeyFingerprint] = useState(t("security.internalIdLoading"));
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
+  const [isOpeningCheckout, setIsOpeningCheckout] = useState<UpgradePlan | null>(null);
   const [isConfirmingPreapproval, setIsConfirmingPreapproval] = useState(false);
   const [isAutoReconcilingBilling, setIsAutoReconcilingBilling] = useState(false);
   const [lastAutoBillingAttemptKey, setLastAutoBillingAttemptKey] = useState("");
@@ -155,12 +162,16 @@ export default function SettingsPage() {
   // Constantes de animação.
   const fadeInUp = "animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both";
   const zoomIn = "animate-in fade-in zoom-in-50 duration-500 fill-mode-both";
-  const formatPlanPrice = (planId: "premium" | "pro") =>
+  const formatPlanPrice = (planId: UpgradePlan) =>
     money(getPlanPrice(planId, currency)?.amount ?? plans[planId].price);
+  const hasFamilyWorkspace = workspaces.some((workspace) => workspace.type === "family" || workspace.settings?.familyModeEnabled || Boolean(workspace.membership));
 
   usePlatformTour({
     route: "settings",
-    disabled: onboardingLoading || isOnboardingActive,
+    disabled: onboardingLoading || isOnboardingActive || workspacesLoading,
+    stepVisibility: {
+      familyWorkspace: hasFamilyWorkspace,
+    },
     onComplete: completeTour,
   });
 
@@ -227,7 +238,7 @@ export default function SettingsPage() {
     return t("ticketTypes.support");
   };
 
-  const handleTabChange = (tab: "account" | "billing" | "security" | "help") => {
+  const handleTabChange = (tab: "account" | "profiles" | "family" | "billing" | "security" | "help") => {
     setActiveTab(tab);
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", tab);
@@ -408,7 +419,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleStartCheckout = async (plan: "premium" | "pro") => {
+  const handleStartCheckout = async (plan: UpgradePlan) => {
     if (!user) {
       showFeedback("error", t("feedback.expiredSessionTitle"), t("feedback.expiredSessionMessage"));
       return;
@@ -432,7 +443,7 @@ export default function SettingsPage() {
 
   const handleConfirmPreapproval = async (
     preapprovalId?: string,
-    expectedPlan?: "premium" | "pro",
+    expectedPlan?: UpgradePlan,
     checkoutAttemptId?: string
   ) => {
     if (!user) return;
@@ -488,7 +499,7 @@ export default function SettingsPage() {
   const pendingPreapprovalId = userProfile?.billing?.pendingPreapprovalId;
   const pendingCheckoutAttemptId = userProfile?.billing?.pendingCheckoutAttemptId;
   const pendingPlan = userProfile?.billing?.pendingPlan;
-  const recoveryPlan: "premium" | "pro" =
+  const recoveryPlan: UpgradePlan =
     pendingPlan === "pro" || currentPlan === "pro" ? "pro" : "premium";
   const shouldShowRecoveryCTA =
     !isBillingExemptRole &&
@@ -507,7 +518,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (isTabBootstrapped) return;
     const tab = searchParams.get("tab");
-    if (tab === "account" || tab === "billing" || tab === "security" || tab === "help") {
+    if (tab === "account" || tab === "profiles" || tab === "family" || tab === "billing" || tab === "security" || tab === "help") {
       setActiveTab(tab);
     }
     setIsTabBootstrapped(true);
@@ -651,6 +662,13 @@ export default function SettingsPage() {
     setBillingHistoryPage(1);
   }, [activeTab]);
 
+  useEffect(() => {
+    if (workspacesLoading) return;
+    if (activeTab === "family" && !hasFamilyWorkspace) {
+      setActiveTab("account");
+    }
+  }, [activeTab, hasFamilyWorkspace, workspacesLoading]);
+
   return (
     <div className="min-h-screen p-3 font-sans md:p-8 pb-20">
       <div className="max-w-5xl mx-auto space-y-8">
@@ -672,10 +690,18 @@ export default function SettingsPage() {
 
         {/* Navegação de Abas Personalizada */}
         <div className={`${fadeInUp} delay-150 space-y-6`}>
-          <div id="tour-settings-tabs" className="app-panel-subtle grid min-w-full w-full grid-cols-2 gap-1 rounded-2xl border p-1.5 shadow-sm sm:grid-cols-4">
+          <div id="tour-settings-tabs" className={`app-panel-subtle grid min-w-full w-full grid-cols-2 gap-1 rounded-2xl border p-1.5 shadow-sm ${hasFamilyWorkspace ? "sm:grid-cols-6" : "sm:grid-cols-5"}`}>
             <button id="tour-settings-account-tab" type="button" aria-pressed={activeTab === "account"} onClick={() => handleTabChange("account")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "account" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <User className="h-4 w-4" /> {t("tabs.account")}
             </button>
+            <button id="tour-settings-profiles-tab" type="button" aria-pressed={activeTab === "profiles"} onClick={() => handleTabChange("profiles")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "profiles" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+              <WalletCards className="h-4 w-4" /> Perfis
+            </button>
+            {hasFamilyWorkspace ? (
+              <button id="tour-settings-family-tab" type="button" aria-pressed={activeTab === "family"} onClick={() => handleTabChange("family")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "family" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+                <UsersRound className="h-4 w-4" /> Familia
+              </button>
+            ) : null}
             <button id="tour-settings-billing-tab" type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "billing" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <CreditCard className="h-4 w-4" /> {t("tabs.billing")}
             </button>
@@ -875,6 +901,18 @@ export default function SettingsPage() {
                 </Button>
               </CardFooter>
             </Card>
+          )}
+
+          {activeTab === "profiles" && (
+            <div id="tour-settings-profiles-panel" className={`${fadeInUp} delay-200`}>
+              <WorkspaceSettingsPanel />
+            </div>
+          )}
+
+          {activeTab === "family" && (
+            <div id="tour-settings-family-panel" className={`${fadeInUp} delay-200`}>
+              <FamilyWorkspacePanel workspaces={workspaces} loading={workspacesLoading} />
+            </div>
           )}
 
           {/* ABA PLANOS */}
