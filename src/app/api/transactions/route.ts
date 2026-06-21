@@ -22,9 +22,41 @@ import {
   supabaseSelectPaged,
   supabaseUpsertRows,
 } from "@/services/supabase/admin";
+import {
+  canCreateFamilyTransaction,
+  canEditFamilyTransaction,
+  canViewFamilyTransaction,
+} from "@/lib/workspaces/family";
+import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const TX_SELECT_WITH_WORKSPACE =
+  "source_id,workspace_id,created_by_uid,title,description,amount,amount_text,amount_for_limit,tx_type,category,tx_status,payment_method,card_id,card_label,card_type,tx_date,due_date,group_id,installment_current,installment_total,created_at,raw";
+const TX_SELECT_LEGACY =
+  "source_id,title,description,amount,amount_text,amount_for_limit,tx_type,category,tx_status,payment_method,card_id,card_label,card_type,tx_date,due_date,group_id,installment_current,installment_total,created_at,raw";
+
+function isMissingWorkspaceTransactionColumn(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return message.includes("workspace_id") || message.includes("created_by_uid") || message.includes("PGRST204");
+}
+
+function withoutWorkspaceColumns(row: Record<string, unknown>) {
+  const { workspace_id: _workspaceId, created_by_uid: _createdByUid, ...legacyRow } = row;
+  void _workspaceId;
+  void _createdByUid;
+  return legacyRow;
+}
+
+async function upsertTransactionRows(rows: Array<Record<string, unknown>>) {
+  try {
+    await supabaseUpsertRows("transactions", rows, { onConflict: "id" });
+  } catch (error) {
+    if (!isMissingWorkspaceTransactionColumn(error)) throw error;
+    await supabaseUpsertRows("transactions", rows.map(withoutWorkspaceColumns), { onConflict: "id" });
+  }
+}
 
 function asNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -41,10 +73,19 @@ function escapeIlike(value: string) {
     .trim();
 }
 
-function toTxRow(uid: string, sourceId: string, data: Record<string, unknown>) {
+function toTxRow(
+  uid: string,
+  sourceId: string,
+  data: Record<string, unknown>,
+  context?: { workspaceId?: string | null; createdByUid?: string }
+) {
+  const workspaceId = typeof data.workspaceId === "string" ? data.workspaceId : context?.workspaceId || null;
+  const createdByUid = typeof data.createdByUid === "string" ? data.createdByUid : context?.createdByUid || uid;
   return {
     id: `${uid}__${sourceId}`,
     uid,
+    workspace_id: workspaceId,
+    created_by_uid: createdByUid,
     source_id: sourceId,
     title: data.title ?? null,
     description: data.description ?? null,
@@ -65,7 +106,7 @@ function toTxRow(uid: string, sourceId: string, data: Record<string, unknown>) {
       typeof data.installmentCurrent === "number" ? data.installmentCurrent : null,
     installment_total:
       typeof data.installmentTotal === "number" ? data.installmentTotal : null,
-    raw: data,
+    raw: { ...data, workspaceId, createdByUid },
     created_at: typeof data.createdAt === "string" ? data.createdAt : new Date().toISOString(),
   };
 }
@@ -101,6 +142,8 @@ function toClientTx(uid: string, row: Record<string, unknown>) {
     isEncrypted: typeof raw.isEncrypted === "boolean" ? raw.isEncrypted : false,
     isArchived: typeof raw.isArchived === "boolean" ? raw.isArchived : false,
     userId: uid,
+    workspaceId: typeof row.workspace_id === "string" ? row.workspace_id : typeof raw.workspaceId === "string" ? raw.workspaceId : undefined,
+    createdByUid: typeof row.created_by_uid === "string" ? row.created_by_uid : typeof raw.createdByUid === "string" ? raw.createdByUid : uid,
   };
 }
 
@@ -121,12 +164,27 @@ function getRowMonth(row: Record<string, unknown>) {
   return getMonthKey(String(row.due_date || raw.dueDate || row.tx_date || raw.date || ""));
 }
 
-async function fetchUserTransactions(uid: string) {
-  return supabaseSelect("transactions", {
-    select:
-      "source_id,title,description,amount,amount_text,amount_for_limit,tx_type,category,tx_status,payment_method,card_id,card_label,card_type,tx_date,due_date,group_id,installment_current,installment_total,created_at,raw",
-    filters: { uid },
-    order: "due_date.desc.nullslast",
+async function fetchUserTransactions(uid: string, workspaceId?: string | null, includeLegacyRows = true) {
+  let rows: Record<string, unknown>[];
+  try {
+    rows = await supabaseSelect("transactions", {
+      select: TX_SELECT_WITH_WORKSPACE,
+      filters: { uid },
+      order: "due_date.desc.nullslast",
+    });
+  } catch (error) {
+    if (!isMissingWorkspaceTransactionColumn(error)) throw error;
+    rows = await supabaseSelect("transactions", {
+      select: TX_SELECT_LEGACY,
+      filters: { uid },
+      order: "due_date.desc.nullslast",
+    });
+  }
+  if (!workspaceId) return rows;
+  return rows.filter((row) => {
+    const raw = getRaw(row);
+    const rowWorkspaceId = String(row.workspace_id || raw.workspaceId || "");
+    return rowWorkspaceId === workspaceId || (!rowWorkspaceId && includeLegacyRows);
   });
 }
 
@@ -136,7 +194,13 @@ function getTransactionMonthKey(value: unknown) {
   return /^\d{4}-\d{2}$/.test(monthKey) ? monthKey : null;
 }
 
-async function migrateLegacyRecurringRows(uid: string, rows: Record<string, unknown>[], currentMonthKey: string) {
+async function migrateLegacyRecurringRows(
+  uid: string,
+  rows: Record<string, unknown>[],
+  currentMonthKey: string,
+  workspaceId?: string | null,
+  createdByUid?: string
+) {
   const groups = new Map<string, Record<string, unknown>[]>();
 
   for (const row of rows) {
@@ -170,7 +234,7 @@ async function migrateLegacyRecurringRows(uid: string, rows: Record<string, unkn
         recurringRole: "template",
         installmentCurrent: undefined,
         installmentTotal: undefined,
-      })
+      }, { workspaceId, createdByUid })
     );
 
     for (const row of sorted) {
@@ -192,23 +256,23 @@ async function migrateLegacyRecurringRows(uid: string, rows: Record<string, unkn
           recurringRole: "occurrence",
           installmentCurrent: undefined,
           installmentTotal: undefined,
-        })
+        }, { workspaceId, createdByUid })
       );
     }
   }
 
   if (upserts.length > 0) {
-    await supabaseUpsertRows("transactions", upserts, { onConflict: "id" });
+    await upsertTransactionRows(upserts);
   }
 
   return upserts.length;
 }
 
-async function syncRecurringRows(uid: string) {
+async function syncRecurringRows(uid: string, workspaceId?: string | null, createdByUid?: string, includeLegacyRows = true) {
   const currentMonthKey = getCurrentMonthKey();
-  const rows = await fetchUserTransactions(uid);
-  const migrated = await migrateLegacyRecurringRows(uid, rows, currentMonthKey);
-  const freshRows = migrated > 0 ? await fetchUserTransactions(uid) : rows;
+  const rows = await fetchUserTransactions(uid, workspaceId, includeLegacyRows);
+  const migrated = await migrateLegacyRecurringRows(uid, rows, currentMonthKey, workspaceId, createdByUid);
+  const freshRows = migrated > 0 ? await fetchUserTransactions(uid, workspaceId, includeLegacyRows) : rows;
 
   const existingOccurrenceKeys = new Set<string>();
   for (const row of freshRows) {
@@ -259,13 +323,13 @@ async function syncRecurringRows(uid: string) {
         installmentCurrent: undefined,
         installmentTotal: undefined,
         createdAt: new Date().toISOString(),
-      })
+      }, { workspaceId, createdByUid })
     );
     existingOccurrenceKeys.add(occurrenceKey);
   }
 
   if (upserts.length > 0) {
-    await supabaseUpsertRows("transactions", upserts, { onConflict: "id" });
+    await upsertTransactionRows(upserts);
   }
 
   return { created: upserts.length, migrated };
@@ -281,7 +345,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const { actingUid: uid } = await resolveActingContext(request);
+    const { actingUid: requesterUid } = await resolveActingContext(request);
+    const requestedWorkspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
+    const workspaceContext = await resolveActiveWorkspaceContext(requesterUid, requestedWorkspaceId);
+    const uid = workspaceContext.ownerUid;
     const groupId = request.nextUrl.searchParams.get("groupId")?.trim();
     const month = request.nextUrl.searchParams.get("month")?.trim();
     const typeFilter = request.nextUrl.searchParams.get("type")?.trim();
@@ -293,7 +360,7 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, Number(pageParam || "1"));
     const limit = Math.max(1, Math.min(200, Number(limitParam || "50")));
 
-    const usePaged = Boolean(pageParam || limitParam) && !groupId;
+    const usePaged = Boolean(pageParam || limitParam) && !groupId && !(workspaceContext.workspaceId && workspaceContext.includeLegacyRows);
     const baseFilters: Record<string, string | undefined> = {
       uid,
       ...(typeFilter && typeFilter !== "all" ? { tx_type: typeFilter } : {}),
@@ -312,20 +379,37 @@ export async function GET(request: NextRequest) {
     }
     const safeQ = escapeIlike(q);
     const or = safeQ ? `title.ilike.*${safeQ}*,description.ilike.*${safeQ}*,amount_text.ilike.*${safeQ}*` : undefined;
-    const paged = usePaged
-      ? await supabaseSelectPaged("transactions", {
-          select:
-            "source_id,title,description,amount,amount_text,amount_for_limit,tx_type,category,tx_status,payment_method,card_id,card_label,card_type,tx_date,due_date,group_id,installment_current,installment_total,created_at,raw",
+    let paged = null as Awaited<ReturnType<typeof supabaseSelectPaged>> | null;
+    if (usePaged) {
+      try {
+        paged = await supabaseSelectPaged("transactions", {
+            select: TX_SELECT_WITH_WORKSPACE,
+            filters: workspaceContext.workspaceId ? { ...baseFilters, workspace_id: workspaceContext.workspaceId } : baseFilters,
+            conditions,
+            or,
+            order: "due_date.desc.nullslast",
+            page,
+            limit,
+          });
+      } catch (error) {
+        if (!isMissingWorkspaceTransactionColumn(error)) throw error;
+        paged = await supabaseSelectPaged("transactions", {
+          select: TX_SELECT_LEGACY,
           filters: baseFilters,
           conditions,
           or,
           order: "due_date.desc.nullslast",
           page,
           limit,
-        })
-      : null;
-    const rows = paged ? paged.data : await fetchUserTransactions(uid);
+        });
+      }
+    }
+    const rows = paged ? paged.data : await fetchUserTransactions(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
     const filtered = rows.filter((row) => {
+      const rowWorkspaceId = String(row.workspace_id || getRaw(row).workspaceId || "");
+      if (workspaceContext.workspaceId && rowWorkspaceId !== workspaceContext.workspaceId && !(workspaceContext.includeLegacyRows && !rowWorkspaceId)) return false;
+      const createdByUid = String(row.created_by_uid || getRaw(row).createdByUid || uid);
+      if (!canViewFamilyTransaction(workspaceContext.member, createdByUid)) return false;
       if (groupId && String(row.group_id || "") !== groupId) return false;
       if (typeFilter && typeFilter !== "all" && String(row.tx_type || "") !== typeFilter) return false;
       if (statusFilter && statusFilter !== "all" && String(row.tx_status || "") !== statusFilter) return false;
@@ -345,7 +429,7 @@ export async function GET(request: NextRequest) {
     const total = paged ? paged.total : transactions.length;
     const result = paged ? transactions : transactions;
 
-    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: requesterUid });
     return NextResponse.json({ ok: true, transactions: result, total, page, limit }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
@@ -373,20 +457,22 @@ export async function POST(request: NextRequest) {
     }
 
     const acting = await resolveActingContext(request);
-    const uid = acting.actingUid;
+    const requesterUid = acting.actingUid;
     const body = (await request.json()) as
-      | { action: "createMany"; transactions: Record<string, unknown>[] }
-      | { action: "updateMany"; updates: Array<{ id: string; updates: Record<string, unknown> }> }
-      | { action: "toggleStatus"; transactionId: string; currentStatus: "paid" | "pending" }
-      | { action: "cancelFuture"; groupId: string; lastInstallmentDate: string }
-      | { action: "syncRecurring" };
+      | { action: "createMany"; workspaceId?: string; transactions: Record<string, unknown>[] }
+      | { action: "updateMany"; workspaceId?: string; updates: Array<{ id: string; updates: Record<string, unknown> }> }
+      | { action: "toggleStatus"; workspaceId?: string; transactionId: string; currentStatus: "paid" | "pending" }
+      | { action: "cancelFuture"; workspaceId?: string; groupId: string; lastInstallmentDate: string }
+      | { action: "syncRecurring"; workspaceId?: string };
+    const workspaceContext = await resolveActiveWorkspaceContext(requesterUid, body.workspaceId);
+    const uid = workspaceContext.ownerUid;
 
     if (body.action === "syncRecurring") {
-      const result = await syncRecurringRows(uid);
+      const result = await syncRecurringRows(uid, workspaceContext.workspaceId, requesterUid, workspaceContext.includeLegacyRows);
       if (result.created > 0 || result.migrated > 0) {
-        await enforceCreditCardPolicy(uid);
+        await enforceCreditCardPolicy(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
       }
-      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: requesterUid });
       return NextResponse.json({ ok: true, ...result }, { status: 200 });
     }
 
@@ -404,6 +490,9 @@ export async function POST(request: NextRequest) {
       const txs = Array.isArray(body.transactions) ? body.transactions : [];
       if (txs.length === 0) {
         return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+      }
+      if (!canCreateFamilyTransaction(workspaceContext.member)) {
+        return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
 
       const planContext = await getUserPlanContext(uid);
@@ -431,7 +520,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (!planContext.isBillingExempt && capabilities.maxTransactionsPerMonth !== null) {
-        const current = await fetchUserTransactions(uid);
+        const current = await fetchUserTransactions(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
         const monthlyCounts = new Map<string, number>();
 
         for (const row of current) {
@@ -467,12 +556,12 @@ export async function POST(request: NextRequest) {
       const nowIso = new Date().toISOString();
       const rows = txs.map((tx) => {
         const id = typeof tx.sourceId === "string" && tx.sourceId.trim() ? tx.sourceId.trim() : crypto.randomUUID();
-        return toTxRow(uid, id, { ...tx, userId: uid, createdAt: nowIso });
+        return toTxRow(uid, id, { ...tx, userId: uid, createdAt: nowIso }, { workspaceId: workspaceContext.workspaceId, createdByUid: requesterUid });
       });
 
-      await supabaseUpsertRows("transactions", rows, { onConflict: "id" });
-      await enforceCreditCardPolicy(uid);
-      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+      await upsertTransactionRows(rows);
+      await enforceCreditCardPolicy(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: requesterUid });
       return NextResponse.json({ ok: true, created: rows.length }, { status: 200 });
     }
 
@@ -500,7 +589,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
 
-      const current = await fetchUserTransactions(uid);
+      const current = await fetchUserTransactions(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
       const byId = new Map(current.map((row) => [String(row.source_id || ""), row]));
       const nextRows: Array<Record<string, unknown>> = [];
 
@@ -509,15 +598,17 @@ export async function POST(request: NextRequest) {
         const existing = byId.get(entry.id);
         if (!existing) continue;
         const raw = ((existing.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+        const createdByUid = String(existing.created_by_uid || raw.createdByUid || uid);
+        if (!canEditFamilyTransaction(workspaceContext.member, createdByUid)) continue;
         const merged = { ...raw, ...entry.updates };
-        nextRows.push(toTxRow(uid, entry.id, merged));
+        nextRows.push(toTxRow(uid, entry.id, merged, { workspaceId: workspaceContext.workspaceId, createdByUid }));
       }
 
       if (nextRows.length > 0) {
-        await supabaseUpsertRows("transactions", nextRows, { onConflict: "id" });
+        await upsertTransactionRows(nextRows);
       }
-      await enforceCreditCardPolicy(uid);
-      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+      await enforceCreditCardPolicy(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: requesterUid });
       return NextResponse.json({ ok: true, updated: nextRows.length }, { status: 200 });
     }
 
@@ -544,7 +635,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
 
-      const current = await fetchUserTransactions(uid);
+      const current = await fetchUserTransactions(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
       const existing = current.find((row) => String(row.source_id || "") === body.transactionId);
       if (!existing) {
         return NextResponse.json({ ok: false, error: "transaction_not_found" }, { status: 404 });
@@ -552,13 +643,15 @@ export async function POST(request: NextRequest) {
 
       const nextStatus = body.currentStatus === "paid" ? "pending" : "paid";
       const raw = ((existing.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+      const createdByUid = String(existing.created_by_uid || raw.createdByUid || uid);
+      if (!canEditFamilyTransaction(workspaceContext.member, createdByUid)) {
+        return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+      }
       const merged = { ...raw, status: nextStatus };
-      await supabaseUpsertRows("transactions", [toTxRow(uid, body.transactionId, merged)], {
-        onConflict: "id",
-      });
-      await enforceCreditCardPolicy(uid);
+      await upsertTransactionRows([toTxRow(uid, body.transactionId, merged, { workspaceId: workspaceContext.workspaceId, createdByUid })]);
+      await enforceCreditCardPolicy(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
 
-      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: requesterUid });
       return NextResponse.json({ ok: true, status: nextStatus }, { status: 200 });
     }
 
@@ -585,13 +678,16 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
 
-      const current = await fetchUserTransactions(uid);
+      const current = await fetchUserTransactions(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
       const toDelete = current.filter(
         (row) =>
           String(row.group_id || "") === body.groupId &&
           typeof row.due_date === "string" &&
           row.due_date > body.lastInstallmentDate
       );
+      if (toDelete.some((row) => !canEditFamilyTransaction(workspaceContext.member, String(row.created_by_uid || getRaw(row).createdByUid || uid)))) {
+        return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+      }
 
       for (const row of toDelete) {
         await supabaseDeleteByFilters("transactions", {
@@ -615,13 +711,13 @@ export async function POST(request: NextRequest) {
           return toTxRow(uid, String(row.source_id), {
             ...raw,
             recurrenceEnded: true,
-          });
+          }, { workspaceId: workspaceContext.workspaceId, createdByUid: String(row.created_by_uid || raw.createdByUid || uid) });
         });
-        await supabaseUpsertRows("transactions", updates, { onConflict: "id" });
+        await upsertTransactionRows(updates);
       }
 
-      await enforceCreditCardPolicy(uid);
-      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+      await enforceCreditCardPolicy(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: requesterUid });
       return NextResponse.json({ ok: true, deleted: toDelete.length }, { status: 200 });
     }
 
@@ -652,7 +748,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const acting = await resolveActingContext(request);
-    const uid = acting.actingUid;
+    const requesterUid = acting.actingUid;
     const approval = await ensureImpersonationWriteApproval({
       request,
       acting,
@@ -663,25 +759,29 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });
     }
 
-    const body = (await request.json()) as { transactionId?: string; updates?: Record<string, unknown> };
+    const body = (await request.json()) as { transactionId?: string; workspaceId?: string; updates?: Record<string, unknown> };
     if (!body.transactionId || !body.updates) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
 
-    const current = await fetchUserTransactions(uid);
+    const workspaceContext = await resolveActiveWorkspaceContext(requesterUid, body.workspaceId);
+    const uid = workspaceContext.ownerUid;
+    const current = await fetchUserTransactions(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
     const existing = current.find((row) => String(row.source_id || "") === body.transactionId);
     if (!existing) {
       return NextResponse.json({ ok: false, error: "transaction_not_found" }, { status: 404 });
     }
 
     const raw = ((existing.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+    const createdByUid = String(existing.created_by_uid || raw.createdByUid || uid);
+    if (!canEditFamilyTransaction(workspaceContext.member, createdByUid)) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
     const merged = { ...raw, ...body.updates };
-    await supabaseUpsertRows("transactions", [toTxRow(uid, body.transactionId, merged)], {
-      onConflict: "id",
-    });
-    await enforceCreditCardPolicy(uid);
+    await upsertTransactionRows([toTxRow(uid, body.transactionId, merged, { workspaceId: workspaceContext.workspaceId, createdByUid })]);
+    await enforceCreditCardPolicy(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
 
-    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: requesterUid });
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
@@ -709,7 +809,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const acting = await resolveActingContext(request);
-    const uid = acting.actingUid;
+    const requesterUid = acting.actingUid;
     const approval = await ensureImpersonationWriteApproval({
       request,
       acting,
@@ -722,6 +822,8 @@ export async function DELETE(request: NextRequest) {
 
     const transactionId = request.nextUrl.searchParams.get("transactionId")?.trim();
     const groupId = request.nextUrl.searchParams.get("groupId")?.trim();
+    const workspaceContext = await resolveActiveWorkspaceContext(requesterUid, request.nextUrl.searchParams.get("workspaceId")?.trim());
+    const uid = workspaceContext.ownerUid;
 
     if (!transactionId && !groupId) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
@@ -736,22 +838,30 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (groupId) {
-      const current = await fetchUserTransactions(uid);
+      const current = await fetchUserTransactions(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
       const toDelete = current.filter((row) => String(row.group_id || "") === groupId);
+      if (toDelete.some((row) => !canEditFamilyTransaction(workspaceContext.member, String(row.created_by_uid || getRaw(row).createdByUid || uid)))) {
+        return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+      }
       for (const row of toDelete) {
         await supabaseDeleteByFilters("transactions", {
           uid,
           source_id: String(row.source_id || ""),
         });
       }
-      await enforceCreditCardPolicy(uid);
-      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+      await enforceCreditCardPolicy(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: requesterUid });
       return NextResponse.json({ ok: true, deleted: toDelete.length }, { status: 200 });
     }
 
+    const current = await fetchUserTransactions(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
+    const existing = current.find((row) => String(row.source_id || "") === transactionId);
+    if (existing && !canEditFamilyTransaction(workspaceContext.member, String(existing.created_by_uid || getRaw(existing).createdByUid || uid))) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
     await supabaseDeleteByFilters("transactions", { uid, source_id: transactionId as string });
-    await enforceCreditCardPolicy(uid);
-    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+    await enforceCreditCardPolicy(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
+    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: requesterUid });
     return NextResponse.json({ ok: true, deleted: 1 }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";

@@ -251,6 +251,12 @@ for (const category of ALL_DEFAULT_CATEGORIES) {
   category.aliases?.forEach((alias) => CANONICAL_BY_NAME.set(alias, category.name));
 }
 
+Object.values(CATEGORY_TRANSLATIONS).forEach((dictionary) => {
+  Object.entries(dictionary).forEach(([canonical, translated]) => {
+    CANONICAL_BY_NAME.set(translated, canonical);
+  });
+});
+
 export function getDefaultCategoriesForWorkspaceType(workspaceType: WorkspaceType = "personal") {
   const byKey = new Map<string, DefaultCategoryPreset>();
   [...DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE[workspaceType], ...COMMON_DEFAULT_CATEGORIES].forEach((category) => {

@@ -5,10 +5,11 @@ import { useAuth } from "./useAuth";
 import { subscribeToTransactions } from "@/services/transactionService";
 import { Transaction } from "@/types/transaction";
 
-export function useTransactions() {
+export function useTransactions(options?: { syncRecurring?: boolean }) {
   const { user, userProfile } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const syncRecurring = Boolean(options?.syncRecurring);
 
   useEffect(() => {
     // 1. Caso de Logout: Limpa os dados e retorna
@@ -26,12 +27,12 @@ export function useTransactions() {
     const unsubscribe = subscribeToTransactions(effectiveUid, (data) => {
       setTransactions(data);
       setLoading(false);
-    });
+    }, undefined, { syncRecurring });
 
     // 3. Cleanup: Executa quando o componente desmonta ou user muda
     return () => unsubscribe();
 
-  }, [user, userProfile?.uid]);
+  }, [syncRecurring, user, userProfile?.uid]);
 
   return { transactions, loading };
 }

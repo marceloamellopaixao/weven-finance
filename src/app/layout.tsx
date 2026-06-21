@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 
 import { AuthProvider } from "@/hooks/useAuth";
@@ -16,7 +15,6 @@ import { getDictionary } from "@/i18n/getDictionary";
 import { getRequestLocale } from "@/i18n/server";
 import { getSiteUrl, SITE_NAME } from "@/lib/site";
 
-const inter = Inter({ subsets: ["latin"] });
 const siteUrl = getSiteUrl();
 const structuredData = [
   {
@@ -145,7 +143,7 @@ export default async function RootLayout({
 
   return (
     <html lang={locale}>
-      <body className={inter.className}>
+      <body className="font-sans">
         <script
           type="application/ld+json"
           suppressHydrationWarning

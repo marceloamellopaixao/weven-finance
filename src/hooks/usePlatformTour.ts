@@ -66,6 +66,31 @@ export function usePlatformTour(options: UsePlatformTourOptions) {
   }, []);
 
   useEffect(() => {
+    const shouldBlock = disabled && isPlatformTourActive && platformTourState.route === route;
+    const existing = document.getElementById("wevenfinance-tour-pending-overlay");
+    if (!shouldBlock) {
+      existing?.remove();
+      return;
+    }
+    if (existing) return;
+
+    const overlay = document.createElement("div");
+    overlay.id = "wevenfinance-tour-pending-overlay";
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.style.position = "fixed";
+    overlay.style.inset = "0";
+    overlay.style.zIndex = "9998";
+    overlay.style.background = "rgba(0, 0, 0, 0.38)";
+    overlay.style.cursor = "wait";
+    overlay.style.pointerEvents = "auto";
+    document.body.appendChild(overlay);
+
+    return () => {
+      overlay.remove();
+    };
+  }, [disabled, isPlatformTourActive, platformTourState.route, route]);
+
+  useEffect(() => {
     if (route !== "dashboard" || disabled) return;
     if (isPlatformTourActive) return;
     if (forceStart || !hasSeen) {
@@ -134,7 +159,9 @@ export function usePlatformTour(options: UsePlatformTourOptions) {
     driverRef.current = driver({
       showProgress: true,
       animate: true,
-      allowClose: true,
+      allowClose: false,
+      disableActiveInteraction: true,
+      overlayClickBehavior: () => undefined,
       popoverClass: "driverjs-theme",
       doneBtnText: "Concluir",
       nextBtnText: "Próximo",
@@ -156,7 +183,7 @@ export function usePlatformTour(options: UsePlatformTourOptions) {
     hasQueuedRef.current = true;
     const timer = window.setTimeout(() => {
       driverRef.current?.drive();
-    }, 650);
+    }, 180);
 
     return () => {
       window.clearTimeout(timer);

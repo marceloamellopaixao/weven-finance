@@ -439,6 +439,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (hasPrivilegedAccess) return;
 
     const isMarketingOrAuthRoute = PUBLIC_ROUTES.includes(pathname);
+    const isCreatingAdditionalWorkspace =
+      pathname === "/account-profile" &&
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("create") === "1";
     const shouldCheckWorkspace = pathname === "/account-profile" || !isMarketingOrAuthRoute;
     if (!shouldCheckWorkspace) return;
 
@@ -451,7 +455,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           router.replace("/account-profile");
           return;
         }
-        if (workspace && pathname === "/account-profile") {
+        if (workspace && pathname === "/account-profile" && !isCreatingAdditionalWorkspace) {
           router.replace(resolvePostAuthPath());
         }
       } catch (error) {

@@ -16,9 +16,43 @@ import {
   writeSecurePiggyPayload,
 } from "@/lib/secure-store/piggy-banks";
 import { supabaseDeleteByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
+import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function isMissingWorkspaceColumn(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return message.includes("workspace_id") || message.includes("created_by_uid") || message.includes("PGRST204");
+}
+
+function withoutWorkspaceColumns(row: Record<string, unknown>) {
+  const { workspace_id: _workspaceId, created_by_uid: _createdByUid, ...legacyRow } = row;
+  void _workspaceId;
+  void _createdByUid;
+  return legacyRow;
+}
+
+async function upsertRowsWithWorkspaceFallback(table: string, rows: Array<Record<string, unknown>>) {
+  try {
+    await supabaseUpsertRows(table, rows, { onConflict: "id" });
+  } catch (error) {
+    if (!isMissingWorkspaceColumn(error)) throw error;
+    await supabaseUpsertRows(table, rows.map(withoutWorkspaceColumns), { onConflict: "id" });
+  }
+}
+
+function getPiggyWorkspaceId(row: Record<string, unknown>) {
+  const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const secureRaw = readSecurePiggyPayload(row.raw);
+  return String(row.workspace_id || raw.workspaceId || secureRaw.workspaceId || "");
+}
+
+function belongsToWorkspace(row: Record<string, unknown>, workspaceId?: string | null, includeLegacyRows = true) {
+  if (!workspaceId) return true;
+  const rowWorkspaceId = getPiggyWorkspaceId(row);
+  return rowWorkspaceId === workspaceId || (!rowWorkspaceId && includeLegacyRows);
+}
 
 function sanitizeGoalType(value: unknown): PiggyBankGoalType {
   if (
@@ -89,7 +123,7 @@ function buildPiggyBankResponse(
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 
   return {
-    id: String(piggy.source_id || piggy.id || ""),
+    id: String(piggyRaw.slug || piggy.slug || safeSlug),
     slug: String(piggy.slug || piggyRaw.slug || safeSlug),
     name: String(piggy.name || piggyRaw.name || "Cofrinho"),
     goalType: sanitizeGoalType(piggy.goal_type || piggyRaw.goalType),
@@ -123,12 +157,13 @@ function buildPiggyBankResponse(
   };
 }
 
-async function loadPiggyBank(uid: string, safeSlug: string) {
+async function loadPiggyBank(uid: string, safeSlug: string, workspaceId?: string | null, includeLegacyRows = true) {
   const piggyRows = await supabaseSelect("piggy_banks", {
-    filters: { uid, source_id: safeSlug },
-    limit: 1,
+    filters: { uid },
   });
-  const activePiggyRows = filterActiveJsonRows(piggyRows);
+  const activePiggyRows = filterActiveJsonRows(piggyRows)
+    .filter((row) => belongsToWorkspace(row, workspaceId, includeLegacyRows))
+    .filter((row) => String(row.slug || readSecurePiggyPayload(row.raw).slug || row.source_id || "") === safeSlug);
   if (activePiggyRows.length === 0) {
     return null;
   }
@@ -150,16 +185,23 @@ async function applyCardLimitAdjustment(
   uid: string,
   cardId: string,
   amountDelta: number,
-  nowIso: string
+  nowIso: string,
+  workspaceId?: string | null,
+  includeLegacyRows = true
 ) {
   if (!cardId || amountDelta === 0) return;
   const cardRows = await supabaseSelect("payment_cards", {
     filters: { uid, source_id: cardId },
     limit: 1,
   });
-  if (cardRows.length === 0) return;
+  const scopedCardRows = cardRows.filter((row) => {
+    const raw = readSecureCardPayload(row.raw);
+    const rowWorkspaceId = String(row.workspace_id || raw.workspaceId || "");
+    return !workspaceId || rowWorkspaceId === workspaceId || (!rowWorkspaceId && includeLegacyRows);
+  });
+  if (scopedCardRows.length === 0) return;
 
-  const cardRow = cardRows[0];
+  const cardRow = scopedCardRows[0];
   const cardRaw = readSecureCardPayload(cardRow.raw);
   const currentLimit = Number(cardRow.credit_limit || cardRaw.creditLimit || 0);
   const nextLimit = Math.max(0, currentLimit + amountDelta);
@@ -170,36 +212,37 @@ async function applyCardLimitAdjustment(
   cardRaw.limitEnabled = nextLimit > 0;
   cardRaw.updatedAt = nowIso;
 
-  await supabaseUpsertRows(
+  await upsertRowsWithWorkspaceFallback(
     "payment_cards",
     [
       {
         id: cardRow.id,
         uid,
+        workspace_id: workspaceId,
         source_id: cardId,
         bank_name: bankName,
         last4,
         card_type: cardRow.card_type || cardRaw.type || "credit_card",
         credit_limit: nextLimit,
         limit_enabled: nextLimit > 0,
-        raw: writeSecureCardPayload(cardRaw),
+        raw: writeSecureCardPayload({ ...cardRaw, workspaceId: workspaceId || null }),
         updated_at: nowIso,
       },
     ],
-    { onConflict: "id" }
   );
 }
 
 export async function GET(_request: NextRequest, context: { params: Promise<{ slug: string }> }) {
   try {
     const { actingUid } = await resolveActingContext(_request);
+    const workspaceContext = await resolveActiveWorkspaceContext(actingUid, _request.nextUrl.searchParams.get("workspaceId"));
     const { slug } = await context.params;
     const safeSlug = String(slug || "").trim();
     if (!safeSlug) {
       return NextResponse.json({ ok: false, error: "invalid_slug" }, { status: 400 });
     }
 
-    const loaded = await loadPiggyBank(actingUid, safeSlug);
+    const loaded = await loadPiggyBank(workspaceContext.ownerUid, safeSlug, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
     if (!loaded) {
       return NextResponse.json({ ok: false, error: "piggy_bank_not_found" }, { status: 404 });
     }
@@ -224,27 +267,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
       return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });
     }
 
-    const { slug } = await context.params;
-    const safeSlug = String(slug || "").trim();
-    if (!safeSlug) {
-      return NextResponse.json({ ok: false, error: "invalid_slug" }, { status: 400 });
-    }
-
-    const planContext = await getUserPlanContext(acting.actingUid);
-    if (
-      !planContext.isBillingExempt &&
-      !hasAccess(planContext.accessControl, { uid: acting.actingUid, plan: planContext.plan, role: planContext.role }, "piggy_bank.write", "write")
-    ) {
-      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
-    }
-
-    const loaded = await loadPiggyBank(acting.actingUid, safeSlug);
-    if (!loaded) {
-      return NextResponse.json({ ok: false, error: "piggy_bank_not_found" }, { status: 404 });
-    }
-
     const body = (await request.json()) as {
       action?: "edit" | "adjustBalance";
+      workspaceId?: string;
       name?: string;
       withdrawalMode?: string;
       yieldType?: string;
@@ -252,6 +277,27 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
       direction?: "deposit" | "withdraw";
       sourceType?: "bank" | "cash";
     };
+    const workspaceContext = await resolveActiveWorkspaceContext(acting.actingUid, body.workspaceId);
+    const uid = workspaceContext.ownerUid;
+
+    const { slug } = await context.params;
+    const safeSlug = String(slug || "").trim();
+    if (!safeSlug) {
+      return NextResponse.json({ ok: false, error: "invalid_slug" }, { status: 400 });
+    }
+
+    const planContext = await getUserPlanContext(uid);
+    if (
+      !planContext.isBillingExempt &&
+      !hasAccess(planContext.accessControl, { uid, plan: planContext.plan, role: planContext.role }, "piggy_bank.write", "write")
+    ) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
+
+    const loaded = await loadPiggyBank(uid, safeSlug, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
+    if (!loaded) {
+      return NextResponse.json({ ok: false, error: "piggy_bank_not_found" }, { status: 404 });
+    }
 
     const nowIso = new Date().toISOString();
     const today = nowIso.slice(0, 10);
@@ -270,28 +316,28 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
         updatedAt: nowIso,
       };
 
-      await supabaseUpsertRows(
+      await upsertRowsWithWorkspaceFallback(
         "piggy_banks",
         [
           {
             id: loaded.piggy.id,
-            uid: acting.actingUid,
-            source_id: safeSlug,
+            uid,
+            workspace_id: workspaceContext.workspaceId,
+            source_id: String(loaded.piggy.source_id || safeSlug),
             slug: safeSlug,
             name: nextName,
             goal_type: loaded.piggy.goal_type || piggyRaw.goalType || loaded.detail.goalType,
             total_saved: loaded.detail.totalSaved,
             withdrawal_mode: withdrawalMode || null,
             yield_type: yieldType || null,
-            raw: writeSecurePiggyPayload(mergedRaw),
+            raw: writeSecurePiggyPayload({ ...mergedRaw, workspaceId: workspaceContext.workspaceId }),
             created_at: loaded.piggy.created_at || nowIso,
             updated_at: nowIso,
           },
         ],
-        { onConflict: "id" }
       );
 
-      const refreshed = await loadPiggyBank(acting.actingUid, safeSlug);
+      const refreshed = await loadPiggyBank(uid, safeSlug, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
       return NextResponse.json({ ok: true, piggyBank: refreshed?.detail }, { status: 200 });
     }
 
@@ -320,7 +366,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
       const shouldAdjustCard = loaded.detail.goalType === "card_limit" && Boolean(linkedCardId);
 
       if (shouldAdjustCard) {
-        await applyCardLimitAdjustment(acting.actingUid, linkedCardId, amountDelta, nowIso);
+        await applyCardLimitAdjustment(uid, linkedCardId, amountDelta, nowIso, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
       }
 
       const mergedRaw: Record<string, unknown> = {
@@ -332,25 +378,25 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
         ...(linkedCardLabel ? { cardLabel: linkedCardLabel } : {}),
       };
 
-      await supabaseUpsertRows(
+      await upsertRowsWithWorkspaceFallback(
         "piggy_banks",
         [
           {
             id: loaded.piggy.id,
-            uid: acting.actingUid,
-            source_id: safeSlug,
+            uid,
+            workspace_id: workspaceContext.workspaceId,
+            source_id: String(loaded.piggy.source_id || safeSlug),
             slug: safeSlug,
             name: currentName,
             goal_type: loaded.piggy.goal_type || piggyRaw.goalType || loaded.detail.goalType,
             total_saved: nextTotal,
             withdrawal_mode: loaded.detail.withdrawalMode || null,
             yield_type: loaded.detail.yieldType || null,
-            raw: writeSecurePiggyPayload(mergedRaw),
+            raw: writeSecurePiggyPayload({ ...mergedRaw, workspaceId: workspaceContext.workspaceId }),
             created_at: loaded.piggy.created_at || nowIso,
             updated_at: nowIso,
           },
         ],
-        { onConflict: "id" }
       );
 
       const historyId = crypto.randomUUID();
@@ -368,11 +414,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
         createdBy: acting.requesterUid,
       };
 
-      await supabaseUpsertRows("piggy_bank_history", [
+      await upsertRowsWithWorkspaceFallback("piggy_bank_history", [
         {
           id: historyId,
           piggy_bank_id: loaded.piggy.id,
-          uid: acting.actingUid,
+          uid,
+          workspace_id: workspaceContext.workspaceId,
           source_id: historyId,
           amount,
           withdrawal_mode: loaded.detail.withdrawalMode || null,
@@ -381,17 +428,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
           card_id: linkedCardId || null,
           card_label: linkedCardLabel || null,
           applied_to_card_limit: shouldAdjustCard,
-          raw: writeSecurePiggyHistoryPayload(historyRaw),
+          raw: writeSecurePiggyHistoryPayload({ ...historyRaw, workspaceId: workspaceContext.workspaceId }),
           created_at: nowIso,
         },
       ]);
 
       const txId = crypto.randomUUID();
       const txDescription = direction === "withdraw" ? `Resgate do Cofrinho: ${currentName}` : `Aporte no Cofrinho: ${currentName}`;
-      const encryptedDescription = encryptDataForUser(txDescription, acting.actingUid);
-      const encryptedAmount = encryptDataForUser(amount, acting.actingUid);
+      const encryptedDescription = encryptDataForUser(txDescription, uid);
+      const encryptedAmount = encryptDataForUser(amount, uid);
       const txRaw = {
-        userId: acting.actingUid,
+        userId: uid,
+        workspaceId: workspaceContext.workspaceId,
         piggyBankSlug: safeSlug,
         description: encryptedDescription,
         amount: encryptedAmount,
@@ -410,10 +458,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
         createdAt: nowIso,
       };
 
-      await supabaseUpsertRows("transactions", [
+      await upsertRowsWithWorkspaceFallback("transactions", [
         {
-          id: `${acting.actingUid}__${txId}`,
-          uid: acting.actingUid,
+          id: `${uid}__${txId}`,
+          uid,
+          workspace_id: workspaceContext.workspaceId,
+          created_by_uid: acting.requesterUid,
           source_id: txId,
           description: encryptedDescription,
           amount,
@@ -433,8 +483,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
         },
       ]);
 
-      await enforceCreditCardPolicy(acting.actingUid);
-      const refreshed = await loadPiggyBank(acting.actingUid, safeSlug);
+      await enforceCreditCardPolicy(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
+      const refreshed = await loadPiggyBank(uid, safeSlug, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
       return NextResponse.json({ ok: true, piggyBank: refreshed?.detail }, { status: 200 });
     }
 
@@ -460,20 +510,22 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     }
 
     const { slug } = await context.params;
+    const workspaceContext = await resolveActiveWorkspaceContext(acting.actingUid, request.nextUrl.searchParams.get("workspaceId"));
+    const uid = workspaceContext.ownerUid;
     const safeSlug = String(slug || "").trim();
     if (!safeSlug) {
       return NextResponse.json({ ok: false, error: "invalid_slug" }, { status: 400 });
     }
 
-    const planContext = await getUserPlanContext(acting.actingUid);
+    const planContext = await getUserPlanContext(uid);
     if (
       !planContext.isBillingExempt &&
-      !hasAccess(planContext.accessControl, { uid: acting.actingUid, plan: planContext.plan, role: planContext.role }, "piggy_bank.delete", "write")
+      !hasAccess(planContext.accessControl, { uid, plan: planContext.plan, role: planContext.role }, "piggy_bank.delete", "write")
     ) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
-    const loaded = await loadPiggyBank(acting.actingUid, safeSlug);
+    const loaded = await loadPiggyBank(uid, safeSlug, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
     if (!loaded) {
       return NextResponse.json({ ok: false, error: "piggy_bank_not_found" }, { status: 404 });
     }
@@ -489,18 +541,19 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
     for (const [cardId, amount] of linkedAmountsByCard.entries()) {
       if (!amount) continue;
-      await applyCardLimitAdjustment(acting.actingUid, cardId, -amount, nowIso);
+      await applyCardLimitAdjustment(uid, cardId, -amount, nowIso, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
     }
 
     const candidateTransactions = await supabaseSelect("transactions", {
-      select: "id,source_id,description,category,raw",
-      filters: { uid: acting.actingUid },
+      select: "id,source_id,workspace_id,description,category,raw",
+      filters: { uid },
       conditions: {
         category: `eq.${encodeURIComponent(`Cofrinho > ${loaded.detail.name}`)}`,
       },
     });
 
     const piggyTransactions = candidateTransactions.filter((row) => {
+      if (!belongsToWorkspace(row, workspaceContext.workspaceId, workspaceContext.includeLegacyRows)) return false;
       const raw = (row.raw as Record<string, unknown> | null) ?? {};
       const rawSlug = typeof raw.piggyBankSlug === "string" ? raw.piggyBankSlug : "";
       const description = String(row.description || "");
@@ -510,24 +563,24 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
     for (const tx of piggyTransactions) {
       await supabaseDeleteByFilters("transactions", {
-        uid: acting.actingUid,
+        uid,
         source_id: String(tx.source_id || ""),
       });
     }
 
     for (const row of loaded.historyRows) {
       await supabaseDeleteByFilters("piggy_bank_history", {
-        uid: acting.actingUid,
+        uid,
         source_id: String(row.source_id || ""),
       });
     }
 
     await supabaseDeleteByFilters("piggy_banks", {
-      uid: acting.actingUid,
-      source_id: safeSlug,
+      uid,
+      source_id: String(loaded.piggy.source_id || safeSlug),
     });
 
-    await enforceCreditCardPolicy(acting.actingUid);
+    await enforceCreditCardPolicy(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";

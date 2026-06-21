@@ -1,6 +1,7 @@
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { PiggyBank, PiggyBankDetail, PiggyBankGoalType } from "@/types/piggyBank";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { getActiveWorkspaceId } from "@/services/workspaceService";
 
 async function getIdTokenOrThrow() {
   return getAccessTokenOrThrow();
@@ -19,8 +20,20 @@ async function fetchWithAuth(path: string, init?: RequestInit) {
   });
 }
 
+function withActiveWorkspace(path: string) {
+  const workspaceId = getActiveWorkspaceId();
+  if (!workspaceId) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}workspaceId=${encodeURIComponent(workspaceId)}`;
+}
+
+function withActiveWorkspaceBody<T extends Record<string, unknown>>(body: T): T & { workspaceId?: string } {
+  const workspaceId = getActiveWorkspaceId();
+  return workspaceId ? { ...body, workspaceId } : body;
+}
+
 export async function getPiggyBanks(): Promise<PiggyBank[]> {
-  const response = await fetchWithAuth("/api/piggy-banks", { method: "GET" });
+  const response = await fetchWithAuth(withActiveWorkspace("/api/piggy-banks"), { method: "GET" });
   const payload = (await response.json()) as { ok: boolean; error?: string; piggyBanks?: PiggyBank[] };
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível carregar porquinhos");
@@ -29,7 +42,7 @@ export async function getPiggyBanks(): Promise<PiggyBank[]> {
 }
 
 export async function getPiggyBankBySlug(slug: string): Promise<PiggyBankDetail> {
-  const response = await fetchWithAuth(`/api/piggy-banks/${encodeURIComponent(slug)}`, { method: "GET" });
+  const response = await fetchWithAuth(withActiveWorkspace(`/api/piggy-banks/${encodeURIComponent(slug)}`), { method: "GET" });
   const payload = (await response.json()) as { ok: boolean; error?: string; piggyBank?: PiggyBankDetail };
   if (!response.ok || !payload.ok || !payload.piggyBank) {
     throw new Error(payload.error || "Não foi possível encontrar o porquinho");
@@ -50,10 +63,10 @@ export interface SavePiggyDepositInput {
 export async function savePiggyDeposit(input: SavePiggyDepositInput) {
   const response = await fetchWithAuth("/api/piggy-banks", {
     method: "POST",
-    body: JSON.stringify({
+    body: JSON.stringify(withActiveWorkspaceBody({
       action: "deposit",
       ...input,
-    }),
+    })),
   });
   const payload = (await response.json()) as { ok: boolean; error?: string; slug?: string };
   if (!response.ok || !payload.ok || !payload.slug) {
@@ -71,10 +84,10 @@ export interface UpdatePiggyBankInput {
 export async function updatePiggyBank(slug: string, input: UpdatePiggyBankInput) {
   const response = await fetchWithAuth(`/api/piggy-banks/${encodeURIComponent(slug)}`, {
     method: "PATCH",
-    body: JSON.stringify({
+    body: JSON.stringify(withActiveWorkspaceBody({
       action: "edit",
       ...input,
-    }),
+    })),
   });
   const payload = (await response.json()) as { ok: boolean; error?: string; piggyBank?: PiggyBankDetail };
   if (!response.ok || !payload.ok || !payload.piggyBank) {
@@ -93,10 +106,10 @@ export async function adjustPiggyBankBalance(
 ) {
   const response = await fetchWithAuth(`/api/piggy-banks/${encodeURIComponent(slug)}`, {
     method: "PATCH",
-    body: JSON.stringify({
+    body: JSON.stringify(withActiveWorkspaceBody({
       action: "adjustBalance",
       ...input,
-    }),
+    })),
   });
   const payload = (await response.json()) as { ok: boolean; error?: string; piggyBank?: PiggyBankDetail };
   if (!response.ok || !payload.ok || !payload.piggyBank) {
@@ -106,7 +119,7 @@ export async function adjustPiggyBankBalance(
 }
 
 export async function deletePiggyBank(slug: string) {
-  const response = await fetchWithAuth(`/api/piggy-banks/${encodeURIComponent(slug)}`, {
+  const response = await fetchWithAuth(withActiveWorkspace(`/api/piggy-banks/${encodeURIComponent(slug)}`), {
     method: "DELETE",
   });
   const payload = (await response.json()) as { ok: boolean; error?: string };

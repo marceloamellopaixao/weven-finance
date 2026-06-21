@@ -316,9 +316,7 @@ export function CardsClient() {
   const currency = usePreferredCurrency();
   const { money, date: formatDate, number: formatNumber } = useFormatters(currency);
   const {
-    status: onboardingStatus,
     loading: onboardingLoading,
-    activeStep: onboardingActiveStep,
     isActive: isOnboardingActive,
     completeTour,
   } = useOnboarding();
@@ -392,14 +390,12 @@ export function CardsClient() {
 
   const danger = Boolean(activeCardCreditSummary?.isExceeded);
   const warning = !danger && Boolean(activeCardCreditSummary && activeCardCreditSummary.usagePct >= settings.alertThresholdPct);
-  const isCardOnboardingActive =
-    isOnboardingActive &&
-    onboardingActiveStep === "firstCard" &&
-    !onboardingStatus.steps.firstCard;
-
   usePlatformTour({
     route: "cards",
-    disabled: onboardingLoading || isOnboardingActive,
+    disabled: onboardingLoading || isOnboardingActive || isLoadingState,
+    stepVisibility: {
+      cardDetails: paymentCards.length > 0,
+    },
     onComplete: completeTour,
   });
 
@@ -798,16 +794,6 @@ export function CardsClient() {
           </div>
         )}
 
-        {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.steps.firstCard && (
-          <div className={`rounded-2xl border px-4 py-3 text-sm ${
-            isCardOnboardingActive
-              ? "border-primary/35 bg-accent text-accent-foreground ring-2 ring-ring/35"
-              : "border-primary/20 bg-accent text-accent-foreground"
-          }`}>
-            {tCards("onboarding.firstCard")}
-          </div>
-        )}
-
         {!showCardForm && paymentCards.length === 0 && (
           <Card className="rounded-3xl border-dashed bg-transparent shadow-none">
             <CardContent className="flex min-h-[300px] md:min-h-[360px] flex-col items-center justify-center py-8 md:py-12 text-center">
@@ -821,7 +807,7 @@ export function CardsClient() {
               <Button
                 id="tour-cards-add-button"
                 onClick={() => setShowCardForm(true)}
-                className={`w-full max-w-xs rounded-xl px-8 sm:w-auto ${isCardOnboardingActive ? "ring-2 ring-ring/45 ring-offset-2 ring-offset-background" : ""}`}
+                className="w-full max-w-xs rounded-xl px-8 sm:w-auto"
               >
                 <Plus className="mr-2 h-4 w-4" /> {tCards("actions.addCard")}
               </Button>

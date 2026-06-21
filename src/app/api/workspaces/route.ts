@@ -9,6 +9,7 @@ import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import type { Workspace, WorkspaceSettings, WorkspaceType } from "@/types/workspace";
+import { ensureFamilyManagerMembership, getActiveMemberships, toWorkspaceMember } from "@/lib/workspaces/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -127,6 +128,17 @@ function toWorkspace(uid: string, row: Record<string, unknown>): Workspace {
   };
 }
 
+function toSharedWorkspace(row: Record<string, unknown>, uid: string, membership: ReturnType<typeof toWorkspaceMember>): Workspace {
+  const workspace = toWorkspace(uid, row);
+  return {
+    ...workspace,
+    uid,
+    ownerUid: String(row.uid || uid),
+    isDefault: false,
+    membership,
+  };
+}
+
 function toWorkspaceRow(uid: string, workspace: Workspace) {
   const raw = {
     id: workspace.id,
@@ -152,10 +164,31 @@ function toWorkspaceRow(uid: string, workspace: Workspace) {
   };
 }
 
-function toCategoryRow(uid: string, sourceId: string, data: Record<string, unknown>) {
+function isMissingCategoryWorkspaceColumn(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return message.includes("workspace_id") || message.includes("PGRST204");
+}
+
+function withoutWorkspaceColumn(row: Record<string, unknown>) {
+  const { workspace_id: _workspaceId, ...legacyRow } = row;
+  void _workspaceId;
+  return legacyRow;
+}
+
+async function upsertCategoryRows(rows: Array<Record<string, unknown>>) {
+  try {
+    await supabaseUpsertRows("categories", rows, { onConflict: "id" });
+  } catch (error) {
+    if (!isMissingCategoryWorkspaceColumn(error)) throw error;
+    await supabaseUpsertRows("categories", rows.map(withoutWorkspaceColumn), { onConflict: "id" });
+  }
+}
+
+function toCategoryRow(uid: string, sourceId: string, data: Record<string, unknown>, workspaceId?: string | null) {
   return {
     id: `${uid}__${sourceId}`,
     uid,
+    workspace_id: workspaceId || null,
     source_id: sourceId,
     name: data.name ?? "",
     parent_name: null,
@@ -163,7 +196,7 @@ function toCategoryRow(uid: string, sourceId: string, data: Record<string, unkno
     color: data.color ?? null,
     is_default: false,
     is_custom: true,
-    raw: data,
+    raw: { ...data, workspaceId: workspaceId || null },
     created_at: typeof data.createdAt === "string" ? data.createdAt : new Date().toISOString(),
   };
 }
@@ -177,33 +210,71 @@ async function getWorkspaceRows(uid: string) {
   return rows.map((row) => toWorkspace(uid, row));
 }
 
-async function applyCategoryPreset(uid: string, workspaceType: WorkspaceType) {
-  const existingRows = await supabaseSelect("categories", {
-    select: "name,category_type",
+async function getProfileSummary(uid: string) {
+  const rows = await supabaseSelect("profiles", {
+    select: "uid,email,display_name,complete_name,raw",
     filters: { uid },
+    limit: 1,
   });
-  const existing = new Set(existingRows.map((row) => `${String(row.name || "").toLowerCase()}::${String(row.category_type || "")}`));
+  const row = rows[0] || {};
+  const raw = (row.raw as Record<string, unknown> | null) || {};
+  return {
+    email: String(row.email || raw.email || ""),
+    displayName: String(row.display_name || raw.displayName || row.complete_name || raw.completeName || row.email || raw.email || "Gestor"),
+  };
+}
+
+async function applyCategoryPreset(uid: string, workspaceType: WorkspaceType, workspaceId: string) {
+  let existingRows: Record<string, unknown>[];
+  try {
+    existingRows = await supabaseSelect("categories", {
+      select: "name,category_type,workspace_id,raw",
+      filters: { uid },
+    });
+  } catch (error) {
+    if (!isMissingCategoryWorkspaceColumn(error)) throw error;
+    existingRows = await supabaseSelect("categories", {
+      select: "name,category_type,raw",
+      filters: { uid },
+    });
+  }
+  const workspaceRows = existingRows.filter((row) => {
+    const raw = (row.raw as Record<string, unknown> | null) || {};
+    return String(row.workspace_id || raw.workspaceId || "") === workspaceId;
+  });
+  const existing = new Set(workspaceRows.map((row) => `${String(row.name || "").toLowerCase()}::${String(row.category_type || "")}`));
   const now = new Date().toISOString();
   const rows = CATEGORY_PRESETS[workspaceType]
     .filter((category) => !existing.has(`${category.name.toLowerCase()}::${category.type}`))
     .map((category) =>
-      toCategoryRow(uid, `preset_${workspaceType}_${category.type}_${category.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, {
+      toCategoryRow(uid, `preset_${workspaceId}_${workspaceType}_${category.type}_${category.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, {
         ...category,
         color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50",
         userId: uid,
         isCustom: true,
         workspacePreset: workspaceType,
         createdAt: now,
-      })
+      }, workspaceId)
     );
 
   if (rows.length > 0) {
-    await supabaseUpsertRows("categories", rows, { onConflict: "id" });
+    await upsertCategoryRows(rows);
   }
 }
 
 async function persistWorkspaceSet(uid: string, workspaces: Workspace[]) {
   await supabaseUpsertRows("workspaces", workspaces.map((workspace) => toWorkspaceRow(uid, workspace)), { onConflict: "id" });
+}
+
+async function ensureFamilyOwnerIfNeeded(uid: string, workspace: Workspace) {
+  if (workspace.type !== "family") return;
+  const profile = await getProfileSummary(uid);
+  await ensureFamilyManagerMembership({
+    workspaceUid: uid,
+    workspaceId: workspace.id,
+    email: profile.email,
+    displayName: profile.displayName,
+  });
 }
 
 function buildWorkspace(uid: string, input: { name?: string; type?: unknown; isDefault?: boolean; settings?: WorkspaceSettings }, currentCount: number): Workspace {
@@ -231,7 +302,24 @@ export async function GET(request: NextRequest) {
     }
 
     const { actingUid: uid } = await resolveActingContext(request);
-    const workspaces = await getWorkspaceRows(uid);
+    const ownedWorkspaces = await getWorkspaceRows(uid);
+    const memberships = await getActiveMemberships(uid);
+    const sharedRows =
+      memberships.length > 0
+        ? await Promise.all(
+            memberships
+              .filter((member) => member.workspaceUid !== uid)
+              .map(async (member) => {
+                const rows = await supabaseSelect("workspaces", {
+                  select: "uid,source_id,name,workspace_type,is_default,settings,raw,created_at,updated_at",
+                  filters: { uid: member.workspaceUid, source_id: member.workspaceId },
+                  limit: 1,
+                });
+                return rows[0] ? toSharedWorkspace(rows[0], uid, member) : null;
+              }),
+          )
+        : [];
+    const workspaces = [...ownedWorkspaces, ...sharedRows.filter((workspace): workspace is Workspace => Boolean(workspace))];
     const defaultWorkspace = workspaces.find((workspace) => workspace.isDefault) || null;
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json({ ok: true, workspaces, defaultWorkspace }, { status: 200 });
@@ -270,7 +358,6 @@ export async function POST(request: NextRequest) {
     if (!type) {
       return NextResponse.json({ ok: false, error: "invalid_workspace_type" }, { status: 400 });
     }
-
     const current = await getWorkspaceRows(uid);
     const workspace = buildWorkspace(uid, { ...body, type }, current.length);
     const next = workspace.isDefault
@@ -278,7 +365,8 @@ export async function POST(request: NextRequest) {
       : [...current, workspace];
 
     await persistWorkspaceSet(uid, next);
-    await applyCategoryPreset(uid, workspace.type);
+    await ensureFamilyOwnerIfNeeded(uid, workspace);
+    await applyCategoryPreset(uid, workspace.type, workspace.id);
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json({ ok: true, workspace }, { status: 200 });
   } catch (error) {
@@ -330,7 +418,8 @@ export async function PATCH(request: NextRequest) {
       const workspace = buildWorkspace(uid, { ...body.workspace, isDefault: true }, current.length);
       const next = [...current.map((item) => ({ ...item, isDefault: false, updatedAt: new Date().toISOString() })), workspace];
       await persistWorkspaceSet(uid, next);
-      await applyCategoryPreset(uid, workspace.type);
+      await ensureFamilyOwnerIfNeeded(uid, workspace);
+      await applyCategoryPreset(uid, workspace.type, workspace.id);
       return NextResponse.json({ ok: true, defaultWorkspace: workspace }, { status: 200 });
     }
 
@@ -347,7 +436,6 @@ export async function PATCH(request: NextRequest) {
     if (!nextType) {
       return NextResponse.json({ ok: false, error: "invalid_workspace_type" }, { status: 400 });
     }
-
     const now = new Date().toISOString();
     const updated: Workspace = {
       ...target,
@@ -365,8 +453,9 @@ export async function PATCH(request: NextRequest) {
           : workspace
     );
     await persistWorkspaceSet(uid, next);
+    await ensureFamilyOwnerIfNeeded(uid, updated);
     if (updated.settings?.categoriesPresetApplied !== true || updated.type !== target.type) {
-      await applyCategoryPreset(uid, updated.type);
+      await applyCategoryPreset(uid, updated.type, updated.id);
     }
 
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });

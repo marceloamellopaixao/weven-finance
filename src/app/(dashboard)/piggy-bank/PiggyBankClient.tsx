@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
+import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useTranslations } from "@/i18n/T";
 import { useFormatters } from "@/i18n/useFormatters";
 import { getPiggyBanks } from "@/services/piggyBankService";
@@ -79,10 +80,9 @@ function PiggyBankPageSkeleton() {
 export function PiggyBankClient() {
   const t = useTranslations("piggyBank");
   const { user, userProfile } = useAuth();
+  const { activeWorkspaceId } = useWorkspaces();
   const {
-    status: onboardingStatus,
     loading: onboardingLoading,
-    activeStep: onboardingActiveStep,
     isActive: isOnboardingActive,
     completeTour,
   } = useOnboarding();
@@ -91,11 +91,6 @@ export function PiggyBankClient() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const currency = usePreferredCurrency();
   const { money } = useFormatters(currency);
-  const isGoalOnboardingActive =
-    isOnboardingActive &&
-    onboardingActiveStep === "firstGoal" &&
-    !onboardingStatus.steps.firstGoal;
-
   usePlatformTour({
     route: "piggy-bank",
     disabled: onboardingLoading || isOnboardingActive,
@@ -122,7 +117,7 @@ export function PiggyBankClient() {
     return () => {
       mounted = false;
     };
-  }, [t, user]);
+  }, [activeWorkspaceId, t, user]);
 
   if (!user || !userProfile) {
     return (
@@ -151,7 +146,7 @@ export function PiggyBankClient() {
             <Link href="/piggy-bank/new">
               <Button
                 id="tour-piggy-create"
-                className={`rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 ${isGoalOnboardingActive ? "ring-2 ring-ring/45 ring-offset-2 ring-offset-background" : ""}`}
+                className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 <PlusCircle className="mr-2 h-4 w-4" />
                 {t("actions.createGoal")}
@@ -167,18 +162,6 @@ export function PiggyBankClient() {
 
         {feedback && (
           <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{feedback}</div>
-        )}
-
-        {!onboardingLoading && !onboardingStatus.dismissed && !onboardingStatus.steps.firstGoal && (
-          <div
-            className={`rounded-2xl border px-4 py-3 text-sm ${
-              isGoalOnboardingActive
-                ? "border-primary/35 bg-accent text-accent-foreground ring-2 ring-ring/35"
-                : "border-primary/20 bg-accent text-accent-foreground"
-            }`}
-          >
-            {t("onboarding.firstGoal")}
-          </div>
         )}
 
         <div className="grid gap-4 md:grid-cols-3">

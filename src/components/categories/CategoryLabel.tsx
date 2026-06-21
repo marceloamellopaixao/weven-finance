@@ -31,9 +31,9 @@ export function CategoryLabel({ value, className, iconClassName, inheritColors =
     return (
       <span className={cn("flex min-w-0 items-center gap-2", className)}>
         <Layers className={cn("h-3.5 w-3.5 shrink-0", iconTone, iconClassName)} />
-        <span className={cn("truncate", rootTone)}>{translateDefaultCategoryName(getCategoryRoot(value), locale)}</span>
+        <span data-i18n-skip className={cn("truncate", rootTone)}>{translateDefaultCategoryName(getCategoryRoot(value), locale)}</span>
         <span className={separatorTone}>/</span>
-        <span className={cn("truncate font-medium", subTone)}>{translateDefaultCategoryName(getSubcategoryName(value), locale)}</span>
+        <span data-i18n-skip className={cn("truncate font-medium", subTone)}>{translateDefaultCategoryName(getSubcategoryName(value), locale)}</span>
       </span>
     );
   }
@@ -42,7 +42,7 @@ export function CategoryLabel({ value, className, iconClassName, inheritColors =
     return (
       <span className={cn("flex min-w-0 items-center gap-2 pl-1", className)}>
         <Layers className={cn("h-3.5 w-3.5 shrink-0", iconTone, iconClassName)} />
-        <span className={cn("truncate font-medium", subTone)}>{translateDefaultCategoryName(getSubcategoryName(value), locale)}</span>
+        <span data-i18n-skip className={cn("truncate font-medium", subTone)}>{translateDefaultCategoryName(getSubcategoryName(value), locale)}</span>
       </span>
     );
   }
@@ -50,7 +50,7 @@ export function CategoryLabel({ value, className, iconClassName, inheritColors =
   return (
     <span className={cn("flex min-w-0 items-center gap-2", className)}>
       <Tag className={cn("h-3.5 w-3.5 shrink-0", categoryIconTone, iconClassName)} />
-      <span className="truncate">{translateDefaultCategoryName(value, locale)}</span>
+      <span data-i18n-skip className="truncate">{translateDefaultCategoryName(value, locale)}</span>
     </span>
   );
 }
