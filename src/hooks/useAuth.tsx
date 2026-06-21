@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { UserProfile } from "@/types/user";
 import {
   getImpersonationHeader,
@@ -136,7 +136,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const supabase = useMemo(() => getSupabaseClient(), []);
 
   const resolvePostAuthPath = useCallback(() => {
@@ -440,7 +439,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (hasPrivilegedAccess) return;
 
     const isMarketingOrAuthRoute = PUBLIC_ROUTES.includes(pathname);
-    const isCreatingAdditionalWorkspace = pathname === "/account-profile" && searchParams.get("create") === "1";
+    const isCreatingAdditionalWorkspace =
+      pathname === "/account-profile" &&
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("create") === "1";
     const shouldCheckWorkspace = pathname === "/account-profile" || !isMarketingOrAuthRoute;
     if (!shouldCheckWorkspace) return;
 
@@ -465,7 +467,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [authReady, pagePreviewAccess, pathname, resolvePostAuthPath, router, searchParams, user, userProfile]);
+  }, [authReady, pagePreviewAccess, pathname, resolvePostAuthPath, router, user, userProfile]);
 
   const togglePrivacyMode = () => {
     setPrivacyMode((prev) => {
