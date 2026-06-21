@@ -439,7 +439,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                             Editar permissões
                           </span>
                           {/* Ao clicar o botão abrir ele fica fechar */}
-                          <span className="text-[10px] font-medium text-primary">{isExpanded ? 'Abrir' : 'Fechar'}</span>
+                          <span className="text-[10px] font-medium text-primary">{isExpanded ? 'Fechar' : 'Abrir'}</span>
                         </summary>
                         <div className="border-t border-border/60 p-3">
                           <PermissionMatrix
@@ -474,7 +474,9 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
             <div>
               <p className="font-semibold text-foreground">Encerrar família</p>
               <p className="mt-1">
-                Essa opção ainda não está disponível. Por enquanto, você pode remover membros individualmente.
+                Essa opção ainda não está disponível. 
+                <br />
+                Por enquanto, você pode remover membros individualmente.
               </p>
             </div>
           </div>
