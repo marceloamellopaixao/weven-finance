@@ -8,22 +8,30 @@ import { AlertTriangle, CreditCard, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslations } from "@/i18n/T";
+import { formatMoney } from "@/lib/money/formatMoney";
+import { getEquivalentMonthlyPrice, PLAN_CATALOG, PLAN_ORDER, type BillingInterval } from "@/lib/plans/catalog";
 import { getCheckoutLink } from "@/services/billingService";
 import {
   buildUpgradeCheckoutPath,
   clearPendingUpgradePlan,
+  parseBillingInterval,
   parseUpgradePlan,
+  readPendingUpgradeInterval,
   readPendingUpgradePlan,
   rememberPendingUpgradePlan,
 } from "@/services/billing/checkoutIntent";
+import type { UserPlan } from "@/types/user";
 
 type CheckoutState = "preparing" | "redirecting" | "error" | "exempt";
 
-const PLAN_RANK: Record<"free" | "premium" | "pro", number> = {
-  free: 0,
-  premium: 1,
-  pro: 2,
-};
+const PLAN_RANK: Record<UserPlan, number> = PLAN_ORDER.reduce(
+  (acc, item, index) => ({ ...acc, [item]: index }),
+  {} as Record<UserPlan, number>
+);
+
+function getChargeLabel(interval: BillingInterval) {
+  return interval === "yearly" ? "Anual" : "Mensal";
+}
 
 export default function BillingCheckoutPage() {
   const t = useTranslations("billing");
@@ -36,12 +44,20 @@ export default function BillingCheckoutPage() {
 
   const planFromQuery = useMemo(() => parseUpgradePlan(searchParams.get("plan")), [searchParams]);
   const plan = planFromQuery || readPendingUpgradePlan();
+  const intervalFromQuery = useMemo(() => parseBillingInterval(searchParams.get("interval")), [searchParams]);
+  const interval = planFromQuery ? intervalFromQuery : readPendingUpgradeInterval();
+  const selectedPlan = plan ? PLAN_CATALOG[plan] : null;
+  const selectedPrice =
+    selectedPlan && interval === "yearly" && selectedPlan.yearlyPrice !== null
+      ? selectedPlan.yearlyPrice
+      : selectedPlan?.monthlyPrice ?? 0;
+  const equivalentMonthly = plan && interval === "yearly" ? getEquivalentMonthlyPrice(plan) : null;
 
   useEffect(() => {
     if (planFromQuery) {
-      rememberPendingUpgradePlan(planFromQuery);
+      rememberPendingUpgradePlan(planFromQuery, intervalFromQuery);
     }
-  }, [planFromQuery]);
+  }, [intervalFromQuery, planFromQuery]);
 
   useEffect(() => {
     if (loading || canPreviewRestrictedPages || plan) return;
@@ -51,10 +67,10 @@ export default function BillingCheckoutPage() {
   useEffect(() => {
     if (loading || canPreviewRestrictedPages || !plan) return;
 
-    rememberPendingUpgradePlan(plan);
+    rememberPendingUpgradePlan(plan, interval);
 
     if (!user) {
-      router.replace(`/login?upgrade_plan=${plan}`);
+      router.replace(`/login?upgrade_plan=${plan}&interval=${interval}`);
       return;
     }
 
@@ -70,17 +86,17 @@ export default function BillingCheckoutPage() {
       return;
     }
 
-    const requestKey = `${user.uid}:${plan}`;
+    const requestKey = `${user.uid}:${plan}:${interval}`;
     if (startedRef.current === requestKey) return;
     startedRef.current = requestKey;
 
     const run = async () => {
       setState("redirecting");
-      setMessage(t("checkout.redirecting", { plan: plan === "premium" ? "Premium" : "Pro" }));
+      setMessage(t("checkout.redirecting", { plan: selectedPlan?.publicName ?? plan }));
 
       try {
         const token = await user.getIdToken();
-        const session = await getCheckoutLink(plan, token);
+        const session = await getCheckoutLink(plan, token, interval);
         clearPendingUpgradePlan();
         window.location.assign(session.checkoutUrl);
       } catch (error) {
@@ -99,7 +115,7 @@ export default function BillingCheckoutPage() {
 
     void run();
 
-  }, [canPreviewRestrictedPages, loading, plan, router, t, user, userProfile]);
+  }, [canPreviewRestrictedPages, interval, loading, plan, router, selectedPlan?.publicName, t, user, userProfile]);
 
   const resolvedState: CheckoutState = !loading && !plan ? "error" : state;
   const resolvedMessage =
@@ -138,6 +154,37 @@ export default function BillingCheckoutPage() {
 
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{resolvedMessage}</p>
 
+          {plan && selectedPlan && (
+            <div className="mt-6 rounded-2xl border border-border/70 bg-background/55 p-4 text-left">
+              <p className="text-xs font-semibold uppercase text-muted-foreground">Resumo da assinatura</p>
+              <dl className="mt-3 space-y-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Plano escolhido</dt>
+                  <dd className="text-right font-semibold text-foreground">{selectedPlan.publicName}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Cobrança</dt>
+                  <dd className="text-right font-semibold text-foreground">{getChargeLabel(interval)}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Valor hoje</dt>
+                  <dd className="text-right font-semibold text-foreground">{formatMoney(selectedPrice, "BRL", "pt-BR")}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Renovação</dt>
+                  <dd className="text-right font-semibold text-foreground">
+                    {interval === "yearly" ? "A cada 12 meses" : "A cada mês"}
+                  </dd>
+                </div>
+              </dl>
+              {equivalentMonthly !== null && (
+                <p className="mt-3 rounded-xl bg-primary/10 px-3 py-2 text-xs font-medium text-primary">
+                  Equivale a {formatMoney(equivalentMonthly, "BRL", "pt-BR")} por mês.
+                </p>
+              )}
+            </div>
+          )}
+
           {!canPreviewRestrictedPages && resolvedState !== "error" && resolvedState !== "exempt" && (
             <div className="mt-6 flex items-center justify-center gap-2 text-sm font-medium text-primary">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -148,7 +195,7 @@ export default function BillingCheckoutPage() {
           {resolvedState === "error" && plan && (
             <div className="mt-6 space-y-3">
               <Button
-                onClick={() => window.location.assign(buildUpgradeCheckoutPath(plan))}
+                onClick={() => window.location.assign(buildUpgradeCheckoutPath(plan, interval))}
                 className="h-11 w-full rounded-xl bg-primary font-medium text-primary-foreground hover:bg-primary/90"
               >
                 {t("checkout.retry")}

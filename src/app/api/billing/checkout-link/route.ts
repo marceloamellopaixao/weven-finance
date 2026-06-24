@@ -4,6 +4,7 @@ import { buildCheckoutUrl } from "@/lib/billing/mercadopago";
 import { DEFAULT_ACCESS_CONTROL_CONFIG, DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
 import { UserPlan, UserRole } from "@/types/user";
 import { verifyRequestAuth } from "@/lib/auth/server";
+import { parseBillingInterval, parseUpgradePlan } from "@/services/billing/checkoutIntent";
 import { resolveActingContext } from "@/lib/impersonation/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { checkRateLimit } from "@/lib/api/rate-limit";
@@ -11,14 +12,25 @@ import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { hasBillingExemption, normalizeAccessControlConfig } from "@/lib/access-control/config";
+import { normalizePlansConfig as normalizeSystemPlans } from "@/lib/plans/catalog";
+import type { BillingInterval } from "@/lib/plans/catalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function parsePlan(value: string | null): UserPlan | null {
-  if (!value) return null;
-  if (value === "free" || value === "pro" || value === "premium") return value;
-  return null;
+function getMercadoPagoPlanId(plan: Exclude<UserPlan, "free">, interval: BillingInterval) {
+  if (plan === "premium") return interval === "yearly" ? process.env.MERCADOPAGO_PLAN_PREMIUM_YEARLY_ID || process.env.MERCADOPAGO_PLAN_PREMIUM_ID : process.env.MERCADOPAGO_PLAN_PREMIUM_ID;
+  if (plan === "pro") return interval === "yearly" ? process.env.MERCADOPAGO_PLAN_PRO_YEARLY_ID || process.env.MERCADOPAGO_PLAN_PRO_ID : process.env.MERCADOPAGO_PLAN_PRO_ID;
+  if (plan === "family") return interval === "yearly" ? process.env.MERCADOPAGO_PLAN_FAMILY_YEARLY_ID || process.env.MERCADOPAGO_PLAN_FAMILY_ID : process.env.MERCADOPAGO_PLAN_FAMILY_ID;
+  if (plan === "business") return interval === "yearly" ? process.env.MERCADOPAGO_PLAN_BUSINESS_YEARLY_ID || process.env.MERCADOPAGO_PLAN_BUSINESS_ID : process.env.MERCADOPAGO_PLAN_BUSINESS_ID;
+  if (plan === "founder") return process.env.MERCADOPAGO_PLAN_FOUNDER_ID;
+  return undefined;
+}
+
+function getCheckoutBaseUrl(configuredPaymentLink: string | undefined, plan: Exclude<UserPlan, "free">, interval: BillingInterval) {
+  if (configuredPaymentLink?.trim()) return configuredPaymentLink.trim();
+  const planId = getMercadoPagoPlanId(plan, interval);
+  return planId ? `https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=${encodeURIComponent(planId)}` : "";
 }
 
 export async function GET(request: NextRequest) {
@@ -35,9 +47,10 @@ export async function GET(request: NextRequest) {
     await verifyRequestAuth(request);
     const acting = await resolveActingContext(request);
     uid = acting.actingUid;
-    const plan = parsePlan(request.nextUrl.searchParams.get("plan"));
+    const plan = parseUpgradePlan(request.nextUrl.searchParams.get("plan"));
+    const interval = parseBillingInterval(request.nextUrl.searchParams.get("interval"));
 
-    if (!plan || plan === "free") {
+    if (!plan) {
       return NextResponse.json({ ok: false, error: "invalid_plan" }, { status: 400 });
     }
 
@@ -64,14 +77,15 @@ export async function GET(request: NextRequest) {
       filters: { key: "plans" },
       limit: 1,
     });
-    const plans = (plansRows[0]?.data as PlansConfig | undefined) ?? DEFAULT_PLANS_CONFIG;
+    const plans: PlansConfig = plansRows[0]?.data ? normalizeSystemPlans(plansRows[0].data, DEFAULT_PLANS_CONFIG) : DEFAULT_PLANS_CONFIG;
 
     const selectedPlan = plans[plan];
     if (!selectedPlan?.active) {
       return NextResponse.json({ ok: false, error: "plan_inactive" }, { status: 409 });
     }
 
-    if (!selectedPlan.paymentLink) {
+    const paymentLink = getCheckoutBaseUrl(selectedPlan.paymentLink, plan, interval);
+    if (!paymentLink) {
       return NextResponse.json({ ok: false, error: "plan_missing_payment_link" }, { status: 422 });
     }
 
@@ -84,9 +98,9 @@ export async function GET(request: NextRequest) {
       !selectedBaseUrl.includes("127.0.0.1");
     const checkoutAttemptId = crypto.randomUUID();
     const returnUrl = isPublicHttpsUrl
-      ? `${selectedBaseUrl}/billing/activating?plan=${plan}&attempt=${checkoutAttemptId}`
+      ? `${selectedBaseUrl}/billing/activating?plan=${plan}&interval=${interval}&attempt=${checkoutAttemptId}`
       : undefined;
-    const checkoutUrl = buildCheckoutUrl(selectedPlan.paymentLink, {
+    const checkoutUrl = buildCheckoutUrl(paymentLink, {
       uid,
       plan,
       returnUrl,
@@ -98,6 +112,7 @@ export async function GET(request: NextRequest) {
 
     billing.pendingPreapprovalId = null;
     billing.pendingPlan = plan;
+    billing.pendingBillingInterval = interval;
     billing.pendingCheckoutAt = new Date().toISOString();
     billing.pendingCheckoutAttemptId = checkoutAttemptId;
     billing.lastError = null;
@@ -127,6 +142,7 @@ export async function GET(request: NextRequest) {
           raw: {
             uid,
             plan,
+            interval,
             checkoutAttemptId,
             createdAt: new Date().toISOString(),
             returnUrl: returnUrl ?? null,

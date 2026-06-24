@@ -7,6 +7,7 @@ import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/im
 import { normalizeCurrency } from "@/lib/money/formatMoney";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { getDefaultCategoriesForWorkspaceType } from "@/lib/categories/defaultCategories";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import type { Workspace, WorkspaceSettings, WorkspaceType } from "@/types/workspace";
 import { ensureFamilyManagerMembership, getActiveMemberships, toWorkspaceMember } from "@/lib/workspaces/server";
@@ -98,9 +99,21 @@ const CATEGORY_PRESETS: Record<WorkspaceType, Array<{ name: string; type: "incom
     { name: "Operacional", type: "expense" },
   ],
 };
+void CATEGORY_PRESETS;
 
 function parseType(value: unknown): WorkspaceType | null {
   return typeof value === "string" && WORKSPACE_TYPES.has(value as WorkspaceType) ? (value as WorkspaceType) : null;
+}
+
+function normalizeWorkspaceType(type: WorkspaceType): WorkspaceType {
+  return type === "professional" || type === "church" ? "business" : type;
+}
+
+function assertDocumentAllowed(type: WorkspaceType, settings?: WorkspaceSettings) {
+  const document = typeof settings?.businessDocument === "string" ? settings.businessDocument.replace(/\D/g, "") : "";
+  if (document && type !== "business") {
+    throw new Error("business_profile_required_for_cnpj");
+  }
 }
 
 function parseSettings(value: unknown): WorkspaceSettings {
@@ -109,6 +122,8 @@ function parseSettings(value: unknown): WorkspaceSettings {
     currency: normalizeCurrency(data.currency),
     monthlyReportEnabled: data.monthlyReportEnabled !== false,
     categoriesPresetApplied: Boolean(data.categoriesPresetApplied),
+    familyModeEnabled: Boolean(data.familyModeEnabled),
+    businessDocument: typeof data.businessDocument === "string" ? data.businessDocument.replace(/\D/g, "").slice(0, 14) : undefined,
   };
 }
 
@@ -244,12 +259,11 @@ async function applyCategoryPreset(uid: string, workspaceType: WorkspaceType, wo
   });
   const existing = new Set(workspaceRows.map((row) => `${String(row.name || "").toLowerCase()}::${String(row.category_type || "")}`));
   const now = new Date().toISOString();
-  const rows = CATEGORY_PRESETS[workspaceType]
+  const rows = getDefaultCategoriesForWorkspaceType(workspaceType)
     .filter((category) => !existing.has(`${category.name.toLowerCase()}::${category.type}`))
     .map((category) =>
       toCategoryRow(uid, `preset_${workspaceId}_${workspaceType}_${category.type}_${category.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, {
         ...category,
-        color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50",
         userId: uid,
         isCustom: true,
         workspacePreset: workspaceType,
@@ -278,7 +292,8 @@ async function ensureFamilyOwnerIfNeeded(uid: string, workspace: Workspace) {
 }
 
 function buildWorkspace(uid: string, input: { name?: string; type?: unknown; isDefault?: boolean; settings?: WorkspaceSettings }, currentCount: number): Workspace {
-  const type = parseType(input.type) || "personal";
+  const type = normalizeWorkspaceType(parseType(input.type) || "personal");
+  assertDocumentAllowed(type, input.settings);
   const now = new Date().toISOString();
   return {
     id: crypto.randomUUID(),
@@ -432,10 +447,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "workspace_not_found" }, { status: 404 });
     }
 
-    const nextType = body.type === undefined ? target.type : parseType(body.type);
-    if (!nextType) {
+    const parsedNextType = body.type === undefined ? target.type : parseType(body.type);
+    if (!parsedNextType) {
       return NextResponse.json({ ok: false, error: "invalid_workspace_type" }, { status: 400 });
     }
+    const nextType = normalizeWorkspaceType(parsedNextType);
+    assertDocumentAllowed(nextType, { ...target.settings, ...body.settings });
     const now = new Date().toISOString();
     const updated: Workspace = {
       ...target,

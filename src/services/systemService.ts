@@ -10,6 +10,7 @@
 } from "@/types/system";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
+import { normalizePlansConfig } from "@/lib/plans/catalog";
 
 const POLLING_INTERVAL_MS = 60000;
 const LOCAL_CACHE_TTL_MS = 120000;
@@ -43,8 +44,9 @@ export const getPlansConfig = async (): Promise<PlansConfig> => {
     if (!response.ok || !payload.ok || !payload.plans) {
       throw new Error(payload.error || "Não foi possível buscar planos");
     }
-    lastPlansCache = { at: Date.now(), value: payload.plans };
-    return payload.plans;
+    const plans = normalizePlansConfig(payload.plans, DEFAULT_PLANS_CONFIG);
+    lastPlansCache = { at: Date.now(), value: plans };
+    return plans;
   } catch {
     return DEFAULT_PLANS_CONFIG;
   }

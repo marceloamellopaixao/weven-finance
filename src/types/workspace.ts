@@ -1,13 +1,28 @@
 import type { CurrencyCode } from "@/lib/money/formatMoney";
 
 export type WorkspaceType = "personal" | "professional" | "church" | "family" | "business";
+export type FinancialProfileType = "personal" | "family" | "business";
 
 export type WorkspaceSettings = {
   currency?: CurrencyCode;
   monthlyReportEnabled?: boolean;
   categoriesPresetApplied?: boolean;
   familyModeEnabled?: boolean;
+  businessDocument?: string;
 };
+
+export function toFinancialProfileType(type: WorkspaceType | null | undefined): FinancialProfileType {
+  if (type === "family") return "family";
+  if (type === "business" || type === "professional" || type === "church") return "business";
+  return "personal";
+}
+
+export function getFinancialProfileLabel(type: WorkspaceType | null | undefined) {
+  const normalized = toFinancialProfileType(type);
+  if (normalized === "family") return "Família";
+  if (normalized === "business") return "Business/PJ";
+  return "Uso pessoal";
+}
 
 export type FamilyRole = "family_manager" | "spouse_responsible" | "child_dependent" | "guest_member";
 
@@ -111,8 +126,8 @@ export type UpdateWorkspaceInput = {
 
 export const WORKSPACE_TYPE_LABELS: Record<WorkspaceType, string> = {
   personal: "Pessoal",
-  professional: "Profissional / Autônomo",
-  church: "Igreja / Ministério",
-  family: "Família / Casa",
-  business: "Pequeno negócio",
+  professional: "Business/PJ",
+  church: "Business/PJ",
+  family: "Família",
+  business: "Business/PJ",
 };

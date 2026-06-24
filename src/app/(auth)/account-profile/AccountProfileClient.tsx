@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BriefcaseBusiness, Building2, CheckCircle2, Home, Loader2, UsersRound, WalletCards } from "lucide-react";
+import { BriefcaseBusiness, CheckCircle2, Home, Loader2, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
@@ -17,47 +18,50 @@ import type { WorkspaceType } from "@/types/workspace";
 
 const OPTIONS: Array<{
   type: WorkspaceType;
-  titleKey: string;
-  descriptionKey: string;
+  title: string;
+  description: string;
+  suggestions: string[];
   icon: typeof WalletCards;
   accent: string;
 }> = [
   {
     type: "personal",
-    titleKey: "options.personal.title",
-    descriptionKey: "options.personal.description",
+    title: "Uso pessoal",
+    description: "Para organizar seu salário, gastos, cartões, metas e vida financeira individual.",
+    suggestions: ["Meu dinheiro", "Finanças pessoais"],
     icon: WalletCards,
     accent: "from-emerald-500/15 to-teal-500/10 text-emerald-700",
   },
   {
-    type: "professional",
-    titleKey: "options.professional.title",
-    descriptionKey: "options.professional.description",
-    icon: BriefcaseBusiness,
-    accent: "from-sky-500/15 to-cyan-500/10 text-sky-700",
-  },
-  {
-    type: "church",
-    titleKey: "options.church.title",
-    descriptionKey: "options.church.description",
-    icon: Building2,
-    accent: "from-violet-500/15 to-indigo-500/10 text-violet-700",
-  },
-  {
     type: "family",
-    titleKey: "options.family.title",
-    descriptionKey: "options.family.description",
+    title: "Família",
+    description: "Para organizar as finanças da casa com outras pessoas, como casal ou família.",
+    suggestions: ["Casa", "Família"],
     icon: Home,
     accent: "from-amber-500/15 to-orange-500/10 text-amber-700",
   },
   {
     type: "business",
-    titleKey: "options.business.title",
-    descriptionKey: "options.business.description",
-    icon: UsersRound,
+    title: "Business/PJ",
+    description: "Para controlar MEI, CNPJ, igreja, projeto profissional, loja, prestação de serviço ou pequeno negócio.",
+    suggestions: ["Meu negócio", "MEI", "Minha empresa", "Projeto profissional"],
+    icon: BriefcaseBusiness,
     accent: "from-fuchsia-500/15 to-pink-500/10 text-fuchsia-700",
   },
 ];
+
+function stripCnpj(value: string) {
+  return value.replace(/\D/g, "").slice(0, 14);
+}
+
+function formatCnpj(value: string) {
+  const digits = stripCnpj(value);
+  return digits
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2");
+}
 
 export function AccountProfileClient() {
   const router = useRouter();
@@ -68,6 +72,9 @@ export function AccountProfileClient() {
   const tProfile = useTranslations("accountProfile");
   const tCommon = useTranslations("common");
   const [selectedType, setSelectedType] = useState<WorkspaceType>("personal");
+  const [profileName, setProfileName] = useState("Meu dinheiro");
+  const [wantsCnpj, setWantsCnpj] = useState(false);
+  const [cnpj, setCnpj] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isCreatingAdditionalWorkspace = searchParams.get("create") === "1";
@@ -86,12 +93,31 @@ export function AccountProfileClient() {
     [selectedType],
   );
 
+  const handleSelectType = (type: WorkspaceType) => {
+    const option = OPTIONS.find((item) => item.type === type) || OPTIONS[0];
+    setSelectedType(type);
+    setProfileName(option.suggestions[0]);
+    if (type !== "business") {
+      setWantsCnpj(false);
+      setCnpj("");
+    }
+  };
+
   const handleContinue = async () => {
+    const cleanedCnpj = stripCnpj(cnpj);
+    if (selectedType !== "business" && cleanedCnpj) {
+      setError("Para controlar um negócio, MEI, igreja, projeto profissional ou qualquer atividade com CNPJ, use o perfil Business/PJ.");
+      return;
+    }
+    if (selectedType === "business" && wantsCnpj && cleanedCnpj.length !== 14) {
+      setError("Confira o CNPJ informado. Ele precisa ter 14 números.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       const workspace = await createWorkspace({
-        name: tProfile(selectedOption.titleKey),
+        name: profileName.trim() || selectedOption.suggestions[0],
         type: selectedOption.type,
         isDefault: !isCreatingAdditionalWorkspace,
         settings: {
@@ -99,6 +125,7 @@ export function AccountProfileClient() {
           monthlyReportEnabled: true,
           categoriesPresetApplied: true,
           familyModeEnabled: selectedOption.type === "family",
+          businessDocument: selectedType === "business" && cleanedCnpj ? cleanedCnpj : undefined,
         },
       });
       setActiveWorkspaceId(workspace.id);
@@ -120,10 +147,10 @@ export function AccountProfileClient() {
           </div>
           <div className="space-y-3">
             <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
-              {tProfile("title")}
+              Como você quer usar o WevenFinance?
             </h1>
             <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              {tProfile("description")}
+              Escolha o perfil financeiro antes de começar. Isso ajuda o sistema a separar seus dados, categorias e limites do jeito certo.
             </p>
           </div>
           {userProfile?.displayName ? (
@@ -139,7 +166,7 @@ export function AccountProfileClient() {
               <button
                 key={option.type}
                 type="button"
-                onClick={() => setSelectedType(option.type)}
+                onClick={() => handleSelectType(option.type)}
                 disabled={submitting}
                 className={`group min-h-[150px] rounded-2xl border p-1 text-left transition-all duration-300 ${
                   selected
@@ -153,8 +180,8 @@ export function AccountProfileClient() {
                       <Icon className="h-6 w-6" />
                     </div>
                     <div className="space-y-2">
-                      <h2 className="text-lg font-bold text-foreground">{tProfile(option.titleKey)}</h2>
-                      <p className="text-sm leading-relaxed text-muted-foreground">{tProfile(option.descriptionKey)}</p>
+                      <h2 className="text-lg font-bold text-foreground">{option.title}</h2>
+                      <p className="text-sm leading-relaxed text-muted-foreground">{option.description}</p>
                     </div>
                     <div className="mt-auto flex items-center gap-2 text-sm font-semibold text-primary">
                       <span>{selected ? tProfile("selected") : tProfile("choose")}</span>
@@ -167,9 +194,82 @@ export function AccountProfileClient() {
           })}
         </section>
 
+        <section className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+          <div className="rounded-2xl border border-border/80 bg-card/80 p-5">
+            <h2 className="text-xl font-bold text-foreground">Dê um nome para este perfil</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Esse nome aparece no topo do sistema e ajuda você a separar melhor suas finanças. Você pode alterar depois.
+            </p>
+            <label className="mt-5 block text-sm font-semibold text-foreground" htmlFor="profile-name">
+              Nome do perfil
+            </label>
+            <Input
+              id="profile-name"
+              value={profileName}
+              onChange={(event) => setProfileName(event.target.value)}
+              placeholder={selectedOption.suggestions[0]}
+              className="mt-2 h-11 rounded-xl"
+              maxLength={60}
+            />
+            <div className="mt-4 flex flex-wrap gap-2">
+              {selectedOption.suggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => setProfileName(suggestion)}
+                  className="rounded-full border border-border/80 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border/80 bg-card/80 p-5">
+            {selectedType === "business" ? (
+              <>
+                <h2 className="text-xl font-bold text-foreground">Você quer informar um CNPJ agora?</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  O CNPJ é opcional, mas ajuda a identificar relatórios e organizar melhor seu perfil profissional.
+                </p>
+                <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                  <Button type="button" variant={wantsCnpj ? "default" : "outline"} onClick={() => setWantsCnpj(true)} className="rounded-xl">
+                    Sim, informar CNPJ
+                  </Button>
+                  <Button type="button" variant={!wantsCnpj ? "default" : "outline"} onClick={() => setWantsCnpj(false)} className="rounded-xl">
+                    Agora não
+                  </Button>
+                </div>
+                {wantsCnpj ? (
+                  <div className="mt-4">
+                    <label className="text-sm font-semibold text-foreground" htmlFor="business-cnpj">
+                      CNPJ
+                    </label>
+                    <Input
+                      id="business-cnpj"
+                      value={formatCnpj(cnpj)}
+                      onChange={(event) => setCnpj(formatCnpj(event.target.value))}
+                      inputMode="numeric"
+                      placeholder="00.000.000/0000-00"
+                      className="mt-2 h-11 rounded-xl"
+                    />
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <h2 className="text-xl font-bold text-foreground">Perfil sem CNPJ</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Para controlar um negócio, MEI, igreja, projeto profissional ou qualquer atividade com CNPJ, escolha Business/PJ.
+                </p>
+              </>
+            )}
+          </div>
+        </section>
+
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="max-w-2xl text-sm text-muted-foreground">
-            {tProfile("notice")}
+            Você pode criar outros perfis depois e alternar entre eles pelo menu de perfis.
           </p>
           <Button id="tour-account-profile-submit" className="h-12 rounded-xl px-8 text-base font-semibold" onClick={handleContinue} disabled={submitting}>
             {submitting ? (

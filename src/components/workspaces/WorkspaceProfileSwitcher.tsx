@@ -1,6 +1,6 @@
 "use client";
 
-import { BriefcaseBusiness, Building2, Check, ChevronsUpDown, Home, Plus, Store, UserRound, UsersRound, WalletCards } from "lucide-react";
+import { BriefcaseBusiness, Check, ChevronsUpDown, Home, Plus, UserRound, UsersRound, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -20,25 +20,25 @@ import type { Workspace, WorkspaceType } from "@/types/workspace";
 const WORKSPACE_ICONS: Record<WorkspaceType, typeof WalletCards> = {
   personal: WalletCards,
   professional: BriefcaseBusiness,
-  church: Building2,
+  church: BriefcaseBusiness,
   family: Home,
-  business: Store,
+  business: BriefcaseBusiness,
 };
 
 const WORKSPACE_TONE: Record<WorkspaceType, string> = {
   personal: "bg-emerald-500/12 text-emerald-700 ring-emerald-500/20",
-  professional: "bg-sky-500/12 text-sky-700 ring-sky-500/20",
-  church: "bg-violet-500/12 text-violet-700 ring-violet-500/20",
+  professional: "bg-fuchsia-500/12 text-fuchsia-700 ring-fuchsia-500/20",
+  church: "bg-fuchsia-500/12 text-fuchsia-700 ring-fuchsia-500/20",
   family: "bg-amber-500/12 text-amber-700 ring-amber-500/20",
   business: "bg-fuchsia-500/12 text-fuchsia-700 ring-fuchsia-500/20",
 };
 
 const WORKSPACE_KIND_LABEL: Record<WorkspaceType, string> = {
   personal: "Pessoal",
-  professional: "Profissional",
-  church: "Igreja",
-  family: "Familia",
-  business: "Negocio",
+  professional: "Business/PJ",
+  church: "Business/PJ",
+  family: "Família",
+  business: "Business/PJ",
 };
 
 function getInitials(workspace: Workspace) {

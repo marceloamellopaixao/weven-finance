@@ -1,4 +1,4 @@
-export type UserPlan = 'free' | 'premium' | 'pro';
+export type UserPlan = 'free' | 'premium' | 'pro' | 'family' | 'business' | 'founder';
 export type BuiltInUserRole = 'admin' | 'moderator' | 'support' | 'client';
 export type UserRole = BuiltInUserRole | (string & {});
 export type UserStatus = 'active' | 'inactive' | 'deleted' | 'blocked';

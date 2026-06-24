@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
-import { Calculator, CheckCircle2, CreditCard, Lock, Medal, ShieldCheck, Smartphone } from "lucide-react";
+import { Calculator, CreditCard, Lock, ShieldCheck, Smartphone } from "lucide-react";
 
 import { MarketingCtas } from "@/components/marketing/MarketingCtas";
+import { PricingPlans } from "@/components/marketing/PricingPlans";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { translate } from "@/i18n/getDictionary";
 import { getRequestLocale } from "@/i18n/server";
-import { getPlanPrice } from "@/lib/billing/prices";
-import { formatMoney, getDefaultCurrencyForLocale } from "@/lib/money/formatMoney";
-import { getLocalizedPlanCopy, getPlanTone } from "@/lib/plans/display";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getRequestLocale();
@@ -41,10 +39,7 @@ const trustCards = [
 
 export default async function LandingPage() {
   const locale = await getRequestLocale();
-  const currency = getDefaultCurrencyForLocale(locale);
   const t = (key: string) => translate(locale, key);
-  const formatPlanPrice = (planId: "free" | "premium" | "pro") =>
-    formatMoney(getPlanPrice(planId, currency)?.amount ?? 0, currency, locale);
 
   return (
     <div className="flex min-h-screen flex-col bg-transparent font-sans text-foreground selection:bg-primary/15 selection:text-foreground">
@@ -152,46 +147,7 @@ export default async function LandingPage() {
             <p className="text-lg text-muted-foreground">{t("landing.pricing.description")}</p>
           </div>
 
-          <div className="mx-auto grid max-w-6xl items-stretch gap-5 md:grid-cols-3 md:items-center">
-            {(["free", "premium", "pro"] as const).map((key) => {
-              const plan = getLocalizedPlanCopy(t, key);
-              const tone = getPlanTone(key);
-              const featured = key === "premium";
-
-              return (
-                <Card key={plan.name} className={`${featured ? `app-panel-soft relative z-10 rounded-4xl border-2 shadow-2xl md:scale-105 lg:scale-110 ${tone.border}` : `app-panel-subtle z-0 rounded-4xl shadow-sm transition-all duration-300 hover:shadow-md md:scale-90 md:hover:scale-95 ${tone.border}`}`}>
-                  {featured && (
-                    <div className={`absolute left-0 top-0 h-10 w-full rounded-t-4xl ${tone.topBar}`}>
-                      <CardTitle className="flex h-full w-full items-center justify-center text-xs font-bold uppercase tracking-widest text-white">{t("landing.pricing.recommended")}</CardTitle>
-                    </div>
-                  )}
-                  <CardHeader className={`p-8 pb-0 ${featured ? "mt-6" : ""}`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <CardTitle className="flex items-center gap-2 text-xl font-bold">
-                        {plan.title} <Medal className={`h-5 w-5 ${tone.accentText}`} />
-                      </CardTitle>
-                      <Badge variant={featured ? "default" : "outline"}>{plan.tag}</Badge>
-                    </div>
-                    <CardDescription>{plan.description}</CardDescription>
-                    <div className="flex items-baseline gap-1 pb-2 pt-6">
-                      <span className="text-4xl font-bold">{formatPlanPrice(key)}</span>
-                      {key !== "free" && <span className="text-sm text-muted-foreground">{t("landing.pricing.monthlySuffix")}</span>}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4 p-8 pt-6">
-                    <ul className="space-y-3 text-sm text-muted-foreground">
-                      {plan.features.map((feature) => (
-                        <li key={feature} className="flex gap-3"><CheckCircle2 className={`h-5 w-5 shrink-0 ${tone.accentText}`} /> {feature}</li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                  <CardFooter className="p-8 pt-0">
-                    <MarketingCtas variant={key} />
-                  </CardFooter>
-                </Card>
-              );
-            })}
-          </div>
+          <PricingPlans />
         </div>
       </section>
     </div>

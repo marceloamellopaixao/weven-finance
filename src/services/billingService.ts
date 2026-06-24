@@ -1,5 +1,6 @@
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { UserPlan } from "@/types/user";
+import type { BillingInterval } from "@/lib/plans/catalog";
 
 export type BillingHistoryItem = {
   id: string;
@@ -30,9 +31,11 @@ function authHeaders(idToken: string, includeJson = false) {
 
 export async function getCheckoutLink(
   plan: Exclude<UserPlan, "free">,
-  idToken: string
+  idToken: string,
+  interval: BillingInterval = "monthly"
 ): Promise<{ checkoutUrl: string; preapprovalId?: string | null; checkoutAttemptId?: string | null }> {
-  const response = await fetch(`/api/billing/checkout-link?plan=${plan}`, {
+  const params = new URLSearchParams({ plan, interval });
+  const response = await fetch(`/api/billing/checkout-link?${params.toString()}`, {
     method: "GET",
     headers: authHeaders(idToken),
   });

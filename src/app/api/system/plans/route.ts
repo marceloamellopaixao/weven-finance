@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
+import { normalizePlansConfig } from "@/lib/plans/catalog";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { requireAccessResource } from "@/lib/access-control/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
@@ -29,7 +30,7 @@ export async function GET() {
       filters: { key: "plans" },
       limit: 1,
     });
-    const plans = rows.length > 0 ? ((rows[0].data as PlansConfig | undefined) ?? DEFAULT_PLANS_CONFIG) : DEFAULT_PLANS_CONFIG;
+    const plans = rows.length > 0 ? normalizePlansConfig(rows[0].data, DEFAULT_PLANS_CONFIG) : DEFAULT_PLANS_CONFIG;
     plansCache = { at: Date.now(), value: plans };
 
     return NextResponse.json(
@@ -56,18 +57,19 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
 
+    const plans = normalizePlansConfig(body.plans, DEFAULT_PLANS_CONFIG);
     await supabaseUpsertRows(
       "system_configs",
       [
         {
           key: "plans",
-          data: body.plans,
+          data: plans,
           updated_at: new Date().toISOString(),
         },
       ],
       { onConflict: "key" }
     );
-    plansCache = { at: Date.now(), value: body.plans };
+    plansCache = { at: Date.now(), value: plans };
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";

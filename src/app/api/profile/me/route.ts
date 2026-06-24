@@ -15,9 +15,10 @@ import { readSecureProfilePayload, writeSecureProfilePayload } from "@/lib/secur
 import { resolvePermanentDeleteAt } from "@/lib/account-deletion/policy";
 import { BillingInfo, UserPaymentStatus, UserPlan, UserRole, UserStatus } from "@/types/user";
 import { syncSubscriptionStatus } from "@/lib/billing/mercadopago";
+import { parseUserPlan } from "@/lib/plans/catalog";
 
 function asPlan(value: unknown): UserPlan {
-  return value === "premium" || value === "pro" ? value : "free";
+  return parseUserPlan(value);
 }
 
 function asStatus(value: unknown): UserStatus {

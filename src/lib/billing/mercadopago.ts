@@ -13,6 +13,7 @@ import {
 } from "@/types/user";
 import { DEFAULT_ACCESS_CONTROL_CONFIG } from "@/types/system";
 import { pushNotification } from "@/lib/notifications/server";
+import { isPaidPlan, parseUserPlan } from "@/lib/plans/catalog";
 
 type MercadoPagoTopic = "payment" | "merchant_order" | "preapproval";
 
@@ -55,7 +56,14 @@ const MERCADO_PAGO_API_BASE = "https://api.mercadopago.com";
 
 const PLAN_BY_PREAPPROVAL_ID: Record<string, UserPlan> = {
   [process.env.MERCADOPAGO_PLAN_PRO_ID ?? ""]: "pro",
+  [process.env.MERCADOPAGO_PLAN_PRO_YEARLY_ID ?? ""]: "pro",
   [process.env.MERCADOPAGO_PLAN_PREMIUM_ID ?? ""]: "premium",
+  [process.env.MERCADOPAGO_PLAN_PREMIUM_YEARLY_ID ?? ""]: "premium",
+  [process.env.MERCADOPAGO_PLAN_FAMILY_ID ?? ""]: "family",
+  [process.env.MERCADOPAGO_PLAN_FAMILY_YEARLY_ID ?? ""]: "family",
+  [process.env.MERCADOPAGO_PLAN_BUSINESS_ID ?? ""]: "business",
+  [process.env.MERCADOPAGO_PLAN_BUSINESS_YEARLY_ID ?? ""]: "business",
+  [process.env.MERCADOPAGO_PLAN_FOUNDER_ID ?? ""]: "founder",
 };
 
 function allowPendingCheckoutHeuristic() {
@@ -64,6 +72,16 @@ function allowPendingCheckoutHeuristic() {
 
 function allowFallbackPlanSearchHeuristic() {
   return process.env.MERCADOPAGO_ALLOW_FALLBACK_PLAN_SEARCH === "true";
+}
+
+function getPreapprovalPlanId(plan: UserPlan, interval?: unknown) {
+  const yearly = interval === "yearly";
+  if (plan === "premium") return yearly ? process.env.MERCADOPAGO_PLAN_PREMIUM_YEARLY_ID || process.env.MERCADOPAGO_PLAN_PREMIUM_ID : process.env.MERCADOPAGO_PLAN_PREMIUM_ID;
+  if (plan === "pro") return yearly ? process.env.MERCADOPAGO_PLAN_PRO_YEARLY_ID || process.env.MERCADOPAGO_PLAN_PRO_ID : process.env.MERCADOPAGO_PLAN_PRO_ID;
+  if (plan === "family") return yearly ? process.env.MERCADOPAGO_PLAN_FAMILY_YEARLY_ID || process.env.MERCADOPAGO_PLAN_FAMILY_ID : process.env.MERCADOPAGO_PLAN_FAMILY_ID;
+  if (plan === "business") return yearly ? process.env.MERCADOPAGO_PLAN_BUSINESS_YEARLY_ID || process.env.MERCADOPAGO_PLAN_BUSINESS_ID : process.env.MERCADOPAGO_PLAN_BUSINESS_ID;
+  if (plan === "founder") return process.env.MERCADOPAGO_PLAN_FOUNDER_ID;
+  return undefined;
 }
 
 async function getProfileRow(uid: string): Promise<ProfileRow | null> {
@@ -204,9 +222,7 @@ function parseExternalReference(reference: string | undefined): { uid?: string; 
     if (!key || !value) continue;
 
     if (key === "uid") out.uid = value;
-    if (key === "plan" && (value === "free" || value === "pro" || value === "premium")) {
-      out.plan = value;
-    }
+    if (key === "plan") out.plan = parseUserPlan(value);
   }
 
   if (!out.uid && !reference.includes(":")) {
@@ -429,10 +445,7 @@ async function fetchGatewayDetails(topic: MercadoPagoTopic, resourceId: string):
     const externalReference = typeof payload.external_reference === "string" ? payload.external_reference : undefined;
     const metadata = (payload.metadata ?? {}) as Record<string, unknown>;
     const parsedReference = parseExternalReference(externalReference);
-    const parsedMetadataPlan =
-      metadata.plan === "free" || metadata.plan === "pro" || metadata.plan === "premium"
-        ? (metadata.plan as UserPlan)
-        : undefined;
+    const parsedMetadataPlan = metadata.plan ? parseUserPlan(metadata.plan) : undefined;
     const preapprovalId =
       typeof payload.preapproval_id === "string"
         ? payload.preapproval_id
@@ -566,7 +579,7 @@ async function findUserByWebhook(details: GatewayDetails): Promise<UserMatch | n
     }
   }
 
-  const pendingPlan = details.plan === "pro" || details.plan === "premium" ? details.plan : null;
+  const pendingPlan = details.plan && isPaidPlan(details.plan) ? details.plan : null;
   if (pendingPlan && allowPendingCheckoutHeuristic()) {
     const now = Date.now();
     const windowMs = 6 * 60 * 60 * 1000;
@@ -730,8 +743,7 @@ export async function syncFromWebhook(input: WebhookInput) {
   const pendingPlan =
     typeof userMatch.userData.billing === "object" &&
     userMatch.userData.billing !== null &&
-    ((userMatch.userData.billing as { pendingPlan?: unknown }).pendingPlan === "pro" ||
-      (userMatch.userData.billing as { pendingPlan?: unknown }).pendingPlan === "premium")
+    isPaidPlan((userMatch.userData.billing as { pendingPlan?: unknown }).pendingPlan)
       ? ((userMatch.userData.billing as { pendingPlan: UserPlan }).pendingPlan as UserPlan)
       : undefined;
   const currentRole = (userMatch.userData.role as UserRole) || "client";
@@ -1017,12 +1029,7 @@ export async function confirmLatestPreapprovalForUser(params: {
   const searchPayload = await mpRequest(`/preapproval/search?payer_email=${encodeURIComponent(params.userEmail)}&limit=30&offset=0`);
   const results = Array.isArray(searchPayload.results) ? (searchPayload.results as Record<string, unknown>[]) : [];
 
-  const expectedPlanId =
-    params.expectedPlan === "pro"
-      ? process.env.MERCADOPAGO_PLAN_PRO_ID
-      : params.expectedPlan === "premium"
-        ? process.env.MERCADOPAGO_PLAN_PREMIUM_ID
-        : undefined;
+  const expectedPlanId = params.expectedPlan ? getPreapprovalPlanId(params.expectedPlan) : undefined;
   const minStartedAt = params.checkoutStartedAt ? new Date(params.checkoutStartedAt).getTime() - 10 * 60 * 1000 : null;
 
   const baseCandidates = results.filter((item) => {
@@ -1154,12 +1161,7 @@ export async function cancelSubscriptionForUser(params: {
       : "";
 
   if (!preapprovalId) {
-    const expectedPlanId =
-      currentPlan === "pro"
-        ? process.env.MERCADOPAGO_PLAN_PRO_ID
-        : currentPlan === "premium"
-          ? process.env.MERCADOPAGO_PLAN_PREMIUM_ID
-          : undefined;
+    const expectedPlanId = getPreapprovalPlanId(currentPlan);
     const searchPayload = await mpRequest(`/preapproval/search?payer_email=${encodeURIComponent(params.userEmail)}&limit=30&offset=0`);
     const results = Array.isArray(searchPayload.results) ? (searchPayload.results as Record<string, unknown>[]) : [];
 

@@ -4,6 +4,8 @@ import { verifyRequestAuth } from "@/lib/auth/server";
 import { hasAccess, normalizeAccessControlConfig } from "@/lib/access-control/config";
 import { CREATOR_SUPREME_UID } from "@/lib/access-control/roles";
 import { DEFAULT_ACCESS_CONTROL_CONFIG, AccessControlConfig } from "@/types/system";
+import { parseUserPlan } from "@/lib/plans/catalog";
+import type { UserPlan } from "@/types/user";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 
 const ACCESS_CONTROL_CACHE_TTL_MS = 60000;
@@ -14,7 +16,7 @@ async function getUidFromBearer(request: NextRequest): Promise<string> {
   return auth.uid;
 }
 
-async function getProfile(uid: string): Promise<{ role: string; plan: "free" | "premium" | "pro" }> {
+async function getProfile(uid: string): Promise<{ role: string; plan: UserPlan }> {
   const rows = await supabaseSelect("profiles", {
     select: "role,plan,raw",
     filters: { uid },
@@ -23,7 +25,7 @@ async function getProfile(uid: string): Promise<{ role: string; plan: "free" | "
   const raw = (rows[0]?.raw as Record<string, unknown> | null) ?? {};
   const role = String(rows[0]?.role || raw.role || "client");
   const rawPlan = rows[0]?.plan ?? raw.plan;
-  const plan = rawPlan === "premium" || rawPlan === "pro" ? rawPlan : "free";
+  const plan = parseUserPlan(rawPlan);
   return { role, plan };
 }
 
