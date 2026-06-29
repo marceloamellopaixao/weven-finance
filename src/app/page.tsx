@@ -140,7 +140,7 @@ export default async function LandingPage() {
       </section>
 
       <section className="relative px-4 py-20 sm:px-6 sm:py-24" id="pricing">
-        <div className="container mx-auto max-w-6xl">
+        <div className="container mx-auto max-w-7xl">
           <div className="mb-16 space-y-4 text-center">
             <Badge className="mb-2 border-primary/20 bg-primary/10 px-3 py-1 text-primary hover:bg-primary/15">{t("landing.pricing.badge")}</Badge>
             <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">{t("landing.pricing.title")}</h2>

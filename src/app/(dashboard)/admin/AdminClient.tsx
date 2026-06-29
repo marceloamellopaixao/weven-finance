@@ -452,7 +452,7 @@ export default function AdminPage() {
       return targetRole === "client" || targetRole === "support";
     };
 
-    // Suporte não tem acesso Ã  tabela de usuários
+    // Suporte não tem acesso à tabela de usuários
     return false;
   }, [hasAdminPermission, userProfile]);
 
@@ -493,7 +493,7 @@ export default function AdminPage() {
     return myRank > targetRank;
   }, [hasAdminPermission, userProfile]);
 
-  // PERMISSÃ•ES no usuário (Bloquear, Resetar, Deletar)
+  // Permissões no usuário (bloquear, resetar, deletar)
   const canEditUser = useCallback((targetUser: UserProfile) => {
     if (!userProfile) return false;
 
@@ -3002,9 +3002,11 @@ export default function AdminPage() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="free">Free</SelectItem>
-                              <SelectItem value="premium">Premium</SelectItem>
-                              <SelectItem value="pro">Pro</SelectItem>
+                              {PLAN_ORDER.map((planId) => (
+                                <SelectItem key={planId} value={planId}>
+                                  {PLAN_CATALOG[planId].publicName}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         ) : accessSubjectType === "role" ? (

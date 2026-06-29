@@ -64,7 +64,7 @@ export function PricingPlans() {
         <p className="text-center text-sm font-semibold text-primary">Melhor custo-benefício. Economize até 2 meses.</p>
       ) : null}
 
-      <div className="grid items-stretch gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
+      <div className="grid items-stretch gap-5 md:grid-cols-2 xl:grid-cols-5">
         {plans.map((plan) => {
           const featured = plan.id === "premium";
           const price = getPlanPrice(plan, interval);
@@ -80,7 +80,7 @@ export function PricingPlans() {
           return (
             <Card
               key={plan.id}
-              className={`relative flex h-full min-h-[520px] overflow-hidden rounded-2xl border bg-card/90 shadow-sm transition-all ${
+              className={`relative flex h-full min-h-[520px] overflow-hidden rounded-2xl border bg-card/90 shadow-sm transition-all xl:min-h-[560px] ${
                 featured ? "border-primary/55 shadow-xl shadow-primary/10" : "border-border/80 hover:border-primary/35"
               }`}
             >
