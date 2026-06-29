@@ -2,6 +2,7 @@ import type { CurrencyCode } from "@/lib/money/formatMoney";
 
 export type WorkspaceType = "personal" | "professional" | "church" | "family" | "business";
 export type FinancialProfileType = "personal" | "family" | "business";
+export type WorkspaceStatus = "active" | "archived";
 
 export type WorkspaceSettings = {
   currency?: CurrencyCode;
@@ -9,6 +10,7 @@ export type WorkspaceSettings = {
   categoriesPresetApplied?: boolean;
   familyModeEnabled?: boolean;
   businessDocument?: string;
+  archivedAt?: string | null;
 };
 
 export function toFinancialProfileType(type: WorkspaceType | null | undefined): FinancialProfileType {
@@ -102,6 +104,7 @@ export type Workspace = {
   name: string;
   type: WorkspaceType;
   isDefault: boolean;
+  status?: WorkspaceStatus;
   ownerUid?: string;
   membership?: WorkspaceMember;
   createdAt: string;

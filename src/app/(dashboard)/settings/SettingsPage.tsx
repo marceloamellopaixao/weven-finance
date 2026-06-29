@@ -167,6 +167,7 @@ export default function SettingsPage() {
   const formatPlanPrice = (planId: UpgradePlan) =>
     money(getPlanPrice(planId, currency)?.amount ?? plans[planId].price);
   const canOpenFamilyWorkspaceSettings = workspaces.some((workspace) => {
+    if (workspace.status === "archived") return false;
     if (workspace.type !== "family" && !workspace.settings?.familyModeEnabled && !workspace.membership) return false;
     return !workspace.membership || canViewFamilyMembers(workspace.membership);
   });

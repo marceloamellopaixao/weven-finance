@@ -12,6 +12,14 @@ import { normalizeFamilyPermissions, normalizeFamilyRole } from "@/lib/workspace
 
 type WorkspaceRow = Record<string, unknown>;
 
+function isWorkspaceRowArchived(row: WorkspaceRow | null | undefined) {
+  if (!row) return false;
+  const settings = (row.settings as Record<string, unknown> | null) || {};
+  const raw = (row.raw as Record<string, unknown> | null) || {};
+  const rawSettings = (raw.settings as Record<string, unknown> | null) || {};
+  return Boolean(settings.archivedAt || rawSettings.archivedAt || raw.status === "archived");
+}
+
 function isMissingWorkspaceFamilyTable(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
   return message.includes("workspace_members") || message.includes("workspace_invitations");
@@ -155,6 +163,9 @@ export async function resolveActiveWorkspaceContext(uid: string, workspaceId?: s
   });
   const owned = ownedRows[0];
   if (owned) {
+    if (isWorkspaceRowArchived(owned)) {
+      throw new Error("workspace_archived");
+    }
     return {
       ownerUid: uid,
       workspaceId: String(owned.source_id || workspaceId || ""),
@@ -188,6 +199,9 @@ export async function resolveActiveWorkspaceContext(uid: string, workspaceId?: s
     filters: { uid: membership.workspaceUid, source_id: membership.workspaceId },
     limit: 1,
   });
+  if (isWorkspaceRowArchived(workspaceRows[0])) {
+    throw new Error("workspace_archived");
+  }
   return {
     ownerUid: membership.workspaceUid,
     workspaceId: membership.workspaceId,

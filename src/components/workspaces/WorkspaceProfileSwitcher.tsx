@@ -62,14 +62,14 @@ function WorkspaceAvatar({ workspace, active, compact }: { workspace: Workspace;
 }
 
 export function WorkspaceProfileSwitcher() {
-  const { workspaces, activeWorkspace, activeWorkspaceId, loading, setActiveWorkspace } = useWorkspaces();
+  const { workspaces, activeWorkspaces, activeWorkspace, activeWorkspaceId, loading, setActiveWorkspace } = useWorkspaces();
   const [open, setOpen] = useState(false);
   const canOpenFamilySettings = workspaces.some((workspace) => {
     if (workspace.type !== "family" && !workspace.settings?.familyModeEnabled && !workspace.membership) return false;
     return !workspace.membership || canViewFamilyMembers(workspace.membership);
   });
 
-  if (loading || workspaces.length === 0 || !activeWorkspace) return null;
+  if (loading || activeWorkspaces.length === 0 || !activeWorkspace) return null;
 
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
@@ -100,7 +100,7 @@ export function WorkspaceProfileSwitcher() {
         </DropdownMenuLabel>
 
         <div className="space-y-1 sm:hidden">
-          {workspaces.map((workspace) => {
+          {activeWorkspaces.map((workspace) => {
             const active = workspace.id === activeWorkspaceId;
             return (
               <button
@@ -130,7 +130,7 @@ export function WorkspaceProfileSwitcher() {
         </div>
 
         <div className="hidden grid-cols-2 gap-2 sm:grid sm:grid-cols-3">
-          {workspaces.map((workspace) => {
+          {activeWorkspaces.map((workspace) => {
             const active = workspace.id === activeWorkspaceId;
             return (
               <button
@@ -186,7 +186,7 @@ export function WorkspaceProfileSwitcher() {
         <Link href="/settings?tab=profiles" className="block">
           <Button variant="ghost" className="h-10 w-full justify-start rounded-xl text-sm">
             <WalletCards className="mr-2 h-4 w-4" />
-            Configuracoes de perfil
+            Configurações de perfil
           </Button>
         </Link>
       </DropdownMenuContent>

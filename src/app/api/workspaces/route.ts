@@ -10,7 +10,7 @@ import { writeApiMetric } from "@/lib/observability/metrics";
 import { getDefaultCategoriesForWorkspaceType } from "@/lib/categories/defaultCategories";
 import { canPlanUseProfile } from "@/lib/plans/catalog";
 import { getUserPlanContext } from "@/lib/plans/server";
-import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
+import { supabaseDeleteByFilters, supabasePatchByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { toFinancialProfileType, type Workspace, type WorkspaceSettings, type WorkspaceType } from "@/types/workspace";
 import { ensureFamilyManagerMembership, getActiveMemberships, toWorkspaceMember } from "@/lib/workspaces/server";
 
@@ -57,12 +57,14 @@ async function assertPlanCanUseWorkspace(uid: string, type: WorkspaceType) {
 
 function parseSettings(value: unknown): WorkspaceSettings {
   const data = (value as WorkspaceSettings | null) || {};
+  const archivedAt = typeof data.archivedAt === "string" && data.archivedAt ? data.archivedAt : undefined;
   return {
     currency: normalizeCurrency(data.currency),
     monthlyReportEnabled: data.monthlyReportEnabled !== false,
     categoriesPresetApplied: Boolean(data.categoriesPresetApplied),
     familyModeEnabled: Boolean(data.familyModeEnabled),
     businessDocument: typeof data.businessDocument === "string" ? data.businessDocument.replace(/\D/g, "").slice(0, 14) : undefined,
+    archivedAt,
   };
 }
 
@@ -82,6 +84,7 @@ function toWorkspace(uid: string, row: Record<string, unknown>): Workspace {
     name: String(row.name || raw.name || DEFAULT_NAMES[type]),
     type,
     isDefault: Boolean(row.is_default ?? raw.isDefault),
+    status: settings.archivedAt ? "archived" : "active",
     createdAt: String(row.created_at || raw.createdAt || new Date().toISOString()),
     updatedAt: String(row.updated_at || raw.updatedAt || new Date().toISOString()),
     settings,
@@ -106,6 +109,7 @@ function toWorkspaceRow(uid: string, workspace: Workspace) {
     name: workspace.name,
     type: workspace.type,
     isDefault: workspace.isDefault,
+    status: workspace.status || "active",
     settings: workspace.settings,
     createdAt: workspace.createdAt,
     updatedAt: workspace.updatedAt,
@@ -168,6 +172,10 @@ async function getWorkspaceRows(uid: string) {
     order: "is_default.desc,created_at.asc",
   });
   return rows.map((row) => toWorkspace(uid, row));
+}
+
+function isWorkspaceActive(workspace: Workspace) {
+  return workspace.status !== "archived" && !workspace.settings?.archivedAt;
 }
 
 async function getProfileSummary(uid: string) {
@@ -236,6 +244,40 @@ async function ensureFamilyOwnerIfNeeded(uid: string, workspace: Workspace) {
   });
 }
 
+async function clearFamilyAccess(uid: string, workspaceId: string, now: string) {
+  try {
+    await supabasePatchByFilters(
+      "workspace_members",
+      { workspace_uid: uid, workspace_id: workspaceId },
+      { member_status: "disabled", updated_at: now, raw: { status: "disabled", archivedAt: now } },
+    );
+    await supabasePatchByFilters(
+      "workspace_invitations",
+      { workspace_uid: uid, workspace_id: workspaceId },
+      { invitation_status: "revoked", updated_at: now, raw: { status: "revoked", archivedAt: now } },
+    );
+  } catch {
+    // Older installs may not have family tables yet.
+  }
+}
+
+async function deleteWorkspaceFinancialData(uid: string, workspaceId: string) {
+  const tables = ["transactions", "categories", "payment_cards", "piggy_banks", "piggy_bank_history"];
+  for (const table of tables) {
+    try {
+      await supabaseDeleteByFilters(table, { uid, workspace_id: workspaceId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || "");
+      if (!message.includes("workspace_id") && !message.includes("PGRST204")) throw error;
+    }
+  }
+  try {
+    await supabaseDeleteByFilters("user_settings", { uid, setting_key: `categories:${workspaceId}` });
+  } catch {
+    // Non-critical cleanup.
+  }
+}
+
 function buildWorkspace(uid: string, input: { name?: string; type?: unknown; isDefault?: boolean; settings?: WorkspaceSettings }, currentCount: number): Workspace {
   const type = normalizeWorkspaceType(parseType(input.type) || "personal");
   assertDocumentAllowed(type, input.settings);
@@ -275,12 +317,13 @@ export async function GET(request: NextRequest) {
                   filters: { uid: member.workspaceUid, source_id: member.workspaceId },
                   limit: 1,
                 });
-                return rows[0] ? toSharedWorkspace(rows[0], uid, member) : null;
+                const workspace = rows[0] ? toSharedWorkspace(rows[0], uid, member) : null;
+                return workspace && isWorkspaceActive(workspace) ? workspace : null;
               }),
           )
         : [];
     const workspaces = [...ownedWorkspaces, ...sharedRows.filter((workspace): workspace is Workspace => Boolean(workspace))];
-    const defaultWorkspace = workspaces.find((workspace) => workspace.isDefault) || null;
+    const defaultWorkspace = workspaces.find((workspace) => workspace.isDefault && isWorkspaceActive(workspace)) || null;
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json({ ok: true, workspaces, defaultWorkspace }, { status: 200 });
   } catch (error) {
@@ -319,17 +362,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_workspace_type" }, { status: 400 });
     }
     const current = await getWorkspaceRows(uid);
+    const activeCurrent = current.filter(isWorkspaceActive);
     const workspace = buildWorkspace(uid, { ...body, type }, current.length);
+    const workspaceToPersist = activeCurrent.length === 0 ? { ...workspace, isDefault: true } : workspace;
     await assertPlanCanUseWorkspace(uid, workspace.type);
-    const next = workspace.isDefault
-      ? [...current.map((item) => ({ ...item, isDefault: false, updatedAt: new Date().toISOString() })), workspace]
-      : [...current, workspace];
+    const next = workspaceToPersist.isDefault
+      ? [...current.map((item) => ({ ...item, isDefault: false, updatedAt: new Date().toISOString() })), workspaceToPersist]
+      : [...current, workspaceToPersist];
 
     await persistWorkspaceSet(uid, next);
-    await ensureFamilyOwnerIfNeeded(uid, workspace);
-    await applyCategoryPreset(uid, workspace.type, workspace.id);
+    await ensureFamilyOwnerIfNeeded(uid, workspaceToPersist);
+    await applyCategoryPreset(uid, workspaceToPersist.type, workspaceToPersist.id);
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
-    return NextResponse.json({ ok: true, workspace }, { status: 200 });
+    return NextResponse.json({ ok: true, workspace: workspaceToPersist }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     const status = getWorkspaceErrorStatus(message);
@@ -372,7 +417,7 @@ export async function PATCH(request: NextRequest) {
     const current = await getWorkspaceRows(uid);
 
     if (body.action === "ensureDefault") {
-      const existingDefault = current.find((workspace) => workspace.isDefault);
+      const existingDefault = current.find((workspace) => workspace.isDefault && isWorkspaceActive(workspace));
       if (existingDefault) {
         return NextResponse.json({ ok: true, defaultWorkspace: existingDefault }, { status: 200 });
       }
@@ -404,12 +449,19 @@ export async function PATCH(request: NextRequest) {
       await assertPlanCanUseWorkspace(uid, nextType);
     }
     const now = new Date().toISOString();
+    const nextSettings = parseSettings({ ...target.settings, ...body.settings });
+    const restoringArchived = Boolean(target.settings?.archivedAt) && body.settings && "archivedAt" in body.settings && !body.settings.archivedAt;
+    if (restoringArchived) {
+      await assertPlanCanUseWorkspace(uid, nextType);
+    }
+    const activeAfterRestore = current.filter((workspace) => workspace.id !== target.id && isWorkspaceActive(workspace));
     const updated: Workspace = {
       ...target,
       name: body.name?.trim() || target.name,
       type: nextType,
-      isDefault: typeof body.isDefault === "boolean" ? body.isDefault : target.isDefault,
-      settings: parseSettings({ ...target.settings, ...body.settings }),
+      isDefault: nextSettings.archivedAt ? false : typeof body.isDefault === "boolean" ? body.isDefault : restoringArchived && activeAfterRestore.length === 0 ? true : target.isDefault,
+      status: nextSettings.archivedAt ? "archived" : "active",
+      settings: nextSettings,
       updatedAt: now,
     };
     const next = current.map((workspace) =>
@@ -431,6 +483,91 @@ export async function PATCH(request: NextRequest) {
     const message = error instanceof Error ? error.message : "unknown_error";
     const status = getWorkspaceErrorStatus(message);
     apiLogger.error({ message: "workspaces_patch_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
+    await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
+    return NextResponse.json({ ok: false, error: message }, { status });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const meta = getRequestMeta(request);
+  const startedAt = Date.now();
+  try {
+    const rate = await checkRateLimit(request, { key: "api:workspaces:delete", max: 20, windowMs: 60_000 });
+    if (!rate.allowed) {
+      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    }
+
+    const acting = await resolveActingContext(request);
+    const approval = await ensureImpersonationWriteApproval({
+      request,
+      acting,
+      actionType: "workspaces:delete",
+      actionLabel: "Excluir ou arquivar perfil financeiro",
+    });
+    if (!approval.allowed) {
+      return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });
+    }
+
+    const uid = acting.actingUid;
+    const body = (await request.json()) as { id?: string; mode?: "archive" | "delete_data" };
+    const workspaceId = String(body.id || "").trim();
+    const mode = body.mode === "delete_data" ? "delete_data" : "archive";
+    if (!workspaceId) {
+      return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    }
+
+    const current = await getWorkspaceRows(uid);
+    const target = current.find((workspace) => workspace.id === workspaceId);
+    if (!target || target.membership) {
+      return NextResponse.json({ ok: false, error: "workspace_not_found" }, { status: 404 });
+    }
+
+    const activeOthers = current.filter((workspace) => workspace.id !== workspaceId && isWorkspaceActive(workspace) && !workspace.membership);
+    if (activeOthers.length === 0) {
+      return NextResponse.json({ ok: false, error: "Crie ou restaure outro perfil antes de remover este." }, { status: 400 });
+    }
+
+    const now = new Date().toISOString();
+    if (target.type === "family") {
+      await clearFamilyAccess(uid, workspaceId, now);
+    }
+
+    if (mode === "delete_data") {
+      await deleteWorkspaceFinancialData(uid, workspaceId);
+      await supabaseDeleteByFilters("workspaces", { uid, source_id: workspaceId });
+      const fallbackDefault = activeOthers[0];
+      const next = current
+        .filter((workspace) => workspace.id !== workspaceId)
+        .map((workspace) => {
+          if (workspace.id === fallbackDefault.id) return { ...workspace, isDefault: true, updatedAt: now };
+          return workspace.isDefault ? { ...workspace, isDefault: false, updatedAt: now } : workspace;
+        });
+      await persistWorkspaceSet(uid, next);
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+      return NextResponse.json({ ok: true, mode, defaultWorkspace: fallbackDefault }, { status: 200 });
+    }
+
+    const archived: Workspace = {
+      ...target,
+      isDefault: false,
+      status: "archived",
+      settings: { ...target.settings, archivedAt: now },
+      updatedAt: now,
+    };
+    const fallbackDefault = activeOthers.find((workspace) => workspace.isDefault) || activeOthers[0];
+    const next = current.map((workspace) => {
+      if (workspace.id === archived.id) return archived;
+      if (workspace.id === fallbackDefault.id) return { ...workspace, isDefault: true, updatedAt: now };
+      return workspace.isDefault ? { ...workspace, isDefault: false, updatedAt: now } : workspace;
+    });
+    await persistWorkspaceSet(uid, next);
+
+    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+    return NextResponse.json({ ok: true, mode, workspace: archived, defaultWorkspace: fallbackDefault }, { status: 200 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown_error";
+    const status = getWorkspaceErrorStatus(message);
+    apiLogger.error({ message: "workspaces_delete_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }

@@ -127,7 +127,7 @@ export function ReportClient() {
   const t = useTranslations("reports");
   const { userProfile, privacyMode } = useAuth();
   const { transactions, loading: transactionsLoading } = useTransactions();
-  const { workspaces, defaultWorkspace, loading: workspacesLoading } = useWorkspaces();
+  const { activeWorkspaces, defaultWorkspace, loading: workspacesLoading } = useWorkspaces();
   const { status: onboardingStatus, completeTour, isActive: isOnboardingActive } = useOnboarding();
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("default");
@@ -142,9 +142,9 @@ export function ReportClient() {
   });
 
   const workspaceOptions = useMemo(() => {
-    const byId = new Map(workspaces.map((workspace) => [workspace.id, workspace]));
+    const byId = new Map(activeWorkspaces.map((workspace) => [workspace.id, workspace]));
     return Array.from(byId.values());
-  }, [workspaces]);
+  }, [activeWorkspaces]);
 
   useEffect(() => {
     if (selectedWorkspaceId !== "default") return;

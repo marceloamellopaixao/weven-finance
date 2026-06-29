@@ -12,6 +12,7 @@ import {
   subscribeToActiveWorkspaceChanged,
   subscribeToWorkspacesChanged,
   updateWorkspace as updateWorkspaceRequest,
+  deleteWorkspace as deleteWorkspaceRequest,
 } from "@/services/workspaceService";
 import type { CreateWorkspaceInput, UpdateWorkspaceInput, Workspace } from "@/types/workspace";
 
@@ -37,10 +38,11 @@ export function useWorkspaces() {
     try {
       const data = await getUserWorkspaces();
       setWorkspaces(data);
+      const activeData = data.filter((workspace) => workspace.status !== "archived");
       const storedActiveId = getActiveWorkspaceId();
-      const nextActiveId = storedActiveId && data.some((workspace) => workspace.id === storedActiveId)
+      const nextActiveId = storedActiveId && activeData.some((workspace) => workspace.id === storedActiveId)
         ? storedActiveId
-        : data.find((workspace) => workspace.isDefault)?.id || data[0]?.id || null;
+        : activeData.find((workspace) => workspace.isDefault)?.id || activeData[0]?.id || null;
       setActiveWorkspaceIdState(nextActiveId);
       if (nextActiveId && nextActiveId !== storedActiveId) {
         setActiveWorkspaceIdRequest(nextActiveId);
@@ -87,9 +89,11 @@ export function useWorkspaces() {
   );
 
   const setActiveWorkspace = useCallback((id: string) => {
+    const target = workspaces.find((workspace) => workspace.id === id);
+    if (!target || target.status === "archived") return;
     setActiveWorkspaceIdRequest(id);
     setActiveWorkspaceIdState(id);
-  }, []);
+  }, [workspaces]);
 
   const updateWorkspace = useCallback(
     async (input: UpdateWorkspaceInput) => {
@@ -100,15 +104,25 @@ export function useWorkspaces() {
     [refresh]
   );
 
-  const defaultWorkspace = workspaces.find((workspace) => workspace.isDefault) || null;
+  const activeWorkspaces = workspaces.filter((workspace) => workspace.status !== "archived");
+  const defaultWorkspace = activeWorkspaces.find((workspace) => workspace.isDefault) || null;
   const activeWorkspace =
-    workspaces.find((workspace) => workspace.id === activeWorkspaceId) ||
+    activeWorkspaces.find((workspace) => workspace.id === activeWorkspaceId) ||
     defaultWorkspace ||
-    workspaces[0] ||
+    activeWorkspaces[0] ||
     null;
+
+  const deleteWorkspace = useCallback(
+    async (input: { id: string; mode: "archive" | "delete_data" }) => {
+      await deleteWorkspaceRequest(input);
+      await refresh();
+    },
+    [refresh]
+  );
 
   return {
     workspaces,
+    activeWorkspaces,
     defaultWorkspace,
     activeWorkspace,
     activeWorkspaceId: activeWorkspace?.id || null,
@@ -116,6 +130,7 @@ export function useWorkspaces() {
     error,
     createWorkspace,
     updateWorkspace,
+    deleteWorkspace,
     setDefaultWorkspace,
     setActiveWorkspace,
     refresh,
