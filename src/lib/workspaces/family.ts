@@ -287,3 +287,43 @@ export function canManageFamilyMembers(member: WorkspaceMember | null | undefine
 export function canViewFamilyMembers(member: WorkspaceMember | null | undefined) {
   return !member || hasFamilyPermission(member, "family.view_members") || canManageFamilyMembers(member);
 }
+
+function isOwnFamilyResource(member: WorkspaceMember | null | undefined, createdByUid?: string | null) {
+  return Boolean(member?.memberUid && createdByUid && member.memberUid === createdByUid);
+}
+
+export function canViewFamilyCard(member: WorkspaceMember | null | undefined, createdByUid?: string | null) {
+  if (!member) return true;
+  if (hasFamilyPermission(member, "cards.view_all")) return true;
+  return hasFamilyPermission(member, "cards.view_own") && isOwnFamilyResource(member, createdByUid);
+}
+
+export function canManageFamilyCard(member: WorkspaceMember | null | undefined, createdByUid?: string | null) {
+  if (!member) return true;
+  if (hasFamilyPermission(member, "cards.manage_all")) return true;
+  return hasFamilyPermission(member, "cards.manage_own") && isOwnFamilyResource(member, createdByUid);
+}
+
+export function canViewFamilyPiggyBank(member: WorkspaceMember | null | undefined, createdByUid?: string | null) {
+  if (!member) return true;
+  if (hasFamilyPermission(member, "piggy_banks.view_all")) return true;
+  return hasFamilyPermission(member, "piggy_banks.view_own") && isOwnFamilyResource(member, createdByUid);
+}
+
+export function canManageFamilyPiggyBank(member: WorkspaceMember | null | undefined, createdByUid?: string | null) {
+  if (!member) return true;
+  if (hasFamilyPermission(member, "piggy_banks.manage_all")) return true;
+  return hasFamilyPermission(member, "piggy_banks.manage_own") && isOwnFamilyResource(member, createdByUid);
+}
+
+export function canCreateFamilyPiggyBank(member: WorkspaceMember | null | undefined) {
+  return !member || hasFamilyPermission(member, "piggy_banks.manage_own") || hasFamilyPermission(member, "piggy_banks.manage_all");
+}
+
+export function canViewFamilySettings(member: WorkspaceMember | null | undefined) {
+  return !member || hasFamilyPermission(member, "settings.view");
+}
+
+export function canManageFamilyBilling(member: WorkspaceMember | null | undefined) {
+  return !member || hasFamilyPermission(member, "settings.manage_billing");
+}

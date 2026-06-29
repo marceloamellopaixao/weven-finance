@@ -64,7 +64,7 @@ export function PricingPlans() {
         <p className="text-center text-sm font-semibold text-primary">Melhor custo-benefício. Economize até 2 meses.</p>
       ) : null}
 
-      <div className="grid items-stretch gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid items-stretch gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
         {plans.map((plan) => {
           const featured = plan.id === "premium";
           const price = getPlanPrice(plan, interval);
@@ -80,24 +80,31 @@ export function PricingPlans() {
           return (
             <Card
               key={plan.id}
-              className={`relative overflow-hidden rounded-2xl border bg-card/90 shadow-sm transition-all ${
+              className={`relative flex h-full min-h-[520px] overflow-hidden rounded-2xl border bg-card/90 shadow-sm transition-all ${
                 featured ? "border-primary/55 shadow-xl shadow-primary/10" : "border-border/80 hover:border-primary/35"
               }`}
             >
-              {plan.badge ? (
-                <div className="absolute right-4 top-4">
-                  <Badge className="rounded-full bg-primary/10 text-primary hover:bg-primary/15">{plan.badge}</Badge>
+              <CardHeader className="min-h-[158px] space-y-4 p-6">
+                <div className="flex min-h-7 flex-wrap items-center gap-2">
+                  {plan.badge ? (
+                    <Badge className="rounded-full bg-primary/10 text-primary hover:bg-primary/15">{plan.badge}</Badge>
+                  ) : null}
+                  {featured ? (
+                    <Badge variant="outline" className="rounded-full border-primary/30 text-primary">
+                      Mais escolhido
+                    </Badge>
+                  ) : null}
                 </div>
-              ) : null}
-              <CardHeader className="p-6 pr-28">
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  {plan.publicName}
-                  {featured ? <Medal className="h-5 w-5 text-primary" /> : null}
-                </CardTitle>
-                <CardDescription className="min-h-12">{plan.description}</CardDescription>
+                <div className="space-y-2">
+                  <CardTitle className="flex min-h-14 items-start gap-2 text-xl leading-tight">
+                    <span>{plan.publicName}</span>
+                    {featured ? <Medal className="mt-0.5 h-5 w-5 shrink-0 text-primary" /> : null}
+                  </CardTitle>
+                  <CardDescription className="min-h-[60px] leading-5">{plan.description}</CardDescription>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-5 p-6 pt-0">
-                <div>
+              <CardContent className="flex flex-1 flex-col space-y-5 p-6 pt-0">
+                <div className="min-h-[92px]">
                   <p className="text-3xl font-black tracking-tight text-foreground">{chargeText}</p>
                   {equivalent !== null && hasYearlyPrice ? (
                     <p className="mt-1 text-sm font-medium text-muted-foreground">
@@ -105,7 +112,7 @@ export function PricingPlans() {
                     </p>
                   ) : null}
                 </div>
-                <ul className="space-y-2 text-sm text-muted-foreground">
+                <ul className="min-h-[168px] flex-1 space-y-2 text-sm text-muted-foreground">
                   {plan.benefits.slice(0, 6).map((feature) => (
                     <li key={feature} className="flex gap-2">
                       <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -114,7 +121,7 @@ export function PricingPlans() {
                   ))}
                 </ul>
               </CardContent>
-              <CardFooter className="p-6 pt-0">
+              <CardFooter className="mt-auto p-6 pt-0">
                 <Button
                   className="h-11 w-full rounded-xl font-bold"
                   variant={featured ? "default" : "outline"}

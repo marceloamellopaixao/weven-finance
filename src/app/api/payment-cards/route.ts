@@ -14,6 +14,7 @@ import {
   supabaseUpsertRows,
 } from "@/services/supabase/admin";
 import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
+import { canManageFamilyCard, canViewFamilyCard } from "@/lib/workspaces/family";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +48,12 @@ function getRowWorkspaceId(row: Record<string, unknown>) {
   const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
   const secureRaw = readSecureCardPayload(row.raw) || {};
   return String(row.workspace_id || raw.workspaceId || secureRaw.workspaceId || "");
+}
+
+function getRowCreatedByUid(row: Record<string, unknown>) {
+  const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const secureRaw = readSecureCardPayload(row.raw) || {};
+  return String(row.created_by_uid || raw.createdBy || secureRaw.createdBy || "");
 }
 
 function sanitizeBankName(value: unknown) {
@@ -188,7 +195,9 @@ export async function GET(request: NextRequest) {
     const { actingUid } = await resolveActingContext(request);
     const workspaceContext = await resolveActiveWorkspaceContext(actingUid, request.nextUrl.searchParams.get("workspaceId"));
     const rows = await getCards(workspaceContext.ownerUid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
-    const cards = rows.map(toClientCard);
+    const cards = rows
+      .filter((row) => canViewFamilyCard(workspaceContext.member, getRowCreatedByUid(row)))
+      .map(toClientCard);
 
     cards.sort((a, b) =>
       String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || ""))
@@ -219,6 +228,9 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as Partial<PaymentCard> & { workspaceId?: string };
     const workspaceContext = await resolveActiveWorkspaceContext(acting.actingUid, body.workspaceId);
+    if (!canManageFamilyCard(workspaceContext.member, acting.actingUid)) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
     const uid = workspaceContext.ownerUid;
     const [existingCards, planContext] = await Promise.all([
       getCards(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows),
@@ -337,6 +349,9 @@ export async function PATCH(request: NextRequest) {
     if (!existing) {
       return NextResponse.json({ ok: false, error: "card_not_found" }, { status: 404 });
     }
+    if (!canManageFamilyCard(workspaceContext.member, getRowCreatedByUid(existing))) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
 
     const raw = readSecureCardPayload(existing.raw);
     const merged: Record<string, unknown> = {
@@ -421,6 +436,14 @@ export async function DELETE(request: NextRequest) {
     const uid = workspaceContext.ownerUid;
     if (!cardId) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    }
+    const rows = await getCards(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
+    const existing = rows.find((row) => String(row.source_id || "") === cardId);
+    if (!existing) {
+      return NextResponse.json({ ok: false, error: "card_not_found" }, { status: 404 });
+    }
+    if (!canManageFamilyCard(workspaceContext.member, getRowCreatedByUid(existing))) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
     const planContext = await getUserPlanContext(uid);
     if (

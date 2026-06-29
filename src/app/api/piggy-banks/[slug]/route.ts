@@ -17,6 +17,7 @@ import {
 } from "@/lib/secure-store/piggy-banks";
 import { supabaseDeleteByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
+import { canManageFamilyPiggyBank, canViewFamilyPiggyBank } from "@/lib/workspaces/family";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,12 @@ function getPiggyWorkspaceId(row: Record<string, unknown>) {
   const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
   const secureRaw = readSecurePiggyPayload(row.raw);
   return String(row.workspace_id || raw.workspaceId || secureRaw.workspaceId || "");
+}
+
+function getPiggyCreatedByUid(row: Record<string, unknown>) {
+  const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const secureRaw = readSecurePiggyPayload(row.raw);
+  return String(row.created_by_uid || raw.createdBy || secureRaw.createdBy || "");
 }
 
 function belongsToWorkspace(row: Record<string, unknown>, workspaceId?: string | null, includeLegacyRows = true) {
@@ -246,6 +253,9 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ sl
     if (!loaded) {
       return NextResponse.json({ ok: false, error: "piggy_bank_not_found" }, { status: 404 });
     }
+    if (!canViewFamilyPiggyBank(workspaceContext.member, getPiggyCreatedByUid(loaded.piggy))) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
     return NextResponse.json({ ok: true, piggyBank: loaded.detail }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
@@ -297,6 +307,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
     const loaded = await loadPiggyBank(uid, safeSlug, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
     if (!loaded) {
       return NextResponse.json({ ok: false, error: "piggy_bank_not_found" }, { status: 404 });
+    }
+    if (!canManageFamilyPiggyBank(workspaceContext.member, getPiggyCreatedByUid(loaded.piggy))) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
     const nowIso = new Date().toISOString();
@@ -528,6 +541,9 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     const loaded = await loadPiggyBank(uid, safeSlug, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
     if (!loaded) {
       return NextResponse.json({ ok: false, error: "piggy_bank_not_found" }, { status: 404 });
+    }
+    if (!canManageFamilyPiggyBank(workspaceContext.member, getPiggyCreatedByUid(loaded.piggy))) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
     const nowIso = new Date().toISOString();

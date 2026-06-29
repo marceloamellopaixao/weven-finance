@@ -102,6 +102,13 @@ export async function updateFamilyMember(input: {
   return payload.member;
 }
 
+export async function closeFamilyWorkspace(workspaceId: string) {
+  const response = await apiFetch(`/api/workspaces/family?workspaceId=${encodeURIComponent(workspaceId)}`, {
+    method: "DELETE",
+  });
+  await readPayload<{ ok: true }>(response);
+}
+
 export async function acceptFamilyInvitation() {
   const response = await apiFetch("/api/workspaces/family/accept", {
     method: "POST",

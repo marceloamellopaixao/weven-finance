@@ -18,7 +18,7 @@ import {
   canViewFamilyMembers,
   normalizeFamilyPermissions,
 } from "@/lib/workspaces/family";
-import { getFamilyWorkspace, inviteFamilyMember, resendFamilyInvitation, resendFamilyMemberAccess, updateFamilyMember } from "@/services/familyWorkspaceService";
+import { closeFamilyWorkspace, getFamilyWorkspace, inviteFamilyMember, resendFamilyInvitation, resendFamilyMemberAccess, updateFamilyMember } from "@/services/familyWorkspaceService";
 import type { FamilyPermission, FamilyRole, Workspace, WorkspaceInvitation, WorkspaceMember } from "@/types/workspace";
 
 const ROLE_OPTIONS = Object.keys(FAMILY_ROLE_LABELS) as FamilyRole[];
@@ -106,6 +106,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
   const [isInviting, setIsInviting] = useState(false);
   const [resendingInvitationId, setResendingInvitationId] = useState<string | null>(null);
   const [resendingMemberUid, setResendingMemberUid] = useState<string | null>(null);
+  const [isClosingFamily, setIsClosingFamily] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const mayManage = canManage(familyWorkspace);
@@ -121,7 +122,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
       setMembers(data.members);
       setInvitations(data.invitations);
     } catch {
-      setMessage("Não foi possível carregar os membros agora. Tente novamente em alguns instantes.");
+      setMessage("NÃ£o foi possÃ­vel carregar os membros agora. Tente novamente em alguns instantes.");
     } finally {
       setIsLoadingFamily(false);
     }
@@ -155,12 +156,12 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
       setTemporaryPassword("");
       setMessage(
         result.emailSent
-          ? "Convite enviado. Peça para a pessoa verificar a caixa de entrada e o lixo eletrônico."
-          : "Acesso criado. Compartilhe a senha temporária com a pessoa por um canal seguro.",
+          ? "Convite enviado. PeÃ§a para a pessoa verificar a caixa de entrada e o lixo eletrÃ´nico."
+          : "Acesso criado. Compartilhe a senha temporÃ¡ria com a pessoa por um canal seguro.",
       );
       await refresh();
     } catch {
-      setMessage("Não foi possível enviar o convite agora. Revise o e-mail e tente novamente.");
+      setMessage("NÃ£o foi possÃ­vel enviar o convite agora. Revise o e-mail e tente novamente.");
     } finally {
       setIsInviting(false);
     }
@@ -191,7 +192,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
   const handleRemoveMember = async (member: WorkspaceMember) => {
     if (!familyWorkspace) return;
     const confirmed = window.confirm(
-      `Remover ${member.displayName || member.email} da família? A conta da pessoa não será apagada.`
+      `Remover ${member.displayName || member.email} da famÃ­lia? A conta da pessoa nÃ£o serÃ¡ apagada.`
     );
     if (!confirmed) return;
     const updated = await updateFamilyMember({
@@ -200,7 +201,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
       status: "disabled",
     });
     setMembers((current) => current.filter((item) => item.memberUid !== updated.memberUid));
-      setMessage("Membro removido da família.");
+      setMessage("Membro removido da famÃ­lia.");
   };
 
   const handleResendInvitation = async (invitation: WorkspaceInvitation) => {
@@ -213,9 +214,9 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
         invitationId: invitation.id,
       });
       setInvitations((current) => current.map((item) => (item.id === result.invitation.id ? result.invitation : item)));
-      setMessage("Convite reenviado. Peça para a pessoa verificar a caixa de entrada e o lixo eletrônico.");
+      setMessage("Convite reenviado. PeÃ§a para a pessoa verificar a caixa de entrada e o lixo eletrÃ´nico.");
     } catch {
-      setMessage("Não foi possível reenviar o convite agora. Tente novamente em alguns instantes.");
+      setMessage("NÃ£o foi possÃ­vel reenviar o convite agora. Tente novamente em alguns instantes.");
     } finally {
       setResendingInvitationId(null);
     }
@@ -230,11 +231,30 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
         workspaceId: familyWorkspace.id,
         memberUid: member.memberUid,
       });
-      setMessage("Acesso reenviado. Peça para a pessoa verificar a caixa de entrada e o lixo eletrônico.");
+      setMessage("Acesso reenviado. PeÃ§a para a pessoa verificar a caixa de entrada e o lixo eletrÃ´nico.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Não foi possível reenviar o acesso.");
+      setMessage(error instanceof Error ? error.message : "NÃ£o foi possÃ­vel reenviar o acesso.");
     } finally {
       setResendingMemberUid(null);
+    }
+  };
+
+  const handleCloseFamily = async () => {
+    if (!familyWorkspace || familyWorkspace.membership) return;
+    const confirmed = window.confirm(
+      "Encerrar este perfil FamÃ­lia? Os membros perderÃ£o o acesso compartilhado, os convites serÃ£o cancelados e os dados ficarÃ£o somente com vocÃª."
+    );
+    if (!confirmed) return;
+    setIsClosingFamily(true);
+    setMessage(null);
+    try {
+      await closeFamilyWorkspace(familyWorkspace.id);
+      setMessage("Perfil FamÃ­lia encerrado. Os dados continuam no seu perfil financeiro.");
+      window.dispatchEvent(new Event("wevenfinance:workspaces:changed"));
+    } catch {
+      setMessage("NÃ£o foi possÃ­vel encerrar a famÃ­lia agora. Tente novamente em alguns instantes.");
+    } finally {
+      setIsClosingFamily(false);
     }
   };
 
@@ -252,8 +272,8 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
     return (
       <Card className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border)">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><UsersRound className="h-5 w-5" /> Perfil Família / Casa</CardTitle>
-          <CardDescription>Crie um perfil Família / Casa para convidar e gerenciar seus familiares.</CardDescription>
+          <CardTitle className="flex items-center gap-2"><UsersRound className="h-5 w-5" /> Perfil FamÃ­lia / Casa</CardTitle>
+          <CardDescription>Crie um perfil FamÃ­lia / Casa para convidar e gerenciar seus familiares.</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -266,15 +286,15 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle className="flex items-center gap-2"><UsersRound className="h-5 w-5" /> {familyWorkspace.name}</CardTitle>
-              <CardDescription>Convide familiares, defina papéis e escolha o que cada pessoa pode acessar.</CardDescription>
+              <CardDescription>Convide familiares, defina papÃ©is e escolha o que cada pessoa pode acessar.</CardDescription>
             </div>
             <Badge variant="outline" className="gap-1 border-primary/25 bg-primary/10 text-primary">
-              <ShieldCheck className="h-3 w-3" /> Família
+              <ShieldCheck className="h-3 w-3" /> FamÃ­lia
             </Badge>
           </div>
         </CardHeader>
         {!mayViewMembers ? (
-          <CardContent className="text-sm text-muted-foreground">Você pode usar este perfil, mas não tem permissão para gerenciar membros.</CardContent>
+          <CardContent className="text-sm text-muted-foreground">VocÃª pode usar este perfil, mas nÃ£o tem permissÃ£o para gerenciar membros.</CardContent>
         ) : (
           <CardContent className="space-y-5">
             {mayManage ? (
@@ -312,14 +332,14 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="self_setup">Enviar convite para criar senha</SelectItem>
-                        <SelectItem value="temporary_password">Definir senha temporária</SelectItem>
+                        <SelectItem value="temporary_password">Definir senha temporÃ¡ria</SelectItem>
                         <SelectItem value="auto_password">Gerar senha automaticamente</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   {inviteMode === "temporary_password" ? (
                     <div className="space-y-2">
-                      <Label htmlFor="family-temp-password">Senha temporária</Label>
+                      <Label htmlFor="family-temp-password">Senha temporÃ¡ria</Label>
                       <Input id="family-temp-password" type="password" value={temporaryPassword} onChange={(event) => setTemporaryPassword(event.target.value)} />
                     </div>
                   ) : null}
@@ -331,9 +351,9 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
 
                 <div className="rounded-2xl border border-color:var(--app-panel-border) p-4">
                   <div className="mb-3">
-                    <p className="text-sm font-semibold">Permissões do convite</p>
+                    <p className="text-sm font-semibold">PermissÃµes do convite</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Escolha o que esta pessoa poderá ver ou alterar.
+                      Escolha o que esta pessoa poderÃ¡ ver ou alterar.
                     </p>
                   </div>
                   <PermissionMatrix
@@ -356,7 +376,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold">{invitation.email}</p>
                         <p className="text-xs text-muted-foreground">
-                          {FAMILY_ROLE_LABELS[invitation.role]} ainda não aceitou
+                          {FAMILY_ROLE_LABELS[invitation.role]} ainda nÃ£o aceitou
                         </p>
                       </div>
                       <Button
@@ -390,7 +410,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="truncate text-sm font-semibold">{member.displayName || member.email}</p>
                           {isOwnerManager ? (
-                            <Badge variant="outline" className="border-primary/30 bg-primary/10 text-[10px] text-primary">Dono da família</Badge>
+                            <Badge variant="outline" className="border-primary/30 bg-primary/10 text-[10px] text-primary">Dono da famÃ­lia</Badge>
                           ) : null}
                           {isInvitedManager ? (
                             <Badge variant="outline" className="border-sky-300/60 bg-sky-500/10 text-[10px] text-sky-700">Gestor</Badge>
@@ -411,10 +431,12 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                               {ROLE_OPTIONS.map((option) => <SelectItem key={option} value={option}>{FAMILY_ROLE_LABELS[option]}</SelectItem>)}
                             </SelectContent>
                           </Select>
-                          <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl" disabled={resendingMemberUid === member.memberUid} onClick={() => void handleResendMemberAccess(member)}>
-                            {resendingMemberUid === member.memberUid ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MailPlus className="mr-2 h-4 w-4" />}
-                            Reenviar acesso
-                          </Button>
+                          {member.status === "pending" ? (
+                            <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl" disabled={resendingMemberUid === member.memberUid} onClick={() => void handleResendMemberAccess(member)}>
+                              {resendingMemberUid === member.memberUid ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MailPlus className="mr-2 h-4 w-4" />}
+                              Reenviar convite
+                            </Button>
+                          ) : null}
                           <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => void handleRemoveMember(member)}>
                             <Trash2 className="mr-2 h-4 w-4" />
                             Remover
@@ -425,20 +447,20 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                       )}
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      {getVisiblePermissions(member.permissions).length} permissões configuradas.
+                      {getVisiblePermissions(member.permissions).length} permissÃµes configuradas.
                     </p>
                     {isOwnerManager ? (
                       <div className="mt-3 rounded-xl border border-primary/20 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
-                        O dono da família tem acesso completo para manter o perfil seguro.
+                        O dono da famÃ­lia tem acesso completo para manter o perfil seguro.
                       </div>
                     ) : mayManage ? (
                       <details onToggle={toggleExpanded} className="mt-3 rounded-xl border border-border/70 bg-background/60">
                         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground">
                           <span className="flex items-center gap-2">
                             <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                            Editar permissões
+                            Editar permissÃµes
                           </span>
-                          {/* Ao clicar o botão abrir ele fica fechar */}
+                          {/* Ao clicar o botÃ£o abrir ele fica fechar */}
                           <span className="text-[10px] font-medium text-primary">{isExpanded ? 'Fechar' : 'Abrir'}</span>
                         </summary>
                         <div className="border-t border-border/60 p-3">
@@ -463,28 +485,28 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
       <Card className="app-panel-soft rounded-3xl border border-color:var(--app-panel-border)">
         <CardContent className="flex items-start gap-3 p-5 text-sm text-muted-foreground">
           <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-          As senhas e links de acesso são protegidos. Ninguém da família consegue ver a senha de outra pessoa.
+          As senhas e links de acesso sÃ£o protegidos. NinguÃ©m da famÃ­lia consegue ver a senha de outra pessoa.
         </CardContent>
       </Card>
-
-      <Card className="app-panel-soft rounded-3xl border border-amber-300/60">
-        <CardContent className="space-y-3 p-5 text-sm text-muted-foreground">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            <div>
-              <p className="font-semibold text-foreground">Encerrar família</p>
-              <p className="mt-1">
-                Essa opção ainda não está disponível. 
-                <br />
-                Por enquanto, você pode remover membros individualmente.
-              </p>
+      {!familyWorkspace.membership ? (
+        <Card className="app-panel-soft rounded-3xl border border-amber-300/60">
+          <CardContent className="space-y-3 p-5 text-sm text-muted-foreground">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <div>
+                <p className="font-semibold text-foreground">Encerrar famÃ­lia</p>
+                <p className="mt-1">
+                  Remove o acesso dos membros e cancela convites pendentes. Os dados financeiros continuam com vocÃª.
+                </p>
+              </div>
             </div>
-          </div>
-          <Button type="button" variant="outline" className="rounded-xl border-amber-300 text-amber-700" disabled>
-            Indisponível no momento
-          </Button>
-        </CardContent>
-      </Card>
+            <Button type="button" variant="outline" className="rounded-xl border-amber-300 text-amber-700" disabled={isClosingFamily} onClick={() => void handleCloseFamily()}>
+              {isClosingFamily ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Encerrar famÃ­lia
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

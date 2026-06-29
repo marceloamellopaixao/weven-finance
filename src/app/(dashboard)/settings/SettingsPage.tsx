@@ -34,7 +34,7 @@ import {
   UsersRound,
   WalletCards,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import { requestOwnAccountDeletion, updateOwnProfile } from "@/services/userService";
 import { rememberAccountDeletionRequest } from "@/lib/account-deletion/client";
 import { getKeyFingerprint } from "@/lib/crypto";
@@ -60,7 +60,7 @@ import { getPublicPlans } from "@/lib/plans/catalog";
 import type { UpgradePlan } from "@/services/billing/checkoutIntent";
 import { useTranslations } from "@/i18n/T";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
-import { canViewFamilyMembers } from "@/lib/workspaces/family";
+import { canManageFamilyBilling, canViewFamilyMembers } from "@/lib/workspaces/family";
 import { FamilyWorkspacePanel } from "@/components/workspaces/FamilyWorkspacePanel";
 import { WorkspaceSettingsPanel } from "@/components/workspaces/WorkspaceSettingsPanel";
 
@@ -102,7 +102,7 @@ export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode, refreshProfile } = useAuth();
   const { completeTour, isActive: isOnboardingActive, loading: onboardingLoading } = useOnboarding();
   const { appearancePreferences, appearanceLoading, updateAppearance } = useAppearance();
-  const { workspaces, loading: workspacesLoading } = useWorkspaces();
+  const { workspaces, activeWorkspace, loading: workspacesLoading } = useWorkspaces();
   const { isImpersonating } = useImpersonation();
   const { plans } = usePlans();
   const currency = usePreferredCurrency();
@@ -170,6 +170,9 @@ export default function SettingsPage() {
     if (workspace.type !== "family" && !workspace.settings?.familyModeEnabled && !workspace.membership) return false;
     return !workspace.membership || canViewFamilyMembers(workspace.membership);
   });
+  const canOpenBillingSettings = !activeWorkspace?.membership || canManageFamilyBilling(activeWorkspace.membership);
+  const canOpenSecuritySettings = !activeWorkspace?.membership || activeWorkspace.membership.permissions.includes("settings.manage_security");
+  const settingsTabCount = 3 + (canOpenFamilyWorkspaceSettings ? 1 : 0) + (canOpenBillingSettings ? 1 : 0) + (canOpenSecuritySettings ? 1 : 0);
 
   usePlatformTour({
     route: "settings",
@@ -244,6 +247,9 @@ export default function SettingsPage() {
   };
 
   const handleTabChange = (tab: "account" | "profiles" | "family" | "billing" | "security" | "help") => {
+    if (tab === "family" && !canOpenFamilyWorkspaceSettings) return;
+    if (tab === "billing" && !canOpenBillingSettings) return;
+    if (tab === "security" && !canOpenSecuritySettings) return;
     setActiveTab(tab);
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", tab);
@@ -659,10 +665,14 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (workspacesLoading) return;
-    if (activeTab === "family" && !canOpenFamilyWorkspaceSettings) {
+    if (
+      (activeTab === "family" && !canOpenFamilyWorkspaceSettings) ||
+      (activeTab === "billing" && !canOpenBillingSettings) ||
+      (activeTab === "security" && !canOpenSecuritySettings)
+    ) {
       setActiveTab("account");
     }
-  }, [activeTab, canOpenFamilyWorkspaceSettings, workspacesLoading]);
+  }, [activeTab, canOpenBillingSettings, canOpenFamilyWorkspaceSettings, canOpenSecuritySettings, workspacesLoading]);
 
   return (
     <div className="min-h-screen p-3 font-sans md:p-8 pb-20">
@@ -685,7 +695,7 @@ export default function SettingsPage() {
 
         {/* Navegação de Abas Personalizada */}
         <div className={`${fadeInUp} delay-150 space-y-6`}>
-          <div id="tour-settings-tabs" className={`app-panel-subtle grid min-w-full w-full grid-cols-2 gap-1 rounded-2xl border p-1.5 shadow-sm ${canOpenFamilyWorkspaceSettings ? "sm:grid-cols-6" : "sm:grid-cols-5"}`}>
+          <div id="tour-settings-tabs" className="app-panel-subtle grid min-w-full w-full grid-cols-2 gap-1 rounded-2xl border p-1.5 shadow-sm sm:grid-cols-[repeat(var(--settings-tab-count),minmax(0,1fr))]" style={{ "--settings-tab-count": settingsTabCount } as CSSProperties & Record<"--settings-tab-count", number>}>
             <button id="tour-settings-account-tab" type="button" aria-pressed={activeTab === "account"} onClick={() => handleTabChange("account")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "account" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <User className="h-4 w-4" /> {t("tabs.account")}
             </button>
@@ -697,12 +707,16 @@ export default function SettingsPage() {
                 <UsersRound className="h-4 w-4" /> Família
               </button>
             ) : null}
-            <button id="tour-settings-billing-tab" type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "billing" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
-              <CreditCard className="h-4 w-4" /> {t("tabs.billing")}
-            </button>
-            <button id="tour-settings-security-tab" type="button" aria-pressed={activeTab === "security"} onClick={() => handleTabChange("security")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "security" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
-              <ShieldCheck className="h-4 w-4" /> {t("tabs.security")}
-            </button>
+            {canOpenBillingSettings ? (
+              <button id="tour-settings-billing-tab" type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "billing" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+                <CreditCard className="h-4 w-4" /> {t("tabs.billing")}
+              </button>
+            ) : null}
+            {canOpenSecuritySettings ? (
+              <button id="tour-settings-security-tab" type="button" aria-pressed={activeTab === "security"} onClick={() => handleTabChange("security")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "security" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+                <ShieldCheck className="h-4 w-4" /> {t("tabs.security")}
+              </button>
+            ) : null}
             <button id="tour-settings-help-tab" type="button" aria-pressed={activeTab === "help"} onClick={() => handleTabChange("help")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "help" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <HelpCircle className="h-4 w-4" /> {t("tabs.help")}
             </button>

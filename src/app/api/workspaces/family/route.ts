@@ -21,7 +21,7 @@ import {
   toWorkspaceInvitation,
   toWorkspaceMember,
 } from "@/lib/workspaces/server";
-import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
+import { supabasePatchByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { getSupabaseServiceClient, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
 import { readSecureProfilePayload, writeSecureProfilePayload } from "@/lib/secure-store/profile";
 import type { FamilyRole, WorkspaceInvitation, WorkspaceMember } from "@/types/workspace";
@@ -558,6 +558,81 @@ export async function PATCH(request: NextRequest) {
     const message = error instanceof Error ? error.message : "unknown_error";
     const status = getFamilyErrorStatus(message);
     apiLogger.error({ message: "workspaces_family_patch_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
+    await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
+    return NextResponse.json({ ok: false, error: message }, { status });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const meta = getRequestMeta(request);
+  const startedAt = Date.now();
+  try {
+    const rate = await checkRateLimit(request, { key: "api:workspaces-family:delete", max: 10, windowMs: 60_000 });
+    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    const auth = await verifyRequestAuth(request);
+    const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
+    if (!workspaceId) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+
+    const owned = await getOwnedWorkspace(auth.uid, workspaceId);
+    if (!owned || owned.workspace_type !== "family") {
+      return NextResponse.json({ ok: false, error: "workspace_not_family" }, { status: 404 });
+    }
+
+    const now = new Date().toISOString();
+    const raw = ((owned.raw as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+    const settings = ((owned.settings as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+    await supabaseUpsertRows(
+      "workspaces",
+      [
+        {
+          ...owned,
+          workspace_type: "personal",
+          settings: {
+            ...settings,
+            familyModeEnabled: false,
+            familyClosedAt: now,
+          },
+          raw: {
+            ...raw,
+            type: "personal",
+            settings: {
+              ...(((raw.settings as Record<string, unknown> | null) || {}) as Record<string, unknown>),
+              familyModeEnabled: false,
+              familyClosedAt: now,
+            },
+            updatedAt: now,
+          },
+          updated_at: now,
+        },
+      ],
+      { onConflict: "id" },
+    );
+
+    await supabasePatchByFilters(
+      "workspace_members",
+      { workspace_uid: auth.uid, workspace_id: workspaceId },
+      {
+        member_status: "disabled",
+        raw: { familyClosedAt: now, status: "disabled" },
+        updated_at: now,
+      },
+    );
+    await supabasePatchByFilters(
+      "workspace_invitations",
+      { workspace_uid: auth.uid, workspace_id: workspaceId },
+      {
+        invitation_status: "revoked",
+        raw: { familyClosedAt: now, status: "revoked" },
+        updated_at: now,
+      },
+    );
+
+    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
+    return NextResponse.json({ ok: true }, { status: 200 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown_error";
+    const status = getFamilyErrorStatus(message);
+    apiLogger.error({ message: "workspaces_family_delete_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
