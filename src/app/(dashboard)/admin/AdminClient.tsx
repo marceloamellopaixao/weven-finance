@@ -40,6 +40,7 @@ import { ACCESS_RESOURCE_LABEL_BY_KEY, ACCESS_SCREENS, hasAccess, hasBillingExem
 import { CREATOR_SUPREME_UID, canAccessAdminArea, isCreatorSupremeUid } from "@/lib/access-control/roles";
 import { computePermanentDeleteAt } from "@/lib/account-deletion/policy";
 import { getPlanTone } from "@/lib/plans/display";
+import { isUserPlan, PLAN_CATALOG, PLAN_ORDER } from "@/lib/plans/catalog";
 import { cn } from "@/lib/utils";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -86,6 +87,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -94,7 +96,6 @@ import {
   ShieldAlert,
   UserX,
   CheckCircle2,
-  Search,
   MoreVertical,
   Trash2,
   RefreshCcw,
@@ -224,7 +225,6 @@ function formatDateSafe(value: unknown) {
 
 const ADMIN_USERS_FILTERS_STORAGE_KEY = "wevenfinance:admin:users-filters:v1";
 const ADMIN_SUPPORT_FILTERS_STORAGE_KEY = "wevenfinance:admin:support-filters:v1";
-const ADMIN_AUDIT_FILTERS_STORAGE_KEY = "wevenfinance:admin:audit-filters:v1";
 const ADMIN_DIALOG_CONTENT_CLASS = "app-panel-soft w-[calc(100vw-1rem)] max-h-[calc(100svh-2rem)] overflow-y-auto rounded-3xl border border-color:var(--app-panel-border) p-5 shadow-2xl shadow-primary/10 sm:p-6";
 
 type TicketPriority = NonNullable<SupportTicket["priority"]>;
@@ -290,9 +290,6 @@ export default function AdminPage() {
   const { plans } = usePlans();
   const tAdmin = useTranslations("admin");
   const { locale } = useI18n();
-  const freePlanTone = getPlanTone("free");
-  const premiumPlanTone = getPlanTone("premium");
-  const proPlanTone = getPlanTone("pro");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -340,9 +337,8 @@ export default function AdminPage() {
   const [metricsSummary, setMetricsSummary] = useState<AdminMetricsSummary | null>(null);
   const [metricsByRoute, setMetricsByRoute] = useState<AdminMetricsRoute[]>([]);
   const [metricsAlerts, setMetricsAlerts] = useState<AdminMetricsAlert[]>([]);
-  const [criticalMetricsAlerts, setCriticalMetricsAlerts] = useState<AdminMetricsAlert[]>([]);
-  const [healthData, setHealthData] = useState<AdminHealth | null>(null);
-  const [healthAlerts, setHealthAlerts] = useState<AdminMetricsAlert[]>([]);
+  const [healthData] = useState<AdminHealth | null>(null);
+  const [healthAlerts] = useState<AdminMetricsAlert[]>([]);
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
   const [isExportingCsv, setIsExportingCsv] = useState<"users" | "support" | "audit" | null>(null);
 
@@ -485,37 +481,17 @@ export default function AdminPage() {
         icon: Lock,
       });
     }
-    if (hasAdminPermission("audit", "read")) {
-      items.push({
-        id: "audit",
-        label: tAdmin("nav.audit.label"),
-        description: tAdmin("nav.audit.description"),
-        icon: ShieldCheck,
-      });
-    }
-    if (hasAdminPermission("metrics", "read")) {
-      items.push({
-        id: "metrics",
-        label: tAdmin("nav.metrics.label"),
-        description: tAdmin("nav.metrics.description"),
-        icon: Calculator,
-        badge: criticalMetricsAlerts.length,
-      });
-    }
-
     return items;
-  }, [canRestore, canViewPermissions, criticalMetricsAlerts.length, hasAdminPermission, tAdmin, unseenSupportCount]);
+  }, [canRestore, canViewPermissions, hasAdminPermission, tAdmin, unseenSupportCount]);
 
   const activeAdminNavItem = adminNavItems.find((item) => item.id === activeTab) ?? adminNavItems[0];
 
   const allowedTabs = useMemo(() => {
-    if (!userProfile) return ["users", "support", "audit"];
+    if (!userProfile) return ["users", "support"];
     const tabs: string[] = [];
     if (hasAdminPermission("users", "read")) tabs.push("users");
     if (hasAdminPermission("support", "read")) tabs.push("support");
     if (hasAdminPermission("restore", "read")) tabs.push("restore");
-    if (hasAdminPermission("audit", "read")) tabs.push("audit");
-    if (hasAdminPermission("metrics", "read")) tabs.push("metrics");
     if (hasAdminPermission("plans", "read")) tabs.push("plans");
     if (hasAdminPermission("permissions", "read")) tabs.push("permissions");
     return tabs;
@@ -662,7 +638,7 @@ export default function AdminPage() {
       setAccessSubjectId("all");
       return;
     }
-    if (accessSubjectType === "plan" && !["free", "premium", "pro"].includes(accessSubjectId)) {
+    if (accessSubjectType === "plan" && !isUserPlan(accessSubjectId)) {
       setAccessSubjectId("free");
       return;
     }
@@ -751,49 +727,6 @@ export default function AdminPage() {
       // ignora falha de storage
     }
   }, [supportTypeFilter, supportStatusFilter, supportPriorityFilter, supportSearch]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = window.localStorage.getItem(ADMIN_AUDIT_FILTERS_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as Partial<{
-        auditSearch: string;
-        auditActionFilter: string;
-        auditActorUidFilter: string;
-        auditTargetUidFilter: string;
-        auditFromDate: string;
-        auditToDate: string;
-      }>;
-      if (typeof parsed.auditSearch === "string") setAuditSearch(parsed.auditSearch);
-      if (typeof parsed.auditActionFilter === "string") setAuditActionFilter(parsed.auditActionFilter);
-      if (typeof parsed.auditActorUidFilter === "string") setAuditActorUidFilter(parsed.auditActorUidFilter);
-      if (typeof parsed.auditTargetUidFilter === "string") setAuditTargetUidFilter(parsed.auditTargetUidFilter);
-      if (typeof parsed.auditFromDate === "string") setAuditFromDate(parsed.auditFromDate);
-      if (typeof parsed.auditToDate === "string") setAuditToDate(parsed.auditToDate);
-    } catch {
-      // ignora parse invalido
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(
-        ADMIN_AUDIT_FILTERS_STORAGE_KEY,
-        JSON.stringify({
-          auditSearch,
-          auditActionFilter,
-          auditActorUidFilter,
-          auditTargetUidFilter,
-          auditFromDate,
-          auditToDate,
-        })
-      );
-    } catch {
-      // ignora falha de storage
-    }
-  }, [auditSearch, auditActionFilter, auditActorUidFilter, auditTargetUidFilter, auditFromDate, auditToDate]);
 
   useEffect(() => {
     if (loading || !userProfile || isTabBootstrapped) return;
@@ -976,11 +909,6 @@ export default function AdminPage() {
     }
     return "border-amber-300 bg-amber-50 text-amber-800";
   };
-
-  const onlyCriticalAlerts = useCallback(
-    (alerts: AdminMetricsAlert[]) => alerts.filter((alert) => alert.level === "critical"),
-    []
-  );
 
   const getTicketPriorityLabel = (priority?: string) => {
     if (priority === "urgent") return tAdmin("support.priority.urgent");
@@ -1243,16 +1171,13 @@ export default function AdminPage() {
         if (!cancelled) {
           setMetricsSummary(payload.summary || null);
           setMetricsByRoute(Array.isArray(payload.byRoute) ? payload.byRoute : []);
-          const alerts = Array.isArray(payload.alerts) ? payload.alerts : [];
-          setMetricsAlerts(alerts);
-          setCriticalMetricsAlerts(onlyCriticalAlerts(alerts));
+          setMetricsAlerts(Array.isArray(payload.alerts) ? payload.alerts : []);
         }
       } catch (error) {
         if (!cancelled) {
           setMetricsSummary(null);
           setMetricsByRoute([]);
           setMetricsAlerts([]);
-          setCriticalMetricsAlerts([]);
         }
         console.error(error);
       } finally {
@@ -1266,80 +1191,7 @@ export default function AdminPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [activeTab, metricsWindowMinutes, onlyCriticalAlerts, tAdmin, user, userProfile]);
-
-  useEffect(() => {
-    if (!user || !userProfile) return;
-    if (userProfile.role !== "admin" && userProfile.role !== "moderator") return;
-
-    let cancelled = false;
-
-    const loadCriticalAlerts = async () => {
-      if (!shouldRefreshAdminNow()) return;
-      try {
-        const token = await user.getIdToken();
-        const response = await fetch("/api/admin/metrics?windowMinutes=60", {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const payload = (await response.json()) as {
-          ok: boolean;
-          alerts?: AdminMetricsAlert[];
-        };
-        if (!response.ok || !payload.ok) return;
-        if (cancelled) return;
-        const alerts = Array.isArray(payload.alerts) ? payload.alerts : [];
-        setCriticalMetricsAlerts(onlyCriticalAlerts(alerts));
-      } catch {
-        if (!cancelled) setCriticalMetricsAlerts([]);
-      }
-    };
-
-    void loadCriticalAlerts();
-    const timer = setInterval(() => void loadCriticalAlerts(), ADMIN_MONITORING_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [onlyCriticalAlerts, user, userProfile]);
-
-  useEffect(() => {
-    if (!user || !userProfile) return;
-    if (userProfile.role !== "admin" && userProfile.role !== "moderator") return;
-
-    let cancelled = false;
-
-    const loadHealth = async () => {
-      if (!shouldRefreshAdminNow()) return;
-      try {
-        const token = await user.getIdToken();
-        const response = await fetch("/api/admin/health", {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const payload = (await response.json()) as {
-          ok: boolean;
-          health?: AdminHealth;
-          alerts?: AdminMetricsAlert[];
-        };
-        if (!response.ok || !payload.ok || cancelled) return;
-        setHealthData(payload.health || null);
-        setHealthAlerts(Array.isArray(payload.alerts) ? payload.alerts : []);
-      } catch {
-        if (!cancelled) {
-          setHealthData(null);
-          setHealthAlerts([]);
-        }
-      }
-    };
-
-    void loadHealth();
-    const timer = setInterval(() => void loadHealth(), ADMIN_MONITORING_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [user, userProfile]);
+  }, [activeTab, metricsWindowMinutes, tAdmin, user, userProfile]);
 
   const handleAssignTicket = async (ticketId: string, staffUid: string) => {
     const staff = staffMembers.find(s => s.uid === staffUid);
@@ -1913,7 +1765,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden p-4 pb-20 font-sans md:p-8">
+    <div className="relative min-h-screen overflow-x-hidden p-4 pb-20 font-sans md:p-8">
 
       {/* Background Decorativo */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
@@ -1921,7 +1773,7 @@ export default function AdminPage() {
         <div className="absolute bottom-[-10%] left-[-10%] h-[500px] w-[500px] rounded-full bg-primary/4 blur-[100px]" />
       </div>
 
-      <div className="container relative z-10 mx-auto max-w-screen-2xl">
+      <div className="container relative z-10 mx-auto w-full max-w-screen-2xl min-w-0">
         <div className={`${fadeInUp} flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8`}>
           <div>
             <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight text-foreground">
@@ -1943,18 +1795,6 @@ export default function AdminPage() {
             </Button>
           )}
         </div>
-
-        {criticalMetricsAlerts.length > 0 && (
-          <div className={`${fadeInUp} mb-4 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-red-900`}>
-            <div className="flex items-center gap-2 font-semibold text-sm">
-              <AlertTriangle className="h-4 w-4" />
-              {tAdmin("header.criticalAlerts", { count: criticalMetricsAlerts.length })}
-            </div>
-            <p className="text-xs mt-1">
-              {criticalMetricsAlerts[0]?.title}: {criticalMetricsAlerts[0]?.description}
-            </p>
-          </div>
-        )}
 
         <div className={`${fadeInUp} delay-150 grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start xl:grid-cols-[280px_minmax(0,1fr)]`}>
           <aside className="hidden lg:block">
@@ -1997,7 +1837,7 @@ export default function AdminPage() {
             </div>
           </aside>
 
-          <section className="min-w-0 space-y-6">
+          <section className="w-full min-w-0 space-y-6 overflow-x-hidden">
             <div className="lg:hidden">
               <div className="app-panel-subtle flex gap-2 overflow-x-auto rounded-2xl border border-color:var(--app-panel-border) p-1.5 shadow-sm no-scrollbar" aria-label={tAdmin("header.navAria")}>
                 {adminNavItems.map((item) => {
@@ -2080,7 +1920,7 @@ export default function AdminPage() {
                   </div>
                   <div className="space-y-3 border-b border-color:var(--app-panel-border) p-4 md:p-5">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-                      <Input
+                      <SearchInput
                         value={supportSearch}
                         onChange={(e) => setSupportSearch(e.target.value)}
                         className="h-10 rounded-xl"
@@ -2539,18 +2379,16 @@ export default function AdminPage() {
                 </CardHeader>
                 <CardContent className="p-4 md:p-5 space-y-4">
                   <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 h-4 w-4" />
-                      <Input
-                        value={auditSearch}
-                        onChange={(e) => {
-                          setAuditSearch(e.target.value);
-                          setAuditPage(1);
-                        }}
-                        className="pl-10 h-10 rounded-xl"
-                        placeholder={tAdmin("audit.searchPlaceholder")}
-                      />
-                    </div>
+                    <SearchInput
+                      containerClassName="flex-1"
+                      value={auditSearch}
+                      onChange={(e) => {
+                        setAuditSearch(e.target.value);
+                        setAuditPage(1);
+                      }}
+                      className="h-10 rounded-xl"
+                      placeholder={tAdmin("audit.searchPlaceholder")}
+                    />
                     <Badge variant="outline" className="rounded-xl px-3 py-1.5 text-xs">
                       {tAdmin("audit.recordsLabel", { count: auditTotal })}
                     </Badge>
@@ -2878,15 +2716,13 @@ export default function AdminPage() {
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               {/* Filtros e Busca */}
               <div className="space-y-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-3.5 h-4 w-4 text-zinc-400" />
-                  <Input
-                    placeholder={tAdmin("users.searchPlaceholder")}
-                    className="h-11 rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg) pl-9"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
+                <SearchInput
+                  containerClassName="flex-1"
+                  placeholder={tAdmin("users.searchPlaceholder")}
+                  className="h-11 rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   {/* Filtro: Plano */}
@@ -2896,9 +2732,9 @@ export default function AdminPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">{tAdmin("users.filters.allPlans")}</SelectItem>
-                      <SelectItem value="free">Free</SelectItem>
-                      <SelectItem value="premium">Premium</SelectItem>
-                      <SelectItem value="pro">Pro</SelectItem>
+                      {PLAN_ORDER.map((planId) => (
+                        <SelectItem key={planId} value={planId}>{PLAN_CATALOG[planId].publicName}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
 
@@ -3046,9 +2882,9 @@ export default function AdminPage() {
                                   <Select value={u.plan} onValueChange={(val) => handlePlanChange(u.uid, val)}>
                                     <SelectTrigger className="w-full h-8 text-xs rounded-lg"><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="free">Free</SelectItem>
-                                      <SelectItem value="premium">Premium</SelectItem>
-                                      <SelectItem value="pro">Pro</SelectItem>
+                                      {PLAN_ORDER.map((planId) => (
+                                        <SelectItem key={planId} value={planId}>{PLAN_CATALOG[planId].publicName}</SelectItem>
+                                      ))}
                                     </SelectContent>
                                   </Select>
                                 ) : (
@@ -3174,11 +3010,11 @@ export default function AdminPage() {
                                     <SelectTrigger className="h-8 w-[120px] rounded-lg border-color:var(--app-field-border) bg-var(--app-field-bg) text-xs">
                                       <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="free">Free</SelectItem>
-                                      <SelectItem value="premium">Premium</SelectItem>
-                                      <SelectItem value="pro">Pro</SelectItem>
-                                    </SelectContent>
+                                      <SelectContent>
+                                        {PLAN_ORDER.map((planId) => (
+                                          <SelectItem key={planId} value={planId}>{PLAN_CATALOG[planId].publicName}</SelectItem>
+                                        ))}
+                                      </SelectContent>
                                   </Select>
                                 ) : (
                                   <div className="flex items-center gap-1 text-xs text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-lg w-fit cursor-not-allowed">
@@ -3525,137 +3361,69 @@ export default function AdminPage() {
               </div>
 
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-                {/* FREE */}
-                <Card className={`app-panel-soft rounded-3xl border-2 shadow-xl transition-shadow ${freePlanTone.border}`}>
-                  <CardHeader className={`flex flex-col gap-3 rounded-t-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${freePlanTone.header}`}>
-                    <div className="flex flex-col justify-center">
-                      <CardTitle className={`${freePlanTone.headerTitle} font-bold text-lg`}>
-                        {tAdmin("plans.planTier", { name: plans.free.name, tier: tAdmin("plans.tiers.bronze") })}
-                      </CardTitle>
-                      <CardDescription className={freePlanTone.headerDescription}>{tAdmin("plans.settings")}</CardDescription>
-                    </div>
-                    <Switch checked={editedPlans.free.active} onCheckedChange={(c) => handlePlanEdit("free", "active", c)} className={freePlanTone.switchChecked} />
-                  </CardHeader>
+                {PLAN_ORDER.map((planId) => {
+                  const planTone = getPlanTone(planId);
+                  const plan = editedPlans[planId];
+                  const isFreePlan = planId === "free";
+                  return (
+                    <Card key={planId} className={`app-panel-soft rounded-3xl border-2 shadow-xl transition-shadow ${planTone.border}`}>
+                      <CardHeader className={`flex flex-col gap-3 rounded-t-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${planTone.header}`}>
+                        <div className="flex flex-col justify-center">
+                          <CardTitle className={`${planTone.headerTitle} font-bold text-lg`}>
+                            {tAdmin("plans.planTier", { name: plan.name, tier: plan.badge || plan.cta || planId })}
+                          </CardTitle>
+                          <CardDescription className={planTone.headerDescription}>{tAdmin("plans.settings")}</CardDescription>
+                        </div>
+                        <Switch checked={plan.active} onCheckedChange={(checked) => handlePlanEdit(planId, "active", checked)} className={planTone.switchChecked} />
+                      </CardHeader>
 
-                  <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.free.active ? "opacity-50 pointer-events-none" : ""}`}>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.name")}</Label>
-                      <Input className="rounded-xl h-10" value={editedPlans.free.name ?? ""} onChange={(e) => handlePlanEdit("free", "name", e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.description")}</Label>
-                      <Input className="rounded-xl h-10" value={editedPlans.free.description ?? ""} onChange={(e) => handlePlanEdit("free", "description", e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.launchLimit")}</Label>
-                      <Input className="rounded-xl h-10" type="number" value={editedPlans.free.limit ?? 0} onChange={(e) => handlePlanEdit("free", "limit", Number(e.target.value))} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.benefitsLineByLine")}</Label>
-                      <textarea
-                        className="flex min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs resize-none"
-                        value={editedPlans.free.features?.join("\n") ?? ""}
-                        onChange={(e) => handleFeaturesEdit("free", e.target.value)}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
+                      <CardContent className={`space-y-4 p-4 sm:p-6 ${!plan.active ? "opacity-50 pointer-events-none" : ""}`}>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.name")}</Label>
+                            <Input className="rounded-xl h-10" value={plan.name ?? ""} onChange={(event) => handlePlanEdit(planId, "name", event.target.value)} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase text-zinc-400">{isFreePlan ? tAdmin("plans.fields.launchLimit") : tAdmin("plans.fields.price")}</Label>
+                            <Input
+                              className="rounded-xl h-10"
+                              type="number"
+                              value={isFreePlan ? plan.limit ?? 0 : plan.price ?? 0}
+                              onChange={(event) => handlePlanEdit(planId, isFreePlan ? "limit" : "price", Number(event.target.value))}
+                            />
+                          </div>
+                        </div>
 
-                {/* PREMIUM */}
-                <Card className={`app-panel-soft rounded-3xl border-2 shadow-xl transition-shadow ${premiumPlanTone.border}`}>
-                  <CardHeader className={`flex flex-col gap-3 rounded-t-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${premiumPlanTone.header}`}>
-                    <div className="flex flex-col justify-center">
-                      <CardTitle className={`${premiumPlanTone.headerTitle} font-bold text-lg`}>
-                        {tAdmin("plans.planTier", { name: plans.premium.name, tier: tAdmin("plans.tiers.silver") })}
-                      </CardTitle>
-                      <CardDescription className={premiumPlanTone.headerDescription}>{tAdmin("plans.settings")}</CardDescription>
-                    </div>
-                    <Switch checked={editedPlans.premium.active} onCheckedChange={(c) => handlePlanEdit("premium", "active", c)} className={premiumPlanTone.switchChecked} />
-                  </CardHeader>
+                        {!isFreePlan ? (
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase text-zinc-400">Preço anual</Label>
+                              <Input className="rounded-xl h-10" type="number" value={plan.yearlyPrice ?? 0} onChange={(event) => handlePlanEdit(planId, "yearlyPrice", Number(event.target.value))} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase text-zinc-400">CTA</Label>
+                              <Input className="rounded-xl h-10" value={plan.cta ?? ""} onChange={(event) => handlePlanEdit(planId, "cta", event.target.value)} />
+                            </div>
+                          </div>
+                        ) : null}
 
-                  <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.premium.active ? "opacity-50 pointer-events-none" : ""}`}>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.name")}</Label>
-                        <Input className="rounded-xl h-10" value={editedPlans.premium.name ?? ""} onChange={(e) => handlePlanEdit("premium", "name", e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.price")}</Label>
-                        <Input className="rounded-xl h-10" type="number" value={editedPlans.premium.price ?? 0} onChange={(e) => handlePlanEdit("premium", "price", Number(e.target.value))} />
-                      </div>
-                    </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.description")}</Label>
+                          <Input className="rounded-xl h-10" value={plan.description ?? ""} onChange={(event) => handlePlanEdit(planId, "description", event.target.value)} />
+                        </div>
 
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.paymentLink")}</Label>
-                      <Input className="rounded-xl h-10 font-mono text-xs text-emerald-600" value={editedPlans.premium.paymentLink ?? ""} onChange={(e) => handlePlanEdit("premium", "paymentLink", e.target.value)} />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.description")}</Label>
-                      <Input className="rounded-xl h-10" value={editedPlans.premium.description ?? ""} onChange={(e) => handlePlanEdit("premium", "description", e.target.value)} />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.benefits")}</Label>
-                      <textarea
-                        className="flex min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs resize-none"
-                        value={editedPlans.premium.features?.join("\n") ?? ""}
-                        onChange={(e) => handleFeaturesEdit("premium", e.target.value)}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* PRO */}
-                <Card className={`app-panel-soft rounded-3xl border-2 shadow-xl transition-shadow ${proPlanTone.border}`}>
-                  <CardHeader className={`flex flex-col gap-3 rounded-t-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${proPlanTone.header}`}>
-                    <div className="flex flex-col justify-center">
-                      <CardTitle className={`${proPlanTone.headerTitle} font-bold text-lg`}>
-                        {tAdmin("plans.planTier", { name: editedPlans.pro.name, tier: tAdmin("plans.tiers.gold") })}
-                      </CardTitle>
-                      <CardDescription className={proPlanTone.headerDescription}>{tAdmin("plans.settings")}</CardDescription>
-                    </div>
-                    <Switch checked={editedPlans.pro.active} onCheckedChange={(c) => handlePlanEdit("pro", "active", c)} className={proPlanTone.switchChecked} />
-                  </CardHeader>
-
-                  <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.pro.active ? "opacity-50 pointer-events-none" : ""}`}>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.name")}</Label>
-                        <Input className="rounded-xl h-10" value={editedPlans.pro.name ?? ""} onChange={(e) => handlePlanEdit("pro", "name", e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.price")}</Label>
-                        <Input className="rounded-xl h-10" type="number" value={editedPlans.pro.price ?? 0} onChange={(e) => handlePlanEdit("pro", "price", Number(e.target.value))} />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.paymentLink")}</Label>
-                      <Input className="rounded-xl h-10 font-mono text-xs text-yellow-600" value={editedPlans.pro.paymentLink ?? ""} onChange={(e) => handlePlanEdit("pro", "paymentLink", e.target.value)} />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.description")}</Label>
-                      <Input className="rounded-xl h-10" value={editedPlans.pro.description ?? ""} onChange={(e) => handlePlanEdit("pro", "description", e.target.value)} />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.benefits")}</Label>
-                      <textarea
-                        className="flex min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs resize-none"
-                        value={editedPlans.pro.features?.join("\n") ?? ""}
-                        onChange={(e) => handleFeaturesEdit("pro", e.target.value)}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {plans && plans.pro.active && (
-                  <div className="col-span-1 text-center text-xs italic text-zinc-500 xl:col-span-3">
-                    {tAdmin("plans.proWarning")}
-                  </div>
-                )}
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold uppercase text-zinc-400">{isFreePlan ? tAdmin("plans.fields.benefitsLineByLine") : tAdmin("plans.fields.benefits")}</Label>
+                          <textarea
+                            className="flex min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs resize-none"
+                            value={plan.features?.join("\n") ?? ""}
+                            onChange={(event) => handleFeaturesEdit(planId, event.target.value)}
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
 
             </div>

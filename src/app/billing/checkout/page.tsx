@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslations } from "@/i18n/T";
 import { formatMoney } from "@/lib/money/formatMoney";
-import { getEquivalentMonthlyPrice, PLAN_CATALOG, PLAN_ORDER, type BillingInterval } from "@/lib/plans/catalog";
+import { getEquivalentMonthlyPrice, PLAN_CATALOG, type BillingInterval } from "@/lib/plans/catalog";
 import { getCheckoutLink } from "@/services/billingService";
 import {
   buildUpgradeCheckoutPath,
@@ -20,14 +20,8 @@ import {
   readPendingUpgradePlan,
   rememberPendingUpgradePlan,
 } from "@/services/billing/checkoutIntent";
-import type { UserPlan } from "@/types/user";
 
 type CheckoutState = "preparing" | "redirecting" | "error" | "exempt";
-
-const PLAN_RANK: Record<UserPlan, number> = PLAN_ORDER.reduce(
-  (acc, item, index) => ({ ...acc, [item]: index }),
-  {} as Record<UserPlan, number>
-);
 
 function getChargeLabel(interval: BillingInterval) {
   return interval === "yearly" ? "Anual" : "Mensal";
@@ -77,10 +71,8 @@ export default function BillingCheckoutPage() {
     if (!userProfile) return;
 
     const currentPlan = userProfile.plan || "free";
-    const currentRank = PLAN_RANK[currentPlan];
-    const targetRank = PLAN_RANK[plan];
 
-    if (currentRank >= targetRank && userProfile.paymentStatus === "paid") {
+    if (currentPlan === plan && userProfile.paymentStatus === "paid") {
       clearPendingUpgradePlan();
       router.replace("/dashboard");
       return;

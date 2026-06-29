@@ -295,7 +295,6 @@ export function planCatalogToDetails(plan: PlanCatalogItem): PlanDetails {
     price: plan.monthlyPrice,
     yearlyPrice: plan.yearlyPrice,
     description: plan.description,
-    paymentLink: "",
     features: plan.benefits,
     limit: plan.limits.monthlyTransactions ?? undefined,
     allowedProfileTypes: plan.allowedProfileTypes,

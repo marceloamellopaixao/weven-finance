@@ -3,7 +3,7 @@ import type { Dictionary } from "@/i18n/dictionaries/pt-BR";
 export const admin: Dictionary["admin"] = {
   metadata: {
     title: "WevenFinance | Admin",
-    description: "WevenFinance admin panel for users, support, plans, permissions, audit, and metrics.",
+    description: "WevenFinance admin panel for users, support, plans, permissions, and account recovery.",
   },
   common: {
     invalidDate: "Invalid date",
@@ -436,8 +436,6 @@ export const admin: Dictionary["admin"] = {
       benefits: "Benefits",
       price: "Price",
     },
-    paymentLink: "Payment link",
-    proWarning: "The Pro plan offers exclusive benefits. Make sure the payment link is configured correctly.",
     saveErrorTitle: "Save error",
     saveErrorMessage: "We could not update plans.",
   },

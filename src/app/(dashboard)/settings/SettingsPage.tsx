@@ -43,7 +43,7 @@ import { migrateCryptography } from "@/services/transactionService";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { sendFeatureRequest, sendSupportRequest, subscribeToSupportTickets, type SupportTicket } from "@/hooks/supportService";
 import { BillingHistoryItem, cancelSubscription, confirmPreapproval, getBillingHistory } from "@/services/billingService";
-import { buildUpgradeCheckoutPath } from "@/services/billing/checkoutIntent";
+import { buildUpgradeCheckoutPath, parseUpgradePlan } from "@/services/billing/checkoutIntent";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { sendPasswordAccessEmail } from "@/services/auth/passwordAccess";
 import { formatPhone, normalizePhone } from "@/lib/phone";
@@ -56,6 +56,7 @@ import { AppearanceAccent, AppearanceThemeMode } from "@/types/appearance";
 import { useFormatters } from "@/i18n/useFormatters";
 import { getPlanPrice } from "@/lib/billing/prices";
 import { getLocalizedPlanCopy, getPlanTone } from "@/lib/plans/display";
+import { getPublicPlans } from "@/lib/plans/catalog";
 import type { UpgradePlan } from "@/services/billing/checkoutIntent";
 import { useTranslations } from "@/i18n/T";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
@@ -483,28 +484,18 @@ export default function SettingsPage() {
     : billingPaymentStatus === "failed"
       ? "not_paid"
       : (userProfile?.paymentStatus || billingPaymentStatus || "pending");
-  const canUpgrade = !isBillingExemptRole && effectivePlan !== "pro";
+  const canUpgrade = !isBillingExemptRole;
   const currentPlanCopy = getLocalizedPlanCopy(tGlobal, effectivePlan, plans[effectivePlan]);
-  const premiumPlanCopy = getLocalizedPlanCopy(tGlobal, "premium", plans.premium);
-  const proPlanCopy = getLocalizedPlanCopy(tGlobal, "pro", plans.pro);
   const effectivePlanTone = getPlanTone(effectivePlan);
-  const premiumPlanTone = getPlanTone("premium");
-  const proPlanTone = getPlanTone("pro");
-  const planRoleLabel = effectivePlan === "free"
-    ? t("billing.role.free")
-    : effectivePlan === "premium"
-      ? t("billing.role.premium")
-      : t("billing.role.pro");
-  const planValueSummary = effectivePlan === "free"
-    ? t("billing.summary.free")
-    : effectivePlan === "premium"
-      ? t("billing.summary.premium")
-      : t("billing.summary.pro");
+  const availableUpgradePlans = getPublicPlans()
+    .map((plan) => plan.id)
+    .filter((plan): plan is UpgradePlan => plan !== "free" && plan !== effectivePlan);
+  const planRoleLabel = effectivePlan === "free" ? t("billing.role.free") : currentPlanCopy.name;
+  const planValueSummary = currentPlanCopy.description;
   const pendingPreapprovalId = userProfile?.billing?.pendingPreapprovalId;
   const pendingCheckoutAttemptId = userProfile?.billing?.pendingCheckoutAttemptId;
   const pendingPlan = userProfile?.billing?.pendingPlan;
-  const recoveryPlan: UpgradePlan =
-    pendingPlan === "pro" || currentPlan === "pro" ? "pro" : "premium";
+  const recoveryPlan: UpgradePlan = parseUpgradePlan(pendingPlan) || parseUpgradePlan(currentPlan) || "premium";
   const shouldShowRecoveryCTA =
     !isBillingExemptRole &&
     (effectivePaymentStatus === "pending" ||
@@ -703,7 +694,7 @@ export default function SettingsPage() {
             </button>
             {canOpenFamilyWorkspaceSettings ? (
               <button id="tour-settings-family-tab" type="button" aria-pressed={activeTab === "family"} onClick={() => handleTabChange("family")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "family" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
-                <UsersRound className="h-4 w-4" /> Familia
+                <UsersRound className="h-4 w-4" /> Família
               </button>
             ) : null}
             <button id="tour-settings-billing-tab" type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "billing" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
@@ -913,7 +904,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {activeTab === "family" && (
+          {activeTab === "family" && canOpenFamilyWorkspaceSettings && (
             <div id="tour-settings-family-panel" className={`${fadeInUp} delay-200`}>
               <FamilyWorkspacePanel workspaces={workspaces} loading={workspacesLoading} />
             </div>
@@ -1199,102 +1190,65 @@ export default function SettingsPage() {
                       <p className="mt-2 text-base font-semibold text-zinc-900">{t("billing.plans.freeTitle")}</p>
                       <p className="mt-1 text-sm text-zinc-600">{t("billing.plans.freeDescription")}</p>
                     </div>
-                    <div className={`rounded-2xl border px-4 py-4 ${premiumPlanTone.softCard}`}>
-                      <p className={`text-[10px] uppercase tracking-[0.2em] ${premiumPlanTone.accentText}`}>{premiumPlanCopy.title}</p>
-                      <p className="mt-2 text-base font-semibold text-zinc-900 dark:text-white">{premiumPlanCopy.tag}</p>
-                      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{premiumPlanCopy.description}</p>
-                    </div>
-                    <div className={`rounded-2xl border px-4 py-4 ${proPlanTone.softCard}`}>
-                      <p className={`text-[10px] uppercase tracking-[0.2em] ${proPlanTone.accentText}`}>{proPlanCopy.title}</p>
-                      <p className="mt-2 text-base font-semibold text-zinc-900 dark:text-white">{proPlanCopy.tag}</p>
-                      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{proPlanCopy.description}</p>
-                    </div>
+                    {availableUpgradePlans.slice(0, 2).map((planId) => {
+                      const planCopy = getLocalizedPlanCopy(tGlobal, planId, plans[planId]);
+                      const planTone = getPlanTone(planId);
+                      return (
+                        <div key={planId} className={`rounded-2xl border px-4 py-4 ${planTone.softCard}`}>
+                          <p className={`text-[10px] uppercase tracking-[0.2em] ${planTone.accentText}`}>{planCopy.title}</p>
+                          <p className="mt-2 text-base font-semibold text-zinc-900 dark:text-white">{planCopy.tag || planCopy.cta}</p>
+                          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{planCopy.description}</p>
+                        </div>
+                      );
+                    })}
                   </div>
 
-                  <div className="grid gap-6 md:grid-cols-2">
-                    {effectivePlan !== 'premium' && (
-                      <Card className={`app-panel-soft relative overflow-hidden h-full flex flex-col border-2 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300 ${premiumPlanTone.border}`}>
-                        <div className={`absolute top-0 left-0 w-full h-1 ${premiumPlanTone.topBar}`} />
-                        <CardHeader className="flex-1">
-                          <CardTitle className="flex justify-between items-center">
-                            <span className="flex items-center gap-2">
-                              <Medal className={`h-5 w-5 ${premiumPlanTone.accentText}`} /> {premiumPlanCopy.title}
-                            </span>
-                            <span className="text-xl font-bold text-zinc-900 dark:text-white">
-                              {formatPlanPrice("premium")}
-                            </span>
-                          </CardTitle>
-                          <CardDescription>
-                            {premiumPlanCopy.description}
-                          </CardDescription>
-                          <p className={`text-xs font-medium uppercase tracking-[0.18em] ${premiumPlanTone.accentText}`}>
-                            {premiumPlanCopy.tag}
-                          </p>
-                          <nav>
-                            {premiumPlanCopy.features.length > 0 &&
-                              (
+                  <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                    {availableUpgradePlans.map((planId) => {
+                      const planCopy = getLocalizedPlanCopy(tGlobal, planId, plans[planId]);
+                      const planTone = getPlanTone(planId);
+                      return (
+                        <Card key={planId} className={`app-panel-soft relative overflow-hidden h-full flex flex-col border-2 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300 ${planTone.border}`}>
+                          <div className={`absolute top-0 left-0 w-full h-1 ${planTone.topBar}`} />
+                          <CardHeader className="flex-1">
+                            <CardTitle className="flex justify-between items-center gap-3">
+                              <span className="flex items-center gap-2">
+                                <Medal className={`h-5 w-5 ${planTone.accentText}`} /> {planCopy.title}
+                              </span>
+                              <span className="text-xl font-bold text-zinc-900 dark:text-white">
+                                {formatPlanPrice(planId)}
+                              </span>
+                            </CardTitle>
+                            <CardDescription>{planCopy.description}</CardDescription>
+                            {planCopy.tag ? (
+                              <p className={`text-xs font-medium uppercase tracking-[0.18em] ${planTone.accentText}`}>
+                                {planCopy.tag}
+                              </p>
+                            ) : null}
+                            {planCopy.features.length > 0 ? (
+                              <nav>
                                 <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
-                                  {premiumPlanCopy.features.map((feature, index) => (
+                                  {planCopy.features.slice(0, 6).map((feature, index) => (
                                     <li key={index} className="flex items-center gap-2">
-                                      <CheckCircle2 className={`h-4 w-4 ${premiumPlanTone.accentText}`} /> {feature}
+                                      <CheckCircle2 className={`h-4 w-4 ${planTone.accentText}`} /> {feature}
                                     </li>
                                   ))}
                                 </ul>
-                              )}
-                          </nav>
-                        </CardHeader>
-                        <CardFooter className="mt-auto">
-                          <Button
-                            onClick={() => handleStartCheckout("premium")}
-                            disabled={isOpeningCheckout === "premium"}
-                            className={`w-full h-11 rounded-xl shadow-lg hover:cursor-pointer transition-all active:scale-[0.98] ${premiumPlanTone.action}`}
-                          >
-                            {isOpeningCheckout === "premium" ? t("billing.plans.openingCheckout") : t("billing.plans.premiumAction")}
-                          </Button>
-                        </CardFooter>
-                      </Card>
-                    )}
-                    <Card className={`app-panel-soft relative overflow-hidden h-full flex flex-col border-2 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300 ${proPlanTone.border}`}>
-                      <div className={`absolute top-0 left-0 w-full h-1 ${proPlanTone.topBar}`} />
-                      <CardHeader className="flex-1">
-                        <CardTitle className="flex justify-between items-center">
-                          <span className="flex items-center gap-2">
-                            <Medal className={`h-5 w-5 ${proPlanTone.accentText}`} /> {proPlanCopy.title}
-                          </span>
-                          <span className="text-xl font-bold text-zinc-900 dark:text-white">
-                            {formatPlanPrice("pro")}
-                          </span>
-                        </CardTitle>
-                        <CardDescription>
-                          {proPlanCopy.description}
-                        </CardDescription>
-                        <p className={`text-xs font-medium uppercase tracking-[0.18em] ${proPlanTone.accentText}`}>
-                          {proPlanCopy.tag}
-                        </p>
-                        <nav>
-                          {proPlanCopy.features.length > 0 &&
-                            (
-                              <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
-                                {proPlanCopy.features.map((feature, index) => (
-                                  <li key={index} className="flex items-center gap-2">
-                                    <CheckCircle2 className={`h-4 w-4 ${proPlanTone.accentText}`} /> {feature}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                        </nav>
-                      </CardHeader>
-                      <CardFooter className="mt-auto">
-                        <Button
-                          onClick={() => handleStartCheckout("pro")}
-                          disabled={isOpeningCheckout === "pro"}
-                          variant="outline"
-                          className={`w-full h-11 rounded-xl hover:cursor-pointer transition-all active:scale-[0.98] ${proPlanTone.actionOutline}`}
-                        >
-                          {isOpeningCheckout === "pro" ? t("billing.plans.openingCheckout") : t("billing.plans.proAction")}
-                        </Button>
-                      </CardFooter>
-                    </Card>
+                              </nav>
+                            ) : null}
+                          </CardHeader>
+                          <CardFooter className="mt-auto">
+                            <Button
+                              onClick={() => handleStartCheckout(planId)}
+                              disabled={isOpeningCheckout === planId}
+                              className={`w-full h-11 rounded-xl shadow-lg hover:cursor-pointer transition-all active:scale-[0.98] ${planTone.action}`}
+                            >
+                              {isOpeningCheckout === planId ? t("billing.plans.openingCheckout") : planCopy.cta}
+                            </Button>
+                          </CardFooter>
+                        </Card>
+                      );
+                    })}
                   </div>
                 </div>
               )}

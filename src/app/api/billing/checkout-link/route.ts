@@ -27,8 +27,7 @@ function getMercadoPagoPlanId(plan: Exclude<UserPlan, "free">, interval: Billing
   return undefined;
 }
 
-function getCheckoutBaseUrl(configuredPaymentLink: string | undefined, plan: Exclude<UserPlan, "free">, interval: BillingInterval) {
-  if (configuredPaymentLink?.trim()) return configuredPaymentLink.trim();
+function getCheckoutBaseUrl(plan: Exclude<UserPlan, "free">, interval: BillingInterval) {
   const planId = getMercadoPagoPlanId(plan, interval);
   return planId ? `https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=${encodeURIComponent(planId)}` : "";
 }
@@ -84,9 +83,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "plan_inactive" }, { status: 409 });
     }
 
-    const paymentLink = getCheckoutBaseUrl(selectedPlan.paymentLink, plan, interval);
-    if (!paymentLink) {
-      return NextResponse.json({ ok: false, error: "plan_missing_payment_link" }, { status: 422 });
+    const checkoutBaseUrl = getCheckoutBaseUrl(plan, interval);
+    if (!checkoutBaseUrl) {
+      return NextResponse.json({ ok: false, error: "plan_missing_mercadopago_id" }, { status: 422 });
     }
 
     const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -100,7 +99,7 @@ export async function GET(request: NextRequest) {
     const returnUrl = isPublicHttpsUrl
       ? `${selectedBaseUrl}/billing/activating?plan=${plan}&interval=${interval}&attempt=${checkoutAttemptId}`
       : undefined;
-    const checkoutUrl = buildCheckoutUrl(paymentLink, {
+    const checkoutUrl = buildCheckoutUrl(checkoutBaseUrl, {
       uid,
       plan,
       returnUrl,

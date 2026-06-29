@@ -165,7 +165,6 @@ export async function GET(request: NextRequest) {
           apiErrors1h,
           apiAvgLatency1h,
           observability: {
-            sentryConfigured: Boolean(process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN),
             upstashConfigured: Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
           },
         },

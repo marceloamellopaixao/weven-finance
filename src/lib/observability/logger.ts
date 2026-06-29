@@ -1,5 +1,3 @@
-import * as Sentry from "@sentry/nextjs";
-
 type LogLevel = "info" | "warn" | "error";
 
 type LogPayload = {
@@ -25,19 +23,6 @@ function write(level: LogLevel, payload: LogPayload) {
 
   const line = JSON.stringify(entry);
   if (level === "error") {
-    const maybeError = payload.meta?.error;
-    if (maybeError instanceof Error) {
-      Sentry.captureException(maybeError, {
-        tags: { route: payload.route || "unknown", method: payload.method || "unknown" },
-        extra: payload.meta || {},
-      });
-    } else if (typeof maybeError === "string") {
-      Sentry.captureMessage(maybeError, {
-        level: "error",
-        tags: { route: payload.route || "unknown", method: payload.method || "unknown" },
-        extra: payload.meta || {},
-      });
-    }
     console.error(line);
     return;
   }

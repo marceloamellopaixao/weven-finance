@@ -1,7 +1,7 @@
 export const admin = {
   metadata: {
     title: "WevenFinance | Administração",
-    description: "Painel administrativo do WevenFinance para usuários, suporte, planos, permissões, auditoria e métricas.",
+    description: "Painel administrativo do WevenFinance para usuários, suporte, planos, permissões e restauração de contas.",
   },
   common: {
     invalidDate: "Data inválida",
@@ -455,8 +455,6 @@ export const admin = {
       benefits: "Benefícios",
       price: "Preço",
     },
-    paymentLink: "Link de pagamento",
-    proWarning: "O Plano Pro oferece benefícios exclusivos. Certifique-se de configurar corretamente o link de pagamento.",
     saveErrorTitle: "Erro ao salvar",
     saveErrorMessage: "Não foi possível atualizar os planos.",
   },

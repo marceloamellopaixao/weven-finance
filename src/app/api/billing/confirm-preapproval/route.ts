@@ -9,6 +9,7 @@ import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { isPaidPlan, parseUserPlan } from "@/lib/plans/catalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,8 +30,8 @@ async function getCheckoutAttemptContext(checkoutAttemptId: string) {
 }
 
 function parsePlan(value: unknown): UserPlan | undefined {
-  if (value === "free" || value === "pro" || value === "premium") return value;
-  return undefined;
+  const plan = parseUserPlan(value, "free");
+  return plan === "free" ? undefined : plan;
 }
 
 function getConfirmErrorStatus(message: string) {
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
         result = await confirmLatestPreapprovalForUser({
           uid,
           userEmail,
-          expectedPlan: expectedPlan === "pro" || expectedPlan === "premium" ? expectedPlan : undefined,
+          expectedPlan: isPaidPlan(expectedPlan) ? expectedPlan : undefined,
           checkoutStartedAt,
         });
       }
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest) {
       result = await confirmLatestPreapprovalForUser({
         uid,
         userEmail,
-        expectedPlan: expectedPlan === "pro" || expectedPlan === "premium" ? expectedPlan : undefined,
+        expectedPlan: isPaidPlan(expectedPlan) ? expectedPlan : undefined,
         checkoutStartedAt,
       });
     }

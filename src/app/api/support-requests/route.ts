@@ -14,6 +14,7 @@ import {
   isAccessAllowed,
   ServerAccessProfile,
 } from "@/lib/access-control/server";
+import { parseUserPlan } from "@/lib/plans/catalog";
 import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
 
 type SupportType = "support" | "feature";
@@ -84,7 +85,7 @@ async function getAuthContext(request: NextRequest): Promise<SupportAuthContext>
     email: String(row.email || raw.email || decoded.email || ""),
     name: String(row.display_name || raw.displayName || raw.completeName || decoded.email || "Usuário"),
     role: effectiveRole,
-    plan: rawPlan === "premium" || rawPlan === "pro" ? rawPlan : "free",
+    plan: parseUserPlan(rawPlan),
     isSupremeAdmin: !acting.isImpersonating && decoded.uid === CREATOR_SUPREME_UID,
   };
 }

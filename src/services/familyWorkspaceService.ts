@@ -35,7 +35,7 @@ async function apiFetch(path: string, init?: RequestInit) {
 async function readPayload<T>(response: Response): Promise<T> {
   const payload = (await response.json()) as T & { ok?: boolean; error?: string };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Nao foi possivel gerenciar a familia");
+    throw new Error(payload.error || "Não foi possível gerenciar a família");
   }
   return payload;
 }

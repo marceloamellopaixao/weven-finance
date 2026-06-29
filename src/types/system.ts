@@ -1,9 +1,10 @@
-﻿export interface PlanDetails {
+﻿import { PLAN_CATALOG, planCatalogToDetails } from "@/lib/plans/catalog";
+
+export interface PlanDetails {
   name: string;
   price: number;
   yearlyPrice?: number | null;
   description: string;
-  paymentLink: string;
   features: string[];
   limit?: number;
   allowedProfileTypes?: Array<"personal" | "family" | "business">;
@@ -124,112 +125,12 @@ export interface AccessControlConfig {
 }
 
 export const DEFAULT_PLANS_CONFIG: PlansConfig = {
-  free: {
-    name: "Free",
-    price: 0,
-    yearlyPrice: null,
-    description: "Para experimentar o WevenFinance com uso pessoal básico.",
-    paymentLink: "",
-    features: [
-      "Uso pessoal básico",
-      "Limite de transações mensais",
-      "Relatórios simples",
-      "Sem perfil Família ou Business/PJ",
-    ],
-    limit: 20,
-    allowedProfileTypes: ["personal"],
-    cta: "Começar grátis",
-    active: true,
-  },
-  premium: {
-    name: "Premium Individual",
-    price: 19.9,
-    yearlyPrice: 199.9,
-    description: "Para organizar a vida financeira pessoal.",
-    paymentLink: "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=018bc64fcdfa44e384fc7d74c430be10",
-    features: [
-      "Lançamentos ilimitados",
-      "Cartões, categorias e metas",
-      "Relatórios completos",
-      "Exportação PDF/Excel",
-      "Limites e alertas",
-    ],
-    allowedProfileTypes: ["personal"],
-    cta: "Escolher Premium",
-    highlight: true,
-    active: true,
-  },
-  pro: {
-    name: "Pro",
-    price: 29.9,
-    yearlyPrice: 299.9,
-    description: "Para quem quer controle financeiro pessoal mais completo.",
-    paymentLink: "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=cc495aef2c0043c5a272ad5f8594d78e",
-    features: [
-      "Tudo do Premium Individual",
-      "Mais perfis pessoais",
-      "Histórico completo",
-      "Relatórios avançados",
-      "Exportações ilimitadas",
-    ],
-    allowedProfileTypes: ["personal"],
-    cta: "Escolher Pro",
-    highlight: false,
-    active: true,
-  },
-  family: {
-    name: "Família",
-    price: 39.9,
-    yearlyPrice: 399.9,
-    description: "Para casais e famílias organizarem o dinheiro juntos.",
-    paymentLink: "",
-    features: [
-      "Perfil financeiro familiar",
-      "Membros convidados",
-      "Permissões simples",
-      "Metas e relatórios da família",
-      "Controle de gastos compartilhados",
-    ],
-    allowedProfileTypes: ["family"],
-    cta: "Escolher Família",
-    highlight: false,
-    active: true,
-  },
-  business: {
-    name: "Business/PJ",
-    price: 49.9,
-    yearlyPrice: 499.9,
-    description: "Para MEI, CNPJ, igreja, projeto profissional, loja ou pequeno negócio.",
-    paymentLink: "",
-    features: [
-      "Cadastro de CNPJ opcional",
-      "Receitas e despesas do negócio",
-      "Categorias empresariais",
-      "Relatórios em PDF/Excel",
-      "Suporte prioritário",
-    ],
-    allowedProfileTypes: ["business"],
-    cta: "Escolher Business/PJ",
-    highlight: false,
-    active: true,
-  },
-  founder: {
-    name: "Fundador",
-    price: 9.9,
-    yearlyPrice: null,
-    description: "Preço especial por 12 meses para os primeiros usuários.",
-    paymentLink: "",
-    features: [
-      "R$ 9,90 por mês por 12 meses",
-      "Limitado aos primeiros usuários",
-      "Recursos pessoais avançados",
-      "Não é o preço oficial permanente",
-    ],
-    allowedProfileTypes: ["personal"],
-    cta: "Garantir preço fundador",
-    highlight: false,
-    active: process.env.NEXT_PUBLIC_FOUNDER_PLAN_ACTIVE === "true",
-  },
+  free: planCatalogToDetails(PLAN_CATALOG.free),
+  premium: planCatalogToDetails(PLAN_CATALOG.premium),
+  pro: planCatalogToDetails(PLAN_CATALOG.pro),
+  family: planCatalogToDetails(PLAN_CATALOG.family),
+  business: planCatalogToDetails(PLAN_CATALOG.business),
+  founder: planCatalogToDetails(PLAN_CATALOG.founder),
 };
 
 export const DEFAULT_FEATURE_ACCESS_CONFIG: FeatureAccessConfig = {
@@ -289,10 +190,22 @@ export const DEFAULT_ACCESS_CONTROL_CONFIG: AccessControlConfig = {
     { id: "plan-premium-recurring", subjectType: "plan", subjectId: "premium", resource: "transactions.recurring", level: "write", active: true },
     { id: "plan-premium-forecast", subjectType: "plan", subjectId: "premium", resource: "dashboard.monthly_forecast", level: "read", active: true },
     { id: "plan-premium-daily-limit", subjectType: "plan", subjectId: "premium", resource: "dashboard.smart_daily_limit", level: "none", active: true },
+    { id: "plan-founder-installments", subjectType: "plan", subjectId: "founder", resource: "transactions.installments", level: "write", active: true },
+    { id: "plan-founder-recurring", subjectType: "plan", subjectId: "founder", resource: "transactions.recurring", level: "write", active: true },
+    { id: "plan-founder-forecast", subjectType: "plan", subjectId: "founder", resource: "dashboard.monthly_forecast", level: "read", active: true },
+    { id: "plan-founder-daily-limit", subjectType: "plan", subjectId: "founder", resource: "dashboard.smart_daily_limit", level: "none", active: true },
     { id: "plan-pro-installments", subjectType: "plan", subjectId: "pro", resource: "transactions.installments", level: "write", active: true },
     { id: "plan-pro-recurring", subjectType: "plan", subjectId: "pro", resource: "transactions.recurring", level: "write", active: true },
     { id: "plan-pro-forecast", subjectType: "plan", subjectId: "pro", resource: "dashboard.monthly_forecast", level: "read", active: true },
     { id: "plan-pro-daily-limit", subjectType: "plan", subjectId: "pro", resource: "dashboard.smart_daily_limit", level: "read", active: true },
+    { id: "plan-family-installments", subjectType: "plan", subjectId: "family", resource: "transactions.installments", level: "write", active: true },
+    { id: "plan-family-recurring", subjectType: "plan", subjectId: "family", resource: "transactions.recurring", level: "write", active: true },
+    { id: "plan-family-forecast", subjectType: "plan", subjectId: "family", resource: "dashboard.monthly_forecast", level: "read", active: true },
+    { id: "plan-family-daily-limit", subjectType: "plan", subjectId: "family", resource: "dashboard.smart_daily_limit", level: "read", active: true },
+    { id: "plan-business-installments", subjectType: "plan", subjectId: "business", resource: "transactions.installments", level: "write", active: true },
+    { id: "plan-business-recurring", subjectType: "plan", subjectId: "business", resource: "transactions.recurring", level: "write", active: true },
+    { id: "plan-business-forecast", subjectType: "plan", subjectId: "business", resource: "dashboard.monthly_forecast", level: "read", active: true },
+    { id: "plan-business-daily-limit", subjectType: "plan", subjectId: "business", resource: "dashboard.smart_daily_limit", level: "read", active: true },
     { id: "role-admin-users-read", subjectType: "role", subjectId: "admin", resource: "admin.users.read", level: "read", active: true },
     { id: "role-admin-users-write", subjectType: "role", subjectId: "admin", resource: "admin.users.write", level: "write", active: true },
     { id: "role-admin-users-delete", subjectType: "role", subjectId: "admin", resource: "admin.users.delete", level: "write", active: true },

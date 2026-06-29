@@ -52,9 +52,21 @@ const structuredData = [
       {
         "@type": "Offer",
         name: "Pro",
-        price: "49.90",
+        price: "29.90",
         priceCurrency: "BRL",
       },
+      {
+        "@type": "Offer",
+        name: "Family",
+        price: "39.90",
+        priceCurrency: "BRL",
+      },
+      {
+        "@type": "Offer",
+        name: "Corporativo/PJ",
+        price: "49.90",
+        priceCurrency: "BRL",
+      }
     ],
   },
 ];

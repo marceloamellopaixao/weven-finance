@@ -50,8 +50,8 @@ function getInitials(workspace: Workspace) {
 function WorkspaceAvatar({ workspace, active, compact }: { workspace: Workspace; active?: boolean; compact?: boolean }) {
   const Icon = WORKSPACE_ICONS[workspace.type] || WalletCards;
   return (
-    <div className={`relative flex shrink-0 items-center justify-center ring-1 ${compact ? "h-8 w-8 rounded-full" : "h-12 w-12 rounded-2xl"} ${WORKSPACE_TONE[workspace.type]}`}>
-      {workspace.type === "family" ? <UsersRound className={compact ? "h-4 w-4" : "h-5 w-5"} /> : <Icon className={compact ? "h-4 w-4" : "h-5 w-5"} />}
+    <div className={`relative flex shrink-0 items-center justify-center ring-1 ${compact ? "h-6 w-6 rounded-full" : "h-12 w-12 rounded-2xl"} ${WORKSPACE_TONE[workspace.type]}`}>
+      {workspace.type === "family" ? <UsersRound className={compact ? "h-3 w-3" : "h-4 w-4"} /> : <Icon className={compact ? "h-4 w-4" : "h-5 w-5"} />}
       {active ? (
         <span className={`absolute flex items-center justify-center rounded-full bg-primary text-primary-foreground ring-2 ring-background ${compact ? "-right-0.5 -bottom-0.5 h-4 w-4" : "-right-1 -bottom-1 h-5 w-5"}`}>
           <Check className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
@@ -179,7 +179,7 @@ export function WorkspaceProfileSwitcher() {
           <Link href="/settings?tab=family" className="block">
             <Button variant="ghost" className="h-10 w-full justify-start rounded-xl text-sm">
               <UsersRound className="mr-2 h-4 w-4" />
-              Gerenciar perfis da familia
+              Gerenciar perfis da família
             </Button>
           </Link>
         ) : null}

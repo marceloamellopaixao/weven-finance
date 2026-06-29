@@ -8,8 +8,10 @@ import { normalizeCurrency } from "@/lib/money/formatMoney";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { getDefaultCategoriesForWorkspaceType } from "@/lib/categories/defaultCategories";
+import { canPlanUseProfile } from "@/lib/plans/catalog";
+import { getUserPlanContext } from "@/lib/plans/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
-import type { Workspace, WorkspaceSettings, WorkspaceType } from "@/types/workspace";
+import { toFinancialProfileType, type Workspace, type WorkspaceSettings, type WorkspaceType } from "@/types/workspace";
 import { ensureFamilyManagerMembership, getActiveMemberships, toWorkspaceMember } from "@/lib/workspaces/server";
 
 export const runtime = "nodejs";
@@ -25,81 +27,6 @@ const DEFAULT_NAMES: Record<WorkspaceType, string> = {
   business: "Meu negócio",
 };
 
-const CATEGORY_PRESETS: Record<WorkspaceType, Array<{ name: string; type: "income" | "expense" }>> = {
-  personal: [
-    { name: "Salário", type: "income" },
-    { name: "Freelance", type: "income" },
-    { name: "Reembolso", type: "income" },
-    { name: "Investimentos", type: "income" },
-    { name: "Alimentação", type: "expense" },
-    { name: "Moradia", type: "expense" },
-    { name: "Transporte", type: "expense" },
-    { name: "Saúde", type: "expense" },
-    { name: "Educação", type: "expense" },
-    { name: "Lazer", type: "expense" },
-    { name: "Cartão de crédito", type: "expense" },
-    { name: "Assinaturas", type: "expense" },
-  ],
-  professional: [
-    { name: "Cliente", type: "income" },
-    { name: "Projeto", type: "income" },
-    { name: "Serviço recorrente", type: "income" },
-    { name: "Comissão", type: "income" },
-    { name: "Ferramentas", type: "expense" },
-    { name: "Internet", type: "expense" },
-    { name: "Transporte", type: "expense" },
-    { name: "Marketing", type: "expense" },
-    { name: "Impostos", type: "expense" },
-    { name: "Equipamentos", type: "expense" },
-    { name: "Contabilidade", type: "expense" },
-  ],
-  church: [
-    { name: "Dízimos", type: "income" },
-    { name: "Ofertas", type: "income" },
-    { name: "Missões", type: "income" },
-    { name: "Cantina", type: "income" },
-    { name: "Eventos", type: "income" },
-    { name: "Doações", type: "income" },
-    { name: "Aluguel", type: "expense" },
-    { name: "Energia", type: "expense" },
-    { name: "Água", type: "expense" },
-    { name: "Som e mídia", type: "expense" },
-    { name: "Departamento infantil", type: "expense" },
-    { name: "Jovens", type: "expense" },
-    { name: "Missões", type: "expense" },
-    { name: "Cesta básica", type: "expense" },
-    { name: "Manutenção", type: "expense" },
-    { name: "Cantina", type: "expense" },
-  ],
-  family: [
-    { name: "Salário principal", type: "income" },
-    { name: "Salário secundário", type: "income" },
-    { name: "Ajuda familiar", type: "income" },
-    { name: "Mercado", type: "expense" },
-    { name: "Aluguel/Financiamento", type: "expense" },
-    { name: "Luz", type: "expense" },
-    { name: "Água", type: "expense" },
-    { name: "Internet", type: "expense" },
-    { name: "Escola", type: "expense" },
-    { name: "Saúde", type: "expense" },
-    { name: "Transporte", type: "expense" },
-    { name: "Lazer familiar", type: "expense" },
-  ],
-  business: [
-    { name: "Vendas", type: "income" },
-    { name: "Serviços", type: "income" },
-    { name: "Mensalidades", type: "income" },
-    { name: "Repasses", type: "income" },
-    { name: "Fornecedores", type: "expense" },
-    { name: "Estoque", type: "expense" },
-    { name: "Marketing", type: "expense" },
-    { name: "Taxas", type: "expense" },
-    { name: "Plataforma", type: "expense" },
-    { name: "Impostos", type: "expense" },
-    { name: "Operacional", type: "expense" },
-  ],
-};
-void CATEGORY_PRESETS;
 
 function parseType(value: unknown): WorkspaceType | null {
   return typeof value === "string" && WORKSPACE_TYPES.has(value as WorkspaceType) ? (value as WorkspaceType) : null;
@@ -112,7 +39,19 @@ function normalizeWorkspaceType(type: WorkspaceType): WorkspaceType {
 function assertDocumentAllowed(type: WorkspaceType, settings?: WorkspaceSettings) {
   const document = typeof settings?.businessDocument === "string" ? settings.businessDocument.replace(/\D/g, "") : "";
   if (document && type !== "business") {
-    throw new Error("business_profile_required_for_cnpj");
+    throw new Error("Para controlar um negócio, MEI, igreja, projeto profissional ou qualquer atividade com CNPJ, use o perfil Business/PJ.");
+  }
+}
+
+async function assertPlanCanUseWorkspace(uid: string, type: WorkspaceType) {
+  const planContext = await getUserPlanContext(uid);
+  const profileType = toFinancialProfileType(type);
+  if (planContext.isBillingExempt || canPlanUseProfile(planContext.plan, profileType)) return;
+  if (profileType === "family") {
+    throw new Error("Para criar um perfil Família, escolha o plano Família.");
+  }
+  if (profileType === "business") {
+    throw new Error("Para controlar MEI, CNPJ, igreja, projeto profissional ou pequeno negócio, escolha o plano Business/PJ.");
   }
 }
 
@@ -125,6 +64,12 @@ function parseSettings(value: unknown): WorkspaceSettings {
     familyModeEnabled: Boolean(data.familyModeEnabled),
     businessDocument: typeof data.businessDocument === "string" ? data.businessDocument.replace(/\D/g, "").slice(0, 14) : undefined,
   };
+}
+
+function getWorkspaceErrorStatus(message: string) {
+  if (message.includes("CNPJ")) return 400;
+  if (message.startsWith("Para criar um perfil") || message.startsWith("Para controlar")) return 403;
+  return resolveApiErrorStatus(message);
 }
 
 function toWorkspace(uid: string, row: Record<string, unknown>): Workspace {
@@ -340,7 +285,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, workspaces, defaultWorkspace }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = resolveApiErrorStatus(message);
+    const status = getWorkspaceErrorStatus(message);
     apiLogger.error({ message: "workspaces_get_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
@@ -361,7 +306,7 @@ export async function POST(request: NextRequest) {
       request,
       acting,
       actionType: "workspaces:create",
-      actionLabel: "Criar contexto de conta",
+      actionLabel: "Criar perfil financeiro",
     });
     if (!approval.allowed) {
       return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });
@@ -375,6 +320,7 @@ export async function POST(request: NextRequest) {
     }
     const current = await getWorkspaceRows(uid);
     const workspace = buildWorkspace(uid, { ...body, type }, current.length);
+    await assertPlanCanUseWorkspace(uid, workspace.type);
     const next = workspace.isDefault
       ? [...current.map((item) => ({ ...item, isDefault: false, updatedAt: new Date().toISOString() })), workspace]
       : [...current, workspace];
@@ -386,7 +332,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, workspace }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = resolveApiErrorStatus(message);
+    const status = getWorkspaceErrorStatus(message);
     apiLogger.error({ message: "workspaces_post_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
@@ -407,7 +353,7 @@ export async function PATCH(request: NextRequest) {
       request,
       acting,
       actionType: "workspaces:update",
-      actionLabel: "Atualizar contexto de conta",
+      actionLabel: "Atualizar perfil financeiro",
     });
     if (!approval.allowed) {
       return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });
@@ -431,6 +377,7 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ ok: true, defaultWorkspace: existingDefault }, { status: 200 });
       }
       const workspace = buildWorkspace(uid, { ...body.workspace, isDefault: true }, current.length);
+      await assertPlanCanUseWorkspace(uid, workspace.type);
       const next = [...current.map((item) => ({ ...item, isDefault: false, updatedAt: new Date().toISOString() })), workspace];
       await persistWorkspaceSet(uid, next);
       await ensureFamilyOwnerIfNeeded(uid, workspace);
@@ -453,6 +400,9 @@ export async function PATCH(request: NextRequest) {
     }
     const nextType = normalizeWorkspaceType(parsedNextType);
     assertDocumentAllowed(nextType, { ...target.settings, ...body.settings });
+    if (nextType !== target.type) {
+      await assertPlanCanUseWorkspace(uid, nextType);
+    }
     const now = new Date().toISOString();
     const updated: Workspace = {
       ...target,
@@ -479,7 +429,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: true, workspace: updated }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = resolveApiErrorStatus(message);
+    const status = getWorkspaceErrorStatus(message);
     apiLogger.error({ message: "workspaces_patch_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });

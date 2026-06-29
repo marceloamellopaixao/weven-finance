@@ -7,21 +7,22 @@ import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useUiText } from "@/i18n/T";
-import { buildUpgradeCheckoutPath, rememberPendingUpgradePlan } from "@/services/billing/checkoutIntent";
+import { PLAN_CATALOG } from "@/lib/plans/catalog";
+import { buildUpgradeCheckoutPath, rememberPendingUpgradePlan, type UpgradePlan } from "@/services/billing/checkoutIntent";
 
 type MarketingCtasProps = {
-  variant: "hero" | "free" | "premium" | "pro";
+  variant: "hero" | "free" | UpgradePlan;
 };
 
 export function MarketingCtas({ variant }: MarketingCtasProps) {
   const { user, userProfile } = useAuth();
   const tt = useUiText();
-  const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
+  const [isOpeningCheckout, setIsOpeningCheckout] = useState<UpgradePlan | null>(null);
   const hasSession = Boolean(user || userProfile);
   const primaryHref = hasSession ? "/dashboard" : "/register";
   const primaryLabel = hasSession ? tt("Abrir meu painel") : tt("Começar grátis");
 
-  const handlePlanCheckout = async (plan: "premium" | "pro") => {
+  const handlePlanCheckout = async (plan: UpgradePlan) => {
     if (!user) {
       rememberPendingUpgradePlan(plan);
       window.location.assign(`/register?upgrade_plan=${plan}`);
@@ -63,6 +64,7 @@ export function MarketingCtas({ variant }: MarketingCtasProps) {
   }
 
   const plan = variant;
+  const planCopy = PLAN_CATALOG[plan];
   return (
     <Button
       className={plan === "premium"
@@ -72,7 +74,7 @@ export function MarketingCtas({ variant }: MarketingCtasProps) {
       disabled={isOpeningCheckout !== null}
       onClick={() => void handlePlanCheckout(plan)}
     >
-      {isOpeningCheckout === plan ? tt("Abrindo checkout...") : plan === "premium" ? tt("Ir para o Premium") : tt("Ir para o Pro")}
+      {isOpeningCheckout === plan ? tt("Abrindo checkout...") : planCopy.cta}
     </Button>
   );
 }

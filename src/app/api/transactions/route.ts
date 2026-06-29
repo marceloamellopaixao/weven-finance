@@ -513,7 +513,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             ok: false,
-            error: "Parcelamentos estão disponíveis apenas nos planos Premium e Pro.",
+            error: "Parcelamentos e lançamentos fixos fazem parte dos planos pagos.",
           },
           { status: 403 }
         );

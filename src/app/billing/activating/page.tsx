@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTranslations } from "@/i18n/T";
 import { Button } from "@/components/ui/button";
 import { confirmPreapproval } from "@/services/billingService";
+import { parseUpgradePlan } from "@/services/billing/checkoutIntent";
 
 type ActivationState = "preparing" | "confirming" | "success" | "error" | "login_required";
 
@@ -28,12 +29,11 @@ export default function BillingActivatingPage() {
   const startedKeyRef = useRef("");
 
   const expectedPlanFromQuery = useMemo(() => {
-    const value = searchParams.get("plan");
-    return value === "premium" || value === "pro" ? value : undefined;
+    return parseUpgradePlan(searchParams.get("plan")) ?? undefined;
   }, [searchParams]);
 
   const pendingPlan = userProfile?.billing?.pendingPlan;
-  const expectedPlan = expectedPlanFromQuery || (pendingPlan === "premium" || pendingPlan === "pro" ? pendingPlan : undefined);
+  const expectedPlan = expectedPlanFromQuery || parseUpgradePlan(pendingPlan) || undefined;
   const checkoutAttemptIdFromQuery = useMemo(() => searchParams.get("attempt") || undefined, [searchParams]);
   const checkoutAttemptId = checkoutAttemptIdFromQuery || userProfile?.billing?.pendingCheckoutAttemptId;
 

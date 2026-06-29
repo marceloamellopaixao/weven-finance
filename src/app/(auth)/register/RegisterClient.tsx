@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslations } from "@/i18n/T";
+import { formatPlanName } from "@/lib/plans/capabilities";
 import { formatPhone, normalizePhone } from "@/lib/phone";
 import { parseUpgradePlan, readPendingUpgradePlan, rememberPendingUpgradePlan } from "@/services/billing/checkoutIntent";
 
@@ -81,7 +82,7 @@ export function RegisterClient() {
           </p>
           {pendingUpgradePlan && (
             <p className="text-xs font-medium text-primary">
-              {tRegister("pendingUpgrade", { plan: pendingUpgradePlan === "premium" ? "Premium" : "Pro" })}
+              {tRegister("pendingUpgrade", { plan: formatPlanName(pendingUpgradePlan) })}
             </p>
           )}
         </div>

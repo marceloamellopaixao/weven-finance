@@ -18,7 +18,7 @@ type EditingState = {
 } | null;
 
 function workspaceSubtitle(workspace: Workspace) {
-  if (workspace.membership) return `Compartilhado com voce como ${workspace.membership.displayName || "membro"}`;
+  if (workspace.membership) return `Compartilhado com você como ${workspace.membership.displayName || "membro"}`;
   return WORKSPACE_TYPE_LABELS[workspace.type];
 }
 
@@ -46,7 +46,7 @@ export function WorkspaceSettingsPanel() {
       setEditing(null);
       setFeedback("Perfil atualizado.");
     } catch (err) {
-      setFeedback(err instanceof Error ? err.message : "Nao foi possivel salvar o perfil.");
+      setFeedback(err instanceof Error ? err.message : "Não foi possível salvar o perfil.");
     } finally {
       setSavingId(null);
     }
@@ -57,9 +57,9 @@ export function WorkspaceSettingsPanel() {
     setFeedback(null);
     try {
       await setDefaultWorkspace(workspace.id);
-      setFeedback("Perfil padrao atualizado.");
+      setFeedback("Perfil padrão atualizado.");
     } catch (err) {
-      setFeedback(err instanceof Error ? err.message : "Nao foi possivel definir o padrao.");
+      setFeedback(err instanceof Error ? err.message : "Não foi possível definir o padrão.");
     } finally {
       setSavingId(null);
     }
@@ -84,7 +84,7 @@ export function WorkspaceSettingsPanel() {
               <WalletCards className="h-5 w-5" /> Perfis financeiros
             </CardTitle>
             <CardDescription>
-              Crie contextos separados para vida pessoal, igreja, trabalho, familia ou negocio.
+              Separe seu uso pessoal, sua família e seu Business/PJ sem misturar os dados.
             </CardDescription>
           </div>
           <Link href="/account-profile?create=1">
@@ -117,7 +117,7 @@ export function WorkspaceSettingsPanel() {
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="truncate text-base font-semibold text-foreground">{workspace.name}</h3>
                       {active ? <Badge className="gap-1"><Check className="h-3 w-3" /> Ativo</Badge> : null}
-                      {isDefault ? <Badge variant="outline" className="gap-1 border-amber-300 bg-amber-50 text-amber-700"><Star className="h-3 w-3" /> Padrao</Badge> : null}
+                      {isDefault ? <Badge variant="outline" className="gap-1 border-amber-300 bg-amber-50 text-amber-700"><Star className="h-3 w-3" /> Padrão</Badge> : null}
                     </div>
                     <p className="text-sm text-muted-foreground">{workspaceSubtitle(workspace)}</p>
                     {isEditing ? (
@@ -152,7 +152,7 @@ export function WorkspaceSettingsPanel() {
                         </Button>
                         <Button type="button" variant="outline" className="rounded-xl" disabled={isDefault || savingId === workspace.id} onClick={() => void handleSetDefault(workspace)}>
                           {savingId === workspace.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                          Definir padrao
+                          Definir padrão
                         </Button>
                       </>
                     ) : null}

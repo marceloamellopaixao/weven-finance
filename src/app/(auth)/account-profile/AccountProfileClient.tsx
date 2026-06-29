@@ -13,8 +13,9 @@ import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useTranslations } from "@/i18n/T";
 import { getDefaultCurrencyForLocale } from "@/lib/money/formatMoney";
+import { canPlanUseProfile } from "@/lib/plans/catalog";
 import { createWorkspace, setActiveWorkspaceId } from "@/services/workspaceService";
-import type { WorkspaceType } from "@/types/workspace";
+import { toFinancialProfileType, type WorkspaceType } from "@/types/workspace";
 
 const OPTIONS: Array<{
   type: WorkspaceType;
@@ -88,15 +89,36 @@ export function AccountProfileClient() {
     onComplete: completeTour,
   });
 
-  const selectedOption = useMemo(
-    () => OPTIONS.find((option) => option.type === selectedType) || OPTIONS[0],
-    [selectedType],
+  const currentPlan = userProfile?.plan || "free";
+  const availableOptions = useMemo(
+    () => OPTIONS.filter((option) => canPlanUseProfile(currentPlan, toFinancialProfileType(option.type))),
+    [currentPlan],
   );
+  const selectedTypeAllowed = canPlanUseProfile(currentPlan, toFinancialProfileType(selectedType));
+  const selectedOption = useMemo(
+    () => {
+      if (selectedTypeAllowed) return OPTIONS.find((option) => option.type === selectedType) || OPTIONS[0];
+      return availableOptions[0] || OPTIONS[0];
+    },
+    [availableOptions, selectedType, selectedTypeAllowed],
+  );
+
+  const getRestrictionMessage = (type: WorkspaceType) => {
+    const profileType = toFinancialProfileType(type);
+    if (profileType === "family") return "Esse perfil faz parte do plano Família.";
+    if (profileType === "business") return "Esse perfil faz parte do plano Business/PJ.";
+    return "Esse perfil não está disponível no seu plano atual.";
+  };
 
   const handleSelectType = (type: WorkspaceType) => {
     const option = OPTIONS.find((item) => item.type === type) || OPTIONS[0];
+    if (!canPlanUseProfile(currentPlan, toFinancialProfileType(type))) {
+      setError(getRestrictionMessage(type));
+      return;
+    }
     setSelectedType(type);
     setProfileName(option.suggestions[0]);
+    setError(null);
     if (type !== "business") {
       setWantsCnpj(false);
       setCnpj("");
@@ -104,12 +126,16 @@ export function AccountProfileClient() {
   };
 
   const handleContinue = async () => {
+    if (!canPlanUseProfile(currentPlan, toFinancialProfileType(selectedOption.type))) {
+      setError(getRestrictionMessage(selectedOption.type));
+      return;
+    }
     const cleanedCnpj = stripCnpj(cnpj);
-    if (selectedType !== "business" && cleanedCnpj) {
+    if (selectedOption.type !== "business" && cleanedCnpj) {
       setError("Para controlar um negócio, MEI, igreja, projeto profissional ou qualquer atividade com CNPJ, use o perfil Business/PJ.");
       return;
     }
-    if (selectedType === "business" && wantsCnpj && cleanedCnpj.length !== 14) {
+    if (selectedOption.type === "business" && wantsCnpj && cleanedCnpj.length !== 14) {
       setError("Confira o CNPJ informado. Ele precisa ter 14 números.");
       return;
     }
@@ -125,7 +151,7 @@ export function AccountProfileClient() {
           monthlyReportEnabled: true,
           categoriesPresetApplied: true,
           familyModeEnabled: selectedOption.type === "family",
-          businessDocument: selectedType === "business" && cleanedCnpj ? cleanedCnpj : undefined,
+          businessDocument: selectedOption.type === "business" && cleanedCnpj ? cleanedCnpj : undefined,
         },
       });
       setActiveWorkspaceId(workspace.id);
@@ -161,17 +187,20 @@ export function AccountProfileClient() {
         <section id="tour-account-profile-options" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {OPTIONS.map((option) => {
             const Icon = option.icon;
-            const selected = option.type === selectedType;
+            const selected = option.type === selectedOption.type;
+            const allowed = canPlanUseProfile(currentPlan, toFinancialProfileType(option.type));
             return (
               <button
                 key={option.type}
                 type="button"
                 onClick={() => handleSelectType(option.type)}
-                disabled={submitting}
+                disabled={submitting || !allowed}
                 className={`group min-h-[150px] rounded-2xl border p-1 text-left transition-all duration-300 ${
                   selected
                     ? "border-primary/60 bg-primary/10 shadow-xl shadow-primary/10"
-                    : "border-border/80 bg-card/80 hover:border-primary/35 hover:bg-accent/60"
+                    : allowed
+                      ? "border-border/80 bg-card/80 hover:border-primary/35 hover:bg-accent/60"
+                      : "border-border/60 bg-muted/45 opacity-75"
                 }`}
               >
                 <Card className="h-full rounded-xl border-0 bg-transparent shadow-none">
@@ -183,9 +212,9 @@ export function AccountProfileClient() {
                       <h2 className="text-lg font-bold text-foreground">{option.title}</h2>
                       <p className="text-sm leading-relaxed text-muted-foreground">{option.description}</p>
                     </div>
-                    <div className="mt-auto flex items-center gap-2 text-sm font-semibold text-primary">
-                      <span>{selected ? tProfile("selected") : tProfile("choose")}</span>
-                      {selected ? <CheckCircle2 className="h-4 w-4" /> : null}
+                    <div className={`mt-auto flex items-center gap-2 text-sm font-semibold ${allowed ? "text-primary" : "text-muted-foreground"}`}>
+                      <span>{allowed ? (selected ? tProfile("selected") : tProfile("choose")) : getRestrictionMessage(option.type)}</span>
+                      {selected && allowed ? <CheckCircle2 className="h-4 w-4" /> : null}
                     </div>
                   </CardContent>
                 </Card>
@@ -226,7 +255,7 @@ export function AccountProfileClient() {
           </div>
 
           <div className="rounded-2xl border border-border/80 bg-card/80 p-5">
-            {selectedType === "business" ? (
+            {selectedOption.type === "business" ? (
               <>
                 <h2 className="text-xl font-bold text-foreground">Você quer informar um CNPJ agora?</h2>
                 <p className="mt-2 text-sm text-muted-foreground">

@@ -269,7 +269,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
               <CardDescription>Convide familiares, defina papéis e escolha o que cada pessoa pode acessar.</CardDescription>
             </div>
             <Badge variant="outline" className="gap-1 border-primary/25 bg-primary/10 text-primary">
-              <ShieldCheck className="h-3 w-3" /> Familia
+              <ShieldCheck className="h-3 w-3" /> Família
             </Badge>
           </div>
         </CardHeader>
@@ -331,7 +331,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
 
                 <div className="rounded-2xl border border-color:var(--app-panel-border) p-4">
                   <div className="mb-3">
-                    <p className="text-sm font-semibold">Permissoes do convite</p>
+                    <p className="text-sm font-semibold">Permissões do convite</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Escolha o que esta pessoa poderá ver ou alterar.
                     </p>

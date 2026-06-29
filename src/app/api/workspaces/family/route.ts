@@ -6,6 +6,8 @@ import { getRequestMeta } from "@/lib/api/request-meta";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { getPlanCapabilities } from "@/lib/plans/capabilities";
+import { getUserPlanContext } from "@/lib/plans/server";
 import {
   DEFAULT_FAMILY_ROLE_PERMISSIONS,
   canManageFamilyMembers,
@@ -284,6 +286,33 @@ async function sendPasswordSetupEmail(client: ReturnType<typeof getSupabaseServi
   if (result.error) throw new Error(`supabase_password_email_failed:${result.error.message}`);
 }
 
+async function assertFamilyInviteAllowed(workspaceUid: string, workspaceId: string, email: string) {
+  const planContext = await getUserPlanContext(workspaceUid);
+  const capabilities = getPlanCapabilities(planContext.plan, planContext.plans, planContext.featureAccess);
+  if (!planContext.isBillingExempt && !capabilities.hasFamilyWorkspace) {
+    throw new Error("Para convidar familiares, use o plano Família.");
+  }
+  if (planContext.isBillingExempt || capabilities.maxFamilyMembers === null) return;
+
+  const memberRows = await supabaseSelect("workspace_members", {
+    filters: { workspace_uid: workspaceUid, workspace_id: workspaceId },
+    conditions: { member_status: "in.(active,pending)" },
+    limit: 500,
+  });
+  const normalizedEmail = normalizeEmail(email);
+  const alreadyAdded = memberRows.some((row) => normalizeEmail(row.email) === normalizedEmail);
+  const invitedMembers = memberRows.filter((row) => String(row.member_uid || "") !== workspaceUid);
+  if (!alreadyAdded && invitedMembers.length >= capabilities.maxFamilyMembers) {
+    throw new Error(`Seu plano Família permite até ${capabilities.maxFamilyMembers} familiares convidados.`);
+  }
+}
+
+function getFamilyErrorStatus(message: string) {
+  if (message.startsWith("Para convidar") || message.startsWith("Seu plano")) return 403;
+  if (message === "forbidden") return 403;
+  return resolveApiErrorStatus(message);
+}
+
 export async function GET(request: NextRequest) {
   const meta = getRequestMeta(request);
   const startedAt = Date.now();
@@ -314,7 +343,7 @@ export async function GET(request: NextRequest) {
     }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
+    const status = getFamilyErrorStatus(message);
     apiLogger.error({ message: "workspaces_family_get_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
@@ -341,6 +370,7 @@ export async function POST(request: NextRequest) {
     const email = normalizeEmail(body.email);
     if (!workspaceId || !email) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     const access = await assertCanManage(auth.uid, workspaceId);
+    await assertFamilyInviteAllowed(access.workspaceUid, workspaceId, email);
     const role = normalizeFamilyRole(body.role);
     const permissions = normalizeFamilyPermissions(body.permissions || DEFAULT_FAMILY_ROLE_PERMISSIONS[role], role);
     const mode: InviteMode = body.inviteMode === "temporary_password" || body.inviteMode === "auto_password" ? body.inviteMode : "self_setup";
@@ -392,7 +422,7 @@ export async function POST(request: NextRequest) {
     }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
+    const status = getFamilyErrorStatus(message);
     apiLogger.error({ message: "workspaces_family_post_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
@@ -477,7 +507,7 @@ export async function PUT(request: NextRequest) {
     }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
+    const status = getFamilyErrorStatus(message);
     apiLogger.error({ message: "workspaces_family_put_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
@@ -526,7 +556,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: true, member }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
+    const status = getFamilyErrorStatus(message);
     apiLogger.error({ message: "workspaces_family_patch_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
