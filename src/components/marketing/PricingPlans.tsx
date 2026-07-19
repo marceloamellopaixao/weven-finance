@@ -64,55 +64,49 @@ export function PricingPlans() {
         <p className="text-center text-sm font-semibold text-primary">Melhor custo-benefício. Economize até 2 meses.</p>
       ) : null}
 
-      <div className="grid items-stretch gap-5 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-5">
         {plans.map((plan) => {
           const featured = plan.id === "premium";
           const price = getPlanPrice(plan, interval);
           const equivalent = interval === "yearly" ? getEquivalentMonthlyPrice(plan.id) : null;
           const hasYearlyPrice = plan.yearlyPrice !== null;
-          const chargeText =
-            plan.id === "free"
-              ? "R$ 0"
-              : interval === "yearly" && hasYearlyPrice
-                ? `${formatPrice(price)} por ano`
-                : `${formatPrice(plan.monthlyPrice)} por mês`;
+          const priceLabel = plan.id === "free" ? "R$ 0" : formatPrice(price);
+          const periodLabel = plan.id === "free" ? "" : interval === "yearly" && hasYearlyPrice ? "por ano" : "por mês";
 
           return (
             <Card
               key={plan.id}
-              className={`relative flex h-full min-h-[520px] overflow-hidden rounded-2xl border bg-card/90 shadow-sm transition-all xl:min-h-[560px] ${
+              className={`relative flex h-full min-h-[500px] overflow-hidden rounded-2xl border bg-card/90 shadow-sm transition-all xl:min-h-[540px] ${
                 featured ? "border-primary/55 shadow-xl shadow-primary/10" : "border-border/80 hover:border-primary/35"
               }`}
             >
-              <CardHeader className="min-h-[158px] space-y-4 p-6">
-                <div className="flex min-h-7 flex-wrap items-center gap-2">
-                  {plan.badge ? (
-                    <Badge className="rounded-full bg-primary/10 text-primary hover:bg-primary/15">{plan.badge}</Badge>
-                  ) : null}
-                  {featured ? (
-                    <Badge variant="outline" className="rounded-full border-primary/30 text-primary">
-                      Mais escolhido
-                    </Badge>
-                  ) : null}
-                </div>
-                <div className="space-y-2">
-                  <CardTitle className="flex min-h-14 items-start gap-2 text-xl leading-tight">
+              {plan.badge ? (
+                <Badge className="absolute right-5 top-5 rounded-full bg-primary/10 text-[10px] text-primary hover:bg-primary/15">
+                  {plan.badge}
+                </Badge>
+              ) : null}
+              <CardHeader className="min-h-[170px] justify-end space-y-3 p-5 pt-16">
+                <div className="space-y-3">
+                  <CardTitle className="flex min-h-12 items-start gap-2 text-xl leading-tight">
                     <span>{plan.publicName}</span>
                     {featured ? <Medal className="mt-0.5 h-5 w-5 shrink-0 text-primary" /> : null}
                   </CardTitle>
-                  <CardDescription className="min-h-[60px] leading-5">{plan.description}</CardDescription>
+                  <CardDescription className="min-h-[72px] text-sm leading-6">{plan.description}</CardDescription>
                 </div>
               </CardHeader>
-              <CardContent className="flex flex-1 flex-col space-y-5 p-6 pt-0">
-                <div className="min-h-[92px]">
-                  <p className="text-3xl font-black tracking-tight text-foreground">{chargeText}</p>
+              <CardContent className="flex flex-1 flex-col space-y-5 p-5 pt-0">
+                <div className="min-h-[96px]">
+                  <p className="text-3xl font-black leading-none tracking-tight text-foreground">{priceLabel}</p>
+                  {periodLabel ? (
+                    <p className="mt-1 text-xl font-black leading-tight text-foreground">{periodLabel}</p>
+                  ) : null}
                   {equivalent !== null && hasYearlyPrice ? (
                     <p className="mt-1 text-sm font-medium text-muted-foreground">
                       Equivale a {formatPrice(equivalent)} por mês.
                     </p>
                   ) : null}
                 </div>
-                <ul className="min-h-[168px] flex-1 space-y-2 text-sm text-muted-foreground">
+                <ul className="flex-1 space-y-2 text-sm leading-5 text-muted-foreground">
                   {plan.benefits.slice(0, 6).map((feature) => (
                     <li key={feature} className="flex gap-2">
                       <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -121,7 +115,7 @@ export function PricingPlans() {
                   ))}
                 </ul>
               </CardContent>
-              <CardFooter className="mt-auto p-6 pt-0">
+              <CardFooter className="mt-auto p-5 pt-0">
                 <Button
                   className="h-11 w-full rounded-xl font-bold"
                   variant={featured ? "default" : "outline"}
