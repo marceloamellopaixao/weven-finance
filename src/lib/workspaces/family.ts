@@ -288,6 +288,18 @@ export function canViewFamilyMembers(member: WorkspaceMember | null | undefined)
   return !member || hasFamilyPermission(member, "family.view_members") || canManageFamilyMembers(member);
 }
 
+export function canInviteFamilyMembers(member: WorkspaceMember | null | undefined) {
+  return !member || hasFamilyPermission(member, "family.invite_members") || canManageFamilyMembers(member);
+}
+
+export function canEditFamilyMembers(member: WorkspaceMember | null | undefined) {
+  return !member || hasFamilyPermission(member, "family.manage_members") || canManageFamilyMembers(member);
+}
+
+export function canEditFamilyPermissions(member: WorkspaceMember | null | undefined) {
+  return !member || hasFamilyPermission(member, "family.manage_permissions") || canManageFamilyMembers(member);
+}
+
 export function canViewFamilyDashboardSummary(member: WorkspaceMember | null | undefined) {
   return !member || hasFamilyPermission(member, "dashboard.view_all") || hasFamilyPermission(member, "view_all");
 }

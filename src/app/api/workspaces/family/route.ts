@@ -10,7 +10,9 @@ import { getPlanCapabilities } from "@/lib/plans/capabilities";
 import { getUserPlanContext } from "@/lib/plans/server";
 import {
   DEFAULT_FAMILY_ROLE_PERMISSIONS,
-  canManageFamilyMembers,
+  canEditFamilyMembers,
+  canEditFamilyPermissions,
+  canInviteFamilyMembers,
   canViewFamilyMembers,
   normalizeFamilyPermissions,
   normalizeFamilyRole,
@@ -128,7 +130,15 @@ function toInvitationRow(input: {
   };
 }
 
-async function assertCanManage(uid: string, workspaceId: string) {
+type FamilyManageAction = "manage_members" | "invite_members" | "edit_permissions";
+
+function canPerformFamilyManageAction(member: WorkspaceMember | null, action: FamilyManageAction) {
+  if (action === "invite_members") return canInviteFamilyMembers(member);
+  if (action === "edit_permissions") return canEditFamilyPermissions(member);
+  return canEditFamilyMembers(member);
+}
+
+async function assertCanManage(uid: string, workspaceId: string, action: FamilyManageAction = "manage_members") {
   const owned = await getOwnedWorkspace(uid, workspaceId);
   if (owned) {
     if (owned.workspace_type !== "family") throw new Error("workspace_not_family");
@@ -140,7 +150,7 @@ async function assertCanManage(uid: string, workspaceId: string) {
     limit: 1,
   });
   const manager = rows[0] ? toWorkspaceMember(rows[0]) : null;
-  if (!manager || !canManageFamilyMembers(manager)) throw new Error("forbidden");
+  if (!manager || !canPerformFamilyManageAction(manager, action)) throw new Error("forbidden");
   const familyWorkspace = await getOwnedWorkspace(manager.workspaceUid, workspaceId);
   if (familyWorkspace?.workspace_type !== "family") throw new Error("workspace_not_family");
   return { workspaceUid: manager.workspaceUid, workspaceId, owner: false as const, manager };
@@ -369,7 +379,7 @@ export async function POST(request: NextRequest) {
     const workspaceId = String(body.workspaceId || "").trim();
     const email = normalizeEmail(body.email);
     if (!workspaceId || !email) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
-    const access = await assertCanManage(auth.uid, workspaceId);
+    const access = await assertCanManage(auth.uid, workspaceId, "invite_members");
     await assertFamilyInviteAllowed(access.workspaceUid, workspaceId, email);
     const role = normalizeFamilyRole(body.role);
     const permissions = normalizeFamilyPermissions(body.permissions || DEFAULT_FAMILY_ROLE_PERMISSIONS[role], role);
@@ -445,7 +455,7 @@ export async function PUT(request: NextRequest) {
     const invitationId = String(body.invitationId || "").trim();
     const memberUid = String(body.memberUid || "").trim();
     if (!workspaceId || (!invitationId && !memberUid)) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
-    const access = await assertCanManage(auth.uid, workspaceId);
+    const access = await assertCanManage(auth.uid, workspaceId, "invite_members");
     if (memberUid) {
       if (memberUid === access.workspaceUid) {
         return NextResponse.json({ ok: false, error: "cannot_resend_owner_access" }, { status: 400 });
@@ -531,7 +541,11 @@ export async function PATCH(request: NextRequest) {
     const workspaceId = String(body.workspaceId || "").trim();
     const memberUid = String(body.memberUid || "").trim();
     if (!workspaceId || !memberUid) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
-    const access = await assertCanManage(auth.uid, workspaceId);
+    const requiredAction: FamilyManageAction = body.role !== undefined || body.status !== undefined ? "manage_members" : "edit_permissions";
+    const access = await assertCanManage(auth.uid, workspaceId, requiredAction);
+    if (body.permissions !== undefined && !access.owner && !canEditFamilyPermissions(access.manager)) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
     const existing = await getWorkspaceMember(access.workspaceUid, workspaceId, memberUid);
     if (!existing) return NextResponse.json({ ok: false, error: "member_not_found" }, { status: 404 });
     if (memberUid === access.workspaceUid) {

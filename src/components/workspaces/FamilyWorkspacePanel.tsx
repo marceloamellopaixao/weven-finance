@@ -15,6 +15,9 @@ import {
   FAMILY_PERMISSION_LABELS,
   FAMILY_PERMISSION_GROUPS,
   FAMILY_ROLE_LABELS,
+  canEditFamilyMembers,
+  canEditFamilyPermissions,
+  canInviteFamilyMembers,
   canViewFamilyMembers,
   normalizeFamilyPermissions,
 } from "@/lib/workspaces/family";
@@ -22,12 +25,6 @@ import { closeFamilyWorkspace, getFamilyWorkspace, inviteFamilyMember, resendFam
 import type { FamilyPermission, FamilyRole, Workspace, WorkspaceInvitation, WorkspaceMember } from "@/types/workspace";
 
 const ROLE_OPTIONS = Object.keys(FAMILY_ROLE_LABELS) as FamilyRole[];
-
-function canManage(workspace: Workspace | null) {
-  if (!workspace) return false;
-  if (!workspace.membership) return true;
-  return workspace.membership.permissions.includes("manage_members");
-}
 
 function canViewMembers(workspace: Workspace | null) {
   if (!workspace) return false;
@@ -112,8 +109,10 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
   const [isClosingFamily, setIsClosingFamily] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const mayManage = canManage(familyWorkspace);
   const mayViewMembers = canViewMembers(familyWorkspace);
+  const mayInviteMembers = !familyWorkspace?.membership || canInviteFamilyMembers(familyWorkspace.membership);
+  const mayEditMembers = !familyWorkspace?.membership || canEditFamilyMembers(familyWorkspace.membership);
+  const mayEditPermissions = !familyWorkspace?.membership || canEditFamilyPermissions(familyWorkspace.membership);
 
   const toggleExpanded = () => setIsExpanded((current) => !current);
 
@@ -300,7 +299,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
           <CardContent className="text-sm text-muted-foreground">Você pode usar este perfil, mas não tem permissão para gerenciar membros.</CardContent>
         ) : (
           <CardContent className="space-y-5">
-            {mayManage ? (
+            {mayInviteMembers ? (
             <details className="rounded-2xl border border-color:var(--app-panel-border) bg-background/45">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
                 <span>
@@ -370,7 +369,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
 
             {message ? <p className="rounded-xl border border-border/70 px-3 py-2 text-xs text-muted-foreground">{message}</p> : null}
 
-            {mayManage && invitations.some((invitation) => invitation.status === "pending") ? (
+            {mayInviteMembers && invitations.some((invitation) => invitation.status === "pending") ? (
               <div className="space-y-2">
                 <p className="text-sm font-semibold">Convites pendentes</p>
                 <div className="space-y-2">
@@ -426,24 +425,28 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                       </div>
                       {isOwnerManager ? (
                         <Badge variant="secondary" className="h-9 px-3">{FAMILY_ROLE_LABELS.family_manager}</Badge>
-                      ) : mayManage ? (
+                      ) : mayEditMembers || mayEditPermissions ? (
                         <div className="flex flex-wrap items-center gap-2">
-                          <Select value={member.role} onValueChange={(value) => void handleMemberRoleChange(member, value as FamilyRole)}>
-                            <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {ROLE_OPTIONS.map((option) => <SelectItem key={option} value={option}>{FAMILY_ROLE_LABELS[option]}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                          {member.status === "pending" ? (
+                          {mayEditMembers ? (
+                            <Select value={member.role} onValueChange={(value) => void handleMemberRoleChange(member, value as FamilyRole)}>
+                              <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {ROLE_OPTIONS.map((option) => <SelectItem key={option} value={option}>{FAMILY_ROLE_LABELS[option]}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          ) : null}
+                          {mayInviteMembers && member.status === "pending" ? (
                             <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl" disabled={resendingMemberUid === member.memberUid} onClick={() => void handleResendMemberAccess(member)}>
                               {resendingMemberUid === member.memberUid ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MailPlus className="mr-2 h-4 w-4" />}
                               Reenviar convite
                             </Button>
                           ) : null}
-                          <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => void handleRemoveMember(member)}>
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Remover
-                          </Button>
+                          {mayEditMembers ? (
+                            <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => void handleRemoveMember(member)}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Remover
+                            </Button>
+                          ) : null}
                         </div>
                       ) : (
                         <Badge variant="secondary" className="h-9 px-3">{FAMILY_ROLE_LABELS[member.role]}</Badge>
@@ -456,7 +459,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                       <div className="mt-3 rounded-xl border border-primary/20 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
                         O dono da família tem acesso completo para manter o perfil seguro.
                       </div>
-                    ) : mayManage ? (
+                    ) : mayEditPermissions ? (
                       <details onToggle={toggleExpanded} className="mt-3 rounded-xl border border-border/70 bg-background/60">
                         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground">
                           <span className="flex items-center gap-2">
