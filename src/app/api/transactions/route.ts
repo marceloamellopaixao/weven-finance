@@ -151,6 +151,11 @@ function getRaw(row: Record<string, unknown>) {
   return ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
 }
 
+function getRowCreatedByUid(row: Record<string, unknown>, fallbackUid: string) {
+  const raw = getRaw(row);
+  return String(row.created_by_uid || raw.createdByUid || fallbackUid);
+}
+
 function isArchivedRow(row: Record<string, unknown>) {
   return Boolean(getRaw(row).isArchived);
 }
@@ -221,6 +226,7 @@ async function migrateLegacyRecurringRows(
     const first = sorted[0];
     if (!first) continue;
     const firstRaw = getRaw(first);
+    const templateCreatedByUid = getRowCreatedByUid(first, createdByUid || uid);
 
     upserts.push(
       toTxRow(uid, groupId, {
@@ -234,7 +240,7 @@ async function migrateLegacyRecurringRows(
         recurringRole: "template",
         installmentCurrent: undefined,
         installmentTotal: undefined,
-      }, { workspaceId, createdByUid })
+      }, { workspaceId, createdByUid: templateCreatedByUid })
     );
 
     for (const row of sorted) {
@@ -243,6 +249,7 @@ async function migrateLegacyRecurringRows(
       if (!sourceId) continue;
       const monthKey = getRowMonth(row);
       const shouldArchiveFuture = Boolean(monthKey && monthKey > currentMonthKey);
+      const rowCreatedByUid = getRowCreatedByUid(row, templateCreatedByUid);
       upserts.push(
         toTxRow(uid, sourceId, {
           ...raw,
@@ -256,7 +263,7 @@ async function migrateLegacyRecurringRows(
           recurringRole: "occurrence",
           installmentCurrent: undefined,
           installmentTotal: undefined,
-        }, { workspaceId, createdByUid })
+        }, { workspaceId, createdByUid: rowCreatedByUid })
       );
     }
   }
@@ -306,6 +313,7 @@ async function syncRecurringRows(uid: string, workspaceId?: string | null, creat
     const occurrenceDate = getRecurringOccurrenceDateForMonth(String(raw.date || row.tx_date || ""), currentMonthKey);
     const occurrenceDueDate = getRecurringOccurrenceDateForMonth(String(raw.dueDate || row.due_date || ""), currentMonthKey);
     if (!occurrenceDate || !occurrenceDueDate) continue;
+    const templateCreatedByUid = getRowCreatedByUid(row, createdByUid || uid);
 
     upserts.push(
       toTxRow(uid, buildRecurringOccurrenceSourceId(recurringId, currentMonthKey), {
@@ -323,7 +331,7 @@ async function syncRecurringRows(uid: string, workspaceId?: string | null, creat
         installmentCurrent: undefined,
         installmentTotal: undefined,
         createdAt: new Date().toISOString(),
-      }, { workspaceId, createdByUid })
+      }, { workspaceId, createdByUid: templateCreatedByUid })
     );
     existingOccurrenceKeys.add(occurrenceKey);
   }
