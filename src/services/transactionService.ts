@@ -668,7 +668,7 @@ export const syncCreditCardAmountForLimit = async (uid: string, transactions: Tr
 };
 
 async function fetchUserSettings(): Promise<UserSettings> {
-  const response = await apiFetch("/api/user-settings/finance", { method: "GET" });
+  const response = await apiFetch(withActiveWorkspace("/api/user-settings/finance"), { method: "GET" });
   const payload = (await response.json()) as UserSettings & { ok: boolean; error?: string };
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível carregar configurações financeiras");
@@ -712,8 +712,10 @@ export const subscribeToUserSettings = (
   });
   const onChangedEvent = () => void run();
   window.addEventListener(USER_SETTINGS_CHANGED_EVENT, onChangedEvent);
+  const stopWorkspaceListener = subscribeToActiveWorkspaceChanged(onChangedEvent);
   return () => {
     cancelled = true;
+    stopWorkspaceListener();
     stopRealtime();
     window.removeEventListener(USER_SETTINGS_CHANGED_EVENT, onChangedEvent);
   };
@@ -723,7 +725,7 @@ export const updateUserBalance = async (uid: string, newBalance: number) => {
   void uid;
   const { response, payload } = await apiFetchWithOptionalApproval("/api/user-settings/finance", {
     method: "PUT",
-    body: JSON.stringify({ currentBalance: newBalance }),
+    body: JSON.stringify(withActiveWorkspaceBody({ currentBalance: newBalance })),
   });
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível atualizar saldo");
@@ -738,7 +740,7 @@ export const updateUserRegionalPreferences = async (
   void uid;
   const { response, payload } = await apiFetchWithOptionalApproval("/api/user-settings/finance", {
     method: "PUT",
-    body: JSON.stringify(preferences),
+    body: JSON.stringify(withActiveWorkspaceBody(preferences)),
   });
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível salvar as preferências regionais");

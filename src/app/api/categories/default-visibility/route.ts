@@ -4,6 +4,7 @@ import { resolveApiErrorStatus } from "@/lib/api/error";
 import { isArchivedJsonRecord } from "@/lib/account-archive/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
+import { canManageFamilyWorkspaceSettings } from "@/lib/workspaces/family";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,10 @@ export async function POST(request: NextRequest) {
       workspaceId?: string;
     };
     const workspaceContext = await resolveActiveWorkspaceContext(uid, body.workspaceId);
+    const ownerUid = workspaceContext.ownerUid;
+    if (!canManageFamilyWorkspaceSettings(workspaceContext.member)) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
     const settingKey = getCategoriesSettingKey(workspaceContext.workspaceId);
 
     const categoryName = body.categoryName?.trim();
@@ -45,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     const rows = await supabaseSelect("user_settings", {
       select: "id,setting_key,data",
-      filters: { uid },
+      filters: { uid: ownerUid },
       or: workspaceContext.includeLegacyRows
         ? `setting_key.eq.${settingKey},setting_key.eq.categories`
         : `setting_key.eq.${settingKey}`,
@@ -64,13 +69,13 @@ export async function POST(request: NextRequest) {
       : currentHidden.filter((name) => name !== categoryName);
 
     const activeRowBelongsToWorkspace = String(activeRow?.setting_key || "") === settingKey;
-    const id = String(activeRowBelongsToWorkspace ? activeRow?.id : `${uid}__${settingKey}`);
+    const id = String(activeRowBelongsToWorkspace ? activeRow?.id : `${ownerUid}__${settingKey}`);
     await supabaseUpsertRows(
       "user_settings",
       [
         {
           id,
-          uid,
+          uid: ownerUid,
           setting_key: settingKey,
           data: { hiddenDefaultCategories: next, isArchived: false },
           updated_at: new Date().toISOString(),

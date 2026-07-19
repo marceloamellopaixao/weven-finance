@@ -288,6 +288,10 @@ export function canViewFamilyMembers(member: WorkspaceMember | null | undefined)
   return !member || hasFamilyPermission(member, "family.view_members") || canManageFamilyMembers(member);
 }
 
+export function canViewFamilyDashboardSummary(member: WorkspaceMember | null | undefined) {
+  return !member || hasFamilyPermission(member, "dashboard.view_all") || hasFamilyPermission(member, "view_all");
+}
+
 function isOwnFamilyResource(member: WorkspaceMember | null | undefined, createdByUid?: string | null) {
   return Boolean(member?.memberUid && createdByUid && member.memberUid === createdByUid);
 }
@@ -302,6 +306,10 @@ export function canManageFamilyCard(member: WorkspaceMember | null | undefined, 
   if (!member) return true;
   if (hasFamilyPermission(member, "cards.manage_all")) return true;
   return hasFamilyPermission(member, "cards.manage_own") && isOwnFamilyResource(member, createdByUid);
+}
+
+export function canManageFamilyCardSettings(member: WorkspaceMember | null | undefined) {
+  return !member || hasFamilyPermission(member, "cards.manage_all");
 }
 
 export function canViewFamilyPiggyBank(member: WorkspaceMember | null | undefined, createdByUid?: string | null) {
@@ -326,4 +334,8 @@ export function canViewFamilySettings(member: WorkspaceMember | null | undefined
 
 export function canManageFamilyBilling(member: WorkspaceMember | null | undefined) {
   return !member || hasFamilyPermission(member, "settings.manage_billing");
+}
+
+export function canManageFamilyWorkspaceSettings(member: WorkspaceMember | null | undefined) {
+  return !member || hasFamilyPermission(member, "settings.manage_workspace");
 }

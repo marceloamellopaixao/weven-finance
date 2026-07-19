@@ -8,6 +8,7 @@ import {
   supabaseUpsertRows,
 } from "@/services/supabase/admin";
 import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
+import { canManageFamilyWorkspaceSettings } from "@/lib/workspaces/family";
 
 type CategoryType = "income" | "expense" | "both";
 type WorkspaceType = "personal" | "professional" | "church" | "family" | "business";
@@ -176,8 +177,9 @@ async function deleteCategory(uid: string, sourceId: string, workspaceId?: strin
 
 export async function GET(request: NextRequest) {
   try {
-    const { actingUid: uid } = await resolveActingContext(request);
-    const workspaceContext = await resolveActiveWorkspaceContext(uid, request.nextUrl.searchParams.get("workspaceId"));
+    const { actingUid: requesterUid } = await resolveActingContext(request);
+    const workspaceContext = await resolveActiveWorkspaceContext(requesterUid, request.nextUrl.searchParams.get("workspaceId"));
+    const uid = workspaceContext.ownerUid;
     const settingKey = getCategoriesSettingKey(workspaceContext.workspaceId);
 
     const [categoryRows, settingsRows] = await Promise.all([
@@ -225,7 +227,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const acting = await resolveActingContext(request);
-    const uid = acting.actingUid;
+    const requesterUid = acting.actingUid;
     const approval = await ensureImpersonationWriteApproval({
       request,
       acting,
@@ -242,7 +244,11 @@ export async function POST(request: NextRequest) {
       color?: string;
       workspaceId?: string;
     };
-    const workspaceContext = await resolveActiveWorkspaceContext(uid, body.workspaceId);
+    const workspaceContext = await resolveActiveWorkspaceContext(requesterUid, body.workspaceId);
+    const uid = workspaceContext.ownerUid;
+    if (!canManageFamilyWorkspaceSettings(workspaceContext.member)) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
 
     const name = body.name?.trim();
     const type = parseCategoryType(body.type);
@@ -283,7 +289,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const acting = await resolveActingContext(request);
-    const uid = acting.actingUid;
+    const requesterUid = acting.actingUid;
     const approval = await ensureImpersonationWriteApproval({
       request,
       acting,
@@ -299,7 +305,11 @@ export async function PATCH(request: NextRequest) {
       newName?: string;
       workspaceId?: string;
     };
-    const workspaceContext = await resolveActiveWorkspaceContext(uid, body.workspaceId);
+    const workspaceContext = await resolveActiveWorkspaceContext(requesterUid, body.workspaceId);
+    const uid = workspaceContext.ownerUid;
+    if (!canManageFamilyWorkspaceSettings(workspaceContext.member)) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
 
     const oldName = body.oldName?.trim();
     const newName = body.newName?.trim();
@@ -384,7 +394,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const acting = await resolveActingContext(request);
-    const uid = acting.actingUid;
+    const requesterUid = acting.actingUid;
     const approval = await ensureImpersonationWriteApproval({
       request,
       acting,
@@ -397,7 +407,11 @@ export async function DELETE(request: NextRequest) {
 
     const categoryName = request.nextUrl.searchParams.get("name")?.trim();
     const fallbackCategory = request.nextUrl.searchParams.get("fallbackCategory")?.trim() || "Outros";
-    const workspaceContext = await resolveActiveWorkspaceContext(uid, request.nextUrl.searchParams.get("workspaceId"));
+    const workspaceContext = await resolveActiveWorkspaceContext(requesterUid, request.nextUrl.searchParams.get("workspaceId"));
+    const uid = workspaceContext.ownerUid;
+    if (!canManageFamilyWorkspaceSettings(workspaceContext.member)) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
     if (!categoryName) {
       return NextResponse.json({ ok: false, error: "missing_category_name" }, { status: 400 });
     }

@@ -3,20 +3,33 @@ import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/im
 import { isArchivedJsonRecord } from "@/lib/account-archive/server";
 import { readSecureSettingData, writeSecureSettingData } from "@/lib/secure-store/user-settings";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
+import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
+import { canManageFamilyWorkspaceSettings, canViewFamilyDashboardSummary } from "@/lib/workspaces/family";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function getFinanceSettingKey(workspaceId?: string | null) {
+  return workspaceId ? `finance:${workspaceId}` : "finance";
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const { actingUid: uid } = await resolveActingContext(request);
+    const { actingUid: requesterUid } = await resolveActingContext(request);
+    const workspaceContext = await resolveActiveWorkspaceContext(requesterUid, request.nextUrl.searchParams.get("workspaceId"));
+    const uid = workspaceContext.ownerUid;
+    const settingKey = getFinanceSettingKey(workspaceContext.workspaceId);
     const rows = await supabaseSelect("user_settings", {
-      select: "id,data",
-      filters: { uid, setting_key: "finance" },
-      limit: 1,
+      select: "id,setting_key,data",
+      filters: { uid },
+      or: workspaceContext.includeLegacyRows
+        ? `setting_key.eq.${settingKey},setting_key.eq.finance`
+        : `setting_key.eq.${settingKey}`,
     });
 
-    const activeRow = rows.find((row) => !isArchivedJsonRecord(row, "data"));
+    const activeRow =
+      rows.find((row) => String(row.setting_key || "") === settingKey && !isArchivedJsonRecord(row, "data")) ||
+      rows.find((row) => !isArchivedJsonRecord(row, "data"));
     const data = readSecureSettingData<{
       currentBalance?: unknown;
       locale?: unknown;
@@ -25,7 +38,8 @@ export async function GET(request: NextRequest) {
       region?: unknown;
       regionConfigured?: unknown;
     }>(activeRow?.data);
-    const currentBalance = typeof data.currentBalance === "number" ? data.currentBalance : 0;
+    const canViewBalance = canViewFamilyDashboardSummary(workspaceContext.member);
+    const currentBalance = canViewBalance && typeof data.currentBalance === "number" ? data.currentBalance : 0;
     return NextResponse.json(
       {
         ok: true,
@@ -66,17 +80,28 @@ export async function PUT(request: NextRequest) {
       country?: string;
       region?: string;
       regionConfigured?: boolean;
+      workspaceId?: string;
     };
     if (body.currentBalance !== undefined && (typeof body.currentBalance !== "number" || Number.isNaN(body.currentBalance))) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
 
+    const workspaceContext = await resolveActiveWorkspaceContext(uid, body.workspaceId);
+    const ownerUid = workspaceContext.ownerUid;
+    if (!canManageFamilyWorkspaceSettings(workspaceContext.member)) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
+    const settingKey = getFinanceSettingKey(workspaceContext.workspaceId);
     const existingRows = await supabaseSelect("user_settings", {
-      select: "id,data",
-      filters: { uid, setting_key: "finance" },
-      limit: 1,
+      select: "id,setting_key,data",
+      filters: { uid: ownerUid },
+      or: workspaceContext.includeLegacyRows
+        ? `setting_key.eq.${settingKey},setting_key.eq.finance`
+        : `setting_key.eq.${settingKey}`,
     });
-    const existing = existingRows.find((row) => !isArchivedJsonRecord(row, "data"));
+    const existing =
+      existingRows.find((row) => String(row.setting_key || "") === settingKey && !isArchivedJsonRecord(row, "data")) ||
+      existingRows.find((row) => !isArchivedJsonRecord(row, "data"));
 
     const currentData = readSecureSettingData<Record<string, unknown>>(existing?.data);
     const nextData = {
@@ -93,9 +118,9 @@ export async function PUT(request: NextRequest) {
       "user_settings",
       [
         {
-          id: String(existing?.id || `${uid}__finance`),
-          uid,
-          setting_key: "finance",
+          id: String(existing?.id && String(existing.setting_key || "") === settingKey ? existing.id : `${ownerUid}__${settingKey}`),
+          uid: ownerUid,
+          setting_key: settingKey,
           data: writeSecureSettingData(nextData, { isArchived: false }),
           updated_at: new Date().toISOString(),
         },

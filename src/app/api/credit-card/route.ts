@@ -7,6 +7,7 @@ import {
 import { CreditCardSettings } from "@/types/creditCard";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
+import { canManageFamilyCardSettings } from "@/lib/workspaces/family";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,7 +47,10 @@ export async function PUT(request: NextRequest) {
     }
 
     const workspaceContext = await resolveActiveWorkspaceContext(acting.actingUid, body.workspaceId);
-    const settings = await saveCreditCardSettings(workspaceContext.ownerUid, body);
+    if (!canManageFamilyCardSettings(workspaceContext.member)) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
+    const settings = await saveCreditCardSettings(workspaceContext.ownerUid, body, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
     const { summary } = await enforceCreditCardPolicy(workspaceContext.ownerUid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
     return NextResponse.json({ ok: true, settings, summary }, { status: 200 });
   } catch (error) {
