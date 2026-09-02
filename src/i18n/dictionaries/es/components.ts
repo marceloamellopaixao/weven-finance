@@ -10,6 +10,7 @@ export const components: Dictionary["components"] = {
     company: "Empresa",
     about: "Sobre nosotros",
     contact: "Contacto",
+    privacy: "Privacidad",
     terms: "Términos de uso",
     followUs: "Síguenos",
     rights: "© {year} WevenFinance. Todos los derechos reservados.",
