@@ -22,9 +22,7 @@ export function Footer() {
                 Weven<span className="text-primary">Finance</span>
               </span>
             </div>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              {t("description")}
-            </p>
+            <p className="text-sm leading-relaxed text-muted-foreground">{t("description")}</p>
           </div>
 
           <div className="space-y-4">
@@ -41,8 +39,8 @@ export function Footer() {
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li><Link href="https://weven.tech" className="transition-colors hover:text-primary">{t("about")}</Link></li>
               <li><Link href="/contact" className="transition-colors hover:text-primary">{t("contact")}</Link></li>
-              <li><Link href="/terms" className="transition-colors hover:text-primary">{t("terms")}</Link></li>
               <li><Link href="/privacy" className="transition-colors hover:text-primary">{t("privacy")}</Link></li>
+              <li><Link href="/terms" className="transition-colors hover:text-primary">{t("terms")}</Link></li>
             </ul>
           </div>
 
@@ -56,9 +54,7 @@ export function Footer() {
         </div>
 
         <div className="flex flex-col items-center justify-between gap-4 border-t border-border/70 pt-8 text-center md:flex-row md:text-left">
-          <p className="text-xs text-muted-foreground">
-            {t("rights", { year: currentYear })}
-          </p>
+          <p className="text-xs text-muted-foreground">{t("rights", { year: currentYear })}</p>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>{t("madeForFreedom")}</span>
           </div>

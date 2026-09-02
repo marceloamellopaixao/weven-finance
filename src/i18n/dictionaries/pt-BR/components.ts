@@ -8,6 +8,7 @@ export const components = {
     company: "Empresa",
     about: "Sobre nós",
     contact: "Contato",
+    privacy: "Privacidade",
     terms: "Termos de uso",
     followUs: "Siga-nos",
     rights: "© {year} WevenFinance. Todos os direitos reservados.",
