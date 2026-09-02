@@ -348,6 +348,18 @@ export function normalizeAccessControlConfig(value: unknown): AccessControlConfi
   for (const rule of DEFAULT_ACCESS_CONTROL_CONFIG.rules) ruleById.set(rule.id, rule);
   for (const rule of incomingRules) ruleById.set(rule.id, rule);
 
+  for (const resource of ["transactions.installments", "transactions.recurring", "dashboard.monthly_forecast", "dashboard.smart_daily_limit"] as AccessResourceKey[]) {
+    const proRule = Array.from(ruleById.values()).find(
+      (rule) => rule.subjectType === "plan" && rule.subjectId === "pro" && rule.resource === resource,
+    );
+    const foundationRule = Array.from(ruleById.values()).find(
+      (rule) => rule.subjectType === "plan" && rule.subjectId === "founder" && rule.resource === resource,
+    );
+    if (proRule && foundationRule) {
+      ruleById.set(foundationRule.id, { ...foundationRule, level: proRule.level, active: proRule.active });
+    }
+  }
+
   return {
     roles: Array.from(roleByKey.values()),
     rules: Array.from(ruleById.values()),

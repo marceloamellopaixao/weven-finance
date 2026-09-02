@@ -17,6 +17,7 @@ export interface Transaction {
   userId: string;
   workspaceId?: string;
   createdByUid?: string;
+  encryptionUid?: string;
   title?: string;
   description: string;
   amount: number;

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, LOCALE_STORAGE_KEY, Locale, detectBrowserLocale, normalizeLocale } from "@/i18n/config";
+import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, LOCALE_STORAGE_KEY, Locale, TRANSLATIONS_ENABLED, detectBrowserLocale, normalizeLocale } from "@/i18n/config";
 import { translate, TranslationKey, TranslationValues } from "@/i18n/getDictionary";
 
 type I18nContextValue = {
@@ -25,6 +25,7 @@ function readLocaleCookie() {
 }
 
 function readInitialLocale() {
+  if (!TRANSLATIONS_ENABLED) return DEFAULT_LOCALE;
   const cookieLocale = readLocaleCookie();
   if (cookieLocale) {
     window.localStorage.setItem(LOCALE_STORAGE_KEY, cookieLocale);
@@ -48,7 +49,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
 
   const setLocale = useCallback((nextLocale: Locale) => {
-    const normalized = normalizeLocale(nextLocale);
+    const normalized = TRANSLATIONS_ENABLED ? normalizeLocale(nextLocale) : DEFAULT_LOCALE;
     setLocaleState(normalized);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(LOCALE_STORAGE_KEY, normalized);

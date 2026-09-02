@@ -7,6 +7,14 @@ export interface PlanDetails {
   description: string;
   features: string[];
   limit?: number;
+  /** Total de pessoas incluídas, contando o titular do workspace. */
+  includedSeats?: number | null;
+  /** Preço por usuário adicional no ciclo mensal. Nulo desativa a venda. */
+  additionalSeatPrice?: number | null;
+  /** Preço anual legado; quando nulo, o servidor calcula 12 vezes o valor mensal. */
+  additionalSeatYearlyPrice?: number | null;
+  /** Campo legado no painel. O servidor aplica um teto técnico não configurável pelo Admin. */
+  maxAdditionalSeats?: number | null;
   allowedProfileTypes?: Array<"personal" | "family" | "business">;
   cta?: string;
   badge?: string;
@@ -193,7 +201,7 @@ export const DEFAULT_ACCESS_CONTROL_CONFIG: AccessControlConfig = {
     { id: "plan-founder-installments", subjectType: "plan", subjectId: "founder", resource: "transactions.installments", level: "write", active: true },
     { id: "plan-founder-recurring", subjectType: "plan", subjectId: "founder", resource: "transactions.recurring", level: "write", active: true },
     { id: "plan-founder-forecast", subjectType: "plan", subjectId: "founder", resource: "dashboard.monthly_forecast", level: "read", active: true },
-    { id: "plan-founder-daily-limit", subjectType: "plan", subjectId: "founder", resource: "dashboard.smart_daily_limit", level: "none", active: true },
+    { id: "plan-founder-daily-limit", subjectType: "plan", subjectId: "founder", resource: "dashboard.smart_daily_limit", level: "read", active: true },
     { id: "plan-pro-installments", subjectType: "plan", subjectId: "pro", resource: "transactions.installments", level: "write", active: true },
     { id: "plan-pro-recurring", subjectType: "plan", subjectId: "pro", resource: "transactions.recurring", level: "write", active: true },
     { id: "plan-pro-forecast", subjectType: "plan", subjectId: "pro", resource: "dashboard.monthly_forecast", level: "read", active: true },

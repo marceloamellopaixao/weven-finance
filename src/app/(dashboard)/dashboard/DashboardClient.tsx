@@ -1514,7 +1514,7 @@ export function DashboardClient() {
 
         {/* Check-in Modal */}
         <Dialog open={showCheckinModal} onOpenChange={(open) => !checkinAction && setShowCheckinModal(open)}>
-          <DialogContent className="sm:max-w-[425px] rounded-3xl p-6">
+          <DialogContent className="min-w-0 overflow-x-hidden sm:max-w-[425px] rounded-3xl p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-primary">
                 <CheckCircle2 className="h-6 w-6" /> {tt("checkin.title")}
@@ -1525,8 +1525,8 @@ export function DashboardClient() {
             </DialogHeader>
 
             {pendingCheckins.length > 0 && (
-              <div className="app-panel-subtle my-2 rounded-xl border p-4">
-                <p className="font-semibold text-lg">{getTransactionTitle(pendingCheckins[0])}</p>
+              <div className="app-panel-subtle my-2 min-w-0 overflow-hidden rounded-xl border p-4">
+                <p className="truncate font-semibold text-lg" title={getTransactionTitle(pendingCheckins[0])}>{getTransactionTitle(pendingCheckins[0])}</p>
                 <p className="text-sm text-zinc-500 mb-2">{tt("checkin.dueOn")}: {formatDateDisplay(pendingCheckins[0].dueDate, undefined, locale)}</p>
                 <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                   {formatCurrencyDisplay(pendingCheckins[0].amount)}
@@ -1534,17 +1534,17 @@ export function DashboardClient() {
               </div>
             )}
 
-            <DialogFooter className="grid grid-cols-1 gap-3 mt-2 sm:grid-cols-2">
+            <DialogFooter className="grid min-w-0 grid-cols-1 gap-3 mt-2 sm:grid-cols-2">
               <Button
                 variant="outline"
-                className="rounded-xl h-12 hover:cursor-pointer duration-200"
+                className="min-w-0 whitespace-normal rounded-xl h-12 px-3 text-center leading-tight hover:cursor-pointer duration-200"
                 disabled={Boolean(checkinAction) || pendingCheckins.length === 0}
                 onClick={() => handleCheckinAction(pendingCheckins[0], false)}
               >
                 {checkinAction === "pending" ? tt("states.updating") : tt("states.notYet")}
               </Button>
               <Button
-                className="rounded-xl h-12 bg-green-600 hover:bg-green-700 text-white hover:cursor-pointer duration-200"
+                className="min-w-0 whitespace-normal rounded-xl h-12 px-3 text-center leading-tight bg-green-600 hover:bg-green-700 text-white hover:cursor-pointer duration-200"
                 disabled={Boolean(checkinAction) || pendingCheckins.length === 0}
                 onClick={() => handleCheckinAction(pendingCheckins[0], true)}
               >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Medal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatMoney } from "@/lib/money/formatMoney";
 import {
   getConfiguredPublicPlans,
-  getPublicPlans,
   type BillingInterval,
   type PlanCatalogItem,
 } from "@/lib/plans/catalog";
@@ -31,8 +30,9 @@ export function PricingPlans() {
   const { user, userProfile } = useAuth();
   const [interval, setInterval] = useState<BillingInterval>("monthly");
   const [openingPlan, setOpeningPlan] = useState<string | null>(null);
-  const fallbackPlans = useMemo(() => getPublicPlans(), []);
-  const [plans, setPlans] = useState(fallbackPlans);
+  const [plans, setPlans] = useState<PlanCatalogItem[]>([]);
+  const [isLoadingPlans, setIsLoadingPlans] = useState(true);
+  const [plansError, setPlansError] = useState(false);
   const hasSession = Boolean(user || userProfile);
 
   useEffect(() => {
@@ -41,11 +41,23 @@ export function PricingPlans() {
     let cancelled = false;
     void fetch("/api/system/plans")
       .then(async (response) => {
-        if (!response.ok) return;
+        if (!response.ok) throw new Error("plans_unavailable");
         const payload = (await response.json()) as { plans?: PlansConfig };
-        if (!cancelled && payload.plans) setPlans(getConfiguredPublicPlans(payload.plans));
+        if (!payload.plans) throw new Error("plans_unavailable");
+        if (!cancelled) {
+          setPlans(getConfiguredPublicPlans(payload.plans));
+          setPlansError(false);
+        }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) {
+          setPlans([]);
+          setPlansError(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingPlans(false);
+      });
     return () => { cancelled = true; };
   }, []);
 
@@ -86,6 +98,30 @@ export function PricingPlans() {
         <p className="text-center text-sm font-semibold text-primary">Melhor custo-benefício. Economize até 2 meses.</p>
       ) : null}
 
+      {isLoadingPlans ? (
+        <div className="flex flex-wrap items-stretch justify-center gap-5" role="status">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="min-h-[430px] w-full max-w-[390px] animate-pulse rounded-2xl border border-border/80 bg-card/80 p-5 sm:w-[calc(50%-0.625rem)] lg:w-[calc(33.333%-0.875rem)]">
+              <div className="h-7 w-28 rounded-full bg-primary/10" />
+              <div className="mt-5 h-4 w-full rounded-full bg-primary/8" />
+              <div className="mt-2 h-4 w-4/5 rounded-full bg-primary/8" />
+              <div className="mt-8 h-10 w-36 rounded-xl bg-primary/10" />
+              <div className="mt-8 space-y-3">
+                {Array.from({ length: 5 }).map((__, item) => <div key={item} className="h-4 rounded-full bg-primary/8" />)}
+              </div>
+            </div>
+          ))}
+          <span className="sr-only">Carregando planos</span>
+        </div>
+      ) : plansError ? (
+        <div className="mx-auto max-w-xl rounded-2xl border border-red-400/30 bg-card p-6 text-center">
+          <p className="font-semibold text-foreground">Não foi possível carregar os preços atualizados.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Atualize a página para tentar novamente. Nenhum valor desatualizado será exibido.</p>
+          <Button type="button" variant="outline" className="mt-4 rounded-xl" onClick={() => window.location.reload()}>
+            Atualizar página
+          </Button>
+        </div>
+      ) : (
       <div className="flex flex-wrap items-stretch justify-center gap-5">
         {plans.map((plan) => {
           const featured = plan.id === "premium";
@@ -151,6 +187,7 @@ export function PricingPlans() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

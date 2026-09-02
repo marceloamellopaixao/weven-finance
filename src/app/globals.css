@@ -263,6 +263,7 @@
   }
   html {
     min-height: 100%;
+    background-color: var(--background);
     overflow-x: hidden;
   }
   button:not(:disabled) {
