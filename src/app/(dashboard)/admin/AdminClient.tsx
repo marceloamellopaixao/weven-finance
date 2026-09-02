@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePlans } from "@/hooks/usePlans";
 import {
@@ -18,7 +18,8 @@ import {
   getStaffUsers,
   downloadAdminCsv,
 } from "@/services/userService";
-import { getAccessControlConfig, updateAccessControlConfig, updatePlansConfig } from "@/services/systemService";
+import { getAccessControlConfig, updateAccessControlConfig } from "@/services/systemService";
+import { useUpdatePlansMutation } from "@/store/api/systemApi";
 import {
   UserProfile,
   UserStatus,
@@ -135,6 +136,7 @@ import { AdminLoadingShell } from "./components/AdminLoadingShell";
 type UserWithCount = UserProfile & { transactionCount?: number };
 type DeletionSuccessData = { name: string; email: string } | null;
 type PaymentFilterType = UserPaymentStatus | "unpaid_group" | "all";
+type PlanSaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
 
 type FeedbackData = {
   isOpen: boolean;
@@ -309,12 +311,17 @@ export default function AdminPage() {
 
   // Plans
   const [editedPlans, setEditedPlans] = useState<PlansConfig | null>(null);
+  const [dirtyPlanIds, setDirtyPlanIds] = useState<(keyof PlansConfig)[]>([]);
+  const [planSaveStatus, setPlanSaveStatus] = useState<Partial<Record<keyof PlansConfig, PlanSaveStatus>>>({});
   const [editedAccessControl, setEditedAccessControl] = useState<AccessControlConfig | null>(null);
   const [isSavingPlans, setIsSavingPlans] = useState(false);
   const [isSavingAccessControl, setIsSavingAccessControl] = useState(false);
   const [accessSubjectType, setAccessSubjectType] = useState<AccessSubjectType>("plan");
   const [accessSubjectId, setAccessSubjectId] = useState("free");
   const [permissionGroupByScreen, setPermissionGroupByScreen] = useState<Record<string, string>>({});
+  const [updatePlans] = useUpdatePlansMutation();
+  const planEditRevisionRef = useRef(0);
+  const failedPlanRevisionRef = useRef<number | null>(null);
 
   // --- Permissões ---
   const isSupremeAdmin = isCreatorSupremeUid(userProfile?.uid);
@@ -547,8 +554,8 @@ export default function AdminPage() {
   }, [allowedTabs.length, editedAccessControl, userProfile, loading, router]);
 
   useEffect(() => {
-    if (plans) setEditedPlans(plans);
-  }, [plans]);
+    if (plans && dirtyPlanIds.length === 0 && !isSavingPlans) setEditedPlans(plans);
+  }, [dirtyPlanIds.length, isSavingPlans, plans]);
 
   useEffect(() => {
     if (!userProfile || userProfile.role === "client") return;
@@ -1237,6 +1244,11 @@ export default function AdminPage() {
     value: string | number | boolean
   ) => {
     if (!editedPlans) return;
+    if (Object.is(editedPlans[planKey][field], value)) return;
+    planEditRevisionRef.current += 1;
+    failedPlanRevisionRef.current = null;
+    setDirtyPlanIds((current) => current.includes(planKey) ? current : [...current, planKey]);
+    setPlanSaveStatus((current) => ({ ...current, [planKey]: "pending" }));
     setEditedPlans({
       ...editedPlans,
       [planKey]: {
@@ -1249,6 +1261,11 @@ export default function AdminPage() {
   const handleFeaturesEdit = (planKey: keyof PlansConfig, value: string) => {
     if (!editedPlans) return;
     const featuresArray = value.split("\n").filter((line) => line.trim() !== "");
+    if ((editedPlans[planKey].features || []).join("\n") === featuresArray.join("\n")) return;
+    planEditRevisionRef.current += 1;
+    failedPlanRevisionRef.current = null;
+    setDirtyPlanIds((current) => current.includes(planKey) ? current : [...current, planKey]);
+    setPlanSaveStatus((current) => ({ ...current, [planKey]: "pending" }));
     setEditedPlans({
       ...editedPlans,
       [planKey]: {
@@ -1257,6 +1274,59 @@ export default function AdminPage() {
       },
     });
   };
+
+  const retryPlanAutosave = () => {
+    failedPlanRevisionRef.current = null;
+    setPlanSaveStatus((current) => {
+      const next = { ...current };
+      dirtyPlanIds.forEach((planId) => { next[planId] = "pending"; });
+      return next;
+    });
+    setEditedPlans((current) => current ? { ...current } : current);
+  };
+
+  useEffect(() => {
+    if (!editedPlans || dirtyPlanIds.length === 0 || isSavingPlans) return;
+    const userId = userProfile?.uid || user?.uid || "";
+    if (!userId) return;
+    const revision = planEditRevisionRef.current;
+    if (failedPlanRevisionRef.current === revision) return;
+    const plansSnapshot = editedPlans;
+    const plansToSave = [...dirtyPlanIds];
+
+    const timeout = window.setTimeout(() => {
+      setIsSavingPlans(true);
+      setPlanSaveStatus((current) => {
+        const next = { ...current };
+        plansToSave.forEach((planId) => { next[planId] = "saving"; });
+        return next;
+      });
+      void updatePlans({ userId, plans: plansSnapshot }).unwrap()
+        .then((savedPlans) => {
+          if (planEditRevisionRef.current !== revision) return;
+          setEditedPlans(savedPlans);
+          setDirtyPlanIds([]);
+          setPlanSaveStatus((current) => {
+            const next = { ...current };
+            plansToSave.forEach((planId) => { next[planId] = "saved"; });
+            return next;
+          });
+        })
+        .catch((error) => {
+          console.error(error);
+          if (planEditRevisionRef.current !== revision) return;
+          failedPlanRevisionRef.current = revision;
+          setPlanSaveStatus((current) => {
+            const next = { ...current };
+            plansToSave.forEach((planId) => { next[planId] = "error"; });
+            return next;
+          });
+        })
+        .finally(() => setIsSavingPlans(false));
+    }, 750);
+
+    return () => window.clearTimeout(timeout);
+  }, [dirtyPlanIds, editedPlans, isSavingPlans, updatePlans, user?.uid, userProfile?.uid]);
 
   const getDefaultAccessSubjectId = useCallback((subjectType: AccessSubjectType) => {
     if (subjectType === "global") return "all";
@@ -1422,20 +1492,6 @@ export default function AdminPage() {
     }
   };
 
-  const savePlans = async () => {
-    if (!editedPlans) return;
-    setIsSavingPlans(true);
-    try {
-      await updatePlansConfig(editedPlans);
-      showFeedback("success", tAdmin("plans.savedTitle"), tAdmin("plans.savedMessage"));
-    } catch (error) {
-      console.error(error);
-      showFeedback("error", tAdmin("plans.saveErrorTitle"), tAdmin("plans.saveErrorMessage"));
-    } finally {
-      setIsSavingPlans(false);
-    }
-  };
-
   // --- FILTRAGEM ---
   const filteredUsers = useMemo(() => {
     const list = users.filter((u) => u.status !== "deleted" && canViewRole(u.role));
@@ -1516,7 +1572,11 @@ export default function AdminPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, roleFilter, planFilter, paymentStatusFilter, statusFilter]);
+  }, [activeTab, searchTerm, roleFilter, planFilter, paymentStatusFilter, statusFilter]);
+
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   useEffect(() => {
     if (activeTab === "support") setSupportPage(1);
@@ -2637,7 +2697,11 @@ export default function AdminPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="md:hidden p-3 space-y-3">
-                    {deletedUsers.length === 0 ? (
+                    {isLoadingUsers ? (
+                      Array.from({ length: 3 }).map((_, index) => (
+                        <div key={index} className="h-28 animate-pulse rounded-2xl border border-orange-200/60 bg-orange-500/5" />
+                      ))
+                    ) : deletedUsers.length === 0 ? (
                       <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-sm text-muted-foreground">
                         {tAdmin("restore.empty")}
                       </div>
@@ -2708,7 +2772,13 @@ export default function AdminPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {deletedUsers.length === 0 ? (
+                        {isLoadingUsers ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                              <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Carregando contas arquivadas...</span>
+                            </TableCell>
+                          </TableRow>
+                        ) : deletedUsers.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={5} className="h-32 text-center text-zinc-500">
                               {tAdmin("restore.empty")}
@@ -2771,6 +2841,34 @@ export default function AdminPage() {
                       </TableBody>
                     </Table>
                   </div>
+                  <div className="app-panel-subtle flex flex-col gap-3 border-t border-orange-200/60 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-orange-900/30">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {tAdmin("common.pageSummary", { page: currentPage, totalPages: totalPages || 1 })}
+                      <span className="ml-2">· {usersTotal} conta(s)</span>
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 rounded-xl"
+                        disabled={currentPage <= 1 || isLoadingUsers}
+                        onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                      >
+                        <ChevronLeft className="mr-1 h-4 w-4" /> Anterior
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 rounded-xl"
+                        disabled={currentPage >= totalPages || totalPages === 0 || isLoadingUsers}
+                        onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                      >
+                        Próxima <ChevronRight className="ml-1 h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -2778,78 +2876,169 @@ export default function AdminPage() {
 
           {/* --- PLANS TAB --- */}
           {activeTab === "plans" && canManageSensitive && editedPlans && (
-            <div className={`${fadeInUp} delay-200 space-y-4`}>
-              <div className="mb-4 flex justify-end">
-                <Button
-                  onClick={savePlans}
-                  disabled={isSavingPlans}
-                  className="w-full gap-2 rounded-xl bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-700 sm:w-auto sm:hover:scale-105"
-                >
-                  {isSavingPlans ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {tAdmin("plans.saveChanges")}
-                </Button>
+            <div className={`${fadeInUp} delay-200 space-y-5`}>
+              <div className="app-panel-subtle flex flex-col gap-3 rounded-2xl border border-color:var(--app-panel-border) px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Configuração comercial</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Somente alterações reais são salvas, automaticamente, após uma breve pausa na digitação.
+                  </p>
+                </div>
+                {Object.values(planSaveStatus).includes("error") ? (
+                  <Button type="button" variant="outline" size="sm" className="rounded-xl border-red-300 text-red-600" onClick={retryPlanAutosave}>
+                    <RefreshCcw className="mr-2 h-4 w-4" /> Tentar salvar novamente
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    {isSavingPlans ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+                    {isSavingPlans ? "Salvando alterações..." : "Salvamento automático ativo"}
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+              <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2 2xl:grid-cols-3">
                 {PLAN_ORDER.map((planId) => {
                   const planTone = getPlanTone(planId);
                   const plan = editedPlans[planId];
                   const isFreePlan = planId === "free";
+                  const isFoundationPlan = planId === "founder";
+                  const saveStatus = planSaveStatus[planId] || "idle";
+                  const saveLabel = saveStatus === "pending"
+                    ? "Aguardando"
+                    : saveStatus === "saving"
+                      ? "Salvando"
+                      : saveStatus === "saved"
+                        ? "Salvo"
+                        : saveStatus === "error"
+                          ? "Falha ao salvar"
+                          : null;
                   return (
-                    <Card key={planId} className={`app-panel-soft rounded-3xl border-2 shadow-xl transition-shadow ${planTone.border}`}>
-                      <CardHeader className={`flex flex-col gap-3 rounded-t-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${planTone.header}`}>
-                        <div className="flex flex-col justify-center">
-                          <CardTitle className={`${planTone.headerTitle} font-bold text-lg`}>
-                            {tAdmin("plans.planTier", { name: plan.name, tier: plan.badge || plan.cta || planId })}
-                          </CardTitle>
-                          <CardDescription className={planTone.headerDescription}>{tAdmin("plans.settings")}</CardDescription>
+                    <Card key={planId} className={`app-panel-soft flex h-full flex-col overflow-hidden rounded-3xl border-2 py-0 shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl ${planTone.border}`}>
+                      <CardHeader className={`rounded-t-3xl border-b border-white/10 p-5 ${planTone.header}`}>
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0 space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <CardTitle className={`${planTone.headerTitle} text-xl font-bold`}>
+                                Plano {plan.name || planId}
+                              </CardTitle>
+                              {plan.badge ? (
+                                <Badge variant="outline" className="border-current/25 bg-background/20 text-[10px] uppercase tracking-[0.12em] text-current">
+                                  {plan.badge}
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <CardDescription className={planTone.headerDescription}>
+                              {plan.active ? "Disponível para contratação" : "Oculto para novas contratações"}
+                            </CardDescription>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {saveLabel ? (
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ${saveStatus === "error" ? "bg-red-500/15 text-red-500" : saveStatus === "saved" ? "bg-emerald-500/15 text-emerald-500" : "bg-amber-500/15 text-amber-500"}`}>
+                                  {saveStatus === "saving" ? <Loader2 className="h-3 w-3 animate-spin" /> : saveStatus === "saved" ? <CheckCircle2 className="h-3 w-3" /> : null}
+                                  {saveLabel}
+                                </span>
+                              ) : null}
+                              {isFoundationPlan && process.env.NEXT_PUBLIC_FOUNDATION_PLAN_ACTIVE !== "true" && process.env.NEXT_PUBLIC_FOUNDER_PLAN_ACTIVE !== "true" ? (
+                                <span className="rounded-full bg-zinc-950/15 px-2 py-1 text-[10px] font-semibold text-current/75">Ambiente desativado</span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <Switch aria-label={`Disponibilidade do plano ${plan.name || planId}`} checked={plan.active} onCheckedChange={(checked) => handlePlanEdit(planId, "active", checked)} className={planTone.switchChecked} />
                         </div>
-                        <Switch checked={plan.active} onCheckedChange={(checked) => handlePlanEdit(planId, "active", checked)} className={planTone.switchChecked} />
                       </CardHeader>
 
-                      <CardContent className={`space-y-4 p-4 sm:p-6 ${!plan.active ? "opacity-50 pointer-events-none" : ""}`}>
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.name")}</Label>
-                            <Input className="rounded-xl h-10" value={plan.name ?? ""} onChange={(event) => handlePlanEdit(planId, "name", event.target.value)} />
-                          </div>
-                          <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase text-zinc-400">{isFreePlan ? tAdmin("plans.fields.launchLimit") : tAdmin("plans.fields.price")}</Label>
-                            <Input
-                              className="rounded-xl h-10"
-                              type="number"
-                              value={isFreePlan ? plan.limit ?? 0 : plan.price ?? 0}
-                              onChange={(event) => handlePlanEdit(planId, isFreePlan ? "limit" : "price", Number(event.target.value))}
-                            />
-                          </div>
-                        </div>
-
-                        {!isFreePlan ? (
-                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <div className="space-y-2">
-                              <Label className="text-xs font-bold uppercase text-zinc-400">Preço anual</Label>
-                              <Input className="rounded-xl h-10" type="number" value={plan.yearlyPrice ?? 0} onChange={(event) => handlePlanEdit(planId, "yearlyPrice", Number(event.target.value))} />
+                      <CardContent className={`flex-1 space-y-5 p-5 ${!plan.active ? "opacity-60" : ""}`}>
+                        {isFoundationPlan ? (
+                          <>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Mensalidade</p>
+                                <p className="mt-2 text-xl font-bold text-foreground">R$ 9,90</p>
+                              </div>
+                              <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Duração</p>
+                                <p className="mt-2 text-xl font-bold text-foreground">12 meses</p>
+                              </div>
                             </div>
-                            <div className="space-y-2">
-                              <Label className="text-xs font-bold uppercase text-zinc-400">CTA</Label>
-                              <Input className="rounded-xl h-10" value={plan.cta ?? ""} onChange={(event) => handlePlanEdit(planId, "cta", event.target.value)} />
+                            <div className="rounded-2xl border border-amber-400/25 bg-amber-500/8 p-4">
+                              <p className="text-sm font-semibold text-foreground">Oferta fixa e limitada</p>
+                              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Preço, duração e recursos são protegidos pelo servidor. O limite de usuários vem de FOUNDATION_PLAN_MAX_USERS.</p>
                             </div>
-                          </div>
-                        ) : null}
+                            <ul className="space-y-2 text-sm text-muted-foreground">
+                              {(plan.features || []).map((feature, index) => (
+                                <li key={`${feature}-${index}`} className="flex items-start gap-2">
+                                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                                  <span>{feature}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                              <div className="space-y-2">
+                                <Label className="text-xs font-bold uppercase text-muted-foreground">{tAdmin("plans.fields.name")}</Label>
+                                <Input className="h-10 rounded-xl" value={plan.name ?? ""} onChange={(event) => handlePlanEdit(planId, "name", event.target.value)} />
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-xs font-bold uppercase text-muted-foreground">{isFreePlan ? tAdmin("plans.fields.launchLimit") : tAdmin("plans.fields.price")}</Label>
+                                <Input
+                                  className="h-10 rounded-xl"
+                                  type="number"
+                                  min={0}
+                                  step={isFreePlan ? 1 : 0.01}
+                                  value={isFreePlan ? plan.limit ?? 0 : plan.price ?? 0}
+                                  onChange={(event) => handlePlanEdit(planId, isFreePlan ? "limit" : "price", Number(event.target.value))}
+                                />
+                              </div>
+                            </div>
 
-                        <div className="space-y-2">
-                          <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.description")}</Label>
-                          <Input className="rounded-xl h-10" value={plan.description ?? ""} onChange={(event) => handlePlanEdit(planId, "description", event.target.value)} />
-                        </div>
+                            {!isFreePlan ? (
+                              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                  <Label className="text-xs font-bold uppercase text-muted-foreground">Preço anual</Label>
+                                  <Input className="h-10 rounded-xl" min={0} step="0.01" type="number" value={plan.yearlyPrice ?? 0} onChange={(event) => handlePlanEdit(planId, "yearlyPrice", Number(event.target.value))} />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label className="text-xs font-bold uppercase text-muted-foreground">CTA</Label>
+                                  <Input className="h-10 rounded-xl" value={plan.cta ?? ""} onChange={(event) => handlePlanEdit(planId, "cta", event.target.value)} />
+                                </div>
+                              </div>
+                            ) : null}
 
-                        <div className="space-y-2">
-                          <Label className="text-xs font-bold uppercase text-zinc-400">{isFreePlan ? tAdmin("plans.fields.benefitsLineByLine") : tAdmin("plans.fields.benefits")}</Label>
-                          <textarea
-                            className="flex min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs resize-none"
-                            value={plan.features?.join("\n") ?? ""}
-                            onChange={(event) => handleFeaturesEdit(planId, event.target.value)}
-                          />
-                        </div>
+                            {planId === "family" || planId === "business" ? (
+                              <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-4">
+                                <div>
+                                  <p className="text-sm font-semibold text-foreground">Usuários adicionais</p>
+                                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                                    Família inclui 4 usuários e Business inclui 5. Defina o valor mensal por usuário adicional; zero desativa novas contratações.
+                                  </p>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label className="text-xs font-bold uppercase text-muted-foreground">Valor mensal por usuário adicional (R$)</Label>
+                                  <Input className="h-10 rounded-xl" min={0} step="0.01" type="number" value={plan.additionalSeatPrice ?? 0} onChange={(event) => handlePlanEdit(planId, "additionalSeatPrice", Math.max(0, Number(event.target.value)))} />
+                                </div>
+                              </div>
+                            ) : null}
+
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase text-muted-foreground">{tAdmin("plans.fields.description")}</Label>
+                              <textarea
+                                className="flex min-h-20 w-full resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                value={plan.description ?? ""}
+                                onChange={(event) => handlePlanEdit(planId, "description", event.target.value)}
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase text-muted-foreground">{isFreePlan ? tAdmin("plans.fields.benefitsLineByLine") : tAdmin("plans.fields.benefits")}</Label>
+                              <textarea
+                                className="flex min-h-32 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 font-mono text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                value={plan.features?.join("\n") ?? ""}
+                                onChange={(event) => handleFeaturesEdit(planId, event.target.value)}
+                              />
+                            </div>
+                          </>
+                        )}
                       </CardContent>
                     </Card>
                   );

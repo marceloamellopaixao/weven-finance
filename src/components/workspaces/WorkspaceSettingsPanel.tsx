@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { useAuth } from "@/hooks/useAuth";
+import { canAccessAdminArea } from "@/lib/access-control/roles";
 import { WORKSPACE_TYPE_LABELS, type Workspace } from "@/types/workspace";
 
 type EditingState = {
@@ -23,6 +25,7 @@ function workspaceSubtitle(workspace: Workspace) {
 }
 
 export function WorkspaceSettingsPanel() {
+  const { userProfile } = useAuth();
   const {
     workspaces,
     activeWorkspaceId,
@@ -38,6 +41,7 @@ export function WorkspaceSettingsPanel() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const activeOwnedWorkspaces = workspaces.filter((workspace) => workspace.status !== "archived" && !workspace.membership);
+  const canCreateProfiles = canAccessAdminArea(userProfile);
 
   const handleSaveName = async () => {
     if (!editing || !editing.name.trim()) return;
@@ -117,15 +121,17 @@ export function WorkspaceSettingsPanel() {
               <WalletCards className="h-5 w-5" /> Perfis financeiros
             </CardTitle>
             <CardDescription>
-              Separe seu uso pessoal, sua família e seu Business/PJ sem misturar os dados.
+              Seu perfil próprio acompanha o plano contratado. Convites compartilhados aparecem separadamente.
             </CardDescription>
           </div>
-          <Link href="/account-profile?create=1">
-            <Button className="w-full gap-2 rounded-xl sm:w-auto">
-              <Plus className="h-4 w-4" />
-              Criar perfil
-            </Button>
-          </Link>
+          {canCreateProfiles ? (
+            <Link href="/account-profile?create=1">
+              <Button className="w-full gap-2 rounded-xl sm:w-auto">
+                <Plus className="h-4 w-4" />
+                Criar perfil
+              </Button>
+            </Link>
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-3">
           {error ? (

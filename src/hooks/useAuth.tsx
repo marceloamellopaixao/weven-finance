@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { UserProfile } from "@/types/user";
 import {
@@ -16,10 +16,11 @@ import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { buildBrowserRedirectUrl, clearPostAuthRedirect, readPostAuthRedirect, rememberPostAuthRedirect } from "@/services/auth/postAuthRedirect";
 import { buildEmailVerificationRedirectUrl, rememberPendingVerificationEmail } from "@/services/auth/emailVerification";
 import { buildUpgradeCheckoutPath, readPendingUpgradePlan } from "@/services/billing/checkoutIntent";
-import { getDefaultWorkspace } from "@/services/workspaceService";
 import { canAccessAdminArea, isCreatorSupremeUid } from "@/lib/access-control/roles";
 import { canAccessLevel } from "@/lib/access-control/config";
 import { getMyAccessControl } from "@/services/systemService";
+import { useGetWorkspacesQuery } from "@/store/api/workspacesApi";
+import { AppBootLoading } from "@/components/loading/AppBootLoading";
 
 const BLOCKED_STATUSES = new Set(["inactive", "blocked"]);
 const PROFILE_BACKGROUND_REFRESH_MS = 5 * 60 * 1000;
@@ -135,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [impersonationTargetUid, setImpersonationTargetUid] = useState<string | null>(() =>
     getImpersonationTargetUid()
   );
+  const authUserFingerprintRef = useRef<string | null>(null);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -208,29 +210,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
+    const applySessionUser = (sessionUser: Parameters<typeof mapSupabaseUserToAuthUser>[0] | null) => {
       if (!mounted) return;
-      if (data.session?.user) {
-        setLoading(true);
-        setUser(mapSupabaseUserToAuthUser(data.session.user));
-      } else {
+      if (!sessionUser) {
+        authUserFingerprintRef.current = null;
         setUser(null);
         setUserProfile(null);
         setLoading(false);
+        return;
       }
+
+      const mappedUser = mapSupabaseUserToAuthUser(sessionUser);
+      const fingerprint = JSON.stringify({
+        uid: mappedUser.uid,
+        email: mappedUser.email,
+        displayName: mappedUser.displayName,
+        photoURL: mappedUser.photoURL || "",
+        emailVerified: mappedUser.emailVerified,
+        providers: mappedUser.providers,
+        hasPasswordProvider: mappedUser.hasPasswordProvider,
+      });
+      if (authUserFingerprintRef.current === fingerprint) return;
+      authUserFingerprintRef.current = fingerprint;
+      setLoading(true);
+      setUser(mappedUser);
+    };
+
+    supabase.auth.getSession().then(({ data }) => {
+      applySessionUser(data.session?.user ?? null);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setLoading(true);
-        setUser(mapSupabaseUserToAuthUser(session.user));
-      } else {
-        setUser(null);
-        setUserProfile(null);
-        setLoading(false);
-      }
+      applySessionUser(session?.user ?? null);
     });
 
     return () => {
@@ -248,6 +261,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (isCreatorSupremeUid(userProfile.uid)) {
       setPagePreviewAccess(true);
+      setPagePreviewAccessUid(userProfile.uid);
+      return;
+    }
+
+    if (userProfile.role === "client") {
+      setPagePreviewAccess(false);
       setPagePreviewAccessUid(userProfile.uid);
       return;
     }
@@ -272,6 +291,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, userProfile]);
 
   const authReady = !loading && (!user || !userProfile || pagePreviewAccessUid === userProfile.uid);
+  const isWorkspaceGuardRoute = pathname === "/account-profile" || !PUBLIC_ROUTES.includes(pathname);
+  const canLoadWorkspaceGuard = Boolean(
+    authReady &&
+    user &&
+    userProfile &&
+    !pagePreviewAccess &&
+    userProfile.status !== "deleted" &&
+    !BLOCKED_STATUSES.has(userProfile.status) &&
+    !userProfile.needsPasswordSetup &&
+    userProfile.verifiedEmail &&
+    !pathname.startsWith("/billing") &&
+    isWorkspaceGuardRoute
+  );
+  const workspaceGuardUserId = userProfile?.uid || user?.uid || "";
+  const { data: guardedWorkspaces = [], isLoading: isLoadingWorkspaceGuard } = useGetWorkspacesQuery(
+    { userId: workspaceGuardUserId },
+    { skip: !canLoadWorkspaceGuard || !workspaceGuardUserId },
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -433,43 +470,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [authReady, pagePreviewAccess, pathname, resolvePostAuthPath, router, supabase.auth, user, userProfile]);
 
   useEffect(() => {
-    if (!authReady || !user || !userProfile) return;
-    const hasPrivilegedAccess = pagePreviewAccess;
-    if (!hasPrivilegedAccess && (userProfile.status === "deleted" || BLOCKED_STATUSES.has(userProfile.status))) return;
-    if (!hasPrivilegedAccess && (userProfile.needsPasswordSetup || !userProfile.verifiedEmail)) return;
-    if (pathname.startsWith("/billing")) return;
-    if (hasPrivilegedAccess) return;
-
-    const isMarketingOrAuthRoute = PUBLIC_ROUTES.includes(pathname);
+    if (!canLoadWorkspaceGuard || isLoadingWorkspaceGuard) return;
     const isCreatingAdditionalWorkspace =
       pathname === "/account-profile" &&
       typeof window !== "undefined" &&
       new URLSearchParams(window.location.search).get("create") === "1";
-    const shouldCheckWorkspace = pathname === "/account-profile" || !isMarketingOrAuthRoute;
-    if (!shouldCheckWorkspace) return;
-
-    let cancelled = false;
-    const run = async () => {
-      try {
-        const workspace = await getDefaultWorkspace();
-        if (cancelled) return;
-        if (!workspace && pathname !== "/account-profile") {
-          router.replace("/account-profile");
-          return;
-        }
-        if (workspace && pathname === "/account-profile" && !isCreatingAdditionalWorkspace) {
-          router.replace(resolvePostAuthPath());
-        }
-      } catch (error) {
-        console.error("Erro ao verificar contexto da conta:", error);
-      }
-    };
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [authReady, pagePreviewAccess, pathname, resolvePostAuthPath, router, user, userProfile]);
+    const activeWorkspace = guardedWorkspaces.find((workspace) => workspace.status !== "archived") || null;
+    if (!activeWorkspace && pathname !== "/account-profile") {
+      router.replace("/account-profile");
+      return;
+    }
+    if (activeWorkspace && pathname === "/account-profile" && !isCreatingAdditionalWorkspace) {
+      router.replace(resolvePostAuthPath());
+    }
+  }, [canLoadWorkspaceGuard, guardedWorkspaces, isLoadingWorkspaceGuard, pathname, resolvePostAuthPath, router]);
 
   const togglePrivacyMode = () => {
     setPrivacyMode((prev) => {
@@ -592,7 +606,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
       }}
     >
-      {authReady && children}
+      {authReady ? children : <AppBootLoading />}
     </AuthContext.Provider>
   );
 }

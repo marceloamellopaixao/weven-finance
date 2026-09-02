@@ -23,7 +23,7 @@ export type PlanCapabilities = {
 
 const PLAN_NAMES: Record<UserPlan, string> = {
   free: "Free",
-  founder: "Fundador",
+  founder: "Foundation",
   premium: "Premium Individual",
   pro: "Pro",
   family: "Família",
@@ -69,6 +69,7 @@ export function getPlanCapabilities(
   const freeLimitRaw = Number(plans.free.limit ?? DEFAULT_PLANS_CONFIG.free.limit ?? 20);
   const freeLimit = Number.isFinite(freeLimitRaw) && freeLimitRaw > 0 ? freeLimitRaw : 20;
   const base = getCatalogCapabilities(plan);
+  const configuredSeats = plans[plan]?.includedSeats;
   const installmentsOverride = featureAccess.effective?.installments;
   const monthlyForecastOverride = featureAccess.effective?.monthlyForecast;
   const smartDailyLimitOverride = featureAccess.effective?.smartDailyLimit;
@@ -76,6 +77,9 @@ export function getPlanCapabilities(
   return {
     plan,
     ...base,
+    maxFamilyMembers: typeof configuredSeats === "number" && configuredSeats > 0
+      ? Math.floor(configuredSeats)
+      : base.maxFamilyMembers,
     hasInstallments: typeof installmentsOverride === "boolean" ? installmentsOverride : base.hasInstallments,
     hasMonthlyForecast: typeof monthlyForecastOverride === "boolean" ? monthlyForecastOverride : base.hasMonthlyForecast,
     hasSmartDailyLimit: typeof smartDailyLimitOverride === "boolean" ? smartDailyLimitOverride : base.hasSmartDailyLimit,

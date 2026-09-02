@@ -144,6 +144,7 @@ function toClientTx(uid: string, row: Record<string, unknown>) {
     userId: uid,
     workspaceId: typeof row.workspace_id === "string" ? row.workspace_id : typeof raw.workspaceId === "string" ? raw.workspaceId : undefined,
     createdByUid: typeof row.created_by_uid === "string" ? row.created_by_uid : typeof raw.createdByUid === "string" ? raw.createdByUid : uid,
+    encryptionUid: typeof raw.encryptionUid === "string" ? raw.encryptionUid : undefined,
   };
 }
 

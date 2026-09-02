@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, LOCALE_STORAGE_KEY, type Locale, normalizeLocale } from "@/i18n/config";
+import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, LOCALE_STORAGE_KEY, TRANSLATIONS_ENABLED, type Locale, normalizeLocale } from "@/i18n/config";
 import { translate } from "@/i18n/getDictionary";
 
 function getClientLocale(): Locale {
-  if (typeof document === "undefined") return DEFAULT_LOCALE;
+  if (!TRANSLATIONS_ENABLED || typeof document === "undefined") return DEFAULT_LOCALE;
 
   const cookieLocale = document.cookie
     .split("; ")

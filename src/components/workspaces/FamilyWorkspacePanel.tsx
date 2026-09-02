@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, KeyRound, Loader2, MailPlus, ShieldCheck, Trash2, UsersRound } from "lucide-react";
+import { AlertTriangle, KeyRound, Loader2, MailPlus, Minus, Plus, ShieldCheck, Trash2, UsersRound } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,9 +20,10 @@ import {
   canInviteFamilyMembers,
   canViewFamilyMembers,
   normalizeFamilyPermissions,
+  toggleFamilyPermissionSelection,
 } from "@/lib/workspaces/family";
-import { closeFamilyWorkspace, getFamilyWorkspace, inviteFamilyMember, resendFamilyInvitation, resendFamilyMemberAccess, updateFamilyMember } from "@/services/familyWorkspaceService";
-import type { FamilyPermission, FamilyRole, Workspace, WorkspaceInvitation, WorkspaceMember } from "@/types/workspace";
+import { closeFamilyWorkspace, getFamilyWorkspace, inviteFamilyMember, leaveFamilyWorkspace, resendFamilyInvitation, updateAdditionalFamilySeats, updateFamilyMember } from "@/services/familyWorkspaceService";
+import type { FamilyPermission, FamilyRole, Workspace, WorkspaceInvitation, WorkspaceMember, WorkspaceSeatSummary } from "@/types/workspace";
 
 const ROLE_OPTIONS = Object.keys(FAMILY_ROLE_LABELS) as FamilyRole[];
 
@@ -48,10 +49,7 @@ function PermissionMatrix({
 }) {
   const visibleValue = getVisiblePermissions(value);
   const toggle = (permission: FamilyPermission) => {
-    const next = visibleValue.includes(permission)
-      ? visibleValue.filter((item) => item !== permission)
-      : [...visibleValue, permission];
-    onChange(next);
+    onChange(toggleFamilyPermissionSelection(visibleValue, permission));
   };
 
   return (
@@ -100,13 +98,14 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
   const [role, setRole] = useState<FamilyRole>("guest_member");
   const [permissions, setPermissions] = useState<FamilyPermission[]>(DEFAULT_FAMILY_ROLE_PERMISSIONS.guest_member);
   const [invitations, setInvitations] = useState<WorkspaceInvitation[]>([]);
-  const [inviteMode, setInviteMode] = useState<"temporary_password" | "auto_password" | "self_setup">("self_setup");
-  const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [seats, setSeats] = useState<WorkspaceSeatSummary | null>(null);
+  const [desiredAdditionalSeats, setDesiredAdditionalSeats] = useState(0);
   const [isLoadingFamily, setIsLoadingFamily] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
+  const [isUpdatingSeats, setIsUpdatingSeats] = useState(false);
   const [resendingInvitationId, setResendingInvitationId] = useState<string | null>(null);
-  const [resendingMemberUid, setResendingMemberUid] = useState<string | null>(null);
   const [isClosingFamily, setIsClosingFamily] = useState(false);
+  const [isLeavingFamily, setIsLeavingFamily] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const mayViewMembers = canViewMembers(familyWorkspace);
@@ -123,6 +122,8 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
       const data = await getFamilyWorkspace(familyWorkspace.id);
       setMembers(data.members);
       setInvitations(data.invitations);
+      setSeats(data.seats);
+      setDesiredAdditionalSeats(data.seats.additional);
     } catch {
       setMessage("Não foi possível carregar os membros agora. Tente novamente em alguns instantes.");
     } finally {
@@ -150,20 +151,18 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
         displayName,
         role,
         permissions,
-        inviteMode,
-        temporaryPassword: inviteMode === "temporary_password" ? temporaryPassword : undefined,
       });
       setEmail("");
       setDisplayName("");
-      setTemporaryPassword("");
       setMessage(
-        result.emailSent
-          ? "Convite enviado. Peça para a pessoa verificar a caixa de entrada e o lixo eletrônico."
-          : "Acesso criado. Compartilhe a senha temporária com a pessoa por um canal seguro.",
+        result.recipientType === "existing_account"
+          ? "Esta pessoa já possui uma conta. O convite aparecerá no próximo acesso para ela aceitar ou recusar."
+          : "Convite enviado. A pessoa poderá criar o próprio acesso pelo e-mail recebido.",
       );
+      setSeats(result.seats);
       await refresh();
-    } catch {
-      setMessage("Não foi possível enviar o convite agora. Revise o e-mail e tente novamente.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Não foi possível enviar o convite agora. Revise o e-mail e tente novamente.");
     } finally {
       setIsInviting(false);
     }
@@ -216,28 +215,11 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
         invitationId: invitation.id,
       });
       setInvitations((current) => current.map((item) => (item.id === result.invitation.id ? result.invitation : item)));
-      setMessage("Convite reenviado. Peça para a pessoa verificar a caixa de entrada e o lixo eletrônico.");
+      setMessage(result.emailSent ? "Convite reenviado por e-mail." : "Lembrete enviado dentro do WevenFinance.");
     } catch {
       setMessage("Não foi possível reenviar o convite agora. Tente novamente em alguns instantes.");
     } finally {
       setResendingInvitationId(null);
-    }
-  };
-
-  const handleResendMemberAccess = async (member: WorkspaceMember) => {
-    if (!familyWorkspace) return;
-    setResendingMemberUid(member.memberUid);
-    setMessage(null);
-    try {
-      await resendFamilyMemberAccess({
-        workspaceId: familyWorkspace.id,
-        memberUid: member.memberUid,
-      });
-      setMessage("Acesso reenviado. Peça para a pessoa verificar a caixa de entrada e o lixo eletrônico.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Não foi possível reenviar o acesso.");
-    } finally {
-      setResendingMemberUid(null);
     }
   };
 
@@ -257,6 +239,44 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
       setMessage("Não foi possível encerrar a família agora. Tente novamente em alguns instantes.");
     } finally {
       setIsClosingFamily(false);
+    }
+  };
+
+  const handleLeaveFamily = async () => {
+    if (!familyWorkspace?.membership) return;
+    const confirmed = window.confirm(
+      "Sair desta família? Você perderá o acesso compartilhado e voltará a usar somente seu perfil Pessoal.",
+    );
+    if (!confirmed) return;
+    setIsLeavingFamily(true);
+    setMessage(null);
+    try {
+      await leaveFamilyWorkspace(familyWorkspace.id);
+      window.dispatchEvent(new Event("wevenfinance:workspaces:changed"));
+      window.location.assign("/dashboard");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Não foi possível sair da família agora.");
+      setIsLeavingFamily(false);
+    }
+  };
+
+  const handleUpdateSeats = async () => {
+    if (!familyWorkspace || familyWorkspace.membership || !seats || desiredAdditionalSeats === seats.additional) return;
+    const confirmed = window.confirm(
+      "Atualizar os usuários adicionais do plano Família? O novo valor será aplicado somente na próxima renovação.",
+    );
+    if (!confirmed) return;
+    setIsUpdatingSeats(true);
+    setMessage(null);
+    try {
+      const result = await updateAdditionalFamilySeats(familyWorkspace.id, desiredAdditionalSeats);
+      setSeats(result.seats);
+      setDesiredAdditionalSeats(result.seats.additional);
+      setMessage("Usuários adicionais atualizados. O novo valor será cobrado na próxima renovação, sem cobrança duplicada agora.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Não foi possível atualizar os usuários adicionais.");
+    } finally {
+      setIsUpdatingSeats(false);
     }
   };
 
@@ -299,6 +319,74 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
           <CardContent className="text-sm text-muted-foreground">Você pode usar este perfil, mas não tem permissão para gerenciar membros.</CardContent>
         ) : (
           <CardContent className="space-y-5">
+            {seats ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/45 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold">Pessoas no plano</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    O titular também conta como um usuário. Convites pendentes reservam um acesso.
+                  </p>
+                </div>
+                <Badge variant="outline" className={seats.available > 0 ? "border-primary/30 bg-primary/10 text-primary" : "border-amber-300 bg-amber-500/10 text-amber-700"}>
+                  {seats.occupied}/{seats.capacity} usuários
+                </Badge>
+              </div>
+            ) : null}
+            {!familyWorkspace.membership && seats ? (
+              <div className="space-y-3 rounded-2xl border border-border/70 bg-background/45 px-4 py-4">
+                <div>
+                  <p className="text-sm font-semibold">Gerenciar usuários adicionais</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {seats.additionalSeatPrice
+                      ? `Cada usuário adicional custa R$ ${seats.additionalSeatPrice.toFixed(2).replace(".", ",")} por mês. A alteração entra na próxima renovação.`
+                      : "O valor dos usuários adicionais ainda não foi configurado pelo Admin."}
+                  </p>
+                </div>
+                {seats.additionalSeatPrice ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2" aria-label="Quantidade de usuários adicionais">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 rounded-xl"
+                        disabled={isUpdatingSeats || desiredAdditionalSeats <= Math.max(0, seats.occupied - seats.included)}
+                        onClick={() => setDesiredAdditionalSeats((current) => Math.max(Math.max(0, seats.occupied - seats.included), current - 1))}
+                      >
+                        <Minus className="h-4 w-4" />
+                        <span className="sr-only">Remover um usuário adicional</span>
+                      </Button>
+                      <div className="min-w-28 text-center">
+                        <p className="text-lg font-bold">{desiredAdditionalSeats}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {desiredAdditionalSeats === 1 ? "usuário adicional" : "usuários adicionais"}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 rounded-xl"
+                        disabled={isUpdatingSeats || (seats.maxAdditionalSeats !== null && desiredAdditionalSeats >= seats.maxAdditionalSeats)}
+                        onClick={() => setDesiredAdditionalSeats((current) => current + 1)}
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span className="sr-only">Adicionar um usuário adicional</span>
+                      </Button>
+                    </div>
+                    <Button
+                      type="button"
+                      className="rounded-xl"
+                      disabled={isUpdatingSeats || desiredAdditionalSeats === seats.additional}
+                      onClick={() => void handleUpdateSeats()}
+                    >
+                      {isUpdatingSeats ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Atualizar usuários
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {mayInviteMembers ? (
             <details className="rounded-2xl border border-color:var(--app-panel-border) bg-background/45">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
@@ -328,23 +416,9 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Acesso inicial</Label>
-                    <Select value={inviteMode} onValueChange={(value) => setInviteMode(value as "temporary_password" | "auto_password" | "self_setup")}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="self_setup">Enviar convite para criar senha</SelectItem>
-                        <SelectItem value="temporary_password">Definir senha temporária</SelectItem>
-                        <SelectItem value="auto_password">Gerar senha automaticamente</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+                    Se a pessoa já tiver uma conta, ela receberá o convite dentro do WevenFinance. Caso ainda não tenha, receberá um e-mail para criar o próprio acesso.
                   </div>
-                  {inviteMode === "temporary_password" ? (
-                    <div className="space-y-2">
-                      <Label htmlFor="family-temp-password">Senha temporária</Label>
-                      <Input id="family-temp-password" type="password" value={temporaryPassword} onChange={(event) => setTemporaryPassword(event.target.value)} />
-                    </div>
-                  ) : null}
                   <Button type="button" className="w-full gap-2 rounded-xl" disabled={isInviting || !email.trim()} onClick={handleInvite}>
                     {isInviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}
                     Convidar familiar
@@ -435,12 +509,6 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                               </SelectContent>
                             </Select>
                           ) : null}
-                          {mayInviteMembers && member.status === "pending" ? (
-                            <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl" disabled={resendingMemberUid === member.memberUid} onClick={() => void handleResendMemberAccess(member)}>
-                              {resendingMemberUid === member.memberUid ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MailPlus className="mr-2 h-4 w-4" />}
-                              Reenviar convite
-                            </Button>
-                          ) : null}
                           {mayEditMembers ? (
                             <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => void handleRemoveMember(member)}>
                               <Trash2 className="mr-2 h-4 w-4" />
@@ -512,7 +580,23 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
             </Button>
           </CardContent>
         </Card>
-      ) : null}
+      ) : (
+        <Card className="app-panel-soft rounded-3xl border border-amber-300/60">
+          <CardContent className="space-y-3 p-5 text-sm text-muted-foreground">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <div>
+                <p className="font-semibold text-foreground">Sair da família</p>
+                <p className="mt-1">Você perde o acesso compartilhado e volta ao seu perfil Pessoal, sem apagar sua conta.</p>
+              </div>
+            </div>
+            <Button type="button" variant="outline" className="rounded-xl border-amber-300 text-amber-700" disabled={isLeavingFamily} onClick={() => void handleLeaveFamily()}>
+              {isLeavingFamily ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Sair da família
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

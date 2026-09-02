@@ -2,11 +2,12 @@
 
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
-import type { FamilyPermission, FamilyRole, WorkspaceInvitation, WorkspaceMember } from "@/types/workspace";
+import type { FamilyPermission, FamilyRole, PendingWorkspaceInvitation, WorkspaceInvitation, WorkspaceMember, WorkspaceSeatSummary } from "@/types/workspace";
 
 export type FamilyWorkspacePayload = {
   members: WorkspaceMember[];
   invitations: WorkspaceInvitation[];
+  seats: WorkspaceSeatSummary;
 };
 
 export type InviteFamilyMemberInput = {
@@ -15,8 +16,6 @@ export type InviteFamilyMemberInput = {
   displayName?: string;
   role: FamilyRole;
   permissions?: FamilyPermission[];
-  inviteMode: "temporary_password" | "auto_password" | "self_setup";
-  temporaryPassword?: string;
 };
 
 async function apiFetch(path: string, init?: RequestInit) {
@@ -35,7 +34,16 @@ async function apiFetch(path: string, init?: RequestInit) {
 async function readPayload<T>(response: Response): Promise<T> {
   const payload = (await response.json()) as T & { ok?: boolean; error?: string };
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "Não foi possível gerenciar a família");
+    const messages: Record<string, string> = {
+      subscription_cancellation_confirmation_required: "Confirme o cancelamento do plano individual antes de aceitar.",
+      subscription_not_found: "A assinatura individual não foi encontrada no Mercado Pago. Revise a conta de cobrança antes de aceitar.",
+      additional_seat_price_not_configured: "O valor do usuário adicional ainda não foi configurado.",
+      cannot_remove_occupied_seats: "Remova membros ou convites pendentes antes de reduzir os usuários adicionais.",
+      subscription_not_active_for_seat_change: "É necessário ter uma assinatura ativa para alterar os usuários adicionais.",
+      invitation_not_found: "Este convite não está mais disponível.",
+      shared_workspace_membership_limit_reached: "Você já participa de outro perfil compartilhado. Saia dele antes de aceitar este convite.",
+    };
+    throw new Error((payload.error && messages[payload.error]) || payload.error || "Não foi possível gerenciar a família");
   }
   return payload;
 }
@@ -45,7 +53,7 @@ export async function getFamilyWorkspace(workspaceId: string) {
     method: "GET",
   });
   const payload = await readPayload<FamilyWorkspacePayload & { ok: true }>(response);
-  return { members: payload.members, invitations: payload.invitations };
+  return { members: payload.members, invitations: payload.invitations, seats: payload.seats };
 }
 
 export async function inviteFamilyMember(input: InviteFamilyMemberInput) {
@@ -59,6 +67,8 @@ export async function inviteFamilyMember(input: InviteFamilyMemberInput) {
     invitation: WorkspaceInvitation;
     generatedPasswordExposed: false;
     emailSent: boolean;
+    recipientType: "existing_account" | "new_account";
+    seats: WorkspaceSeatSummary;
   }>(response);
   return payload;
 }
@@ -109,14 +119,51 @@ export async function closeFamilyWorkspace(workspaceId: string) {
   await readPayload<{ ok: true }>(response);
 }
 
-export async function acceptFamilyInvitation() {
+export async function getPendingFamilyInvitations() {
+  const response = await apiFetch("/api/workspaces/family/accept", { method: "GET" });
+  const payload = await readPayload<{ ok: true; invitations: PendingWorkspaceInvitation[] }>(response);
+  return payload.invitations;
+}
+
+export async function acceptFamilyInvitation(invitationId?: string, cancelCurrentSubscription = false) {
   const response = await apiFetch("/api/workspaces/family/accept", {
     method: "POST",
+    body: JSON.stringify({ ...(invitationId ? { invitationId } : {}), cancelCurrentSubscription }),
   });
   const payload = await readPayload<{
     ok: true;
     members: WorkspaceMember[];
     invitations: WorkspaceInvitation[];
+    subscriptionCanceled: boolean;
   }>(response);
   return payload;
+}
+
+export async function rejectFamilyInvitation(invitationId: string) {
+  const response = await apiFetch(`/api/workspaces/family/accept?invitationId=${encodeURIComponent(invitationId)}`, {
+    method: "DELETE",
+  });
+  await readPayload<{ ok: true }>(response);
+}
+
+export async function leaveFamilyWorkspace(workspaceId: string) {
+  const response = await apiFetch(`/api/workspaces/family/accept?workspaceId=${encodeURIComponent(workspaceId)}`, {
+    method: "DELETE",
+  });
+  await readPayload<{ ok: true; leftWorkspaceId: string }>(response);
+}
+
+export async function updateAdditionalFamilySeats(workspaceId: string, quantity: number) {
+  const response = await apiFetch("/api/billing/additional-seats", {
+    method: "POST",
+    body: JSON.stringify({ workspaceId, quantity }),
+  });
+  return readPayload<{
+    ok: true;
+    seats: WorkspaceSeatSummary;
+    amount: number;
+    interval: "monthly" | "yearly";
+    nextChargeAt: string | null;
+    chargePolicy: "next_renewal_no_immediate_charge";
+  }>(response);
 }

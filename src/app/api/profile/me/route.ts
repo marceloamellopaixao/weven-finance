@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
+import { after } from "next/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { checkRateLimit } from "@/lib/api/rate-limit";
@@ -64,27 +65,25 @@ export async function GET(request: NextRequest) {
       }),
       getServerAccessControlConfig(),
     ]);
-    let rows = initialRows;
+    const rows = initialRows;
     if (rows.length === 0) {
       return NextResponse.json({ ok: true, profile: null }, { status: 200 });
     }
     const currentBilling = (rows[0].billing ?? ((rows[0].raw as Record<string, unknown> | null) ?? {}).billing ?? {}) as BillingInfo;
     if (shouldSyncBillingOnRead(currentBilling)) {
-      try {
-        await syncSubscriptionStatus(uid);
-        rows = await supabaseSelect("profiles", {
-          filters: { uid },
-          limit: 1,
-        });
-      } catch (error) {
-        apiLogger.warn({
-          message: "profile_me_billing_sync_failed",
-          requestId: meta.requestId,
-          route: meta.route,
-          method: meta.method,
-          meta: { uid, error: error instanceof Error ? error.message : String(error) },
-        });
-      }
+      after(async () => {
+        try {
+          await syncSubscriptionStatus(uid!);
+        } catch (error) {
+          apiLogger.warn({
+            message: "profile_me_billing_sync_failed",
+            requestId: meta.requestId,
+            route: meta.route,
+            method: meta.method,
+            meta: { uid, error: error instanceof Error ? error.message : String(error) },
+          });
+        }
+      });
     }
     const row = rows[0];
     const raw = readSecureProfilePayload(row.raw);

@@ -93,6 +93,14 @@ export const FAMILY_PERMISSIONS: FamilyPermission[] = [
   ...FAMILY_PERMISSION_GROUPS.flatMap((group) => group.permissions),
 ];
 
+export const EXCLUSIVE_FAMILY_PERMISSION_PAIRS: ReadonlyArray<readonly [FamilyPermission, FamilyPermission]> = [
+  ["view_all", "view_own"],
+  ["dashboard.view_all", "dashboard.view_own"],
+  ["transactions.view_all", "transactions.view_own"],
+  ["cards.view_all", "cards.view_own"],
+  ["piggy_banks.view_all", "piggy_banks.view_own"],
+];
+
 export const FAMILY_ROLE_LABELS: Record<FamilyRole, string> = {
   family_manager: "Gestor da família",
   spouse_responsible: "Cônjuge/responsável",
@@ -249,6 +257,31 @@ function expandCompatiblePermissions(permissions: FamilyPermission[]) {
   return Array.from(expanded);
 }
 
+function removeContradictoryViewPermissions(permissions: FamilyPermission[]) {
+  const normalized = new Set(permissions);
+  EXCLUSIVE_FAMILY_PERMISSION_PAIRS.forEach(([viewAll, viewOwn]) => {
+    if (normalized.has(viewAll) && normalized.has(viewOwn)) normalized.delete(viewOwn);
+  });
+  return Array.from(normalized);
+}
+
+export function toggleFamilyPermissionSelection(
+  permissions: FamilyPermission[],
+  permission: FamilyPermission,
+) {
+  const next = new Set(permissions);
+  if (next.has(permission)) {
+    next.delete(permission);
+  } else {
+    next.add(permission);
+    const pair = EXCLUSIVE_FAMILY_PERMISSION_PAIRS.find((items) => items.includes(permission));
+    pair?.forEach((item) => {
+      if (item !== permission) next.delete(item);
+    });
+  }
+  return Array.from(next);
+}
+
 export function normalizeFamilyRole(value: unknown): FamilyRole {
   return FAMILY_ROLES.includes(value as FamilyRole) ? (value as FamilyRole) : "guest_member";
 }
@@ -256,7 +289,10 @@ export function normalizeFamilyRole(value: unknown): FamilyRole {
 export function normalizeFamilyPermissions(value: unknown, role: FamilyRole): FamilyPermission[] {
   const source = Array.isArray(value) ? value : DEFAULT_FAMILY_ROLE_PERMISSIONS[role];
   const permissions = source.filter((item): item is FamilyPermission => FAMILY_PERMISSIONS.includes(item as FamilyPermission));
-  return expandCompatiblePermissions(Array.from(new Set(permissions.length > 0 ? permissions : DEFAULT_FAMILY_ROLE_PERMISSIONS[role])));
+  const selected = removeContradictoryViewPermissions(
+    Array.from(new Set(permissions.length > 0 ? permissions : DEFAULT_FAMILY_ROLE_PERMISSIONS[role])),
+  );
+  return removeContradictoryViewPermissions(expandCompatiblePermissions(selected));
 }
 
 export function hasFamilyPermission(member: WorkspaceMember | null | undefined, permission: FamilyPermission) {
@@ -265,6 +301,8 @@ export function hasFamilyPermission(member: WorkspaceMember | null | undefined, 
 
 export function canViewFamilyTransaction(member: WorkspaceMember | null | undefined, createdByUid: string) {
   if (!member) return true;
+  if (hasFamilyPermission(member, "transactions.view_all")) return true;
+  if (hasFamilyPermission(member, "transactions.view_own")) return member.memberUid === createdByUid;
   if (hasFamilyPermission(member, "view_all")) return true;
   if (hasFamilyPermission(member, "view_own")) return member.memberUid === createdByUid;
   return false;
@@ -301,7 +339,10 @@ export function canEditFamilyPermissions(member: WorkspaceMember | null | undefi
 }
 
 export function canViewFamilyDashboardSummary(member: WorkspaceMember | null | undefined) {
-  return !member || hasFamilyPermission(member, "dashboard.view_all") || hasFamilyPermission(member, "view_all");
+  if (!member) return true;
+  if (hasFamilyPermission(member, "dashboard.view_all")) return true;
+  if (hasFamilyPermission(member, "dashboard.view_own")) return false;
+  return hasFamilyPermission(member, "view_all");
 }
 
 function isOwnFamilyResource(member: WorkspaceMember | null | undefined, createdByUid?: string | null) {

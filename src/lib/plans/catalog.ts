@@ -1,6 +1,7 @@
 import type { FinancialProfileType } from "@/types/workspace";
 import type { UserPlan } from "@/types/user";
 import type { PlanDetails, PlansConfig } from "@/types/system";
+import { FOUNDATION_MONTHLY_PRICE, isFoundationPlanEnabled } from "@/lib/billing/foundation";
 
 export type BillingInterval = "monthly" | "yearly";
 
@@ -42,6 +43,7 @@ export type PlanCatalogItem = {
 
 export const PLAN_ORDER: UserPlan[] = ["free", "founder", "premium", "pro", "family", "business"];
 export const PAID_PLAN_IDS: Exclude<UserPlan, "free">[] = ["founder", "premium", "pro", "family", "business"];
+export const PRODUCT_MAX_ADDITIONAL_SEATS = { family: 16, business: 95 } as const;
 
 export const PLAN_CATALOG: Record<UserPlan, PlanCatalogItem> = {
   free: {
@@ -80,36 +82,36 @@ export const PLAN_CATALOG: Record<UserPlan, PlanCatalogItem> = {
   },
   founder: {
     id: "founder",
-    publicName: "Fundador",
-    shortName: "Fundador",
-    description: "Preço especial por 12 meses para os primeiros usuários.",
-    monthlyPrice: 9.9,
+    publicName: "Foundation",
+    shortName: "Foundation",
+    description: "Todos os recursos do Pro por um preço especial durante 12 meses.",
+    monthlyPrice: FOUNDATION_MONTHLY_PRICE,
     yearlyPrice: null,
     allowedProfileTypes: ["personal"],
     badge: "Oferta limitada",
-    cta: "Garantir preço fundador",
-    active: process.env.NEXT_PUBLIC_FOUNDER_PLAN_ACTIVE === "true",
+    cta: "Garantir oferta Foundation",
+    active: isFoundationPlanEnabled(),
     founderCampaignOnly: true,
-    limits: { monthlyTransactions: null, cards: 5, goals: 5, familyMembers: null, professionalProfiles: 1 },
+    limits: { monthlyTransactions: null, cards: null, goals: null, familyMembers: null, professionalProfiles: 1 },
     features: {
       familyProfile: false,
       businessProfile: false,
       cnpj: false,
       advancedReports: true,
       exports: true,
-      unlimitedExports: false,
+      unlimitedExports: true,
       collaborators: false,
       businessCategories: false,
       prioritySupport: false,
       installments: true,
       monthlyForecast: true,
-      smartDailyLimit: false,
+      smartDailyLimit: true,
     },
     benefits: [
       "R$ 9,90 por mês por 12 meses",
-      "Limitado aos primeiros usuários",
-      "Recursos pessoais avançados",
-      "Não é o preço oficial permanente",
+      "Todos os recursos do plano Pro",
+      "Oferta limitada aos primeiros usuários",
+      "Após 12 meses, escolha Premium ou Pro",
     ],
   },
   premium: {
@@ -159,7 +161,7 @@ export const PLAN_CATALOG: Record<UserPlan, PlanCatalogItem> = {
     badge: "Melhor custo-benefício",
     cta: "Escolher Pro",
     active: true,
-    limits: { monthlyTransactions: null, cards: null, goals: null, familyMembers: null, professionalProfiles: 3 },
+    limits: { monthlyTransactions: null, cards: null, goals: null, familyMembers: null, professionalProfiles: 1 },
     features: {
       familyProfile: false,
       businessProfile: false,
@@ -211,7 +213,8 @@ export const PLAN_CATALOG: Record<UserPlan, PlanCatalogItem> = {
     },
     benefits: [
       "Perfil financeiro familiar",
-      "Membros convidados",
+      "Até 4 pessoas incluídas",
+      "Usuários adicionais opcionais",
       "Permissões simples",
       "Metas familiares",
       "Relatórios da família",
@@ -247,6 +250,8 @@ export const PLAN_CATALOG: Record<UserPlan, PlanCatalogItem> = {
     benefits: [
       "Cadastro de CNPJ opcional",
       "Perfil financeiro profissional",
+      "Até 5 usuários incluídos",
+      "Usuários adicionais para funcionários",
       "Receitas e despesas do negócio",
       "Categorias empresariais",
       "Relatórios em PDF/Excel",
@@ -270,7 +275,7 @@ export function isPaidPlan(value: unknown): value is Exclude<UserPlan, "free"> {
 
 export function getPublicPlans() {
   return PLAN_ORDER.map((id) => PLAN_CATALOG[id]).filter(
-    (plan) => plan.active && (!plan.founderCampaignOnly || process.env.NEXT_PUBLIC_FOUNDER_PLAN_ACTIVE === "true")
+    (plan) => plan.active && (!plan.founderCampaignOnly || isFoundationPlanEnabled())
   );
 }
 
@@ -309,6 +314,8 @@ export function canPlanUseProfile(plan: UserPlan, profileType: FinancialProfileT
 }
 
 export function planCatalogToDetails(plan: PlanCatalogItem): PlanDetails {
+  const isFamily = plan.id === "family";
+  const isBusiness = plan.id === "business";
   return {
     name: plan.publicName,
     price: plan.monthlyPrice,
@@ -316,6 +323,14 @@ export function planCatalogToDetails(plan: PlanCatalogItem): PlanDetails {
     description: plan.description,
     features: plan.benefits,
     limit: plan.limits.monthlyTransactions ?? undefined,
+    includedSeats: isFamily ? 4 : isBusiness ? 5 : null,
+    additionalSeatPrice: null,
+    additionalSeatYearlyPrice: null,
+    maxAdditionalSeats: isFamily
+      ? PRODUCT_MAX_ADDITIONAL_SEATS.family
+      : isBusiness
+        ? PRODUCT_MAX_ADDITIONAL_SEATS.business
+        : null,
     allowedProfileTypes: plan.allowedProfileTypes,
     cta: plan.cta,
     badge: plan.badge,
@@ -334,12 +349,48 @@ export function normalizePlansConfig(value: unknown, fallback?: PlansConfig): Pl
     family: planCatalogToDetails(PLAN_CATALOG.family),
     business: planCatalogToDetails(PLAN_CATALOG.business),
   };
+  const merge = (plan: UserPlan): PlanDetails => {
+    const merged = { ...base[plan], ...(data[plan] || {}) };
+    if (plan === "founder") {
+      return {
+        ...merged,
+        name: PLAN_CATALOG.founder.publicName,
+        price: FOUNDATION_MONTHLY_PRICE,
+        yearlyPrice: null,
+        description: PLAN_CATALOG.founder.description,
+        features: PLAN_CATALOG.founder.benefits,
+        allowedProfileTypes: ["personal"],
+        cta: PLAN_CATALOG.founder.cta,
+        badge: PLAN_CATALOG.founder.badge,
+      };
+    }
+    const supportsSeats = plan === "family" || plan === "business";
+    if (!supportsSeats) return merged;
+    const includedSeats = plan === "family" ? 4 : 5;
+    const maxAdditionalSeats = plan === "family"
+      ? PRODUCT_MAX_ADDITIONAL_SEATS.family
+      : PRODUCT_MAX_ADDITIONAL_SEATS.business;
+    const normalizeSeatPrice = (price: unknown) => {
+      if (price === null || price === undefined || price === "") return null;
+      const parsed = Number(price);
+      return Number.isFinite(parsed) && parsed > 0 ? Number(parsed.toFixed(2)) : null;
+    };
+    return {
+      ...merged,
+      includedSeats,
+      maxAdditionalSeats,
+      additionalSeatPrice: normalizeSeatPrice(merged.additionalSeatPrice),
+      additionalSeatYearlyPrice: normalizeSeatPrice(merged.additionalSeatPrice)
+        ? Number((Number(merged.additionalSeatPrice) * 12).toFixed(2))
+        : null,
+    };
+  };
   return {
-    free: { ...base.free, ...(data.free || {}) },
-    founder: { ...base.founder, ...(data.founder || {}) },
-    premium: { ...base.premium, ...(data.premium || {}) },
-    pro: { ...base.pro, ...(data.pro || {}) },
-    family: { ...base.family, ...(data.family || {}) },
-    business: { ...base.business, ...(data.business || {}) },
+    free: merge("free"),
+    founder: merge("founder"),
+    premium: merge("premium"),
+    pro: merge("pro"),
+    family: merge("family"),
+    business: merge("business"),
   };
 }

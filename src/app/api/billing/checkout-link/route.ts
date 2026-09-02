@@ -14,6 +14,8 @@ import { writeApiMetric } from "@/lib/observability/metrics";
 import { hasBillingExemption, normalizeAccessControlConfig } from "@/lib/access-control/config";
 import { normalizePlansConfig as normalizeSystemPlans } from "@/lib/plans/catalog";
 import { canAccessResource } from "@/lib/access-control/server";
+import { claimFoundationPlanSlot } from "@/lib/billing/foundation-server";
+import { FOUNDATION_INTERNAL_PLAN_ID, FOUNDATION_MONTHLY_PRICE, hasFoundationOfferExpired, isFoundationPlanEnabled } from "@/lib/billing/foundation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +40,9 @@ export async function GET(request: NextRequest) {
 
     if (!plan) {
       return NextResponse.json({ ok: false, error: "invalid_plan" }, { status: 400 });
+    }
+    if (plan === FOUNDATION_INTERNAL_PLAN_ID && interval !== "monthly") {
+      return NextResponse.json({ ok: false, error: "invalid_foundation_interval" }, { status: 400 });
     }
 
     const userRows = await supabaseSelect("profiles", {
@@ -107,9 +112,20 @@ export async function GET(request: NextRequest) {
     const billing = ((userRow?.billing as Record<string, unknown> | undefined) ??
       (userRaw.billing as Record<string, unknown> | undefined) ??
       {}) as Record<string, unknown>;
-    const checkoutAmount = interval === "yearly" && typeof selectedPlan.yearlyPrice === "number"
-      ? selectedPlan.yearlyPrice
-      : Number(selectedPlan.price || 0);
+    if (plan === FOUNDATION_INTERNAL_PLAN_ID) {
+      if (!isFoundationPlanEnabled()) {
+        return NextResponse.json({ ok: false, error: "plan_inactive" }, { status: 409 });
+      }
+      if (hasFoundationOfferExpired(billing)) {
+        return NextResponse.json({ ok: false, error: "foundation_offer_expired" }, { status: 409 });
+      }
+      if (!canRunAdminTest) await claimFoundationPlanSlot(uid);
+    }
+    const checkoutAmount = plan === FOUNDATION_INTERNAL_PLAN_ID
+      ? FOUNDATION_MONTHLY_PRICE
+      : interval === "yearly" && typeof selectedPlan.yearlyPrice === "number"
+        ? selectedPlan.yearlyPrice
+        : Number(selectedPlan.price || 0);
     if (!Number.isFinite(checkoutAmount) || checkoutAmount <= 0) {
       return NextResponse.json({ ok: false, error: "invalid_checkout_amount" }, { status: 422 });
     }
@@ -121,7 +137,7 @@ export async function GET(request: NextRequest) {
         ? billing.preapprovalId
         : "";
 
-    if (!canRunAdminTest && currentPreapprovalId && currentPaymentStatus === "paid" && currentPlan !== plan) {
+    if (!canRunAdminTest && plan !== FOUNDATION_INTERNAL_PLAN_ID && currentPreapprovalId && currentPaymentStatus === "paid" && currentPlan !== plan) {
       const changed = await changePreapprovalPlanForUser({
         uid,
         preapprovalId: currentPreapprovalId,
@@ -209,7 +225,13 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "missing_auth_token" ? 401 : 500;
+    const status = message === "missing_auth_token"
+      ? 401
+      : message === "foundation_plan_limit_reached" || message === "foundation_offer_expired" || message === "foundation_plan_must_have_12_repetitions" || message === "foundation_plan_must_be_monthly" || message === "foundation_plan_invalid_price" || message === "foundation_plan_invalid_back_url"
+        ? 409
+        : message === "foundation_plan_database_not_configured" || message === "foundation_plan_not_configured"
+          ? 503
+          : 500;
     apiLogger.error({
       message: "billing_checkout_link_failed",
       requestId: meta.requestId,

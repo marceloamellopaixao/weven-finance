@@ -31,7 +31,7 @@ export type LocalizedPlanCopy = {
 
 const PLAN_TONES: Record<PlanKey, PlanTone> = {
   free: {
-    shell: "bg-linear-to-br from-zinc-700 via-zinc-800 to-zinc-950 shadow-zinc-500/20",
+    shell: "bg-linear-to-br from-slate-600 via-slate-700 to-slate-900 shadow-slate-500/20",
     border: "border-zinc-300/45",
     header: "border-b border-zinc-300/25 bg-zinc-200/10",
     headerTitle: "text-zinc-200",

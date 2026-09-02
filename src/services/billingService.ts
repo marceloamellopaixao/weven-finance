@@ -62,7 +62,18 @@ export async function getCheckoutLink(
     error?: string;
   };
   if (!response.ok || !payload.ok || (!payload.checkoutUrl && !payload.changedInPlace)) {
-    throw new Error(payload.error || "Não foi possível gerar o link de pagamento");
+    const messages: Record<string, string> = {
+      foundation_plan_limit_reached: "A oferta Foundation atingiu o limite de usuários.",
+      foundation_offer_expired: "Você já utilizou o período promocional do Foundation. Escolha Premium ou Pro.",
+      foundation_plan_database_not_configured: "A campanha Foundation ainda não foi configurada no banco de dados.",
+      foundation_plan_not_configured: "Informe o plano Foundation do Mercado Pago antes de abrir esta oferta.",
+      foundation_plan_must_have_12_repetitions: "Configure o plano Foundation com exatamente 12 cobranças.",
+      foundation_plan_must_be_monthly: "Configure o plano Foundation com cobrança mensal.",
+      foundation_plan_invalid_price: "Configure o plano Foundation por R$ 9,90 em BRL.",
+      foundation_plan_invalid_back_url: "Configure no Mercado Pago uma URL HTTPS de retorno para o plano Foundation.",
+      invalid_foundation_interval: "O plano Foundation está disponível somente na cobrança mensal.",
+    };
+    throw new Error((payload.error && messages[payload.error]) || payload.error || "Não foi possível gerar o link de pagamento");
   }
 
   return {

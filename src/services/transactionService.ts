@@ -6,7 +6,7 @@ import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
 import { buildInstallmentPlan } from "@/lib/transactions/installments";
 import { buildRecurringOccurrenceSourceId, getMonthKey } from "@/lib/transactions/recurring";
-import { getActiveWorkspaceId, subscribeToActiveWorkspaceChanged } from "@/services/workspaceService";
+import { getActiveWorkspaceId, getActiveWorkspaceOwnerUid, subscribeToActiveWorkspaceChanged } from "@/services/workspaceService";
 
 const TRANSACTIONS_CHANGED_EVENT = "wevenfinance:transactions:changed";
 const USER_SETTINGS_CHANGED_EVENT = "wevenfinance:user-settings:changed";
@@ -114,7 +114,7 @@ async function apiFetchWithOptionalApproval(path: string, init?: RequestInit) {
 }
 
 function resolveCryptoUid(uid: string) {
-  return getImpersonationTargetUid() || uid;
+  return getActiveWorkspaceOwnerUid() || getImpersonationTargetUid() || uid;
 }
 
 function stripInstallmentSuffix(value: string) {
@@ -125,10 +125,21 @@ function looksLikeEncryptedValue(value: unknown) {
   return typeof value === "string" && /^[A-Za-z0-9+/]{16}={0,2}:[A-Za-z0-9+/]{20,}={0,2}$/.test(value);
 }
 
-async function parseApiTransaction(tx: ApiTransaction, cryptoUid: string): Promise<Transaction> {
+async function decryptWithCandidates(value: string, candidates: Array<string | undefined>) {
+  if (!value || !value.includes(":")) return value;
+  const uniqueCandidates = Array.from(new Set(candidates.map((candidate) => String(candidate || "").trim()).filter(Boolean)));
+  for (const candidate of uniqueCandidates) {
+    const decrypted = await decryptData(value, candidate);
+    if (decrypted !== value) return decrypted;
+  }
+  return value;
+}
+
+async function parseApiTransaction(tx: ApiTransaction, cryptoUid: string, requesterUid?: string): Promise<Transaction> {
   let decryptedTitle = tx.title || tx.description;
   let decryptedDesc = tx.title ? tx.description || "" : "";
   let decryptedAmount = String(tx.amount);
+  const candidates = [cryptoUid, tx.encryptionUid, tx.createdByUid, requesterUid];
 
   const shouldDecrypt = Boolean(
     tx.isEncrypted ||
@@ -138,19 +149,19 @@ async function parseApiTransaction(tx: ApiTransaction, cryptoUid: string): Promi
   );
 
   if (shouldDecrypt) {
-    decryptedTitle = await decryptData(tx.title || tx.description, cryptoUid);
-    decryptedDesc = tx.title ? await decryptData(tx.description || "", cryptoUid) : "";
-    decryptedAmount = await decryptData(String(tx.amount), cryptoUid);
+    decryptedTitle = await decryptWithCandidates(tx.title || tx.description, candidates);
+    decryptedDesc = tx.title ? await decryptWithCandidates(tx.description || "", candidates) : "";
+    decryptedAmount = await decryptWithCandidates(String(tx.amount), candidates);
   }
 
   const parsedAmount = Number(decryptedAmount);
   const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
-  const protectedText = tx.title || tx.description;
-  const isDecryptionFailed =
-    shouldDecrypt &&
-    decryptedTitle === protectedText &&
-    typeof protectedText === "string" &&
-    protectedText.length > 50;
+  const protectedText = String(tx.title || tx.description || "");
+  const protectedAmount = String(tx.amount);
+  const isDecryptionFailed = shouldDecrypt && (
+    (looksLikeEncryptedValue(protectedText) && decryptedTitle === protectedText)
+    || (looksLikeEncryptedValue(protectedAmount) && decryptedAmount === protectedAmount)
+  );
 
   return {
     ...tx,
@@ -167,11 +178,12 @@ export type ApiTransaction = Omit<Transaction, "createdAt" | "amount" | "title" 
   title?: string;
   description: string;
   isEncrypted?: boolean;
+  encryptionUid?: string;
 };
 
-export async function parseApiTransactions(transactions: ApiTransaction[], uid: string) {
-  const cryptoUid = resolveCryptoUid(uid);
-  const parsed = await Promise.all(transactions.map((tx) => parseApiTransaction(tx, cryptoUid)));
+export async function parseApiTransactions(transactions: ApiTransaction[], uid: string, workspaceOwnerUid?: string) {
+  const cryptoUid = workspaceOwnerUid || resolveCryptoUid(uid);
+  const parsed = await Promise.all(transactions.map((tx) => parseApiTransaction(tx, cryptoUid, uid)));
   return parsed.filter((tx) => !tx.isArchived);
 }
 
@@ -267,6 +279,7 @@ export const migrateCryptography = async (uid: string) => {
           description: await encryptData(descToSave, cryptoUid),
           amount: await encryptData(amountToSave, cryptoUid),
           isEncrypted: true,
+          encryptionUid: cryptoUid,
         },
       });
       continue;
@@ -279,6 +292,7 @@ export const migrateCryptography = async (uid: string) => {
           description: await encryptData(rawDescription, cryptoUid),
           amount: await encryptData(rawAmount, cryptoUid),
           isEncrypted: true,
+          encryptionUid: cryptoUid,
         },
       });
     }
@@ -415,6 +429,7 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO & { i
       date: currentDate,
       dueDate: currentDueDate,
       isEncrypted: true,
+      encryptionUid: cryptoUid,
       isArchived: false,
       isRecurring: tx.isRecurring || false,
       ...(recurringId && {
@@ -454,6 +469,7 @@ export const addTransaction = async (uid: string, tx: CreateTransactionDTO & { i
       date: tx.date,
       dueDate: tx.dueDate,
       isEncrypted: true,
+      encryptionUid: cryptoUid,
       isArchived: true,
       isRecurring: true,
       recurrenceEnded: false,
@@ -533,6 +549,9 @@ export const updateTransaction = async (
 ) => {
   const cryptoUid = resolveCryptoUid(uid);
   const updates: Record<string, unknown> = { ...data };
+  if (data.amount !== undefined || data.title !== undefined || data.description !== undefined) {
+    updates.encryptionUid = cryptoUid;
+  }
   if (data.amount !== undefined) {
     updates.amount = await encryptData(data.amount, cryptoUid);
     updates.amountForLimit = Number(data.amount);

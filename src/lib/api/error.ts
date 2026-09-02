@@ -13,6 +13,8 @@ export function isAuthErrorMessage(message: string) {
 
 export function resolveApiErrorStatus(message: string) {
   if (message === "auth_service_unavailable") return 503;
+  if (message === "workspace_access_denied") return 403;
+  if (message === "workspace_archived") return 409;
   if (message.startsWith("impersonation_")) return 403;
   if (isAuthErrorMessage(message)) return 401;
   return 500;

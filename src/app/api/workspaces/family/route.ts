@@ -6,6 +6,7 @@ import { getRequestMeta } from "@/lib/api/request-meta";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { pushNotification } from "@/lib/notifications/server";
 import { getPlanCapabilities } from "@/lib/plans/capabilities";
 import { getUserPlanContext } from "@/lib/plans/server";
 import {
@@ -25,21 +26,28 @@ import {
 } from "@/lib/workspaces/server";
 import { supabasePatchByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { getSupabaseServiceClient, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
+import { resolveUserUidFromMetadata } from "@/lib/auth/user-uid";
 import { readSecureProfilePayload, writeSecureProfilePayload } from "@/lib/secure-store/profile";
-import type { FamilyRole, WorkspaceInvitation, WorkspaceMember } from "@/types/workspace";
+import { buildWorkspaceSeatSummary, countOccupiedWorkspaceSeats } from "@/lib/workspaces/seats";
+import type { FamilyRole, WorkspaceInvitation, WorkspaceMember, WorkspaceSeatSummary } from "@/types/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-type InviteMode = "temporary_password" | "auto_password" | "self_setup";
 
 function normalizeEmail(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
 
-function generateServerPassword() {
-  const random = crypto.getRandomValues(new Uint8Array(24));
-  return Array.from(random, (value) => value.toString(16).padStart(2, "0")).join("");
+async function safePushFamilyNotification(input: Parameters<typeof pushNotification>[0]) {
+  try {
+    await pushNotification(input);
+  } catch (error) {
+    apiLogger.warn({
+      message: "family_invitation_notification_failed",
+      uid: input.uid,
+      meta: { error: error instanceof Error ? error.message : "unknown_error" },
+    });
+  }
 }
 
 function toMemberRow(input: {
@@ -87,6 +95,7 @@ function toMemberRow(input: {
 }
 
 function toInvitationRow(input: {
+  id?: string;
   workspaceUid: string;
   workspaceId: string;
   email: string;
@@ -94,10 +103,11 @@ function toInvitationRow(input: {
   permissions: string[];
   invitedByUid: string;
   invitedMemberUid?: string | null;
+  recipientAccountExisted?: boolean;
   status?: "pending" | "accepted" | "revoked" | "expired";
 }) {
   const now = new Date().toISOString();
-  const id = crypto.randomUUID();
+  const id = input.id || crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
   const raw = {
     id,
@@ -109,6 +119,7 @@ function toInvitationRow(input: {
     status: input.status || "pending",
     invitedByUid: input.invitedByUid,
     invitedMemberUid: input.invitedMemberUid || null,
+    recipientAccountExisted: Boolean(input.recipientAccountExisted),
     expiresAt,
     createdAt: now,
     updatedAt: now,
@@ -249,46 +260,58 @@ async function ensureProfileForMember(input: {
 async function resolveOrCreateAuthUser(input: {
   email: string;
   displayName: string;
-  mode: InviteMode;
-  temporaryPassword?: string;
   redirectTo: string;
 }) {
-  const existingUserId = await resolveSupabaseAuthUserId({ email: input.email });
-  const client = getSupabaseServiceClient();
-  if (existingUserId) {
-    if (input.mode !== "temporary_password") {
-      await sendPasswordSetupEmail(client, input.email, input.redirectTo);
-    }
+  const profileRows = await supabaseSelect("profiles", {
+    conditions: { email: `ilike.${input.email}` },
+    limit: 1,
+  });
+  const existingProfile = profileRows[0];
+  if (existingProfile?.uid) {
     return {
-      uid: existingUserId,
+      uid: String(existingProfile.uid),
       created: false,
-      needsPasswordSetup: input.mode !== "temporary_password",
-      emailSent: input.mode !== "temporary_password",
+      needsPasswordSetup: false,
+      emailSent: false,
+      accountExists: true,
+      profileExists: true,
+      displayName: String(existingProfile.display_name || input.displayName),
     };
   }
 
-  if (input.mode === "self_setup") {
-    const invite = await client.auth.admin.inviteUserByEmail(input.email, {
-      data: { displayName: input.displayName },
-      redirectTo: input.redirectTo,
-    });
-    if (invite.error) throw new Error(`supabase_invite_failed:${invite.error.message}`);
-    return { uid: invite.data.user?.id || "", created: true, needsPasswordSetup: true, emailSent: true };
+  const existingUserId = await resolveSupabaseAuthUserId({ email: input.email });
+  const client = getSupabaseServiceClient();
+  if (existingUserId) {
+    const authResult = await client.auth.admin.getUserById(existingUserId);
+    if (authResult.error || !authResult.data.user) {
+      throw new Error(`supabase_auth_user_lookup_failed:${authResult.error?.message || "not_found"}`);
+    }
+    const uid = resolveUserUidFromMetadata(authResult.data.user.user_metadata, existingUserId);
+    return {
+      uid,
+      created: false,
+      needsPasswordSetup: false,
+      emailSent: false,
+      accountExists: true,
+      profileExists: false,
+      displayName: String(authResult.data.user.user_metadata?.displayName || input.displayName),
+    };
   }
 
-  const password = input.mode === "temporary_password" ? String(input.temporaryPassword || "") : generateServerPassword();
-  if (password.length < 8) throw new Error("invalid_temporary_password");
-  const result = await client.auth.admin.createUser({
-    email: input.email,
-    password,
-    email_confirm: false,
-    user_metadata: { displayName: input.displayName },
+  const invite = await client.auth.admin.inviteUserByEmail(input.email, {
+    data: { displayName: input.displayName },
+    redirectTo: input.redirectTo,
   });
-  if (result.error) throw new Error(`supabase_user_create_failed:${result.error.message}`);
-  if (input.mode === "auto_password") {
-    await sendPasswordSetupEmail(client, input.email, input.redirectTo);
-  }
-  return { uid: result.data.user?.id || "", created: true, needsPasswordSetup: input.mode === "auto_password", emailSent: input.mode === "auto_password" };
+  if (invite.error) throw new Error(`supabase_invite_failed:${invite.error.message}`);
+  return {
+    uid: invite.data.user?.id || "",
+    created: true,
+    needsPasswordSetup: true,
+    emailSent: true,
+    accountExists: false,
+    profileExists: false,
+    displayName: input.displayName,
+  };
 }
 
 async function sendPasswordSetupEmail(client: ReturnType<typeof getSupabaseServiceClient>, email: string, redirectTo: string) {
@@ -296,29 +319,92 @@ async function sendPasswordSetupEmail(client: ReturnType<typeof getSupabaseServi
   if (result.error) throw new Error(`supabase_password_email_failed:${result.error.message}`);
 }
 
+async function getFamilySeatSummary(
+  workspaceUid: string,
+  workspaceId: string,
+  memberRows?: Array<Record<string, unknown>>,
+): Promise<WorkspaceSeatSummary> {
+  const planContext = await getUserPlanContext(workspaceUid);
+  const capabilities = getPlanCapabilities(planContext.plan, planContext.plans, planContext.featureAccess);
+  const rows = memberRows ?? await supabaseSelect("workspace_members", {
+    filters: { workspace_uid: workspaceUid, workspace_id: workspaceId },
+    conditions: { member_status: "in.(active,pending)" },
+    limit: 100,
+  });
+  const profileRows = await supabaseSelect("profiles", {
+    select: "billing,raw",
+    filters: { uid: workspaceUid },
+    limit: 1,
+  });
+  const profileRaw = (profileRows[0]?.raw as Record<string, unknown> | null) || {};
+  const billing = ((profileRows[0]?.billing as Record<string, unknown> | null) ||
+    (profileRaw.billing as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+  const configuredPlan = planContext.plans.family;
+  return buildWorkspaceSeatSummary({
+    plan: configuredPlan,
+    occupied: countOccupiedWorkspaceSeats(workspaceUid, rows),
+    additionalSeats: billing.additionalSeats,
+    fallbackIncluded: capabilities.maxFamilyMembers ?? 4,
+  });
+}
+
+async function expirePendingFamilyInvitations(workspaceUid: string, workspaceId: string) {
+  const expiredRows = await supabaseSelect("workspace_invitations", {
+    filters: { workspace_uid: workspaceUid, workspace_id: workspaceId, invitation_status: "pending" },
+    conditions: { expires_at: `lt.${new Date().toISOString()}` },
+    limit: 100,
+  });
+  const now = new Date().toISOString();
+  for (const row of expiredRows) {
+    const raw = ((row.raw as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+    await supabaseUpsertRows("workspace_invitations", [{
+      ...row,
+      invitation_status: "expired",
+      raw: { ...raw, status: "expired", expiredAt: now, updatedAt: now },
+      updated_at: now,
+    }], { onConflict: "id" });
+    if (row.invited_member_uid) {
+      await supabasePatchByFilters("workspace_members", {
+        workspace_uid: workspaceUid,
+        workspace_id: workspaceId,
+        member_uid: String(row.invited_member_uid),
+        member_status: "pending",
+      }, {
+        member_status: "disabled",
+        updated_at: now,
+      });
+    }
+  }
+}
+
 async function assertFamilyInviteAllowed(workspaceUid: string, workspaceId: string, email: string) {
+  await expirePendingFamilyInvitations(workspaceUid, workspaceId);
   const planContext = await getUserPlanContext(workspaceUid);
   const capabilities = getPlanCapabilities(planContext.plan, planContext.plans, planContext.featureAccess);
   if (!planContext.isBillingExempt && !capabilities.hasFamilyWorkspace) {
     throw new Error("Para convidar familiares, use o plano Família.");
   }
-  if (planContext.isBillingExempt || capabilities.maxFamilyMembers === null) return;
 
   const memberRows = await supabaseSelect("workspace_members", {
     filters: { workspace_uid: workspaceUid, workspace_id: workspaceId },
     conditions: { member_status: "in.(active,pending)" },
-    limit: 500,
+    limit: 100,
   });
   const normalizedEmail = normalizeEmail(email);
   const alreadyAdded = memberRows.some((row) => normalizeEmail(row.email) === normalizedEmail);
-  const invitedMembers = memberRows.filter((row) => String(row.member_uid || "") !== workspaceUid);
-  if (!alreadyAdded && invitedMembers.length >= capabilities.maxFamilyMembers) {
-    throw new Error(`Seu plano Família permite até ${capabilities.maxFamilyMembers} familiares convidados.`);
+  if (alreadyAdded) throw new Error("family_member_already_invited");
+  const seats = await getFamilySeatSummary(workspaceUid, workspaceId, memberRows);
+  if (!planContext.isBillingExempt && seats.available <= 0) {
+    throw new Error(`Limite de ${seats.capacity} pessoas atingido. Contrate um usuário adicional antes de convidar outro familiar.`);
   }
+  return seats;
 }
 
 function getFamilyErrorStatus(message: string) {
-  if (message.startsWith("Para convidar") || message.startsWith("Seu plano")) return 403;
+  if (message.startsWith("Para convidar") || message.startsWith("Limite de")) return 403;
+  if (message === "family_member_already_invited") return 409;
+  if (message === "family_seat_capacity_changed") return 409;
+  if (message === "cannot_invite_yourself") return 400;
   if (message === "forbidden") return 403;
   return resolveApiErrorStatus(message);
 }
@@ -333,6 +419,7 @@ export async function GET(request: NextRequest) {
     const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
     if (!workspaceId) return NextResponse.json({ ok: false, error: "missing_workspace_id" }, { status: 400 });
     const access = await assertCanView(auth.uid, workspaceId);
+    await expirePendingFamilyInvitations(access.workspaceUid, access.workspaceId);
     const [memberRows, invitationRows] = await Promise.all([
       supabaseSelect("workspace_members", {
         filters: { workspace_uid: access.workspaceUid, workspace_id: access.workspaceId },
@@ -345,11 +432,13 @@ export async function GET(request: NextRequest) {
         limit: 50,
       }),
     ]);
+    const seats = await getFamilySeatSummary(access.workspaceUid, access.workspaceId, memberRows);
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
     return NextResponse.json({
       ok: true,
       members: memberRows.map(toWorkspaceMember),
       invitations: invitationRows.map(toWorkspaceInvitation),
+      seats,
     }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
@@ -373,39 +462,38 @@ export async function POST(request: NextRequest) {
       displayName?: string;
       role?: unknown;
       permissions?: unknown;
-      inviteMode?: InviteMode;
-      temporaryPassword?: string;
     };
     const workspaceId = String(body.workspaceId || "").trim();
     const email = normalizeEmail(body.email);
     if (!workspaceId || !email) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    if (email === normalizeEmail(auth.email)) throw new Error("cannot_invite_yourself");
     const access = await assertCanManage(auth.uid, workspaceId, "invite_members");
     await assertFamilyInviteAllowed(access.workspaceUid, workspaceId, email);
     const role = normalizeFamilyRole(body.role);
     const permissions = normalizeFamilyPermissions(body.permissions || DEFAULT_FAMILY_ROLE_PERMISSIONS[role], role);
-    const mode: InviteMode = body.inviteMode === "temporary_password" || body.inviteMode === "auto_password" ? body.inviteMode : "self_setup";
     const displayName = String(body.displayName || email.split("@")[0] || "Familiar").trim();
 
     const authUser = await resolveOrCreateAuthUser({
       email,
       displayName,
-      mode,
-      temporaryPassword: body.temporaryPassword,
       redirectTo: new URL("/first-access?intent=first-access&familyInvite=1", request.nextUrl.origin).toString(),
     });
     if (!authUser.uid) throw new Error("supabase_user_create_failed:missing_user_id");
 
-    await ensureProfileForMember({ uid: authUser.uid, email, displayName, needsPasswordSetup: authUser.needsPasswordSetup });
+    if (!authUser.profileExists) {
+      await ensureProfileForMember({ uid: authUser.uid, email, displayName, needsPasswordSetup: authUser.needsPasswordSetup });
+    }
+    const memberDisplayName = authUser.displayName || displayName;
     const memberRow = toMemberRow({
       workspaceUid: access.workspaceUid,
       workspaceId,
       memberUid: authUser.uid,
       email,
-      displayName,
+      displayName: memberDisplayName,
       role,
       permissions,
       invitedByUid: auth.uid,
-      status: mode === "temporary_password" ? "active" : "pending",
+      status: "pending",
     });
     const invitationRow = toInvitationRow({
       workspaceUid: access.workspaceUid,
@@ -415,20 +503,51 @@ export async function POST(request: NextRequest) {
       permissions,
       invitedByUid: auth.uid,
       invitedMemberUid: authUser.uid,
-      status: mode === "temporary_password" ? "accepted" : "pending",
+      recipientAccountExisted: authUser.accountExists,
+      status: "pending",
     });
 
     await supabaseUpsertRows("workspace_members", [memberRow], { onConflict: "id" });
     await supabaseUpsertRows("workspace_invitations", [invitationRow], { onConflict: "id" });
+    const seats = await getFamilySeatSummary(access.workspaceUid, workspaceId);
+    const ownerPlanContext = await getUserPlanContext(access.workspaceUid);
+    if (!ownerPlanContext.isBillingExempt && seats.occupied > seats.capacity) {
+      const now = new Date().toISOString();
+      await supabaseUpsertRows("workspace_members", [{
+        ...memberRow,
+        member_status: "disabled",
+        raw: { ...((memberRow.raw as Record<string, unknown>) || {}), status: "disabled", updatedAt: now },
+        updated_at: now,
+      }], { onConflict: "id" });
+      await supabaseUpsertRows("workspace_invitations", [{
+        ...invitationRow,
+        invitation_status: "revoked",
+        raw: { ...((invitationRow.raw as Record<string, unknown>) || {}), status: "revoked", updatedAt: now },
+        updated_at: now,
+      }], { onConflict: "id" });
+      throw new Error("family_seat_capacity_changed");
+    }
     const member = toWorkspaceMember(memberRow);
     const invitation = toWorkspaceInvitation(invitationRow);
+    if (authUser.accountExists) {
+      await safePushFamilyNotification({
+        uid: authUser.uid,
+        kind: "workspace",
+        title: "Convite para uma família",
+        message: `${auth.name || "Um responsável"} convidou você para compartilhar um perfil financeiro familiar.`,
+        href: "/dashboard?workspaceInvite=1",
+        meta: { invitationId: invitation.id, workspaceId, workspaceUid: access.workspaceUid },
+      });
+    }
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
-    return NextResponse.json<{ ok: true; member: WorkspaceMember; invitation: WorkspaceInvitation; generatedPasswordExposed: false; emailSent: boolean }>({
+    return NextResponse.json({
       ok: true,
       member,
       invitation,
       generatedPasswordExposed: false,
       emailSent: Boolean(authUser.emailSent),
+      recipientType: authUser.accountExists ? "existing_account" : "new_account",
+      seats,
     }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
@@ -461,17 +580,36 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "cannot_resend_owner_access" }, { status: 400 });
       }
       const member = await getWorkspaceMember(access.workspaceUid, workspaceId, memberUid);
-      if (!member || member.status !== "active") return NextResponse.json({ ok: false, error: "member_not_found" }, { status: 404 });
-      await sendPasswordSetupEmail(
-        getSupabaseServiceClient(),
-        member.email,
-        new URL("/first-access?intent=first-access&familyInvite=1", request.nextUrl.origin).toString(),
-      );
+      if (!member || member.status === "disabled") return NextResponse.json({ ok: false, error: "member_not_found" }, { status: 404 });
+      const memberInvitationRows = await supabaseSelect("workspace_invitations", {
+        filters: { workspace_uid: access.workspaceUid, workspace_id: access.workspaceId, invited_member_uid: member.memberUid },
+        conditions: { invitation_status: "eq.pending" },
+        order: "created_at.desc",
+        limit: 1,
+      });
+      const memberInvitationRaw = ((memberInvitationRows[0]?.raw as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+      const recipientAccountExisted = memberInvitationRaw.recipientAccountExisted === true;
+      if (recipientAccountExisted) {
+        await safePushFamilyNotification({
+          uid: member.memberUid,
+          kind: "workspace",
+          title: "Convite pendente para uma família",
+          message: "Você tem um convite aguardando sua confirmação.",
+          href: "/dashboard?workspaceInvite=1",
+          meta: { invitationId: memberInvitationRows[0]?.id, workspaceId },
+        });
+      } else {
+        await sendPasswordSetupEmail(
+          getSupabaseServiceClient(),
+          member.email,
+          new URL("/first-access?intent=first-access&familyInvite=1", request.nextUrl.origin).toString(),
+        );
+      }
       await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
       return NextResponse.json<{ ok: true; member: WorkspaceMember; emailSent: boolean }>({
         ok: true,
         member,
-        emailSent: true,
+        emailSent: !recipientAccountExisted,
       }, { status: 200 });
     }
 
@@ -489,14 +627,27 @@ export async function PUT(request: NextRequest) {
     if (invitation.status !== "pending") {
       return NextResponse.json({ ok: false, error: "invitation_not_pending" }, { status: 400 });
     }
-    await sendPasswordSetupEmail(
-      getSupabaseServiceClient(),
-      invitation.email,
-      new URL("/first-access?intent=first-access&familyInvite=1", request.nextUrl.origin).toString(),
-    );
+    const invitationRaw = ((existing.raw as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+    const recipientAccountExisted = invitationRaw.recipientAccountExisted === true;
+    if (recipientAccountExisted && existing.invited_member_uid) {
+      await safePushFamilyNotification({
+        uid: String(existing.invited_member_uid),
+        kind: "workspace",
+        title: "Convite pendente para uma família",
+        message: "Você tem um convite aguardando sua confirmação.",
+        href: "/dashboard?workspaceInvite=1",
+        meta: { invitationId, workspaceId },
+      });
+    } else {
+      await sendPasswordSetupEmail(
+        getSupabaseServiceClient(),
+        invitation.email,
+        new URL("/first-access?intent=first-access&familyInvite=1", request.nextUrl.origin).toString(),
+      );
+    }
 
     const now = new Date().toISOString();
-    const raw = ((existing.raw as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+    const raw = invitationRaw;
     const updatedRow = {
       ...existing,
       raw: {
@@ -513,7 +664,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json<{ ok: true; invitation: WorkspaceInvitation; emailSent: boolean }>({
       ok: true,
       invitation: updatedInvitation,
-      emailSent: true,
+      emailSent: !recipientAccountExisted,
     }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
@@ -565,6 +716,27 @@ export async function PATCH(request: NextRequest) {
       invitedByUid: existing.invitedByUid,
     });
     await supabaseUpsertRows("workspace_members", [memberRow], { onConflict: "id" });
+    if (body.status === "disabled") {
+      const pendingInvitationRows = await supabaseSelect("workspace_invitations", {
+        filters: {
+          workspace_uid: access.workspaceUid,
+          workspace_id: workspaceId,
+          invited_member_uid: memberUid,
+          invitation_status: "pending",
+        },
+        limit: 20,
+      });
+      const now = new Date().toISOString();
+      for (const invitationRow of pendingInvitationRows) {
+        const invitationRaw = ((invitationRow.raw as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+        await supabaseUpsertRows("workspace_invitations", [{
+          ...invitationRow,
+          invitation_status: "revoked",
+          raw: { ...invitationRaw, status: "revoked", revokedAt: now, updatedAt: now },
+          updated_at: now,
+        }], { onConflict: "id" });
+      }
+    }
     const member = toWorkspaceMember(memberRow);
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
     return NextResponse.json({ ok: true, member }, { status: 200 });

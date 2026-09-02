@@ -98,6 +98,27 @@ export type WorkspaceInvitation = {
   updatedAt: string;
 };
 
+export type PendingWorkspaceInvitation = WorkspaceInvitation & {
+  workspaceName: string;
+  inviterName: string;
+  currentPlan: import("@/types/user").UserPlan;
+  currentPlanName: string;
+  requiresSubscriptionCancellation: boolean;
+  isStaff: boolean;
+};
+
+export type WorkspaceSeatSummary = {
+  included: number;
+  additional: number;
+  capacity: number;
+  occupied: number;
+  available: number;
+  additionalSeatPrice: number | null;
+  additionalSeatYearlyPrice: number | null;
+  maxAdditionalSeats: number | null;
+  canPurchaseAdditional: boolean;
+};
+
 export type Workspace = {
   id: string;
   uid: string;

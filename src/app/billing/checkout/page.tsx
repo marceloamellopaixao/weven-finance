@@ -34,7 +34,7 @@ export default function BillingCheckoutPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, userProfile, loading, canPreviewRestrictedPages } = useAuth();
-  const { plans } = usePlans();
+  const { plans, loading: plansLoading, error: plansError } = usePlans();
   const [state, setState] = useState<CheckoutState>("preparing");
   const [message, setMessage] = useState(t("checkout.preparing"));
   const startedRef = useRef("");
@@ -59,12 +59,12 @@ export default function BillingCheckoutPage() {
   }, [intervalFromQuery, planFromQuery]);
 
   useEffect(() => {
-    if (loading || isPreviewOnly || plan) return;
+    if (loading || plansLoading || isPreviewOnly || plan) return;
     router.replace(user ? "/settings?tab=billing" : "/login");
-  }, [isPreviewOnly, loading, plan, router, user]);
+  }, [isPreviewOnly, loading, plan, plansLoading, router, user]);
 
   useEffect(() => {
-    if (loading || isPreviewOnly || !plan) return;
+    if (loading || plansLoading || plansError || isPreviewOnly || !plan) return;
 
     rememberPendingUpgradePlan(plan, interval);
 
@@ -116,18 +116,20 @@ export default function BillingCheckoutPage() {
           return;
         }
         setState("error");
-        setMessage(t("checkout.errorMessage"));
+        setMessage(error instanceof Error && error.message ? error.message : t("checkout.errorMessage"));
       }
     };
 
     void run();
 
-  }, [adminTestMode, interval, isPreviewOnly, loading, plan, router, selectedPlan?.name, t, user, userProfile]);
+  }, [adminTestMode, interval, isPreviewOnly, loading, plan, plansError, plansLoading, router, selectedPlan?.name, t, user, userProfile]);
 
-  const resolvedState: CheckoutState = !loading && !plan ? "error" : state;
+  const resolvedState: CheckoutState = plansError || (!loading && !plan) ? "error" : state;
   const resolvedMessage =
     isPreviewOnly
       ? t("checkout.previewMessage")
+      : plansError
+        ? "Não foi possível carregar o preço atualizado do plano. Nenhuma cobrança foi iniciada."
       : !loading && !plan
       ? t("checkout.missingPlanMessage")
       : message;
