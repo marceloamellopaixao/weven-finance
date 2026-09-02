@@ -16,6 +16,37 @@ import { getSiteUrl, SITE_NAME } from "@/lib/site";
 import { StoreProvider } from "@/store/provider";
 
 const siteUrl = getSiteUrl();
+const appearanceBootScript = `
+(() => {
+  try {
+    const root = document.documentElement;
+    const cached = window.localStorage.getItem("wevenfinance:appearance-preferences");
+    const preferences = cached ? JSON.parse(cached) : {};
+    const requestedTheme = ["light", "dark", "system"].includes(preferences.themeMode)
+      ? preferences.themeMode
+      : "system";
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const resolvedTheme = requestedTheme === "system"
+      ? (prefersDark ? "dark" : "light")
+      : requestedTheme;
+    const accents = ["violet", "indigo", "fuchsia", "emerald", "amber"];
+    const accent = accents.includes(preferences.accent) ? preferences.accent : "violet";
+
+    root.classList.toggle("dark", resolvedTheme === "dark");
+    root.dataset.appTheme = requestedTheme;
+    root.dataset.appResolvedTheme = resolvedTheme;
+    root.dataset.appAccent = accent;
+    root.style.colorScheme = resolvedTheme;
+  } catch {
+    const root = document.documentElement;
+    const fallbackDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.classList.toggle("dark", fallbackDark);
+    root.dataset.appTheme = "system";
+    root.dataset.appResolvedTheme = fallbackDark ? "dark" : "light";
+    root.dataset.appAccent = "violet";
+    root.style.colorScheme = fallbackDark ? "dark" : "light";
+  }
+})();`;
 const structuredData = [
   {
     "@context": "https://schema.org",
@@ -154,8 +185,11 @@ export default async function RootLayout({
   const locale = await getRequestLocale();
 
   return (
-    <html lang={locale}>
-      <body className="font-sans">
+    <html lang={locale} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: appearanceBootScript }} />
+      </head>
+      <body className="bg-background font-sans">
         <script
           type="application/ld+json"
           suppressHydrationWarning

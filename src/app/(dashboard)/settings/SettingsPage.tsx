@@ -54,9 +54,8 @@ import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { useAppearance } from "@/hooks/useAppearance";
 import { AppearanceAccent, AppearanceThemeMode } from "@/types/appearance";
 import { useFormatters } from "@/i18n/useFormatters";
-import { getPlanPrice } from "@/lib/billing/prices";
 import { getLocalizedPlanCopy, getPlanTone } from "@/lib/plans/display";
-import { getPublicPlans } from "@/lib/plans/catalog";
+import { getConfiguredPublicPlans } from "@/lib/plans/catalog";
 import type { UpgradePlan } from "@/services/billing/checkoutIntent";
 import { useTranslations } from "@/i18n/T";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
@@ -104,7 +103,7 @@ export default function SettingsPage() {
   const { appearancePreferences, appearanceLoading, updateAppearance } = useAppearance();
   const { workspaces, activeWorkspace, loading: workspacesLoading } = useWorkspaces();
   const { isImpersonating } = useImpersonation();
-  const { plans } = usePlans();
+  const { plans, loading: plansLoading, error: plansError, refetch: refetchPlans } = usePlans();
   const currency = usePreferredCurrency();
   const { date, money } = useFormatters(currency);
   const router = useRouter();
@@ -165,7 +164,7 @@ export default function SettingsPage() {
   const fadeInUp = "animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both";
   const zoomIn = "animate-in fade-in zoom-in-50 duration-500 fill-mode-both";
   const formatPlanPrice = (planId: UpgradePlan) =>
-    money(getPlanPrice(planId, currency)?.amount ?? plans[planId].price);
+    money(plans[planId].price);
   const canOpenFamilyWorkspaceSettings = workspaces.some((workspace) => {
     if (workspace.status === "archived") return false;
     if (workspace.type !== "family" && !workspace.settings?.familyModeEnabled && !workspace.membership) return false;
@@ -515,7 +514,7 @@ export default function SettingsPage() {
   const canUpgrade = !isBillingExemptRole;
   const currentPlanCopy = getLocalizedPlanCopy(tGlobal, effectivePlan, plans[effectivePlan]);
   const effectivePlanTone = getPlanTone(effectivePlan);
-  const availableUpgradePlans = getPublicPlans()
+  const availableUpgradePlans = getConfiguredPublicPlans(plans)
     .map((plan) => plan.id)
     .filter((plan): plan is UpgradePlan => plan !== "free" && plan !== effectivePlan);
   const planRoleLabel = effectivePlan === "free" ? t("billing.role.free") : currentPlanCopy.name;
@@ -1218,67 +1217,86 @@ export default function SettingsPage() {
                 </Card>
               )}
 
-              {canUpgrade && (
-                <div className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="app-panel-subtle rounded-2xl border-slate-200 bg-slate-50/80 px-4 py-4">
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Free</p>
-                      <p className="mt-2 text-base font-semibold text-zinc-900">{t("billing.plans.freeTitle")}</p>
-                      <p className="mt-1 text-sm text-zinc-600">{t("billing.plans.freeDescription")}</p>
+              {canUpgrade && plansLoading ? (
+                <div className="grid items-stretch gap-6 md:grid-cols-2 2xl:grid-cols-3" role="status">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <div key={index} className="app-panel-soft min-h-96 animate-pulse rounded-3xl border border-color:var(--app-panel-border) p-6">
+                      <div className="h-6 w-32 rounded-full bg-primary/12" />
+                      <div className="mt-4 h-4 w-full rounded-full bg-primary/8" />
+                      <div className="mt-2 h-4 w-4/5 rounded-full bg-primary/8" />
+                      <div className="mt-8 space-y-3">
+                        {Array.from({ length: 5 }).map((__, item) => <div key={item} className="h-4 rounded-full bg-primary/8" />)}
+                      </div>
                     </div>
-                    {availableUpgradePlans.slice(0, 2).map((planId) => {
-                      const planCopy = getLocalizedPlanCopy(tGlobal, planId, plans[planId]);
-                      const planTone = getPlanTone(planId);
-                      return (
-                        <div key={planId} className={`rounded-2xl border px-4 py-4 ${planTone.softCard}`}>
-                          <p className={`text-[10px] uppercase tracking-[0.2em] ${planTone.accentText}`}>{planCopy.title}</p>
-                          <p className="mt-2 text-base font-semibold text-zinc-900 dark:text-white">{planCopy.tag || planCopy.cta}</p>
-                          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{planCopy.description}</p>
-                        </div>
-                      );
-                    })}
+                  ))}
+                  <span className="sr-only">Carregando planos disponíveis</span>
+                </div>
+              ) : null}
+
+              {canUpgrade && !plansLoading && plansError ? (
+                <div className="app-panel-soft rounded-3xl border border-red-400/30 p-6 text-center">
+                  <AlertTriangle className="mx-auto h-6 w-6 text-red-500" />
+                  <p className="mt-3 font-semibold text-foreground">Não foi possível carregar os preços atualizados.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Nenhum checkout será iniciado com valores desatualizados.</p>
+                  <Button type="button" variant="outline" className="mt-4 rounded-xl" onClick={() => void refetchPlans()}>
+                    <RefreshCw className="mr-2 h-4 w-4" /> Tentar novamente
+                  </Button>
+                </div>
+              ) : null}
+
+              {canUpgrade && !plansLoading && !plansError && (
+                <div className="space-y-5">
+                  <div>
+                    <h2 className="text-xl font-semibold text-foreground">Planos disponíveis</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Compare os recursos e escolha o plano adequado. O valor exibido aqui é o mesmo usado no checkout.
+                    </p>
                   </div>
 
-                  <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid items-stretch gap-6 md:grid-cols-2 2xl:grid-cols-3">
                     {availableUpgradePlans.map((planId) => {
                       const planCopy = getLocalizedPlanCopy(tGlobal, planId, plans[planId]);
                       const planTone = getPlanTone(planId);
                       return (
-                        <Card key={planId} className={`app-panel-soft relative overflow-hidden h-full flex flex-col border-2 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300 ${planTone.border}`}>
-                          <div className={`absolute top-0 left-0 w-full h-1 ${planTone.topBar}`} />
-                          <CardHeader className="flex-1">
-                            <CardTitle className="flex justify-between items-center gap-3">
-                              <span className="flex items-center gap-2">
-                                <Medal className={`h-5 w-5 ${planTone.accentText}`} /> {planCopy.title}
+                        <Card key={planId} className={`relative flex h-full flex-col overflow-hidden rounded-3xl border-2 bg-card py-0 text-card-foreground shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${planTone.border}`}>
+                          <div className={`h-1.5 w-full shrink-0 ${planTone.topBar}`} />
+                          <CardHeader className="flex-1 space-y-4 p-6">
+                            <div className="flex items-start justify-between gap-4">
+                              <span className="flex min-w-0 items-center gap-2 text-lg font-bold text-foreground">
+                                <Medal className={`h-5 w-5 shrink-0 ${planTone.accentText}`} />
+                                <span className="truncate">{planCopy.title}</span>
                               </span>
-                              <span className="text-xl font-bold text-zinc-900 dark:text-white">
-                                {formatPlanPrice(planId)}
-                              </span>
-                            </CardTitle>
-                            <CardDescription>{planCopy.description}</CardDescription>
+                              <div className="shrink-0 text-right">
+                                <p className="text-xl font-bold text-foreground">{formatPlanPrice(planId)}</p>
+                                <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">por mês</p>
+                              </div>
+                            </div>
+                            <CardDescription className="min-h-10 leading-relaxed text-muted-foreground">{planCopy.description}</CardDescription>
                             {planCopy.tag ? (
-                              <p className={`text-xs font-medium uppercase tracking-[0.18em] ${planTone.accentText}`}>
+                              <p className={`w-fit rounded-full border border-current/20 bg-current/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${planTone.accentText}`}>
                                 {planCopy.tag}
                               </p>
                             ) : null}
                             {planCopy.features.length > 0 ? (
                               <nav>
-                                <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
+                                <ul className="space-y-2.5 text-sm text-muted-foreground">
                                   {planCopy.features.slice(0, 6).map((feature, index) => (
-                                    <li key={index} className="flex items-center gap-2">
-                                      <CheckCircle2 className={`h-4 w-4 ${planTone.accentText}`} /> {feature}
+                                    <li key={index} className="flex items-start gap-2">
+                                      <CheckCircle2 className={`mt-0.5 h-4 w-4 shrink-0 ${planTone.accentText}`} />
+                                      <span>{feature}</span>
                                     </li>
                                   ))}
                                 </ul>
                               </nav>
                             ) : null}
                           </CardHeader>
-                          <CardFooter className="mt-auto">
+                          <CardFooter className="mt-auto border-t border-border/60 bg-muted/20 p-5">
                             <Button
                               onClick={() => handleStartCheckout(planId)}
                               disabled={isOpeningCheckout === planId}
-                              className={`w-full h-11 rounded-xl shadow-lg hover:cursor-pointer transition-all active:scale-[0.98] ${planTone.action}`}
+                              className={`h-11 w-full rounded-xl shadow-lg transition-all active:scale-[0.98] hover:cursor-pointer ${planTone.action}`}
                             >
+                              {isOpeningCheckout === planId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                               {isOpeningCheckout === planId ? t("billing.plans.openingCheckout") : planCopy.cta}
                             </Button>
                           </CardFooter>

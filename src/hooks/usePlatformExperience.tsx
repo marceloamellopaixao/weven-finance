@@ -257,6 +257,7 @@ export function PlatformExperienceProvider({ children }: { children: ReactNode }
       root.dataset.appResolvedTheme = resolvedTheme;
       root.dataset.appAccent = appearancePreferences.accent;
       root.style.colorScheme = resolvedTheme;
+      root.style.backgroundColor = "var(--background)";
     };
 
     applyAppearance();
