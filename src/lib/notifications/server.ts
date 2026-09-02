@@ -7,7 +7,8 @@ export type NotificationKind =
   | "onboarding"
   | "transaction"
   | "card"
-  | "goal";
+  | "goal"
+  | "workspace";
 
 type NotificationInput = {
   uid: string;

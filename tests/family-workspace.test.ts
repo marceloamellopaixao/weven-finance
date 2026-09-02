@@ -15,6 +15,8 @@ import {
   normalizeFamilyPermissions,
 } from "@/lib/workspaces/family";
 import { canPlanUseProfile } from "@/lib/plans/catalog";
+import { buildWorkspaceSeatSummary, countOccupiedWorkspaceSeats } from "@/lib/workspaces/seats";
+import { DEFAULT_PLANS_CONFIG } from "@/types/system";
 import type { WorkspaceMember } from "@/types/workspace";
 
 function member(permissions: WorkspaceMember["permissions"], memberUid = "child-1"): WorkspaceMember {
@@ -111,4 +113,43 @@ test("commercial plans only allow their intended financial profile type", () => 
   assert.equal(canPlanUseProfile("family", "personal"), false);
   assert.equal(canPlanUseProfile("business", "business"), true);
   assert.equal(canPlanUseProfile("business", "family"), false);
+});
+
+test("family capacity counts the owner and reserves pending invitations", () => {
+  const occupied = countOccupiedWorkspaceSeats("owner-1", [
+    { member_uid: "owner-1", member_status: "active" },
+    { member_uid: "parent-2", member_status: "active" },
+    { member_uid: "child-1", member_status: "pending" },
+    { member_uid: "removed", member_status: "disabled" },
+  ]);
+  const seats = buildWorkspaceSeatSummary({
+    plan: { ...DEFAULT_PLANS_CONFIG.family, includedSeats: 4 },
+    occupied,
+    fallbackIncluded: 4,
+  });
+
+  assert.equal(occupied, 3);
+  assert.equal(seats.capacity, 4);
+  assert.equal(seats.available, 1);
+});
+
+test("purchased additional seats expand capacity without changing included seats", () => {
+  const seats = buildWorkspaceSeatSummary({
+    plan: {
+      ...DEFAULT_PLANS_CONFIG.family,
+      includedSeats: 4,
+      additionalSeatPrice: 9.9,
+      additionalSeatYearlyPrice: 99,
+      maxAdditionalSeats: 6,
+    },
+    occupied: 4,
+    additionalSeats: 2,
+    fallbackIncluded: 4,
+  });
+
+  assert.equal(seats.included, 4);
+  assert.equal(seats.additional, 2);
+  assert.equal(seats.capacity, 6);
+  assert.equal(seats.available, 2);
+  assert.equal(seats.canPurchaseAdditional, true);
 });

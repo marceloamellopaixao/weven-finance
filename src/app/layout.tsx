@@ -8,8 +8,7 @@ import { ToastContainer } from "react-toastify";
 import { ImpersonationConsentModal } from "@/components/impersonation/ImpersonationConsentModal";
 import { ImpersonationActionApprovalModal } from "@/components/impersonation/ImpersonationActionApprovalModal";
 import { AppChrome } from "@/components/layout/AppChrome";
-import { RegionBootstrapModal } from "@/components/region/RegionBootstrapModal";
-import { I18nAutoTranslate } from "@/i18n/I18nAutoTranslate";
+import { WorkspaceInvitationModal } from "@/components/workspaces/WorkspaceInvitationModal";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { getDictionary } from "@/i18n/getDictionary";
 import { getRequestLocale } from "@/i18n/server";
@@ -169,10 +168,11 @@ export default async function RootLayout({
               <BlockedGuard>
                 <AppChrome>
                   {children}
-                  <RegionBootstrapModal />
+                  {/* Onboarding regional desativado enquanto o SaaS opera somente em pt-BR. */}
                   <ImpersonationConsentModal />
                   <ImpersonationActionApprovalModal />
-                  <I18nAutoTranslate />
+                  <WorkspaceInvitationModal />
+                  {/* Tradução automática preservada para uma futura retomada do i18n. */}
                   <div aria-live="polite" aria-atomic="true">
                     <ToastContainer
                       position="top-right"

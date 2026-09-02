@@ -40,6 +40,26 @@ create index if not exists idx_workspace_invitations_workspace_status
 create index if not exists idx_workspace_invitations_email_status
   on public.workspace_invitations(lower(email), invitation_status);
 
+create index if not exists idx_workspace_invitations_member_status
+  on public.workspace_invitations(invited_member_uid, invitation_status, created_at desc);
+
+with duplicate_pending_invitations as (
+  select id,
+    row_number() over (
+      partition by workspace_uid, workspace_id, lower(email)
+      order by created_at desc, id desc
+    ) as position
+  from public.workspace_invitations
+  where invitation_status = 'pending'
+)
+update public.workspace_invitations
+set invitation_status = 'revoked', updated_at = timezone('utc', now())
+where id in (select id from duplicate_pending_invitations where position > 1);
+
+create unique index if not exists idx_workspace_invitations_one_pending_per_email
+  on public.workspace_invitations(workspace_uid, workspace_id, lower(email))
+  where invitation_status = 'pending';
+
 create index if not exists idx_transactions_uid_tx_date_desc
   on public.transactions(uid, tx_date desc);
 

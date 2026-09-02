@@ -2,11 +2,12 @@
 
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
-import type { FamilyPermission, FamilyRole, WorkspaceInvitation, WorkspaceMember } from "@/types/workspace";
+import type { FamilyPermission, FamilyRole, PendingWorkspaceInvitation, WorkspaceInvitation, WorkspaceMember, WorkspaceSeatSummary } from "@/types/workspace";
 
 export type FamilyWorkspacePayload = {
   members: WorkspaceMember[];
   invitations: WorkspaceInvitation[];
+  seats: WorkspaceSeatSummary;
 };
 
 export type InviteFamilyMemberInput = {
@@ -15,8 +16,6 @@ export type InviteFamilyMemberInput = {
   displayName?: string;
   role: FamilyRole;
   permissions?: FamilyPermission[];
-  inviteMode: "temporary_password" | "auto_password" | "self_setup";
-  temporaryPassword?: string;
 };
 
 async function apiFetch(path: string, init?: RequestInit) {
@@ -45,7 +44,7 @@ export async function getFamilyWorkspace(workspaceId: string) {
     method: "GET",
   });
   const payload = await readPayload<FamilyWorkspacePayload & { ok: true }>(response);
-  return { members: payload.members, invitations: payload.invitations };
+  return { members: payload.members, invitations: payload.invitations, seats: payload.seats };
 }
 
 export async function inviteFamilyMember(input: InviteFamilyMemberInput) {
@@ -59,6 +58,8 @@ export async function inviteFamilyMember(input: InviteFamilyMemberInput) {
     invitation: WorkspaceInvitation;
     generatedPasswordExposed: false;
     emailSent: boolean;
+    recipientType: "existing_account" | "new_account";
+    seats: WorkspaceSeatSummary;
   }>(response);
   return payload;
 }
@@ -109,9 +110,16 @@ export async function closeFamilyWorkspace(workspaceId: string) {
   await readPayload<{ ok: true }>(response);
 }
 
-export async function acceptFamilyInvitation() {
+export async function getPendingFamilyInvitations() {
+  const response = await apiFetch("/api/workspaces/family/accept", { method: "GET" });
+  const payload = await readPayload<{ ok: true; invitations: PendingWorkspaceInvitation[] }>(response);
+  return payload.invitations;
+}
+
+export async function acceptFamilyInvitation(invitationId?: string) {
   const response = await apiFetch("/api/workspaces/family/accept", {
     method: "POST",
+    body: JSON.stringify(invitationId ? { invitationId } : {}),
   });
   const payload = await readPayload<{
     ok: true;
@@ -119,4 +127,26 @@ export async function acceptFamilyInvitation() {
     invitations: WorkspaceInvitation[];
   }>(response);
   return payload;
+}
+
+export async function rejectFamilyInvitation(invitationId: string) {
+  const response = await apiFetch(`/api/workspaces/family/accept?invitationId=${encodeURIComponent(invitationId)}`, {
+    method: "DELETE",
+  });
+  await readPayload<{ ok: true }>(response);
+}
+
+export async function updateAdditionalFamilySeats(workspaceId: string, quantity: number) {
+  const response = await apiFetch("/api/billing/additional-seats", {
+    method: "POST",
+    body: JSON.stringify({ workspaceId, quantity }),
+  });
+  return readPayload<{
+    ok: true;
+    seats: WorkspaceSeatSummary;
+    amount: number;
+    interval: "monthly" | "yearly";
+    nextChargeAt: string | null;
+    chargePolicy: "next_renewal_no_immediate_charge";
+  }>(response);
 }

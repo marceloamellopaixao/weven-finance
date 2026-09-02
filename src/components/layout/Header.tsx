@@ -17,7 +17,6 @@ import Link from "next/link";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { useNotifications } from "@/hooks/useNotifications";
 import { usePlatformExperience } from "@/hooks/usePlatformExperience";
-import { LocaleSwitcher } from "@/components/i18n/LocaleSwitcher";
 import { useTranslations } from "@/i18n/T";
 import { Bell } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -124,7 +123,7 @@ export function Header() {
             </span>
           </Link>
           <div className="flex items-center gap-4">
-            <LocaleSwitcher />
+            {/* Seletor de idioma preservado para a futura retomada do i18n. */}
             <Link href="/login" className="hidden sm:block">
               <Button variant="ghost" className="rounded-full font-medium text-muted-foreground hover:bg-accent hover:text-foreground">{tHeader("login")}</Button>
             </Link>
@@ -157,7 +156,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
-        <LocaleSwitcher />
+        {/* Seletor de idioma preservado para a futura retomada do i18n. */}
         {isImpersonating && (
           <>
             <Button

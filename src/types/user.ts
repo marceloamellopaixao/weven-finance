@@ -37,6 +37,12 @@ export interface BillingInfo extends Partial<BillingState> {
   pendingPlan?: UserPlan;
   pendingCheckoutAt?: string; // ISO Date
   pendingCheckoutAttemptId?: string;
+  billingInterval?: "monthly" | "yearly";
+  additionalSeats?: number;
+  additionalSeatUnitPrice?: number;
+  additionalSeatsUpdatedAt?: string;
+  pendingAdditionalSeats?: number | null;
+  pendingAdditionalSeatsAt?: string | null;
 }
 
 export interface UserProfile {

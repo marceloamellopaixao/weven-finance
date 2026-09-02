@@ -402,6 +402,26 @@ alter table if exists public.workspace_invitations add column if not exists raw 
 alter table if exists public.workspace_invitations add column if not exists created_at timestamptz default timezone('utc', now());
 alter table if exists public.workspace_invitations add column if not exists updated_at timestamptz default timezone('utc', now());
 
+create index if not exists idx_workspace_invitations_member_status
+  on public.workspace_invitations(invited_member_uid, invitation_status, created_at desc);
+
+with duplicate_pending_invitations as (
+  select id,
+    row_number() over (
+      partition by workspace_uid, workspace_id, lower(email)
+      order by created_at desc, id desc
+    ) as position
+  from public.workspace_invitations
+  where invitation_status = 'pending'
+)
+update public.workspace_invitations
+set invitation_status = 'revoked', updated_at = timezone('utc', now())
+where id in (select id from duplicate_pending_invitations where position > 1);
+
+create unique index if not exists idx_workspace_invitations_one_pending_per_email
+  on public.workspace_invitations(workspace_uid, workspace_id, lower(email))
+  where invitation_status = 'pending';
+
 alter table if exists public.transactions add column if not exists uid text;
 alter table if exists public.transactions add column if not exists workspace_id text;
 alter table if exists public.transactions add column if not exists created_by_uid text;

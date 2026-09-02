@@ -817,6 +817,7 @@ export async function syncFromWebhook(input: WebhookInput) {
     paymentStatus: targetPaymentStatus,
     ...statusPatch,
     billing: {
+      ...(((userMatch.userData.billing as Record<string, unknown> | null) || {}) as Record<string, unknown>),
       ...billingState,
       source: "mercadopago_webhook",
       provider: "mercadopago",
@@ -834,6 +835,7 @@ export async function syncFromWebhook(input: WebhookInput) {
       pendingPlan: null,
       pendingCheckoutAt: null,
       pendingCheckoutAttemptId: null,
+      ...(targetPlan !== currentPlan ? { additionalSeats: 0, additionalSeatUnitPrice: null, additionalSeatsUpdatedAt: nowIso } : {}),
       lastEventType: input.topic,
       lastEventAction: input.action ?? null,
       lastEventId: input.eventId ?? null,
@@ -926,6 +928,35 @@ export async function createPreapprovalCheckout(params: {
   return { preapprovalId, checkoutUrl };
 }
 
+export async function getPreapprovalBillingInfoForUser(params: {
+  uid: string;
+  preapprovalId: string;
+  userEmail?: string;
+}) {
+  const payload = await mpRequest(`/preapproval/${params.preapprovalId}`);
+  const details = normalizeGatewayDetailsFromPreapproval(payload, params.preapprovalId);
+  const reference = parseExternalReference(details.externalReference);
+  if (reference.uid && reference.uid !== params.uid) throw new Error("preapproval_owner_mismatch");
+  if (
+    !reference.uid &&
+    params.userEmail &&
+    details.payerEmail &&
+    params.userEmail.toLowerCase() !== details.payerEmail.toLowerCase()
+  ) {
+    throw new Error("payer_email_mismatch");
+  }
+  const gatewayStatus = details.gatewayStatus.toLowerCase();
+  if (gatewayStatus !== "authorized" && gatewayStatus !== "approved") {
+    throw new Error("subscription_not_active_for_seat_change");
+  }
+  const autoRecurring = ((payload.auto_recurring as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  return {
+    interval: Number(autoRecurring.frequency || 1) === 12 ? "yearly" as const : "monthly" as const,
+    amount: Number(autoRecurring.transaction_amount || 0),
+    nextChargeAt: details.currentPeriodEnd ?? null,
+  };
+}
+
 export async function changePreapprovalPlanForUser(params: {
   uid: string;
   preapprovalId: string;
@@ -960,7 +991,8 @@ export async function changePreapprovalPlanForUser(params: {
     ? autoRecurring.transaction_amount
     : Number(autoRecurring.transaction_amount || 0);
   const previousPlan = currentDetails.plan ?? null;
-  const yearly = params.interval === "yearly";
+  const currentFrequency = Number(autoRecurring.frequency || 1);
+  const yearly = params.interval === "yearly" || (params.interval !== "monthly" && currentFrequency === 12);
 
   await mpPut(`/preapproval/${params.preapprovalId}`, {
     reason: `WevenFinance - ${params.plan}`,
@@ -1154,6 +1186,7 @@ export async function confirmPreapprovalForUser(params: {
     paymentStatus: targetPaymentStatus,
     ...statusPatch,
     billing: {
+      ...(((userData.billing as Record<string, unknown> | null) || {}) as Record<string, unknown>),
       ...billingState,
       source: "mercadopago_confirm",
       provider: "mercadopago",
@@ -1175,6 +1208,7 @@ export async function confirmPreapprovalForUser(params: {
       pendingPlan: null,
       pendingCheckoutAt: null,
       pendingCheckoutAttemptId: null,
+      ...(targetPlan !== currentPlan ? { additionalSeats: 0, additionalSeatUnitPrice: null, additionalSeatsUpdatedAt: nowIso } : {}),
     },
   });
 

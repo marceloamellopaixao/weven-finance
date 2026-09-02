@@ -2825,7 +2825,8 @@ export default function AdminPage() {
                         </div>
 
                         {!isFreePlan ? (
-                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div className="space-y-2">
                               <Label className="text-xs font-bold uppercase text-zinc-400">Preço anual</Label>
                               <Input className="rounded-xl h-10" type="number" value={plan.yearlyPrice ?? 0} onChange={(event) => handlePlanEdit(planId, "yearlyPrice", Number(event.target.value))} />
@@ -2834,6 +2835,35 @@ export default function AdminPage() {
                               <Label className="text-xs font-bold uppercase text-zinc-400">CTA</Label>
                               <Input className="rounded-xl h-10" value={plan.cta ?? ""} onChange={(event) => handlePlanEdit(planId, "cta", event.target.value)} />
                             </div>
+                            </div>
+                            {planId === "family" || planId === "business" ? (
+                              <div className="space-y-3 rounded-2xl border border-border/70 bg-background/40 p-4">
+                                <div>
+                                  <p className="text-sm font-semibold">Assentos e colaboradores</p>
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    O titular ocupa um assento. Deixe o preço adicional vazio ou zero para impedir novas compras.
+                                  </p>
+                                </div>
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                  <div className="space-y-2">
+                                    <Label className="text-xs font-bold uppercase text-zinc-400">Pessoas incluídas</Label>
+                                    <Input className="h-10 rounded-xl" min={1} type="number" value={plan.includedSeats ?? (planId === "family" ? 4 : 5)} onChange={(event) => handlePlanEdit(planId, "includedSeats", Math.max(1, Number(event.target.value)))} />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label className="text-xs font-bold uppercase text-zinc-400">Máximo de adicionais</Label>
+                                    <Input className="h-10 rounded-xl" min={0} type="number" value={plan.maxAdditionalSeats ?? 0} onChange={(event) => handlePlanEdit(planId, "maxAdditionalSeats", Math.max(0, Number(event.target.value)))} />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label className="text-xs font-bold uppercase text-zinc-400">Adicional mensal (R$)</Label>
+                                    <Input className="h-10 rounded-xl" min={0} step="0.01" type="number" value={plan.additionalSeatPrice ?? 0} onChange={(event) => handlePlanEdit(planId, "additionalSeatPrice", Math.max(0, Number(event.target.value)))} />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label className="text-xs font-bold uppercase text-zinc-400">Adicional anual (R$)</Label>
+                                    <Input className="h-10 rounded-xl" min={0} step="0.01" type="number" value={plan.additionalSeatYearlyPrice ?? 0} onChange={(event) => handlePlanEdit(planId, "additionalSeatYearlyPrice", Math.max(0, Number(event.target.value)))} />
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
 

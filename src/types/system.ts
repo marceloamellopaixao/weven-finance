@@ -7,6 +7,13 @@ export interface PlanDetails {
   description: string;
   features: string[];
   limit?: number;
+  /** Total de pessoas incluídas, contando o titular do workspace. */
+  includedSeats?: number | null;
+  /** Preço por assento adicional no ciclo mensal. Nulo desativa a venda. */
+  additionalSeatPrice?: number | null;
+  /** Preço por assento adicional no ciclo anual. Nulo desativa a venda. */
+  additionalSeatYearlyPrice?: number | null;
+  maxAdditionalSeats?: number | null;
   allowedProfileTypes?: Array<"personal" | "family" | "business">;
   cta?: string;
   badge?: string;

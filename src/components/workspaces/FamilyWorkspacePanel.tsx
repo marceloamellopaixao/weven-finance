@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, KeyRound, Loader2, MailPlus, ShieldCheck, Trash2, UsersRound } from "lucide-react";
+import { AlertTriangle, KeyRound, Loader2, MailPlus, ShieldCheck, Trash2, UserPlus, UsersRound } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,8 +21,8 @@ import {
   canViewFamilyMembers,
   normalizeFamilyPermissions,
 } from "@/lib/workspaces/family";
-import { closeFamilyWorkspace, getFamilyWorkspace, inviteFamilyMember, resendFamilyInvitation, resendFamilyMemberAccess, updateFamilyMember } from "@/services/familyWorkspaceService";
-import type { FamilyPermission, FamilyRole, Workspace, WorkspaceInvitation, WorkspaceMember } from "@/types/workspace";
+import { closeFamilyWorkspace, getFamilyWorkspace, inviteFamilyMember, resendFamilyInvitation, resendFamilyMemberAccess, updateAdditionalFamilySeats, updateFamilyMember } from "@/services/familyWorkspaceService";
+import type { FamilyPermission, FamilyRole, Workspace, WorkspaceInvitation, WorkspaceMember, WorkspaceSeatSummary } from "@/types/workspace";
 
 const ROLE_OPTIONS = Object.keys(FAMILY_ROLE_LABELS) as FamilyRole[];
 
@@ -100,10 +100,10 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
   const [role, setRole] = useState<FamilyRole>("guest_member");
   const [permissions, setPermissions] = useState<FamilyPermission[]>(DEFAULT_FAMILY_ROLE_PERMISSIONS.guest_member);
   const [invitations, setInvitations] = useState<WorkspaceInvitation[]>([]);
-  const [inviteMode, setInviteMode] = useState<"temporary_password" | "auto_password" | "self_setup">("self_setup");
-  const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [seats, setSeats] = useState<WorkspaceSeatSummary | null>(null);
   const [isLoadingFamily, setIsLoadingFamily] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
+  const [isUpdatingSeats, setIsUpdatingSeats] = useState(false);
   const [resendingInvitationId, setResendingInvitationId] = useState<string | null>(null);
   const [resendingMemberUid, setResendingMemberUid] = useState<string | null>(null);
   const [isClosingFamily, setIsClosingFamily] = useState(false);
@@ -123,6 +123,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
       const data = await getFamilyWorkspace(familyWorkspace.id);
       setMembers(data.members);
       setInvitations(data.invitations);
+      setSeats(data.seats);
     } catch {
       setMessage("Não foi possível carregar os membros agora. Tente novamente em alguns instantes.");
     } finally {
@@ -150,20 +151,18 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
         displayName,
         role,
         permissions,
-        inviteMode,
-        temporaryPassword: inviteMode === "temporary_password" ? temporaryPassword : undefined,
       });
       setEmail("");
       setDisplayName("");
-      setTemporaryPassword("");
       setMessage(
-        result.emailSent
-          ? "Convite enviado. Peça para a pessoa verificar a caixa de entrada e o lixo eletrônico."
-          : "Acesso criado. Compartilhe a senha temporária com a pessoa por um canal seguro.",
+        result.recipientType === "existing_account"
+          ? "Esta pessoa já possui uma conta. O convite aparecerá no próximo acesso para ela aceitar ou recusar."
+          : "Convite enviado. A pessoa poderá criar o próprio acesso pelo e-mail recebido.",
       );
+      setSeats(result.seats);
       await refresh();
-    } catch {
-      setMessage("Não foi possível enviar o convite agora. Revise o e-mail e tente novamente.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Não foi possível enviar o convite agora. Revise o e-mail e tente novamente.");
     } finally {
       setIsInviting(false);
     }
@@ -216,7 +215,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
         invitationId: invitation.id,
       });
       setInvitations((current) => current.map((item) => (item.id === result.invitation.id ? result.invitation : item)));
-      setMessage("Convite reenviado. Peça para a pessoa verificar a caixa de entrada e o lixo eletrônico.");
+      setMessage(result.emailSent ? "Convite reenviado por e-mail." : "Lembrete enviado dentro do WevenFinance.");
     } catch {
       setMessage("Não foi possível reenviar o convite agora. Tente novamente em alguns instantes.");
     } finally {
@@ -229,11 +228,11 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
     setResendingMemberUid(member.memberUid);
     setMessage(null);
     try {
-      await resendFamilyMemberAccess({
+      const result = await resendFamilyMemberAccess({
         workspaceId: familyWorkspace.id,
         memberUid: member.memberUid,
       });
-      setMessage("Acesso reenviado. Peça para a pessoa verificar a caixa de entrada e o lixo eletrônico.");
+      setMessage(result.emailSent ? "Acesso reenviado por e-mail." : "Lembrete enviado dentro do WevenFinance.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Não foi possível reenviar o acesso.");
     } finally {
@@ -257,6 +256,25 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
       setMessage("Não foi possível encerrar a família agora. Tente novamente em alguns instantes.");
     } finally {
       setIsClosingFamily(false);
+    }
+  };
+
+  const handleAddSeat = async () => {
+    if (!familyWorkspace || familyWorkspace.membership || !seats?.canPurchaseAdditional) return;
+    const confirmed = window.confirm(
+      "Adicionar um assento ao plano Família? O valor configurado para o seu ciclo será aplicado somente na próxima renovação.",
+    );
+    if (!confirmed) return;
+    setIsUpdatingSeats(true);
+    setMessage(null);
+    try {
+      const result = await updateAdditionalFamilySeats(familyWorkspace.id, seats.additional + 1);
+      setSeats(result.seats);
+      setMessage("Assento adicional contratado. O novo valor será cobrado na próxima renovação, sem cobrança duplicada agora.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Não foi possível adicionar o assento.");
+    } finally {
+      setIsUpdatingSeats(false);
     }
   };
 
@@ -299,6 +317,37 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
           <CardContent className="text-sm text-muted-foreground">Você pode usar este perfil, mas não tem permissão para gerenciar membros.</CardContent>
         ) : (
           <CardContent className="space-y-5">
+            {seats ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/45 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold">Pessoas no plano</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    O titular também ocupa um assento. Convites pendentes reservam uma vaga.
+                  </p>
+                </div>
+                <Badge variant="outline" className={seats.available > 0 ? "border-primary/30 bg-primary/10 text-primary" : "border-amber-300 bg-amber-500/10 text-amber-700"}>
+                  {seats.occupied}/{seats.capacity} assentos
+                </Badge>
+              </div>
+            ) : null}
+            {!familyWorkspace.membership && seats && seats.available === 0 ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300/60 bg-amber-500/5 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold">Todos os assentos estão ocupados</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {seats.canPurchaseAdditional
+                      ? `Você pode adicionar outra pessoa. Valor por assento: R$ ${seats.additionalSeatPrice?.toFixed(2).replace(".", ",")} mensal${seats.additionalSeatYearlyPrice ? ` ou R$ ${seats.additionalSeatYearlyPrice.toFixed(2).replace(".", ",")} anual` : ""}.`
+                      : "O Admin ainda não habilitou a contratação de assentos adicionais para este plano."}
+                  </p>
+                </div>
+                {seats.canPurchaseAdditional ? (
+                  <Button type="button" variant="outline" className="gap-2 rounded-xl" disabled={isUpdatingSeats} onClick={() => void handleAddSeat()}>
+                    {isUpdatingSeats ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                    Adicionar assento
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
             {mayInviteMembers ? (
             <details className="rounded-2xl border border-color:var(--app-panel-border) bg-background/45">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
@@ -328,23 +377,9 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Acesso inicial</Label>
-                    <Select value={inviteMode} onValueChange={(value) => setInviteMode(value as "temporary_password" | "auto_password" | "self_setup")}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="self_setup">Enviar convite para criar senha</SelectItem>
-                        <SelectItem value="temporary_password">Definir senha temporária</SelectItem>
-                        <SelectItem value="auto_password">Gerar senha automaticamente</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+                    Se a pessoa já tiver uma conta, ela receberá o convite dentro do WevenFinance. Caso ainda não tenha, receberá um e-mail para criar o próprio acesso.
                   </div>
-                  {inviteMode === "temporary_password" ? (
-                    <div className="space-y-2">
-                      <Label htmlFor="family-temp-password">Senha temporária</Label>
-                      <Input id="family-temp-password" type="password" value={temporaryPassword} onChange={(event) => setTemporaryPassword(event.target.value)} />
-                    </div>
-                  ) : null}
                   <Button type="button" className="w-full gap-2 rounded-xl" disabled={isInviting || !email.trim()} onClick={handleInvite}>
                     {isInviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}
                     Convidar familiar
