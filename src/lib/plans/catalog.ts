@@ -213,7 +213,7 @@ export const PLAN_CATALOG: Record<UserPlan, PlanCatalogItem> = {
     benefits: [
       "Perfil financeiro familiar",
       "Até 4 pessoas incluídas",
-      "Vagas adicionais opcionais",
+      "Usuários adicionais opcionais",
       "Permissões simples",
       "Metas familiares",
       "Relatórios da família",
@@ -250,7 +250,7 @@ export const PLAN_CATALOG: Record<UserPlan, PlanCatalogItem> = {
       "Cadastro de CNPJ opcional",
       "Perfil financeiro profissional",
       "Até 5 usuários incluídos",
-      "Vagas adicionais para funcionários",
+      "Usuários adicionais para funcionários",
       "Receitas e despesas do negócio",
       "Categorias empresariais",
       "Relatórios em PDF/Excel",

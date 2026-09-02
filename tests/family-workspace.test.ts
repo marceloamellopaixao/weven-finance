@@ -13,6 +13,7 @@ import {
   canViewFamilyTransaction,
   DEFAULT_FAMILY_ROLE_PERMISSIONS,
   normalizeFamilyPermissions,
+  toggleFamilyPermissionSelection,
 } from "@/lib/workspaces/family";
 import { canPlanUseProfile } from "@/lib/plans/catalog";
 import { buildWorkspaceSeatSummary, countOccupiedWorkspaceSeats } from "@/lib/workspaces/seats";
@@ -113,6 +114,28 @@ test("commercial plans only allow their intended financial profile type", () => 
   assert.equal(canPlanUseProfile("family", "personal"), false);
   assert.equal(canPlanUseProfile("business", "business"), true);
   assert.equal(canPlanUseProfile("business", "family"), false);
+});
+
+test("all and own view permissions are mutually exclusive", () => {
+  const ownOnly = toggleFamilyPermissionSelection(
+    ["transactions.view_all", "transactions.create"],
+    "transactions.view_own",
+  );
+  assert.deepEqual(ownOnly, ["transactions.create", "transactions.view_own"]);
+
+  const allOnly = normalizeFamilyPermissions(
+    ["transactions.view_all", "transactions.view_own"],
+    "guest_member",
+  );
+  assert.equal(allOnly.includes("transactions.view_all"), true);
+  assert.equal(allOnly.includes("transactions.view_own"), false);
+});
+
+test("scoped own transaction permission takes precedence over a legacy all permission", () => {
+  const scopedMember = member(["view_all", "transactions.view_own"]);
+
+  assert.equal(canViewFamilyTransaction(scopedMember, "child-1"), true);
+  assert.equal(canViewFamilyTransaction(scopedMember, "parent-1"), false);
 });
 
 test("family capacity counts the owner and reserves pending invitations", () => {

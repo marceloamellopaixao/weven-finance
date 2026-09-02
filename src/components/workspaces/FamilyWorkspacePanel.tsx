@@ -20,6 +20,7 @@ import {
   canInviteFamilyMembers,
   canViewFamilyMembers,
   normalizeFamilyPermissions,
+  toggleFamilyPermissionSelection,
 } from "@/lib/workspaces/family";
 import { closeFamilyWorkspace, getFamilyWorkspace, inviteFamilyMember, resendFamilyInvitation, updateAdditionalFamilySeats, updateFamilyMember } from "@/services/familyWorkspaceService";
 import type { FamilyPermission, FamilyRole, Workspace, WorkspaceInvitation, WorkspaceMember, WorkspaceSeatSummary } from "@/types/workspace";
@@ -48,10 +49,7 @@ function PermissionMatrix({
 }) {
   const visibleValue = getVisiblePermissions(value);
   const toggle = (permission: FamilyPermission) => {
-    const next = visibleValue.includes(permission)
-      ? visibleValue.filter((item) => item !== permission)
-      : [...visibleValue, permission];
-    onChange(next);
+    onChange(toggleFamilyPermissionSelection(visibleValue, permission));
   };
 
   return (
@@ -246,7 +244,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
   const handleUpdateSeats = async () => {
     if (!familyWorkspace || familyWorkspace.membership || !seats || desiredAdditionalSeats === seats.additional) return;
     const confirmed = window.confirm(
-      "Atualizar as vagas adicionais do plano Família? O novo valor será aplicado somente na próxima renovação.",
+      "Atualizar os usuários adicionais do plano Família? O novo valor será aplicado somente na próxima renovação.",
     );
     if (!confirmed) return;
     setIsUpdatingSeats(true);
@@ -255,9 +253,9 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
       const result = await updateAdditionalFamilySeats(familyWorkspace.id, desiredAdditionalSeats);
       setSeats(result.seats);
       setDesiredAdditionalSeats(result.seats.additional);
-      setMessage("Vagas atualizadas. O novo valor será cobrado na próxima renovação, sem cobrança duplicada agora.");
+      setMessage("Usuários adicionais atualizados. O novo valor será cobrado na próxima renovação, sem cobrança duplicada agora.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Não foi possível atualizar as vagas.");
+      setMessage(error instanceof Error ? error.message : "Não foi possível atualizar os usuários adicionais.");
     } finally {
       setIsUpdatingSeats(false);
     }
@@ -307,27 +305,27 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                 <div>
                   <p className="text-sm font-semibold">Pessoas no plano</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    O titular também ocupa uma vaga. Convites pendentes reservam outra vaga.
+                    O titular também conta como um usuário. Convites pendentes reservam um acesso.
                   </p>
                 </div>
                 <Badge variant="outline" className={seats.available > 0 ? "border-primary/30 bg-primary/10 text-primary" : "border-amber-300 bg-amber-500/10 text-amber-700"}>
-                  {seats.occupied}/{seats.capacity} vagas ocupadas
+                  {seats.occupied}/{seats.capacity} usuários
                 </Badge>
               </div>
             ) : null}
             {!familyWorkspace.membership && seats ? (
               <div className="space-y-3 rounded-2xl border border-border/70 bg-background/45 px-4 py-4">
                 <div>
-                  <p className="text-sm font-semibold">Gerenciar vagas adicionais</p>
+                  <p className="text-sm font-semibold">Gerenciar usuários adicionais</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {seats.additionalSeatPrice
-                      ? `Cada vaga custa R$ ${seats.additionalSeatPrice.toFixed(2).replace(".", ",")} por mês. A alteração entra na próxima renovação.`
-                      : "O valor das vagas adicionais ainda não foi configurado pelo Admin."}
+                      ? `Cada usuário adicional custa R$ ${seats.additionalSeatPrice.toFixed(2).replace(".", ",")} por mês. A alteração entra na próxima renovação.`
+                      : "O valor dos usuários adicionais ainda não foi configurado pelo Admin."}
                   </p>
                 </div>
                 {seats.additionalSeatPrice ? (
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2" aria-label="Quantidade de vagas adicionais">
+                    <div className="flex items-center gap-2" aria-label="Quantidade de usuários adicionais">
                       <Button
                         type="button"
                         variant="outline"
@@ -337,11 +335,13 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                         onClick={() => setDesiredAdditionalSeats((current) => Math.max(Math.max(0, seats.occupied - seats.included), current - 1))}
                       >
                         <Minus className="h-4 w-4" />
-                        <span className="sr-only">Remover uma vaga</span>
+                        <span className="sr-only">Remover um usuário adicional</span>
                       </Button>
                       <div className="min-w-28 text-center">
                         <p className="text-lg font-bold">{desiredAdditionalSeats}</p>
-                        <p className="text-[11px] text-muted-foreground">vaga(s) adicional(is)</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {desiredAdditionalSeats === 1 ? "usuário adicional" : "usuários adicionais"}
+                        </p>
                       </div>
                       <Button
                         type="button"
@@ -352,7 +352,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                         onClick={() => setDesiredAdditionalSeats((current) => current + 1)}
                       >
                         <Plus className="h-4 w-4" />
-                        <span className="sr-only">Adicionar uma vaga</span>
+                        <span className="sr-only">Adicionar um usuário adicional</span>
                       </Button>
                     </div>
                     <Button
@@ -362,7 +362,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                       onClick={() => void handleUpdateSeats()}
                     >
                       {isUpdatingSeats ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Atualizar vagas
+                      Atualizar usuários
                     </Button>
                   </div>
                 ) : null}

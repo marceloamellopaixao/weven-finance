@@ -9,7 +9,7 @@ export interface PlanDetails {
   limit?: number;
   /** Total de pessoas incluídas, contando o titular do workspace. */
   includedSeats?: number | null;
-  /** Preço por vaga adicional no ciclo mensal. Nulo desativa a venda. */
+  /** Preço por usuário adicional no ciclo mensal. Nulo desativa a venda. */
   additionalSeatPrice?: number | null;
   /** Preço anual legado; quando nulo, o servidor calcula 12 vezes o valor mensal. */
   additionalSeatYearlyPrice?: number | null;

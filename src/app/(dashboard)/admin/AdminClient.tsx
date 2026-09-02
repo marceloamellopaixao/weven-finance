@@ -2839,14 +2839,14 @@ export default function AdminPage() {
                             {planId === "family" || planId === "business" ? (
                               <div className="space-y-3 rounded-2xl border border-border/70 bg-background/40 p-4">
                                 <div>
-                                  <p className="text-sm font-semibold">Vagas adicionais</p>
+                                  <p className="text-sm font-semibold">Usuários adicionais</p>
                                   <p className="mt-1 text-xs text-muted-foreground">
-                                    Família inclui 4 pessoas e Business inclui 5. Defina somente o valor de cada vaga adicional; zero desativa novas contratações.
+                                    Família inclui 4 usuários e Business inclui 5. Defina somente o valor de cada usuário adicional; zero desativa novas contratações.
                                   </p>
                                 </div>
                                 <div className="grid grid-cols-1 gap-3 sm:max-w-sm">
                                   <div className="space-y-2">
-                                    <Label className="text-xs font-bold uppercase text-zinc-400">Valor mensal por vaga (R$)</Label>
+                                    <Label className="text-xs font-bold uppercase text-zinc-400">Valor mensal por usuário adicional (R$)</Label>
                                     <Input className="h-10 rounded-xl" min={0} step="0.01" type="number" value={plan.additionalSeatPrice ?? 0} onChange={(event) => handlePlanEdit(planId, "additionalSeatPrice", Math.max(0, Number(event.target.value)))} />
                                   </div>
                                 </div>

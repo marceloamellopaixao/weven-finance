@@ -37,9 +37,9 @@ async function readPayload<T>(response: Response): Promise<T> {
     const messages: Record<string, string> = {
       subscription_cancellation_confirmation_required: "Confirme o cancelamento do plano individual antes de aceitar.",
       subscription_not_found: "A assinatura individual não foi encontrada no Mercado Pago. Revise a conta de cobrança antes de aceitar.",
-      additional_seat_price_not_configured: "O valor da vaga adicional ainda não foi configurado.",
-      cannot_remove_occupied_seats: "Remova membros ou convites pendentes antes de reduzir as vagas.",
-      subscription_not_active_for_seat_change: "É necessário ter uma assinatura ativa para alterar as vagas.",
+      additional_seat_price_not_configured: "O valor do usuário adicional ainda não foi configurado.",
+      cannot_remove_occupied_seats: "Remova membros ou convites pendentes antes de reduzir os usuários adicionais.",
+      subscription_not_active_for_seat_change: "É necessário ter uma assinatura ativa para alterar os usuários adicionais.",
       invitation_not_found: "Este convite não está mais disponível.",
     };
     throw new Error((payload.error && messages[payload.error]) || payload.error || "Não foi possível gerenciar a família");
