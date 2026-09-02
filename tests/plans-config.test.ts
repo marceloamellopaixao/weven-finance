@@ -34,3 +34,20 @@ test("family capacity is fixed and only the additional vacancy price is configur
   assert.equal(plans.family.additionalSeatPrice, 7.5);
   assert.equal(plans.family.additionalSeatYearlyPrice, 90);
 });
+
+test("Foundation keeps its fixed commercial contract", () => {
+  const plans = normalizePlansConfig({
+    founder: {
+      ...DEFAULT_PLANS_CONFIG.founder,
+      name: "Outro nome",
+      price: 1,
+      yearlyPrice: 1,
+      allowedProfileTypes: ["family"],
+    },
+  }, DEFAULT_PLANS_CONFIG);
+
+  assert.equal(plans.founder.name, "Foundation");
+  assert.equal(plans.founder.price, 9.9);
+  assert.equal(plans.founder.yearlyPrice, null);
+  assert.deepEqual(plans.founder.allowedProfileTypes, ["personal"]);
+});

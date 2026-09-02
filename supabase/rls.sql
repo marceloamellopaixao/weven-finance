@@ -71,6 +71,7 @@ alter table public.support_requests enable row level security;
 alter table public.billing_events enable row level security;
 alter table public.processed_events enable row level security;
 alter table public.subscriptions enable row level security;
+alter table public.foundation_plan_claims enable row level security;
 alter table public.support_access_requests enable row level security;
 alter table public.impersonation_action_requests enable row level security;
 alter table public.log_acesso_suporte enable row level security;

@@ -22,7 +22,7 @@ import {
   normalizeFamilyPermissions,
   toggleFamilyPermissionSelection,
 } from "@/lib/workspaces/family";
-import { closeFamilyWorkspace, getFamilyWorkspace, inviteFamilyMember, resendFamilyInvitation, updateAdditionalFamilySeats, updateFamilyMember } from "@/services/familyWorkspaceService";
+import { closeFamilyWorkspace, getFamilyWorkspace, inviteFamilyMember, leaveFamilyWorkspace, resendFamilyInvitation, updateAdditionalFamilySeats, updateFamilyMember } from "@/services/familyWorkspaceService";
 import type { FamilyPermission, FamilyRole, Workspace, WorkspaceInvitation, WorkspaceMember, WorkspaceSeatSummary } from "@/types/workspace";
 
 const ROLE_OPTIONS = Object.keys(FAMILY_ROLE_LABELS) as FamilyRole[];
@@ -105,6 +105,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
   const [isUpdatingSeats, setIsUpdatingSeats] = useState(false);
   const [resendingInvitationId, setResendingInvitationId] = useState<string | null>(null);
   const [isClosingFamily, setIsClosingFamily] = useState(false);
+  const [isLeavingFamily, setIsLeavingFamily] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const mayViewMembers = canViewMembers(familyWorkspace);
@@ -238,6 +239,24 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
       setMessage("Não foi possível encerrar a família agora. Tente novamente em alguns instantes.");
     } finally {
       setIsClosingFamily(false);
+    }
+  };
+
+  const handleLeaveFamily = async () => {
+    if (!familyWorkspace?.membership) return;
+    const confirmed = window.confirm(
+      "Sair desta família? Você perderá o acesso compartilhado e voltará a usar somente seu perfil Pessoal.",
+    );
+    if (!confirmed) return;
+    setIsLeavingFamily(true);
+    setMessage(null);
+    try {
+      await leaveFamilyWorkspace(familyWorkspace.id);
+      window.dispatchEvent(new Event("wevenfinance:workspaces:changed"));
+      window.location.assign("/dashboard");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Não foi possível sair da família agora.");
+      setIsLeavingFamily(false);
     }
   };
 
@@ -561,7 +580,23 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
             </Button>
           </CardContent>
         </Card>
-      ) : null}
+      ) : (
+        <Card className="app-panel-soft rounded-3xl border border-amber-300/60">
+          <CardContent className="space-y-3 p-5 text-sm text-muted-foreground">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <div>
+                <p className="font-semibold text-foreground">Sair da família</p>
+                <p className="mt-1">Você perde o acesso compartilhado e volta ao seu perfil Pessoal, sem apagar sua conta.</p>
+              </div>
+            </div>
+            <Button type="button" variant="outline" className="rounded-xl border-amber-300 text-amber-700" disabled={isLeavingFamily} onClick={() => void handleLeaveFamily()}>
+              {isLeavingFamily ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Sair da família
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

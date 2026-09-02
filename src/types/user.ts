@@ -43,6 +43,9 @@ export interface BillingInfo extends Partial<BillingState> {
   additionalSeatsUpdatedAt?: string;
   pendingAdditionalSeats?: number | null;
   pendingAdditionalSeatsAt?: string | null;
+  foundationStartedAt?: string;
+  foundationEndsAt?: string;
+  foundationCompletedAt?: string | null;
 }
 
 export interface UserProfile {

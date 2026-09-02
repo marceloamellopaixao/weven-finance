@@ -14,6 +14,7 @@ import { canAccessAdminArea } from "@/lib/access-control/roles";
 import { supabaseDeleteByFilters, supabasePatchByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { toFinancialProfileType, type Workspace, type WorkspaceSettings, type WorkspaceType } from "@/types/workspace";
 import { ensureFamilyManagerMembership, getActiveMemberships, toWorkspaceMember } from "@/lib/workspaces/server";
+import { reconcileOwnedWorkspacesForPlan } from "@/lib/workspaces/reconcile-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -314,11 +315,20 @@ export async function GET(request: NextRequest) {
     }
 
     const { actingUid: uid } = await resolveActingContext(request);
-    const [ownedWorkspaces, memberships, planContext] = await Promise.all([
-      getWorkspaceRows(uid),
+    const [memberships, planContext] = await Promise.all([
       getActiveMemberships(uid),
       getUserPlanContext(uid),
     ]);
+    const isStaff = canAccessAdminArea({ uid, role: planContext.role });
+    const ownedWorkspaceRows = isStaff
+      ? await supabaseSelect("workspaces", {
+          select: "id,uid,source_id,name,workspace_type,is_default,settings,raw,created_at,updated_at",
+          filters: { uid },
+          order: "is_default.desc,created_at.asc",
+          limit: 100,
+        })
+      : await reconcileOwnedWorkspacesForPlan(uid, planContext.plan);
+    const ownedWorkspaces = ownedWorkspaceRows.map((row) => toWorkspace(uid, row));
     const sharedRows =
       memberships.length > 0
         ? await Promise.all(
@@ -336,12 +346,12 @@ export async function GET(request: NextRequest) {
           )
         : [];
     const activeSharedWorkspaces = sharedRows.filter((workspace): workspace is Workspace => Boolean(workspace));
-    const isStaff = canAccessAdminArea({ uid, role: planContext.role });
     const workspaces = isStaff
       ? [...ownedWorkspaces, ...activeSharedWorkspaces]
-      : activeSharedWorkspaces.length > 0
-        ? activeSharedWorkspaces
-        : ownedWorkspaces.filter((workspace) => canPlanUseProfile(planContext.plan, toFinancialProfileType(workspace.type)));
+      : [
+          ...ownedWorkspaces.filter((workspace) => isWorkspaceActive(workspace) && canPlanUseProfile(planContext.plan, toFinancialProfileType(workspace.type))),
+          ...activeSharedWorkspaces,
+        ];
     const defaultWorkspace = workspaces.find((workspace) => workspace.isDefault && isWorkspaceActive(workspace)) || null;
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json({ ok: true, workspaces, defaultWorkspace }, { status: 200 });
@@ -384,7 +394,12 @@ export async function POST(request: NextRequest) {
     const activeCurrent = current.filter(isWorkspaceActive);
     const workspace = buildWorkspace(uid, { ...body, type }, current.length);
     const workspaceToPersist = activeCurrent.length === 0 ? { ...workspace, isDefault: true } : workspace;
+    const planContext = await getUserPlanContext(uid);
+    const isStaff = canAccessAdminArea({ uid, role: planContext.role });
     await assertPlanCanUseWorkspace(uid, workspace.type);
+    if (!isStaff && activeCurrent.length > 0) {
+      return NextResponse.json({ ok: false, error: "workspace_profile_limit_reached" }, { status: 409 });
+    }
     const next = workspaceToPersist.isDefault
       ? [...current.map((item) => ({ ...item, isDefault: false, updatedAt: new Date().toISOString() })), workspaceToPersist]
       : [...current, workspaceToPersist];
@@ -470,10 +485,14 @@ export async function PATCH(request: NextRequest) {
     const now = new Date().toISOString();
     const nextSettings = parseSettings({ ...target.settings, ...body.settings });
     const restoringArchived = Boolean(target.settings?.archivedAt) && body.settings && "archivedAt" in body.settings && !body.settings.archivedAt;
+    const activeAfterRestore = current.filter((workspace) => workspace.id !== target.id && isWorkspaceActive(workspace));
     if (restoringArchived) {
       await assertPlanCanUseWorkspace(uid, nextType);
+      const planContext = await getUserPlanContext(uid);
+      if (!canAccessAdminArea({ uid, role: planContext.role }) && activeAfterRestore.length > 0) {
+        return NextResponse.json({ ok: false, error: "workspace_profile_limit_reached" }, { status: 409 });
+      }
     }
-    const activeAfterRestore = current.filter((workspace) => workspace.id !== target.id && isWorkspaceActive(workspace));
     const updated: Workspace = {
       ...target,
       name: body.name?.trim() || target.name,

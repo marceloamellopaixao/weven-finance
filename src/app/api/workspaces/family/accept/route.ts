@@ -10,7 +10,7 @@ import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { formatPlanName } from "@/lib/plans/capabilities";
 import { getUserPlanContext } from "@/lib/plans/server";
-import { toWorkspaceInvitation, toWorkspaceMember } from "@/lib/workspaces/server";
+import { getActiveMemberships, toWorkspaceInvitation, toWorkspaceMember } from "@/lib/workspaces/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import type { PendingWorkspaceInvitation, WorkspaceInvitation, WorkspaceMember } from "@/types/workspace";
 
@@ -135,6 +135,7 @@ export async function POST(request: NextRequest) {
     const auth = await verifyRequestAuth(request);
     const body = await request.json().catch(() => ({})) as { invitationId?: string; cancelCurrentSubscription?: boolean };
     const invitationId = String(body.invitationId || "").trim();
+    if (!invitationId) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
 
     const invitationRows = await getAccessiblePendingRows(auth, invitationId || undefined);
     if (invitationId && invitationRows.length === 0) {
@@ -156,6 +157,16 @@ export async function POST(request: NextRequest) {
     }
 
     const impact = await getInvitationAccountImpact(auth);
+    const targetWorkspaceKeys = new Set(
+      validatedMembers.map(({ row }) => `${String(row.workspace_uid || "")}:${String(row.workspace_id || "")}`),
+    );
+    const existingSharedMemberships = (await getActiveMemberships(auth.uid)).filter(
+      (membership) => membership.workspaceUid !== auth.uid
+        && !targetWorkspaceKeys.has(`${membership.workspaceUid}:${membership.workspaceId}`),
+    );
+    if (!impact.isStaff && existingSharedMemberships.length > 0) {
+      return NextResponse.json({ ok: false, error: "shared_workspace_membership_limit_reached" }, { status: 409 });
+    }
     if (impact.requiresSubscriptionCancellation && body.cancelCurrentSubscription !== true) {
       return NextResponse.json({ ok: false, error: "subscription_cancellation_confirmation_required", currentPlan: impact.currentPlan }, { status: 409 });
     }
@@ -226,7 +237,32 @@ export async function DELETE(request: NextRequest) {
     if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     const auth = await verifyRequestAuth(request);
     const invitationId = request.nextUrl.searchParams.get("invitationId")?.trim() || "";
-    if (!invitationId) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim() || "";
+    if (!invitationId && !workspaceId) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    if (workspaceId) {
+      const memberRows = await supabaseSelect("workspace_members", {
+        filters: { member_uid: auth.uid, workspace_id: workspaceId, member_status: "active" },
+        limit: 1,
+      });
+      const memberRow = memberRows[0];
+      if (!memberRow || memberRow.workspace_uid === auth.uid) {
+        return NextResponse.json({ ok: false, error: "shared_workspace_membership_not_found" }, { status: 404 });
+      }
+      const now = new Date().toISOString();
+      await supabaseUpsertRows("workspace_members", [{
+        ...memberRow,
+        member_status: "disabled",
+        raw: {
+          ...(((memberRow.raw as Record<string, unknown> | null) || {}) as Record<string, unknown>),
+          status: "disabled",
+          leftAt: now,
+          updatedAt: now,
+        },
+        updated_at: now,
+      }], { onConflict: "id" });
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
+      return NextResponse.json({ ok: true, leftWorkspaceId: workspaceId }, { status: 200 });
+    }
     const rows = await getAccessiblePendingRows(auth, invitationId);
     const row = rows[0];
     if (!row) return NextResponse.json({ ok: false, error: "invitation_not_found" }, { status: 404 });
@@ -266,7 +302,7 @@ function handleError(error: unknown, meta: ReturnType<typeof getRequestMeta>, st
   const errorMessage = error instanceof Error ? error.message : "unknown_error";
   const status = errorMessage === "missing_auth_token" || errorMessage === "invalid_auth_token"
     ? 401
-    : errorMessage === "subscription_not_found" || errorMessage === "role_billing_exempt"
+    : errorMessage === "subscription_not_found" || errorMessage === "role_billing_exempt" || errorMessage === "shared_workspace_membership_limit_reached"
       ? 409
       : 500;
   apiLogger.error({ message, requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: errorMessage } });

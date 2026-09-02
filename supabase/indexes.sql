@@ -135,6 +135,9 @@ create index if not exists idx_subscriptions_uid_updated
 create index if not exists idx_subscriptions_provider_status
   on public.subscriptions(provider, status);
 
+create index if not exists idx_foundation_plan_claims_status_claimed
+  on public.foundation_plan_claims(claim_status, claimed_at asc);
+
 create index if not exists idx_notifications_uid_created_at
   on public.notifications(uid, created_at desc);
 

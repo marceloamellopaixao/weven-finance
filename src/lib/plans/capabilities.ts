@@ -23,7 +23,7 @@ export type PlanCapabilities = {
 
 const PLAN_NAMES: Record<UserPlan, string> = {
   free: "Free",
-  founder: "Fundador",
+  founder: "Foundation",
   premium: "Premium Individual",
   pro: "Pro",
   family: "Família",

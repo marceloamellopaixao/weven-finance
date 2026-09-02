@@ -71,7 +71,7 @@ export function WorkspaceProfileSwitcher() {
     if (workspace.type !== "family" && !workspace.settings?.familyModeEnabled && !workspace.membership) return false;
     return !workspace.membership || canViewFamilyMembers(workspace.membership);
   });
-  const canCreateProfiles = canAccessAdminArea(userProfile) || !activeWorkspaces.some((workspace) => workspace.membership);
+  const canCreateProfiles = canAccessAdminArea(userProfile);
 
   if (loading || activeWorkspaces.length === 0 || !activeWorkspace) return null;
 

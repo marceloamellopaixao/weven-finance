@@ -244,6 +244,63 @@ create table if not exists public.subscriptions (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.foundation_plan_claims (
+  uid text primary key references public.profiles(uid) on delete cascade,
+  claim_status text not null default 'pending' check (claim_status in ('pending', 'active')),
+  claimed_at timestamptz not null default timezone('utc', now()),
+  activated_at timestamptz,
+  expires_at timestamptz,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create or replace function public.claim_foundation_plan_slot(p_uid text, p_max_users integer)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  existing_claim public.foundation_plan_claims%rowtype;
+  occupied_slots integer;
+begin
+  if p_uid is null or btrim(p_uid) = '' or p_max_users is null or p_max_users < 1 then
+    return false;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('wevenfinance:foundation-plan'));
+
+  delete from public.foundation_plan_claims
+  where claim_status = 'pending'
+    and expires_at is not null
+    and expires_at <= timezone('utc', now());
+
+  select * into existing_claim
+  from public.foundation_plan_claims
+  where uid = p_uid;
+
+  if found then
+    if existing_claim.claim_status = 'pending' then
+      update public.foundation_plan_claims
+      set expires_at = timezone('utc', now()) + interval '24 hours', updated_at = timezone('utc', now())
+      where uid = p_uid;
+    end if;
+    return true;
+  end if;
+
+  select count(*) into occupied_slots from public.foundation_plan_claims;
+  if occupied_slots >= p_max_users then
+    return false;
+  end if;
+
+  insert into public.foundation_plan_claims (uid, claim_status, expires_at)
+  values (p_uid, 'pending', timezone('utc', now()) + interval '24 hours');
+  return true;
+end;
+$$;
+
+revoke all on function public.claim_foundation_plan_slot(text, integer) from public;
+grant execute on function public.claim_foundation_plan_slot(text, integer) to service_role;
+
 create table if not exists public.support_access_requests (
   id text primary key,
   requester_uid text,
@@ -536,6 +593,12 @@ alter table if exists public.subscriptions add column if not exists raw jsonb de
 alter table if exists public.subscriptions add column if not exists created_at timestamptz default timezone('utc', now());
 alter table if exists public.subscriptions add column if not exists updated_at timestamptz default timezone('utc', now());
 
+alter table if exists public.foundation_plan_claims add column if not exists claim_status text default 'pending';
+alter table if exists public.foundation_plan_claims add column if not exists claimed_at timestamptz default timezone('utc', now());
+alter table if exists public.foundation_plan_claims add column if not exists activated_at timestamptz;
+alter table if exists public.foundation_plan_claims add column if not exists expires_at timestamptz;
+alter table if exists public.foundation_plan_claims add column if not exists updated_at timestamptz default timezone('utc', now());
+
 alter table if exists public.support_access_requests add column if not exists requester_uid text;
 alter table if exists public.support_access_requests add column if not exists target_uid text;
 alter table if exists public.support_access_requests add column if not exists request_status text;
@@ -642,6 +705,10 @@ for each row execute function public.set_updated_at();
 
 drop trigger if exists trg_subscriptions_set_updated_at on public.subscriptions;
 create trigger trg_subscriptions_set_updated_at before update on public.subscriptions
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_foundation_plan_claims_set_updated_at on public.foundation_plan_claims;
+create trigger trg_foundation_plan_claims_set_updated_at before update on public.foundation_plan_claims
 for each row execute function public.set_updated_at();
 
 drop trigger if exists trg_support_access_requests_set_updated_at on public.support_access_requests;

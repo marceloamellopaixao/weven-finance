@@ -201,7 +201,7 @@ export const DEFAULT_ACCESS_CONTROL_CONFIG: AccessControlConfig = {
     { id: "plan-founder-installments", subjectType: "plan", subjectId: "founder", resource: "transactions.installments", level: "write", active: true },
     { id: "plan-founder-recurring", subjectType: "plan", subjectId: "founder", resource: "transactions.recurring", level: "write", active: true },
     { id: "plan-founder-forecast", subjectType: "plan", subjectId: "founder", resource: "dashboard.monthly_forecast", level: "read", active: true },
-    { id: "plan-founder-daily-limit", subjectType: "plan", subjectId: "founder", resource: "dashboard.smart_daily_limit", level: "none", active: true },
+    { id: "plan-founder-daily-limit", subjectType: "plan", subjectId: "founder", resource: "dashboard.smart_daily_limit", level: "read", active: true },
     { id: "plan-pro-installments", subjectType: "plan", subjectId: "pro", resource: "transactions.installments", level: "write", active: true },
     { id: "plan-pro-recurring", subjectType: "plan", subjectId: "pro", resource: "transactions.recurring", level: "write", active: true },
     { id: "plan-pro-forecast", subjectType: "plan", subjectId: "pro", resource: "dashboard.monthly_forecast", level: "read", active: true },

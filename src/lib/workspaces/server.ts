@@ -165,11 +165,11 @@ export async function resolveActiveWorkspaceContext(uid: string, workspaceId?: s
   const activeMemberships = await getActiveMemberships(uid);
   const sharedMemberships = activeMemberships.filter((membership) => membership.workspaceUid !== uid);
 
-  if (!isStaff && sharedMemberships.length > 0) {
-    const membership = workspaceId
-      ? sharedMemberships.find((item) => item.workspaceId === workspaceId) || null
-      : sharedMemberships[0];
-    if (!membership) throw new Error("workspace_access_denied");
+  const requestedSharedMembership = workspaceId
+    ? sharedMemberships.find((item) => item.workspaceId === workspaceId) || null
+    : null;
+  if (!isStaff && requestedSharedMembership) {
+    const membership = requestedSharedMembership;
     const workspaceRows = await supabaseSelect("workspaces", {
       filters: { uid: membership.workspaceUid, source_id: membership.workspaceId },
       limit: 1,
@@ -226,7 +226,8 @@ export async function resolveActiveWorkspaceContext(uid: string, workspaceId?: s
   } catch (error) {
     if (!isMissingWorkspaceFamilyTable(error)) throw error;
   }
-  const membership = memberships[0] ? toWorkspaceMember(memberships[0]) : null;
+  const fallbackMembership = sharedMemberships[0] || (memberships[0] ? toWorkspaceMember(memberships[0]) : null);
+  const membership = fallbackMembership;
   if (!membership) {
     if (!isStaff && !canPlanUseProfile(planContext.plan, "personal")) throw new Error("workspace_access_denied");
     return { ownerUid: uid, workspaceId: workspaceId || null, workspaceType: "personal", member: null, includeLegacyRows: !workspaceId };

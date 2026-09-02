@@ -116,7 +116,7 @@ export default function BillingCheckoutPage() {
           return;
         }
         setState("error");
-        setMessage(t("checkout.errorMessage"));
+        setMessage(error instanceof Error && error.message ? error.message : t("checkout.errorMessage"));
       }
     };
 

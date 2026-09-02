@@ -17,6 +17,9 @@ export const billing = {
         monthlyFlow: "Vista mensual básica del flujo financiero",
       },
     },
+    founder: { name: "Foundation" },
+    family: { name: "Familia" },
+    business: { name: "Business" },
     premium: {
       name: "Premium",
       tier: "Plata",

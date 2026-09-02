@@ -2795,6 +2795,7 @@ export default function AdminPage() {
                   const planTone = getPlanTone(planId);
                   const plan = editedPlans[planId];
                   const isFreePlan = planId === "free";
+                  const isFoundationPlan = planId === "founder";
                   return (
                     <Card key={planId} className={`app-panel-soft rounded-3xl border-2 shadow-xl transition-shadow ${planTone.border}`}>
                       <CardHeader className={`flex flex-col gap-3 rounded-t-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${planTone.header}`}>
@@ -2811,13 +2812,14 @@ export default function AdminPage() {
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                           <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.name")}</Label>
-                            <Input className="rounded-xl h-10" value={plan.name ?? ""} onChange={(event) => handlePlanEdit(planId, "name", event.target.value)} />
+                            <Input className="rounded-xl h-10" disabled={isFoundationPlan} value={plan.name ?? ""} onChange={(event) => handlePlanEdit(planId, "name", event.target.value)} />
                           </div>
                           <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase text-zinc-400">{isFreePlan ? tAdmin("plans.fields.launchLimit") : tAdmin("plans.fields.price")}</Label>
                             <Input
                               className="rounded-xl h-10"
                               type="number"
+                              disabled={isFoundationPlan}
                               value={isFreePlan ? plan.limit ?? 0 : plan.price ?? 0}
                               onChange={(event) => handlePlanEdit(planId, isFreePlan ? "limit" : "price", Number(event.target.value))}
                             />
@@ -2829,12 +2831,15 @@ export default function AdminPage() {
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div className="space-y-2">
                               <Label className="text-xs font-bold uppercase text-zinc-400">Preço anual</Label>
-                              <Input className="rounded-xl h-10" type="number" value={plan.yearlyPrice ?? 0} onChange={(event) => handlePlanEdit(planId, "yearlyPrice", Number(event.target.value))} />
+                              <Input className="rounded-xl h-10" disabled={isFoundationPlan} type="number" value={plan.yearlyPrice ?? 0} onChange={(event) => handlePlanEdit(planId, "yearlyPrice", Number(event.target.value))} />
                             </div>
                             <div className="space-y-2">
                               <Label className="text-xs font-bold uppercase text-zinc-400">CTA</Label>
-                              <Input className="rounded-xl h-10" value={plan.cta ?? ""} onChange={(event) => handlePlanEdit(planId, "cta", event.target.value)} />
+                              <Input className="rounded-xl h-10" disabled={isFoundationPlan} value={plan.cta ?? ""} onChange={(event) => handlePlanEdit(planId, "cta", event.target.value)} />
                             </div>
+                            {isFoundationPlan ? (
+                              <p className="text-xs text-muted-foreground sm:col-span-2">Oferta fixa: 12 cobranças mensais de R$ 9,90, limitada pela configuração do servidor.</p>
+                            ) : null}
                             </div>
                             {planId === "family" || planId === "business" ? (
                               <div className="space-y-3 rounded-2xl border border-border/70 bg-background/40 p-4">
@@ -2857,12 +2862,13 @@ export default function AdminPage() {
 
                         <div className="space-y-2">
                           <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.description")}</Label>
-                          <Input className="rounded-xl h-10" value={plan.description ?? ""} onChange={(event) => handlePlanEdit(planId, "description", event.target.value)} />
+                          <Input className="rounded-xl h-10" disabled={isFoundationPlan} value={plan.description ?? ""} onChange={(event) => handlePlanEdit(planId, "description", event.target.value)} />
                         </div>
 
                         <div className="space-y-2">
                           <Label className="text-xs font-bold uppercase text-zinc-400">{isFreePlan ? tAdmin("plans.fields.benefitsLineByLine") : tAdmin("plans.fields.benefits")}</Label>
                           <textarea
+                            disabled={isFoundationPlan}
                             className="flex min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs resize-none"
                             value={plan.features?.join("\n") ?? ""}
                             onChange={(event) => handleFeaturesEdit(planId, event.target.value)}

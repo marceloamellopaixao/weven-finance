@@ -14,6 +14,8 @@ import {
 import { DEFAULT_ACCESS_CONTROL_CONFIG } from "@/types/system";
 import { pushNotification } from "@/lib/notifications/server";
 import { isPaidPlan, parseUserPlan } from "@/lib/plans/catalog";
+import { activateFoundationPlanClaim } from "@/lib/billing/foundation-server";
+import { FOUNDATION_INTERNAL_PLAN_ID, FOUNDATION_MONTHLY_PRICE, getFoundationBillingMetadata } from "@/lib/billing/foundation";
 
 type MercadoPagoTopic = "payment" | "merchant_order" | "preapproval";
 
@@ -54,7 +56,9 @@ type ProfileRow = Record<string, unknown> & {
 
 const MERCADO_PAGO_API_BASE = "https://api.mercadopago.com";
 
-const PLAN_BY_PREAPPROVAL_ID: Record<string, UserPlan> = {
+const foundationPreapprovalPlanId = process.env.MERCADOPAGO_PLAN_FOUNDATION_ID || process.env.MERCADOPAGO_PLAN_FOUNDER_ID;
+
+const PLAN_BY_PREAPPROVAL_ID: Record<string, UserPlan> = Object.fromEntries(Object.entries({
   [process.env.MERCADOPAGO_PLAN_PRO_ID ?? ""]: "pro",
   [process.env.MERCADOPAGO_PLAN_PRO_YEARLY_ID ?? ""]: "pro",
   [process.env.MERCADOPAGO_PLAN_PREMIUM_ID ?? ""]: "premium",
@@ -63,8 +67,8 @@ const PLAN_BY_PREAPPROVAL_ID: Record<string, UserPlan> = {
   [process.env.MERCADOPAGO_PLAN_FAMILY_YEARLY_ID ?? ""]: "family",
   [process.env.MERCADOPAGO_PLAN_BUSINESS_ID ?? ""]: "business",
   [process.env.MERCADOPAGO_PLAN_BUSINESS_YEARLY_ID ?? ""]: "business",
-  [process.env.MERCADOPAGO_PLAN_FOUNDER_ID ?? ""]: "founder",
-};
+  [foundationPreapprovalPlanId ?? ""]: "founder",
+}).filter(([id]) => Boolean(id))) as Record<string, UserPlan>;
 
 function allowPendingCheckoutHeuristic() {
   return process.env.MERCADOPAGO_ALLOW_PENDING_CHECKOUT_MATCH === "true";
@@ -80,7 +84,7 @@ function getPreapprovalPlanId(plan: UserPlan, interval?: unknown) {
   if (plan === "pro") return yearly ? process.env.MERCADOPAGO_PLAN_PRO_YEARLY_ID : process.env.MERCADOPAGO_PLAN_PRO_ID;
   if (plan === "family") return yearly ? process.env.MERCADOPAGO_PLAN_FAMILY_YEARLY_ID : process.env.MERCADOPAGO_PLAN_FAMILY_ID;
   if (plan === "business") return yearly ? process.env.MERCADOPAGO_PLAN_BUSINESS_YEARLY_ID : process.env.MERCADOPAGO_PLAN_BUSINESS_ID;
-  if (plan === "founder") return process.env.MERCADOPAGO_PLAN_FOUNDER_ID;
+  if (plan === "founder") return foundationPreapprovalPlanId;
   return undefined;
 }
 
@@ -836,6 +840,7 @@ export async function syncFromWebhook(input: WebhookInput) {
       pendingCheckoutAt: null,
       pendingCheckoutAttemptId: null,
       ...(targetPlan !== currentPlan ? { additionalSeats: 0, additionalSeatUnitPrice: null, additionalSeatsUpdatedAt: nowIso } : {}),
+      ...getFoundationBillingMetadata({ currentPlan, targetPlan, billing: ((userMatch.userData.billing as Record<string, unknown> | null) || {}), now: nowIso }),
       lastEventType: input.topic,
       lastEventAction: input.action ?? null,
       lastEventId: input.eventId ?? null,
@@ -853,6 +858,10 @@ export async function syncFromWebhook(input: WebhookInput) {
     currentPeriodEnd: details.currentPeriodEnd,
     raw: { details, source: "webhook", eventId: input.eventId ?? null },
   });
+
+  if (targetPlan === FOUNDATION_INTERNAL_PLAN_ID && targetPaymentStatus === "paid") {
+    await activateFoundationPlanClaim(userMatch.uid, nowIso).catch(() => undefined);
+  }
 
   await writeBillingEvent(eventDocId, {
     ...baseEvent,
@@ -906,6 +915,31 @@ export async function createPreapprovalCheckout(params: {
 }) {
   if (!Number.isFinite(params.amount) || params.amount <= 0) throw new Error("invalid_checkout_amount");
   const yearly = params.interval === "yearly";
+
+  if (params.plan === FOUNDATION_INTERNAL_PLAN_ID) {
+    if (yearly) throw new Error("invalid_foundation_interval");
+    const planId = getPreapprovalPlanId(params.plan);
+    if (!planId) throw new Error("foundation_plan_not_configured");
+    const planPayload = await mpRequest(`/preapproval_plan/${encodeURIComponent(planId)}`);
+    const autoRecurring = ((planPayload.auto_recurring as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+    if (Number(autoRecurring.repetitions || 0) !== 12) throw new Error("foundation_plan_must_have_12_repetitions");
+    if (Number(autoRecurring.frequency || 0) !== 1 || autoRecurring.frequency_type !== "months") {
+      throw new Error("foundation_plan_must_be_monthly");
+    }
+    if (Math.abs(Number(autoRecurring.transaction_amount || 0) - FOUNDATION_MONTHLY_PRICE) > 0.001 || autoRecurring.currency_id !== "BRL") {
+      throw new Error("foundation_plan_invalid_price");
+    }
+    const configuredBackUrl = typeof planPayload.back_url === "string" ? planPayload.back_url : "";
+    try {
+      const parsedBackUrl = new URL(configuredBackUrl);
+      if (parsedBackUrl.protocol !== "https:") throw new Error("invalid_protocol");
+    } catch {
+      throw new Error("foundation_plan_invalid_back_url");
+    }
+    const checkoutUrl = typeof planPayload.init_point === "string" ? planPayload.init_point : "";
+    if (!checkoutUrl) throw new Error("mercadopago_checkout_missing_data");
+    return { preapprovalId: null, checkoutUrl };
+  }
 
   const payload = await mpPost("/preapproval", {
     payer_email: params.payerEmail.trim().toLowerCase(),
@@ -1209,6 +1243,7 @@ export async function confirmPreapprovalForUser(params: {
       pendingCheckoutAt: null,
       pendingCheckoutAttemptId: null,
       ...(targetPlan !== currentPlan ? { additionalSeats: 0, additionalSeatUnitPrice: null, additionalSeatsUpdatedAt: nowIso } : {}),
+      ...getFoundationBillingMetadata({ currentPlan, targetPlan, billing: ((userData.billing as Record<string, unknown> | null) || {}), now: nowIso }),
     },
   });
 
@@ -1220,6 +1255,10 @@ export async function confirmPreapprovalForUser(params: {
     currentPeriodEnd: details.currentPeriodEnd,
     raw: { details, source: "manual_confirm" },
   });
+
+  if (targetPlan === FOUNDATION_INTERNAL_PLAN_ID && targetPaymentStatus === "paid") {
+    await activateFoundationPlanClaim(params.uid, nowIso).catch(() => undefined);
+  }
 
   if (!params.suppressConfirmationEvent) {
     await writeBillingEvent(`confirm_preapproval_${params.preapprovalId}_${params.uid}`, {
@@ -1446,6 +1485,7 @@ export async function cancelSubscriptionForUser(params: {
     status: currentStatus === "deleted" ? "deleted" : "active",
     blockReason: "",
     billing: {
+      ...(((userData.billing as Record<string, unknown> | null) || {}) as Record<string, unknown>),
       ...billingState,
       source: "mercadopago_cancel",
       provider: "mercadopago",
@@ -1466,6 +1506,7 @@ export async function cancelSubscriptionForUser(params: {
       pendingPlan: null,
       pendingCheckoutAt: null,
       pendingCheckoutAttemptId: null,
+      ...getFoundationBillingMetadata({ currentPlan, targetPlan: "free", billing: ((userData.billing as Record<string, unknown> | null) || {}), now: nowIso }),
     },
   });
 

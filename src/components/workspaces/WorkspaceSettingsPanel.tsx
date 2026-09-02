@@ -41,7 +41,7 @@ export function WorkspaceSettingsPanel() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const activeOwnedWorkspaces = workspaces.filter((workspace) => workspace.status !== "archived" && !workspace.membership);
-  const canCreateProfiles = canAccessAdminArea(userProfile) || !workspaces.some((workspace) => workspace.membership);
+  const canCreateProfiles = canAccessAdminArea(userProfile);
 
   const handleSaveName = async () => {
     if (!editing || !editing.name.trim()) return;
@@ -121,7 +121,7 @@ export function WorkspaceSettingsPanel() {
               <WalletCards className="h-5 w-5" /> Perfis financeiros
             </CardTitle>
             <CardDescription>
-              Separe seu uso pessoal, sua família e seu Business/PJ sem misturar os dados.
+              Seu perfil próprio acompanha o plano contratado. Convites compartilhados aparecem separadamente.
             </CardDescription>
           </div>
           {canCreateProfiles ? (

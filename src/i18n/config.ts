@@ -20,7 +20,6 @@ export function isSupportedLocale(value: unknown): value is Locale {
 }
 
 export function normalizeLocale(value: unknown): Locale {
-  if (!TRANSLATIONS_ENABLED) return DEFAULT_LOCALE;
   return isSupportedLocale(value) ? value : DEFAULT_LOCALE;
 }
 

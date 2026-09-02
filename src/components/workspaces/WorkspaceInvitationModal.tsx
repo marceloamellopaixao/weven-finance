@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useAuth } from "@/hooks/useAuth";
 import { FAMILY_ROLE_LABELS } from "@/lib/workspaces/family";
 import { acceptFamilyInvitation, getPendingFamilyInvitations, rejectFamilyInvitation } from "@/services/familyWorkspaceService";
+import { setActiveWorkspaceId } from "@/services/workspaceService";
 import type { PendingWorkspaceInvitation } from "@/types/workspace";
 
 const PRIVATE_ROUTE_PATTERN = /^\/(dashboard|settings|account-profile|apps|cards|reports|piggy-bank|transactions|notifications)(\/|$)/;
@@ -58,6 +59,10 @@ export function WorkspaceInvitationModal() {
     setError(null);
     try {
       const result = await acceptFamilyInvitation(invitation.id, invitation.requiresSubscriptionCancellation && cancellationConfirmed);
+      const acceptedMembership = result.members[0];
+      if (acceptedMembership) {
+        setActiveWorkspaceId(acceptedMembership.workspaceId, acceptedMembership.workspaceUid);
+      }
       finishCurrent();
       window.dispatchEvent(new Event("wevenfinance:workspaces:changed"));
       if (result.subscriptionCanceled) {

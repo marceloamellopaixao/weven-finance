@@ -1,12 +1,13 @@
 import { CheckoutAvailability, PlanPrice, BillingCurrency, BillingProvider } from "@/types/billing";
 import { UserPlan } from "@/types/user";
+import { FOUNDATION_MONTHLY_PRICE, isFoundationPlanEnabled } from "@/lib/billing/foundation";
 
 export const PLAN_PRICES: PlanPrice[] = [
   { planId: "free", currency: "BRL", amount: 0, interval: "monthly", provider: "manual", active: true },
   { planId: "free", currency: "BRL", amount: 0, interval: "yearly", provider: "manual", active: true },
   { planId: "free", currency: "USD", amount: 0, interval: "monthly", provider: "manual", active: true },
   { planId: "free", currency: "EUR", amount: 0, interval: "monthly", provider: "manual", active: true },
-  { planId: "founder", currency: "BRL", amount: 9.9, interval: "monthly", provider: "mercado_pago", active: process.env.NEXT_PUBLIC_FOUNDER_PLAN_ACTIVE === "true" },
+  { planId: "founder", currency: "BRL", amount: FOUNDATION_MONTHLY_PRICE, interval: "monthly", provider: "mercado_pago", active: isFoundationPlanEnabled() },
   { planId: "premium", currency: "BRL", amount: 19.9, interval: "monthly", provider: "mercado_pago", active: true },
   { planId: "premium", currency: "BRL", amount: 199.9, interval: "yearly", provider: "mercado_pago", active: true },
   { planId: "premium", currency: "USD", amount: 4.99, interval: "monthly", provider: "stripe", active: true },

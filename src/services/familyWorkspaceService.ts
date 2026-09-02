@@ -41,6 +41,7 @@ async function readPayload<T>(response: Response): Promise<T> {
       cannot_remove_occupied_seats: "Remova membros ou convites pendentes antes de reduzir os usuários adicionais.",
       subscription_not_active_for_seat_change: "É necessário ter uma assinatura ativa para alterar os usuários adicionais.",
       invitation_not_found: "Este convite não está mais disponível.",
+      shared_workspace_membership_limit_reached: "Você já participa de outro perfil compartilhado. Saia dele antes de aceitar este convite.",
     };
     throw new Error((payload.error && messages[payload.error]) || payload.error || "Não foi possível gerenciar a família");
   }
@@ -143,6 +144,13 @@ export async function rejectFamilyInvitation(invitationId: string) {
     method: "DELETE",
   });
   await readPayload<{ ok: true }>(response);
+}
+
+export async function leaveFamilyWorkspace(workspaceId: string) {
+  const response = await apiFetch(`/api/workspaces/family/accept?workspaceId=${encodeURIComponent(workspaceId)}`, {
+    method: "DELETE",
+  });
+  await readPayload<{ ok: true; leftWorkspaceId: string }>(response);
 }
 
 export async function updateAdditionalFamilySeats(workspaceId: string, quantity: number) {
