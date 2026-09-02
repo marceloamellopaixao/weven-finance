@@ -157,7 +157,7 @@ async function parseApiTransaction(tx: ApiTransaction, cryptoUid: string): Promi
     title: isDecryptionFailed ? "Dados protegidos no momento" : decryptedTitle,
     description: isDecryptionFailed ? "" : decryptedDesc,
     amount: safeAmount,
-    createdAt: tx.createdAt ? new Date(tx.createdAt) : new Date(),
+    createdAt: tx.createdAt ? new Date(tx.createdAt).toISOString() : new Date().toISOString(),
   } as Transaction;
 }
 
