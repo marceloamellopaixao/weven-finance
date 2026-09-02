@@ -70,7 +70,7 @@ export async function PUT(request: NextRequest) {
       { onConflict: "key" }
     );
     plansCache = { at: Date.now(), value: plans };
-    return NextResponse.json({ ok: true }, { status: 200 });
+    return NextResponse.json({ ok: true, plans }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     const status = resolveApiErrorStatus(message);

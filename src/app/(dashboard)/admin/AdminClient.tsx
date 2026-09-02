@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePlans } from "@/hooks/usePlans";
 import {
@@ -18,7 +18,8 @@ import {
   getStaffUsers,
   downloadAdminCsv,
 } from "@/services/userService";
-import { getAccessControlConfig, updateAccessControlConfig, updatePlansConfig } from "@/services/systemService";
+import { getAccessControlConfig, updateAccessControlConfig } from "@/services/systemService";
+import { useUpdatePlansMutation } from "@/store/api/systemApi";
 import {
   UserProfile,
   UserStatus,
@@ -135,6 +136,7 @@ import { AdminLoadingShell } from "./components/AdminLoadingShell";
 type UserWithCount = UserProfile & { transactionCount?: number };
 type DeletionSuccessData = { name: string; email: string } | null;
 type PaymentFilterType = UserPaymentStatus | "unpaid_group" | "all";
+type PlanSaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
 
 type FeedbackData = {
   isOpen: boolean;
@@ -309,12 +311,17 @@ export default function AdminPage() {
 
   // Plans
   const [editedPlans, setEditedPlans] = useState<PlansConfig | null>(null);
+  const [dirtyPlanIds, setDirtyPlanIds] = useState<(keyof PlansConfig)[]>([]);
+  const [planSaveStatus, setPlanSaveStatus] = useState<Partial<Record<keyof PlansConfig, PlanSaveStatus>>>({});
   const [editedAccessControl, setEditedAccessControl] = useState<AccessControlConfig | null>(null);
   const [isSavingPlans, setIsSavingPlans] = useState(false);
   const [isSavingAccessControl, setIsSavingAccessControl] = useState(false);
   const [accessSubjectType, setAccessSubjectType] = useState<AccessSubjectType>("plan");
   const [accessSubjectId, setAccessSubjectId] = useState("free");
   const [permissionGroupByScreen, setPermissionGroupByScreen] = useState<Record<string, string>>({});
+  const [updatePlans] = useUpdatePlansMutation();
+  const planEditRevisionRef = useRef(0);
+  const failedPlanRevisionRef = useRef<number | null>(null);
 
   // --- Permissões ---
   const isSupremeAdmin = isCreatorSupremeUid(userProfile?.uid);
@@ -547,8 +554,8 @@ export default function AdminPage() {
   }, [allowedTabs.length, editedAccessControl, userProfile, loading, router]);
 
   useEffect(() => {
-    if (plans) setEditedPlans(plans);
-  }, [plans]);
+    if (plans && dirtyPlanIds.length === 0 && !isSavingPlans) setEditedPlans(plans);
+  }, [dirtyPlanIds.length, isSavingPlans, plans]);
 
   useEffect(() => {
     if (!userProfile || userProfile.role === "client") return;
@@ -1237,6 +1244,11 @@ export default function AdminPage() {
     value: string | number | boolean
   ) => {
     if (!editedPlans) return;
+    if (Object.is(editedPlans[planKey][field], value)) return;
+    planEditRevisionRef.current += 1;
+    failedPlanRevisionRef.current = null;
+    setDirtyPlanIds((current) => current.includes(planKey) ? current : [...current, planKey]);
+    setPlanSaveStatus((current) => ({ ...current, [planKey]: "pending" }));
     setEditedPlans({
       ...editedPlans,
       [planKey]: {
@@ -1249,6 +1261,11 @@ export default function AdminPage() {
   const handleFeaturesEdit = (planKey: keyof PlansConfig, value: string) => {
     if (!editedPlans) return;
     const featuresArray = value.split("\n").filter((line) => line.trim() !== "");
+    if ((editedPlans[planKey].features || []).join("\n") === featuresArray.join("\n")) return;
+    planEditRevisionRef.current += 1;
+    failedPlanRevisionRef.current = null;
+    setDirtyPlanIds((current) => current.includes(planKey) ? current : [...current, planKey]);
+    setPlanSaveStatus((current) => ({ ...current, [planKey]: "pending" }));
     setEditedPlans({
       ...editedPlans,
       [planKey]: {
@@ -1257,6 +1274,59 @@ export default function AdminPage() {
       },
     });
   };
+
+  const retryPlanAutosave = () => {
+    failedPlanRevisionRef.current = null;
+    setPlanSaveStatus((current) => {
+      const next = { ...current };
+      dirtyPlanIds.forEach((planId) => { next[planId] = "pending"; });
+      return next;
+    });
+    setEditedPlans((current) => current ? { ...current } : current);
+  };
+
+  useEffect(() => {
+    if (!editedPlans || dirtyPlanIds.length === 0 || isSavingPlans) return;
+    const userId = userProfile?.uid || user?.uid || "";
+    if (!userId) return;
+    const revision = planEditRevisionRef.current;
+    if (failedPlanRevisionRef.current === revision) return;
+    const plansSnapshot = editedPlans;
+    const plansToSave = [...dirtyPlanIds];
+
+    const timeout = window.setTimeout(() => {
+      setIsSavingPlans(true);
+      setPlanSaveStatus((current) => {
+        const next = { ...current };
+        plansToSave.forEach((planId) => { next[planId] = "saving"; });
+        return next;
+      });
+      void updatePlans({ userId, plans: plansSnapshot }).unwrap()
+        .then((savedPlans) => {
+          if (planEditRevisionRef.current !== revision) return;
+          setEditedPlans(savedPlans);
+          setDirtyPlanIds([]);
+          setPlanSaveStatus((current) => {
+            const next = { ...current };
+            plansToSave.forEach((planId) => { next[planId] = "saved"; });
+            return next;
+          });
+        })
+        .catch((error) => {
+          console.error(error);
+          if (planEditRevisionRef.current !== revision) return;
+          failedPlanRevisionRef.current = revision;
+          setPlanSaveStatus((current) => {
+            const next = { ...current };
+            plansToSave.forEach((planId) => { next[planId] = "error"; });
+            return next;
+          });
+        })
+        .finally(() => setIsSavingPlans(false));
+    }, 750);
+
+    return () => window.clearTimeout(timeout);
+  }, [dirtyPlanIds, editedPlans, isSavingPlans, updatePlans, user?.uid, userProfile?.uid]);
 
   const getDefaultAccessSubjectId = useCallback((subjectType: AccessSubjectType) => {
     if (subjectType === "global") return "all";
@@ -1422,20 +1492,6 @@ export default function AdminPage() {
     }
   };
 
-  const savePlans = async () => {
-    if (!editedPlans) return;
-    setIsSavingPlans(true);
-    try {
-      await updatePlansConfig(editedPlans);
-      showFeedback("success", tAdmin("plans.savedTitle"), tAdmin("plans.savedMessage"));
-    } catch (error) {
-      console.error(error);
-      showFeedback("error", tAdmin("plans.saveErrorTitle"), tAdmin("plans.saveErrorMessage"));
-    } finally {
-      setIsSavingPlans(false);
-    }
-  };
-
   // --- FILTRAGEM ---
   const filteredUsers = useMemo(() => {
     const list = users.filter((u) => u.status !== "deleted" && canViewRole(u.role));
@@ -1516,7 +1572,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, roleFilter, planFilter, paymentStatusFilter, statusFilter]);
+  }, [activeTab, searchTerm, roleFilter, planFilter, paymentStatusFilter, statusFilter]);
 
   useEffect(() => {
     if (activeTab === "support") setSupportPage(1);
@@ -2778,18 +2834,7 @@ export default function AdminPage() {
 
           {/* --- PLANS TAB --- */}
           {activeTab === "plans" && canManageSensitive && editedPlans && (
-            <div className={`${fadeInUp} delay-200 space-y-4`}>
-              <div className="mb-4 flex justify-end">
-                <Button
-                  onClick={savePlans}
-                  disabled={isSavingPlans}
-                  className="w-full gap-2 rounded-xl bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-700 sm:w-auto sm:hover:scale-105"
-                >
-                  {isSavingPlans ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {tAdmin("plans.saveChanges")}
-                </Button>
-              </div>
-
+            <div className={`${fadeInUp} delay-200 space-y-2`}>
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
                 {PLAN_ORDER.map((planId) => {
                   const planTone = getPlanTone(planId);
@@ -2797,7 +2842,7 @@ export default function AdminPage() {
                   const isFreePlan = planId === "free";
                   const isFoundationPlan = planId === "founder";
                   return (
-                    <Card key={planId} className={`app-panel-soft rounded-3xl border-2 shadow-xl transition-shadow ${planTone.border}`}>
+                    <Card key={planId} className={`app-panel-soft rounded-3xl py-0 border-2 shadow-xl transition-shadow ${planTone.border}`}>
                       <CardHeader className={`flex flex-col gap-3 rounded-t-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${planTone.header}`}>
                         <div className="flex flex-col justify-center">
                           <CardTitle className={`${planTone.headerTitle} font-bold text-lg`}>
@@ -2842,11 +2887,13 @@ export default function AdminPage() {
                             ) : null}
                             </div>
                             {planId === "family" || planId === "business" ? (
-                              <div className="space-y-3 rounded-2xl border border-border/70 bg-background/40 p-4">
+                              <div className="space-y-3 rounded-2xl border border-border ring-offset-background  bg-background p-4">
                                 <div>
                                   <p className="text-sm font-semibold">Usuários adicionais</p>
                                   <p className="mt-1 text-xs text-muted-foreground">
-                                    Família inclui 4 usuários e Business inclui 5. Defina somente o valor de cada usuário adicional; zero desativa novas contratações.
+                                    Família inclui 4 usuários e Business inclui 5. 
+                                    <br/>Defina somente o valor de cada usuário adicional; 
+                                    <br/>Zero desativa novas contratações.
                                   </p>
                                 </div>
                                 <div className="grid grid-cols-1 gap-3 sm:max-w-sm">
