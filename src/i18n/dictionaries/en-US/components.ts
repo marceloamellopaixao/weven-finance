@@ -10,6 +10,7 @@ export const components: Dictionary["components"] = {
     company: "Company",
     about: "About us",
     contact: "Contact",
+    privacy: "Privacy",
     terms: "Terms of use",
     followUs: "Follow us",
     rights: "© {year} WevenFinance. All rights reserved.",
