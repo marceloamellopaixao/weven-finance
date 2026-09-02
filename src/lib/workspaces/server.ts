@@ -162,10 +162,10 @@ export async function resolveActiveWorkspaceContext(uid: string, workspaceId?: s
 }> {
   const planContext = await getUserPlanContext(uid);
   const isStaff = canAccessAdminArea({ uid, role: planContext.role });
-  const activeMemberships = isStaff ? [] : await getActiveMemberships(uid);
+  const activeMemberships = await getActiveMemberships(uid);
   const sharedMemberships = activeMemberships.filter((membership) => membership.workspaceUid !== uid);
 
-  if (sharedMemberships.length > 0) {
+  if (!isStaff && sharedMemberships.length > 0) {
     const membership = workspaceId
       ? sharedMemberships.find((item) => item.workspaceId === workspaceId) || null
       : sharedMemberships[0];
@@ -209,7 +209,7 @@ export async function resolveActiveWorkspaceContext(uid: string, workspaceId?: s
     };
   }
 
-  if (workspaceId) throw new Error("workspace_access_denied");
+  if (workspaceId && !isStaff) throw new Error("workspace_access_denied");
 
   let memberships: Record<string, unknown>[] = [];
   try {

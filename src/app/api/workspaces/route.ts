@@ -50,10 +50,11 @@ async function assertPlanCanUseWorkspace(uid: string, type: WorkspaceType) {
     getActiveMemberships(uid),
   ]);
   const profileType = toFinancialProfileType(type);
-  if (canAccessAdminArea({ uid, role: planContext.role }) || canPlanUseProfile(planContext.plan, profileType)) return;
+  if (canAccessAdminArea({ uid, role: planContext.role })) return;
   if (memberships.some((membership) => membership.workspaceUid !== uid)) {
     throw new Error("Enquanto você participar de um perfil compartilhado, não é possível criar ou reativar outro perfil financeiro.");
   }
+  if (canPlanUseProfile(planContext.plan, profileType)) return;
   if (profileType === "family") {
     throw new Error("Para criar um perfil Família, escolha o plano Família.");
   }

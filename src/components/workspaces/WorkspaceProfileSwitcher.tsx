@@ -14,6 +14,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { useAuth } from "@/hooks/useAuth";
+import { canAccessAdminArea } from "@/lib/access-control/roles";
 import { canViewFamilyMembers } from "@/lib/workspaces/family";
 import type { Workspace, WorkspaceType } from "@/types/workspace";
 
@@ -62,12 +64,14 @@ function WorkspaceAvatar({ workspace, active, compact }: { workspace: Workspace;
 }
 
 export function WorkspaceProfileSwitcher() {
+  const { userProfile } = useAuth();
   const { workspaces, activeWorkspaces, activeWorkspace, activeWorkspaceId, loading, setActiveWorkspace } = useWorkspaces();
   const [open, setOpen] = useState(false);
   const canOpenFamilySettings = workspaces.some((workspace) => {
     if (workspace.type !== "family" && !workspace.settings?.familyModeEnabled && !workspace.membership) return false;
     return !workspace.membership || canViewFamilyMembers(workspace.membership);
   });
+  const canCreateProfiles = canAccessAdminArea(userProfile) || !activeWorkspaces.some((workspace) => workspace.membership);
 
   if (loading || activeWorkspaces.length === 0 || !activeWorkspace) return null;
 
@@ -169,12 +173,14 @@ export function WorkspaceProfileSwitcher() {
           })}
         </div>
         <DropdownMenuSeparator className="my-3" />
-        <Link href="/account-profile?create=1" className="block">
-          <Button variant="ghost" className="h-10 w-full justify-start rounded-xl text-sm">
-            <Plus className="mr-2 h-4 w-4" />
-            Criar novo perfil
-          </Button>
-        </Link>
+        {canCreateProfiles ? (
+          <Link href="/account-profile?create=1" className="block">
+            <Button variant="ghost" className="h-10 w-full justify-start rounded-xl text-sm">
+              <Plus className="mr-2 h-4 w-4" />
+              Criar novo perfil
+            </Button>
+          </Link>
+        ) : null}
         {canOpenFamilySettings ? (
           <Link href="/settings?tab=family" className="block">
             <Button variant="ghost" className="h-10 w-full justify-start rounded-xl text-sm">

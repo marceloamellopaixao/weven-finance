@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { resolveApiErrorStatus } from "@/lib/api/error";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { isArchivedJsonRecord } from "@/lib/account-archive/server";
 import { readSecureSettingData, writeSecureSettingData } from "@/lib/secure-store/user-settings";
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "missing_auth_token" ? 401 : 500;
+    const status = resolveApiErrorStatus(message);
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
@@ -130,10 +131,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status =
-      message === "missing_auth_token" ? 401
-        : message.startsWith("impersonation_") ? 403
-          : 500;
+    const status = resolveApiErrorStatus(message);
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
