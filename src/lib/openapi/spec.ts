@@ -63,7 +63,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
               name: "plan",
               in: "query",
               required: true,
-              schema: { type: "string", enum: ["premium", "pro"] },
+              schema: { type: "string", enum: ["founder", "premium", "pro", "family", "business"] },
             },
           ],
           responses: {
@@ -104,7 +104,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
                   type: "object",
                   properties: {
                     preapprovalId: { type: "string", nullable: true },
-                    expectedPlan: { type: "string", enum: ["free", "premium", "pro"], nullable: true },
+                    expectedPlan: { type: "string", enum: ["free", "founder", "premium", "pro", "family", "business"], nullable: true },
                   },
                 },
               },
@@ -120,7 +120,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
                     properties: {
                       ok: { type: "boolean", example: true },
                       uid: { type: "string" },
-                      targetPlan: { type: "string", enum: ["free", "premium", "pro"] },
+                      targetPlan: { type: "string", enum: ["free", "founder", "premium", "pro", "family", "business"] },
                       targetPaymentStatus: { type: "string" },
                       gatewayStatus: { type: "string" },
                     },
@@ -1025,10 +1025,12 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/piggy-banks/{slug}": {
         get: {
           tags: ["PiggyBanks"],
-          summary: "Ler porquinho por slug com histórico",
+          summary: "Ler porquinho por slug com histórico paginado",
           security: [{ BearerAuth: [] }],
           parameters: [
             { name: "slug", in: "path", required: true, schema: { type: "string" } },
+            { name: "historyPage", in: "query", required: false, schema: { type: "integer", minimum: 1, default: 1 } },
+            { name: "historyLimit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 25, default: 10 } },
           ],
           responses: {
             200: { description: "Porquinho retornado" },

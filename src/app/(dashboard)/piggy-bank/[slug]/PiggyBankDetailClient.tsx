@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, PiggyBank as PiggyBankIcon, Trash2, WalletCards } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Pencil, PiggyBank as PiggyBankIcon, Trash2, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +17,8 @@ import { formatCurrencyInput, parseCurrencyInput } from "@/lib/money";
 import { getCurrencySymbol } from "@/lib/money/formatMoney";
 import { adjustPiggyBankBalance, deletePiggyBank, getPiggyBankBySlug, updatePiggyBank } from "@/services/piggyBankService";
 import { PiggyBankDetail } from "@/types/piggyBank";
+
+const HISTORY_PAGE_SIZE = 10;
 
 function PiggyDetailSkeleton() {
   return (
@@ -66,6 +67,8 @@ export function PiggyBankDetailClient() {
   const [detail, setDetail] = useState<PiggyBankDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -97,10 +100,13 @@ export function PiggyBankDetailClient() {
     if (!slug) return;
     let mounted = true;
     void (async () => {
-      setLoading(true);
+      setHistoryLoading(true);
       setError(null);
       try {
-        const data = await getPiggyBankBySlug(slug);
+        const data = await getPiggyBankBySlug(slug, {
+          historyPage,
+          historyLimit: HISTORY_PAGE_SIZE,
+        });
         if (!mounted) return;
         setDetail(data);
         setEditName(data.name);
@@ -110,16 +116,27 @@ export function PiggyBankDetailClient() {
         if (!mounted) return;
         setError(getPiggyErrorMessage(err instanceof Error ? err.message : null));
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          setHistoryLoading(false);
+        }
       }
     })();
     return () => {
       mounted = false;
     };
-  }, [getPiggyErrorMessage, slug]);
+  }, [getPiggyErrorMessage, historyPage, slug]);
 
-  const totalEntries = useMemo(() => detail?.history.length || 0, [detail]);
+  const totalEntries = useMemo(
+    () => detail?.historyPagination?.total ?? detail?.history.length ?? 0,
+    [detail],
+  );
+  const totalHistoryPages = detail?.historyPagination?.totalPages || 1;
   const parsedAdjustAmount = useMemo(() => parseCurrencyInput(adjustAmount), [adjustAmount]);
+
+  const handleBack = () => {
+    window.location.assign("/piggy-bank");
+  };
 
   const handleEdit = async () => {
     if (!detail) return;
@@ -132,6 +149,7 @@ export function PiggyBankDetailClient() {
         yieldType: editYieldType,
       });
       setDetail(updated);
+      setHistoryPage(1);
       setIsEditOpen(false);
     } catch (err) {
       setError(getPiggyErrorMessage(err instanceof Error ? err.message : null));
@@ -151,6 +169,7 @@ export function PiggyBankDetailClient() {
         sourceType: adjustSourceType,
       });
       setDetail(updated);
+      setHistoryPage(1);
       setAdjustAmount("");
       setAdjustDirection("deposit");
       setAdjustSourceType("bank");
@@ -179,7 +198,7 @@ export function PiggyBankDetailClient() {
     return <PiggyDetailSkeleton />;
   }
 
-  if (error || !detail) {
+  if (!detail) {
     return (
       <div className="min-h-[70vh] bg-transparent p-3 sm:p-6 md:p-8">
         <div className="mx-auto flex min-h-[55vh] max-w-5xl items-center justify-center">
@@ -190,7 +209,7 @@ export function PiggyBankDetailClient() {
                 <p className="text-lg font-semibold text-foreground">{t("unavailable.title")}</p>
                 <p className="text-sm text-red-600">{error || t("errors.notFound")}</p>
               </div>
-              <Button variant="outline" className="rounded-xl border-border/70 bg-card" onClick={() => router.push("/piggy-bank")}>
+              <Button variant="outline" className="rounded-xl border-border/70 bg-card" onClick={handleBack}>
                 <ArrowLeft className="mr-1 h-4 w-4" />
                 {t("actions.back")}
               </Button>
@@ -212,12 +231,10 @@ export function PiggyBankDetailClient() {
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">{t("description")}</p>
           </div>
-          <Link href="/piggy-bank">
-            <Button variant="outline" className="rounded-xl border-border/70 bg-card">
-              <ArrowLeft className="mr-1 h-4 w-4" />
-              {t("actions.back")}
-            </Button>
-          </Link>
+          <Button variant="outline" className="rounded-xl border-border/70 bg-card" onClick={handleBack}>
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            {t("actions.back")}
+          </Button>
         </div>
 
         {error && (
@@ -268,7 +285,10 @@ export function PiggyBankDetailClient() {
               <CardTitle>{t("history.title")}</CardTitle>
               <CardDescription>{t("history.count", { count: totalEntries })}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent
+              className={`space-y-3 transition-opacity ${historyLoading ? "opacity-60" : "opacity-100"}`}
+              aria-busy={historyLoading}
+            >
               {detail.history.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border/70 bg-background/70 p-5 text-sm text-muted-foreground">
                   {t("history.empty")}
@@ -290,6 +310,40 @@ export function PiggyBankDetailClient() {
                   </div>
                 ))
               )}
+
+              {totalHistoryPages > 1 ? (
+                <div className="flex flex-col gap-3 border-t border-border/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    {t("history.pageSummary", {
+                      page: detail.historyPagination.page,
+                      totalPages: totalHistoryPages,
+                      total: totalEntries,
+                    })}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={historyLoading || historyPage <= 1}
+                      onClick={() => setHistoryPage((current) => Math.max(1, current - 1))}
+                    >
+                      <ChevronLeft className="mr-1 h-4 w-4" />
+                      {t("history.previous")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={historyLoading || historyPage >= totalHistoryPages}
+                      onClick={() => setHistoryPage((current) => Math.min(totalHistoryPages, current + 1))}
+                    >
+                      {t("history.next")}
+                      <ChevronRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         </div>

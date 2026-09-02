@@ -8,82 +8,105 @@ import { AlertTriangle, CreditCard, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslations } from "@/i18n/T";
+import { formatMoney } from "@/lib/money/formatMoney";
+import { type BillingInterval } from "@/lib/plans/catalog";
+import { usePlans } from "@/hooks/usePlans";
 import { getCheckoutLink } from "@/services/billingService";
+import { trackProductEvent } from "@/lib/analytics/client";
 import {
   buildUpgradeCheckoutPath,
   clearPendingUpgradePlan,
+  parseBillingInterval,
   parseUpgradePlan,
+  readPendingUpgradeInterval,
   readPendingUpgradePlan,
   rememberPendingUpgradePlan,
 } from "@/services/billing/checkoutIntent";
 
 type CheckoutState = "preparing" | "redirecting" | "error" | "exempt";
 
-const PLAN_RANK: Record<"free" | "premium" | "pro", number> = {
-  free: 0,
-  premium: 1,
-  pro: 2,
-};
+function getChargeLabel(interval: BillingInterval) {
+  return interval === "yearly" ? "Anual" : "Mensal";
+}
 
 export default function BillingCheckoutPage() {
   const t = useTranslations("billing");
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, userProfile, loading, canPreviewRestrictedPages } = useAuth();
+  const { plans } = usePlans();
   const [state, setState] = useState<CheckoutState>("preparing");
   const [message, setMessage] = useState(t("checkout.preparing"));
   const startedRef = useRef("");
 
   const planFromQuery = useMemo(() => parseUpgradePlan(searchParams.get("plan")), [searchParams]);
+  const adminTestMode = searchParams.get("mode") === "admin-test";
+  const isPreviewOnly = canPreviewRestrictedPages && !adminTestMode;
   const plan = planFromQuery || readPendingUpgradePlan();
+  const intervalFromQuery = useMemo(() => parseBillingInterval(searchParams.get("interval")), [searchParams]);
+  const interval = planFromQuery ? intervalFromQuery : readPendingUpgradeInterval();
+  const selectedPlan = plan ? plans[plan] : null;
+  const selectedPrice =
+    selectedPlan && interval === "yearly" && selectedPlan.yearlyPrice !== null
+      ? selectedPlan.yearlyPrice
+      : selectedPlan?.price ?? 0;
+  const equivalentMonthly = selectedPlan?.yearlyPrice && interval === "yearly" ? selectedPlan.yearlyPrice / 12 : null;
 
   useEffect(() => {
     if (planFromQuery) {
-      rememberPendingUpgradePlan(planFromQuery);
+      rememberPendingUpgradePlan(planFromQuery, intervalFromQuery);
     }
-  }, [planFromQuery]);
+  }, [intervalFromQuery, planFromQuery]);
 
   useEffect(() => {
-    if (loading || canPreviewRestrictedPages || plan) return;
+    if (loading || isPreviewOnly || plan) return;
     router.replace(user ? "/settings?tab=billing" : "/login");
-  }, [canPreviewRestrictedPages, loading, plan, router, user]);
+  }, [isPreviewOnly, loading, plan, router, user]);
 
   useEffect(() => {
-    if (loading || canPreviewRestrictedPages || !plan) return;
+    if (loading || isPreviewOnly || !plan) return;
 
-    rememberPendingUpgradePlan(plan);
+    rememberPendingUpgradePlan(plan, interval);
 
     if (!user) {
-      router.replace(`/login?upgrade_plan=${plan}`);
+      router.replace(`/login?upgrade_plan=${plan}&interval=${interval}`);
       return;
     }
 
     if (!userProfile) return;
 
     const currentPlan = userProfile.plan || "free";
-    const currentRank = PLAN_RANK[currentPlan];
-    const targetRank = PLAN_RANK[plan];
 
-    if (currentRank >= targetRank && userProfile.paymentStatus === "paid") {
+    if (currentPlan === plan && userProfile.paymentStatus === "paid") {
       clearPendingUpgradePlan();
       router.replace("/dashboard");
       return;
     }
 
-    const requestKey = `${user.uid}:${plan}`;
+    const requestKey = `${user.uid}:${plan}:${interval}:${adminTestMode ? "admin-test" : "standard"}`;
     if (startedRef.current === requestKey) return;
     startedRef.current = requestKey;
 
     const run = async () => {
+      trackProductEvent("checkout_started", { plan, interval });
       setState("redirecting");
-      setMessage(t("checkout.redirecting", { plan: plan === "premium" ? "Premium" : "Pro" }));
+      setMessage(t("checkout.redirecting", { plan: selectedPlan?.name ?? plan }));
 
       try {
         const token = await user.getIdToken();
-        const session = await getCheckoutLink(plan, token);
+        const session = await getCheckoutLink(plan, token, interval, { adminTest: adminTestMode });
+        if (session.changedInPlace) {
+          trackProductEvent("checkout_completed", { plan, stage: "plan_change_in_place" });
+          clearPendingUpgradePlan();
+          window.location.assign("/settings?tab=billing&plan_changed=1");
+          return;
+        }
+        if (!session.checkoutUrl) throw new Error("missing_checkout_url");
+        trackProductEvent("checkout_redirected", { plan, interval });
         clearPendingUpgradePlan();
         window.location.assign(session.checkoutUrl);
       } catch (error) {
+        trackProductEvent("checkout_failed", { plan, interval, stage: "create_link" });
         console.error("Falha ao iniciar checkout:", error);
         const errorCode = error instanceof Error ? error.message : "";
         if (errorCode === "role_billing_exempt") {
@@ -99,11 +122,11 @@ export default function BillingCheckoutPage() {
 
     void run();
 
-  }, [canPreviewRestrictedPages, loading, plan, router, t, user, userProfile]);
+  }, [adminTestMode, interval, isPreviewOnly, loading, plan, router, selectedPlan?.name, t, user, userProfile]);
 
   const resolvedState: CheckoutState = !loading && !plan ? "error" : state;
   const resolvedMessage =
-    canPreviewRestrictedPages
+    isPreviewOnly
       ? t("checkout.previewMessage")
       : !loading && !plan
       ? t("checkout.missingPlanMessage")
@@ -127,7 +150,7 @@ export default function BillingCheckoutPage() {
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            {canPreviewRestrictedPages
+            {isPreviewOnly
               ? t("checkout.previewTitle")
               : resolvedState === "error"
               ? t("checkout.errorTitle")
@@ -138,17 +161,62 @@ export default function BillingCheckoutPage() {
 
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{resolvedMessage}</p>
 
-          {!canPreviewRestrictedPages && resolvedState !== "error" && resolvedState !== "exempt" && (
+          {plan && selectedPlan && (
+            <div className="mt-6 rounded-2xl border border-border/70 bg-background/55 p-4 text-left">
+              <p className="text-xs font-semibold uppercase text-muted-foreground">Resumo da assinatura</p>
+              <dl className="mt-3 space-y-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Plano escolhido</dt>
+                  <dd className="text-right font-semibold text-foreground">{selectedPlan.name}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Cobrança</dt>
+                  <dd className="text-right font-semibold text-foreground">{getChargeLabel(interval)}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Valor hoje</dt>
+                  <dd className="text-right font-semibold text-foreground">{formatMoney(selectedPrice, "BRL", "pt-BR")}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Renovação</dt>
+                  <dd className="text-right font-semibold text-foreground">
+                    {interval === "yearly" ? "A cada 12 meses" : "A cada mês"}
+                  </dd>
+                </div>
+              </dl>
+              {equivalentMonthly !== null && (
+                <p className="mt-3 rounded-xl bg-primary/10 px-3 py-2 text-xs font-medium text-primary">
+                  Equivale a {formatMoney(equivalentMonthly, "BRL", "pt-BR")} por mês.
+                </p>
+              )}
+            </div>
+          )}
+
+          {!isPreviewOnly && resolvedState !== "error" && resolvedState !== "exempt" && (
             <div className="mt-6 flex items-center justify-center gap-2 text-sm font-medium text-primary">
               <Loader2 className="h-4 w-4 animate-spin" />
               {t("checkout.opening")}
             </div>
           )}
 
+          {isPreviewOnly && plan && (
+            <div className="mt-6 space-y-2">
+              <Button
+                onClick={() => window.location.assign(`${buildUpgradeCheckoutPath(plan, interval)}&mode=admin-test`)}
+                className="h-11 w-full rounded-xl"
+              >
+                Testar checkout configurado no Mercado Pago
+              </Button>
+              <p className="text-xs leading-5 text-muted-foreground">
+                Será usado o plano associado ao ID configurado no ambiente. Confirme que ele pertence à conta de teste do Mercado Pago.
+              </p>
+            </div>
+          )}
+
           {resolvedState === "error" && plan && (
             <div className="mt-6 space-y-3">
               <Button
-                onClick={() => window.location.assign(buildUpgradeCheckoutPath(plan))}
+                onClick={() => window.location.assign(buildUpgradeCheckoutPath(plan, interval))}
                 className="h-11 w-full rounded-xl bg-primary font-medium text-primary-foreground hover:bg-primary/90"
               >
                 {t("checkout.retry")}

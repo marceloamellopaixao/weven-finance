@@ -30,32 +30,14 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  const [locale, setLocale] = useState<Locale>(DEFAULT_LOCALE);
+  const [locale] = useState<Locale>(() => getClientLocale());
   const title = translate(locale, "errors.global.title");
   const description = translate(locale, "errors.global.description");
   const retry = translate(locale, "errors.global.retry");
 
   useEffect(() => {
-    let cancelled = false;
-
-    void import("@sentry/nextjs")
-      .then((Sentry) => {
-        if (!cancelled) {
-          Sentry.captureException(error);
-        }
-      })
-      .catch(() => {
-        // Ignore capture errors in the error boundary itself.
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    console.error(error);
   }, [error]);
-
-  useEffect(() => {
-    setLocale(getClientLocale());
-  }, []);
 
   return (
     <html lang={locale}>

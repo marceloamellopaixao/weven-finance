@@ -31,38 +31,50 @@ function sanitizeSettings(raw: Partial<CreditCardSettings> | undefined): CreditC
   };
 }
 
-async function getFinanceSettingRow(uid: string) {
-  const rows = await supabaseSelect("user_settings", {
-    select: "id,data",
-    filters: { uid, setting_key: "creditCard" },
-    limit: 1,
-  });
-  return rows[0];
+function getCreditCardSettingKey(workspaceId?: string | null) {
+  return workspaceId ? `creditCard:${workspaceId}` : "creditCard";
 }
 
-export async function getCreditCardSettings(uid: string): Promise<CreditCardSettings> {
-  const row = await getFinanceSettingRow(uid);
+async function getCreditCardSettingRow(uid: string, workspaceId?: string | null, includeLegacyRows = true) {
+  const settingKey = getCreditCardSettingKey(workspaceId);
+  const rows = await supabaseSelect("user_settings", {
+    select: "id,setting_key,data",
+    filters: { uid },
+    or: includeLegacyRows
+      ? `setting_key.eq.${settingKey},setting_key.eq.creditCard`
+      : `setting_key.eq.${settingKey}`,
+  });
+  return (
+    rows.find((row) => String(row.setting_key || "") === settingKey) ||
+    rows.find((row) => String(row.setting_key || "") === "creditCard")
+  );
+}
+
+export async function getCreditCardSettings(uid: string, workspaceId?: string | null, includeLegacyRows = true): Promise<CreditCardSettings> {
+  const row = await getCreditCardSettingRow(uid, workspaceId, includeLegacyRows);
   if (!row) return defaultCreditCardSettings;
   const data = readSecureSettingData<Partial<CreditCardSettings>>(row.data);
   return sanitizeSettings(data);
 }
 
-export async function saveCreditCardSettings(uid: string, patch: Partial<CreditCardSettings>): Promise<CreditCardSettings> {
-  const current = await getCreditCardSettings(uid);
+export async function saveCreditCardSettings(uid: string, patch: Partial<CreditCardSettings>, workspaceId?: string | null, includeLegacyRows = true): Promise<CreditCardSettings> {
+  const settingKey = getCreditCardSettingKey(workspaceId);
+  const current = await getCreditCardSettings(uid, workspaceId, includeLegacyRows);
   const next = sanitizeSettings({
     ...current,
     ...patch,
     updatedAt: new Date().toISOString(),
   });
 
-  const row = await getFinanceSettingRow(uid);
+  const row = await getCreditCardSettingRow(uid, workspaceId, includeLegacyRows);
+  const rowKey = String(row?.setting_key || "");
   await supabaseUpsertRows(
     "user_settings",
     [
       {
-        id: String(row?.id || `${uid}__creditCard`),
+        id: String(row?.id && rowKey === settingKey ? row.id : `${uid}__${settingKey}`),
         uid,
-        setting_key: "creditCard",
+        setting_key: settingKey,
         data: writeSecureSettingData(next),
         updated_at: new Date().toISOString(),
       },
@@ -217,7 +229,7 @@ export async function computeCreditCardSummary(uid: string, limit: number, works
 
 export async function enforceCreditCardPolicy(uid: string, workspaceId?: string | null, includeLegacyRows = true) {
   const [settings, cardRows, pendingTxs] = await Promise.all([
-    getCreditCardSettings(uid),
+    getCreditCardSettings(uid, workspaceId, includeLegacyRows),
     supabaseSelect("payment_cards", {
       select: "source_id,workspace_id,bank_name,last4,card_type,limit_enabled,credit_limit,alert_threshold_pct,block_on_limit_exceeded,raw",
       filters: { uid },

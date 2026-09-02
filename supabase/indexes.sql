@@ -85,6 +85,9 @@ create index if not exists idx_piggy_bank_history_uid_created
 create index if not exists idx_piggy_bank_history_uid_workspace_created
   on public.piggy_bank_history(uid, workspace_id, created_at desc);
 
+create index if not exists idx_piggy_bank_history_uid_piggy_created
+  on public.piggy_bank_history(uid, piggy_bank_id, created_at desc);
+
 create index if not exists idx_support_requests_status_priority_created
   on public.support_requests(ticket_status, created_at desc);
 
@@ -132,3 +135,12 @@ create index if not exists idx_api_request_metrics_created_at
 
 create index if not exists idx_api_request_metrics_route_method_created_at
   on public.api_request_metrics(route, method, created_at desc);
+
+create index if not exists idx_product_events_name_created
+  on public.product_events(event_name, created_at desc);
+
+create index if not exists idx_product_events_session_created
+  on public.product_events(session_id, created_at asc);
+
+create index if not exists idx_product_events_uid_created
+  on public.product_events(uid, created_at desc);

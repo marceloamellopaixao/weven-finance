@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslations } from "@/i18n/T";
+import { formatPlanName } from "@/lib/plans/capabilities";
 import {
   buildUpgradeCheckoutPath,
   parseUpgradePlan,
@@ -116,7 +117,7 @@ export function LoginClient() {
           </p>
           {pendingUpgradePlan && (
             <p className="text-xs font-medium text-primary">
-              {tLogin("pendingUpgrade", { plan: pendingUpgradePlan === "premium" ? "Premium" : "Pro" })}
+              {tLogin("pendingUpgrade", { plan: formatPlanName(pendingUpgradePlan) })}
             </p>
           )}
         </div>

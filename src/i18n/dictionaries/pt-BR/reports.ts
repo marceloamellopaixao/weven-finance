@@ -112,9 +112,9 @@ export const reports = {
   },
   workspaces: {
     personal: "Perfil pessoal",
-    professional: "Perfil profissional / autônomo",
-    church: "Perfil igreja / ministério",
+    professional: "Business/PJ",
+    church: "Business/PJ",
     family: "Perfil família / casa",
-    business: "Perfil pequeno negócio",
+    business: "Business/PJ",
   },
 } as const;

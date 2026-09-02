@@ -6,9 +6,13 @@ import { getRequestMeta } from "@/lib/api/request-meta";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { getPlanCapabilities } from "@/lib/plans/capabilities";
+import { getUserPlanContext } from "@/lib/plans/server";
 import {
   DEFAULT_FAMILY_ROLE_PERMISSIONS,
-  canManageFamilyMembers,
+  canEditFamilyMembers,
+  canEditFamilyPermissions,
+  canInviteFamilyMembers,
   canViewFamilyMembers,
   normalizeFamilyPermissions,
   normalizeFamilyRole,
@@ -19,7 +23,7 @@ import {
   toWorkspaceInvitation,
   toWorkspaceMember,
 } from "@/lib/workspaces/server";
-import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
+import { supabasePatchByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { getSupabaseServiceClient, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
 import { readSecureProfilePayload, writeSecureProfilePayload } from "@/lib/secure-store/profile";
 import type { FamilyRole, WorkspaceInvitation, WorkspaceMember } from "@/types/workspace";
@@ -126,7 +130,15 @@ function toInvitationRow(input: {
   };
 }
 
-async function assertCanManage(uid: string, workspaceId: string) {
+type FamilyManageAction = "manage_members" | "invite_members" | "edit_permissions";
+
+function canPerformFamilyManageAction(member: WorkspaceMember | null, action: FamilyManageAction) {
+  if (action === "invite_members") return canInviteFamilyMembers(member);
+  if (action === "edit_permissions") return canEditFamilyPermissions(member);
+  return canEditFamilyMembers(member);
+}
+
+async function assertCanManage(uid: string, workspaceId: string, action: FamilyManageAction = "manage_members") {
   const owned = await getOwnedWorkspace(uid, workspaceId);
   if (owned) {
     if (owned.workspace_type !== "family") throw new Error("workspace_not_family");
@@ -138,7 +150,7 @@ async function assertCanManage(uid: string, workspaceId: string) {
     limit: 1,
   });
   const manager = rows[0] ? toWorkspaceMember(rows[0]) : null;
-  if (!manager || !canManageFamilyMembers(manager)) throw new Error("forbidden");
+  if (!manager || !canPerformFamilyManageAction(manager, action)) throw new Error("forbidden");
   const familyWorkspace = await getOwnedWorkspace(manager.workspaceUid, workspaceId);
   if (familyWorkspace?.workspace_type !== "family") throw new Error("workspace_not_family");
   return { workspaceUid: manager.workspaceUid, workspaceId, owner: false as const, manager };
@@ -284,6 +296,33 @@ async function sendPasswordSetupEmail(client: ReturnType<typeof getSupabaseServi
   if (result.error) throw new Error(`supabase_password_email_failed:${result.error.message}`);
 }
 
+async function assertFamilyInviteAllowed(workspaceUid: string, workspaceId: string, email: string) {
+  const planContext = await getUserPlanContext(workspaceUid);
+  const capabilities = getPlanCapabilities(planContext.plan, planContext.plans, planContext.featureAccess);
+  if (!planContext.isBillingExempt && !capabilities.hasFamilyWorkspace) {
+    throw new Error("Para convidar familiares, use o plano Família.");
+  }
+  if (planContext.isBillingExempt || capabilities.maxFamilyMembers === null) return;
+
+  const memberRows = await supabaseSelect("workspace_members", {
+    filters: { workspace_uid: workspaceUid, workspace_id: workspaceId },
+    conditions: { member_status: "in.(active,pending)" },
+    limit: 500,
+  });
+  const normalizedEmail = normalizeEmail(email);
+  const alreadyAdded = memberRows.some((row) => normalizeEmail(row.email) === normalizedEmail);
+  const invitedMembers = memberRows.filter((row) => String(row.member_uid || "") !== workspaceUid);
+  if (!alreadyAdded && invitedMembers.length >= capabilities.maxFamilyMembers) {
+    throw new Error(`Seu plano Família permite até ${capabilities.maxFamilyMembers} familiares convidados.`);
+  }
+}
+
+function getFamilyErrorStatus(message: string) {
+  if (message.startsWith("Para convidar") || message.startsWith("Seu plano")) return 403;
+  if (message === "forbidden") return 403;
+  return resolveApiErrorStatus(message);
+}
+
 export async function GET(request: NextRequest) {
   const meta = getRequestMeta(request);
   const startedAt = Date.now();
@@ -314,7 +353,7 @@ export async function GET(request: NextRequest) {
     }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
+    const status = getFamilyErrorStatus(message);
     apiLogger.error({ message: "workspaces_family_get_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
@@ -340,7 +379,8 @@ export async function POST(request: NextRequest) {
     const workspaceId = String(body.workspaceId || "").trim();
     const email = normalizeEmail(body.email);
     if (!workspaceId || !email) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
-    const access = await assertCanManage(auth.uid, workspaceId);
+    const access = await assertCanManage(auth.uid, workspaceId, "invite_members");
+    await assertFamilyInviteAllowed(access.workspaceUid, workspaceId, email);
     const role = normalizeFamilyRole(body.role);
     const permissions = normalizeFamilyPermissions(body.permissions || DEFAULT_FAMILY_ROLE_PERMISSIONS[role], role);
     const mode: InviteMode = body.inviteMode === "temporary_password" || body.inviteMode === "auto_password" ? body.inviteMode : "self_setup";
@@ -392,7 +432,7 @@ export async function POST(request: NextRequest) {
     }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
+    const status = getFamilyErrorStatus(message);
     apiLogger.error({ message: "workspaces_family_post_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
@@ -415,7 +455,7 @@ export async function PUT(request: NextRequest) {
     const invitationId = String(body.invitationId || "").trim();
     const memberUid = String(body.memberUid || "").trim();
     if (!workspaceId || (!invitationId && !memberUid)) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
-    const access = await assertCanManage(auth.uid, workspaceId);
+    const access = await assertCanManage(auth.uid, workspaceId, "invite_members");
     if (memberUid) {
       if (memberUid === access.workspaceUid) {
         return NextResponse.json({ ok: false, error: "cannot_resend_owner_access" }, { status: 400 });
@@ -477,7 +517,7 @@ export async function PUT(request: NextRequest) {
     }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
+    const status = getFamilyErrorStatus(message);
     apiLogger.error({ message: "workspaces_family_put_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
@@ -501,7 +541,11 @@ export async function PATCH(request: NextRequest) {
     const workspaceId = String(body.workspaceId || "").trim();
     const memberUid = String(body.memberUid || "").trim();
     if (!workspaceId || !memberUid) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
-    const access = await assertCanManage(auth.uid, workspaceId);
+    const requiredAction: FamilyManageAction = body.role !== undefined || body.status !== undefined ? "manage_members" : "edit_permissions";
+    const access = await assertCanManage(auth.uid, workspaceId, requiredAction);
+    if (body.permissions !== undefined && !access.owner && !canEditFamilyPermissions(access.manager)) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
     const existing = await getWorkspaceMember(access.workspaceUid, workspaceId, memberUid);
     if (!existing) return NextResponse.json({ ok: false, error: "member_not_found" }, { status: 404 });
     if (memberUid === access.workspaceUid) {
@@ -526,8 +570,83 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: true, member }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
+    const status = getFamilyErrorStatus(message);
     apiLogger.error({ message: "workspaces_family_patch_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
+    await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
+    return NextResponse.json({ ok: false, error: message }, { status });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const meta = getRequestMeta(request);
+  const startedAt = Date.now();
+  try {
+    const rate = await checkRateLimit(request, { key: "api:workspaces-family:delete", max: 10, windowMs: 60_000 });
+    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    const auth = await verifyRequestAuth(request);
+    const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
+    if (!workspaceId) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+
+    const owned = await getOwnedWorkspace(auth.uid, workspaceId);
+    if (!owned || owned.workspace_type !== "family") {
+      return NextResponse.json({ ok: false, error: "workspace_not_family" }, { status: 404 });
+    }
+
+    const now = new Date().toISOString();
+    const raw = ((owned.raw as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+    const settings = ((owned.settings as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+    await supabaseUpsertRows(
+      "workspaces",
+      [
+        {
+          ...owned,
+          workspace_type: "personal",
+          settings: {
+            ...settings,
+            familyModeEnabled: false,
+            familyClosedAt: now,
+          },
+          raw: {
+            ...raw,
+            type: "personal",
+            settings: {
+              ...(((raw.settings as Record<string, unknown> | null) || {}) as Record<string, unknown>),
+              familyModeEnabled: false,
+              familyClosedAt: now,
+            },
+            updatedAt: now,
+          },
+          updated_at: now,
+        },
+      ],
+      { onConflict: "id" },
+    );
+
+    await supabasePatchByFilters(
+      "workspace_members",
+      { workspace_uid: auth.uid, workspace_id: workspaceId },
+      {
+        member_status: "disabled",
+        raw: { familyClosedAt: now, status: "disabled" },
+        updated_at: now,
+      },
+    );
+    await supabasePatchByFilters(
+      "workspace_invitations",
+      { workspace_uid: auth.uid, workspace_id: workspaceId },
+      {
+        invitation_status: "revoked",
+        raw: { familyClosedAt: now, status: "revoked" },
+        updated_at: now,
+      },
+    );
+
+    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
+    return NextResponse.json({ ok: true }, { status: 200 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown_error";
+    const status = getFamilyErrorStatus(message);
+    apiLogger.error({ message: "workspaces_family_delete_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }

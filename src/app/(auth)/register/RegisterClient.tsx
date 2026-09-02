@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Loader2, Wallet } from "lucide-react";
+import { ArrowLeft, Chrome, Loader2, Wallet } from "lucide-react";
 
 import { AuthPageShell, authIconClassName, authPanelClassName } from "@/components/auth/AuthPageShell";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslations } from "@/i18n/T";
-import { formatPhone, normalizePhone } from "@/lib/phone";
+import { formatPlanName } from "@/lib/plans/capabilities";
+import { trackProductEvent } from "@/lib/analytics/client";
 import { parseUpgradePlan, readPendingUpgradePlan, rememberPendingUpgradePlan } from "@/services/billing/checkoutIntent";
 
 export function RegisterClient() {
-  const { registerWithEmail } = useAuth();
+  const { registerWithEmail, signInWithGoogle } = useAuth();
   const tRegister = useTranslations("auth.register");
   const tPlaceholders = useTranslations("auth.placeholders");
   const tValidation = useTranslations("validation");
@@ -23,8 +24,6 @@ export function RegisterClient() {
   const searchParams = useSearchParams();
 
   const [displayName, setDisplayName] = useState("");
-  const [completeName, setCompleteName] = useState("");
-  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -37,6 +36,7 @@ export function RegisterClient() {
   const zoomIn = "animate-in fade-in zoom-in-50 duration-500 fill-mode-both";
 
   useEffect(() => {
+    trackProductEvent("registration_started", { plan: pendingUpgradePlan ?? "free" });
     if (pendingUpgradePlan) {
       rememberPendingUpgradePlan(pendingUpgradePlan);
     }
@@ -47,9 +47,6 @@ export function RegisterClient() {
     setError("");
 
     if (!displayName) return setError(tValidation("nicknameRequired"));
-    if (!phone) return setError(tValidation("phoneRequired"));
-    if (phone.replace(/\D/g, "").length < 10) return setError(tValidation("phoneInvalid"));
-    if (!completeName) return setError(tValidation("fullNameRequired"));
     if (!email) return setError(tValidation("emailRequired"));
     if (!password) return setError(tValidation("passwordRequired"));
     if (!confirmPassword) return setError(tValidation("confirmPasswordRequired"));
@@ -58,10 +55,23 @@ export function RegisterClient() {
 
     setIsLoading(true);
     try {
-      await registerWithEmail(displayName, completeName, email, password, phone);
+      await registerWithEmail(displayName, displayName, email, password, "");
+      trackProductEvent("registration_completed", { plan: pendingUpgradePlan ?? "free" });
     } catch (err) {
       setError(err as string);
     } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleRegister = async () => {
+    setError("");
+    setIsLoading(true);
+    try {
+      trackProductEvent("registration_started", { plan: pendingUpgradePlan ?? "free", provider: "google" });
+      await signInWithGoogle();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
       setIsLoading(false);
     }
   };
@@ -81,13 +91,17 @@ export function RegisterClient() {
           </p>
           {pendingUpgradePlan && (
             <p className="text-xs font-medium text-primary">
-              {tRegister("pendingUpgrade", { plan: pendingUpgradePlan === "premium" ? "Premium" : "Pro" })}
+              {tRegister("pendingUpgrade", { plan: formatPlanName(pendingUpgradePlan) })}
             </p>
           )}
         </div>
 
         <form onSubmit={handleRegister} className={`${fadeInUp} delay-300 space-y-4`}>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Button type="button" variant="outline" className="h-11 w-full rounded-xl" disabled={isLoading} onClick={() => void handleGoogleRegister()}>
+            <Chrome className="mr-2 h-4 w-4" /> Continuar com Google
+          </Button>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" /><span>ou use seu e-mail</span><span className="h-px flex-1 bg-border" /></div>
+          <div>
             <div className="space-y-2">
               <Label htmlFor="displayName">{tRegister("nickname")}</Label>
               <Input
@@ -99,32 +113,6 @@ export function RegisterClient() {
                 onChange={(e) => setDisplayName(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">{tRegister("phone")}</Label>
-              <Input
-                id="phone"
-                type="tel"
-                autoComplete="tel-national"
-                inputMode="tel"
-                placeholder={tPlaceholders("phone")}
-                className="app-field-surface h-11 rounded-xl"
-                maxLength={15}
-                value={formatPhone(phone)}
-                onChange={(e) => setPhone(normalizePhone(e.target.value))}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="completeName">{tRegister("fullName")}</Label>
-            <Input
-              id="completeName"
-              autoComplete="name"
-              placeholder={tPlaceholders("fullName")}
-              className="app-field-surface h-11 rounded-xl"
-              value={completeName}
-              onChange={(e) => setCompleteName(e.target.value)}
-            />
           </div>
 
           <div className="space-y-2">

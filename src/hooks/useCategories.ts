@@ -1,55 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
 
-import { useI18n } from "@/i18n/I18nProvider";
-import {
-  getDefaultCategoriesForWorkspaceType,
-  normalizeDefaultCategoryName,
-  slugifyDefaultCategoryName,
-} from "@/lib/categories/defaultCategories";
+import { getDefaultCategoriesForWorkspaceType, normalizeDefaultCategoryName, slugifyDefaultCategoryName } from "@/lib/categories/defaultCategories";
+import { addCustomCategory, deleteCustomCategoryByName, renameCustomCategoryByName, setDefaultCategoryHidden } from "@/services/categoryService";
+import { useGetCategoriesQuery } from "@/store/api/categoriesApi";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
-import { subscribeToActiveWorkspaceChanged } from "@/services/workspaceService";
-import {
-  addCustomCategory,
-  deleteCustomCategoryByName,
-  getCategoriesData,
-  renameCustomCategoryByName,
-  setDefaultCategoryHidden,
-} from "@/services/categoryService";
 import type { WorkspaceType } from "@/types/workspace";
 import { useAuth } from "./useAuth";
 import { useWorkspaces } from "./useWorkspaces";
 
 export const CATEGORY_PATH_SEPARATOR = "::";
-
 export type CategoryType = "income" | "expense" | "both";
-
-export interface Category {
-  name: string;
-  type: CategoryType;
-  color: string;
-  isCustom?: boolean;
-  isDefault?: boolean;
-}
+export interface Category { name: string; type: CategoryType; color: string; isCustom?: boolean; isDefault?: boolean; }
 
 const FALLBACK_WORKSPACE_TYPE: WorkspaceType = "personal";
-const CUSTOM_CATEGORY_COLOR =
-  "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50";
+const CUSTOM_CATEGORY_COLOR = "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50";
 
-function buildDefaultCategories(workspaceType: WorkspaceType = FALLBACK_WORKSPACE_TYPE): Category[] {
-  return getDefaultCategoriesForWorkspaceType(workspaceType).map((category) => ({
-    name: category.name,
-    type: category.type,
-    color: category.color,
-    isDefault: true,
-  }));
+function buildDefaultCategories(workspaceType: WorkspaceType): Category[] {
+  return getDefaultCategoriesForWorkspaceType(workspaceType).map((category) => ({ ...category, isDefault: true }));
 }
-
-function normalizeCategoryKey(name: string) {
-  return slugifyDefaultCategoryName(normalizeDefaultCategoryName(name));
-}
-
+function normalizeCategoryKey(name: string) { return slugifyDefaultCategoryName(normalizeDefaultCategoryName(name)); }
 function categoriesOverlap(left: Category, right: Category) {
   if (left.name === right.name) return true;
   if (left.type !== right.type && left.type !== "both" && right.type !== "both") return false;
@@ -58,165 +29,52 @@ function categoriesOverlap(left: Category, right: Category) {
 
 export function useCategories() {
   const { user, userProfile } = useAuth();
-  const { locale } = useI18n();
   const { activeWorkspace } = useWorkspaces();
   const workspaceType = activeWorkspace?.type || FALLBACK_WORKSPACE_TYPE;
-  const [categories, setCategories] = useState<Category[]>(() => buildDefaultCategories(workspaceType));
-  const [loadingCategories, setLoadingCategories] = useState(true);
-  const [hiddenDefaultCategories, setHiddenDefaultCategories] = useState<string[]>([]);
-
+  const workspaceId = activeWorkspace?.id;
+  const userId = userProfile?.uid || user?.uid;
+  const { data, isLoading: loadingCategories, refetch } = useGetCategoriesQuery(
+    { userId: userId || "", workspaceId: workspaceId || "" }, { skip: !userId || !workspaceId },
+  );
   useEffect(() => {
-    const effectiveUid = userProfile?.uid || user?.uid;
-    if (!user || !effectiveUid) {
-      setCategories(buildDefaultCategories(workspaceType));
-      setLoadingCategories(false);
-      return;
-    }
+    if (!userId || !workspaceId) return;
+    const stopCategories = subscribeToTableChanges({ table: "categories", filter: `uid=eq.${userId}`, onChange: () => void refetch() });
+    const stopSettings = subscribeToTableChanges({ table: "user_settings", filter: `uid=eq.${userId}`, onChange: () => void refetch() });
+    return () => { stopCategories(); stopSettings(); };
+  }, [refetch, userId, workspaceId]);
 
-    let cancelled = false;
+  const hiddenDefaultCategories = useMemo(() => (data?.hiddenDefaultCategories ?? []).map(normalizeDefaultCategoryName), [data?.hiddenDefaultCategories]);
+  const defaultCategories = useMemo(() => buildDefaultCategories(workspaceType).map((category) => ({
+    ...category,
+    hidden: normalizeDefaultCategoryName(category.name) === "Outros" ? false : hiddenDefaultCategories.some((name) => normalizeCategoryKey(name) === normalizeCategoryKey(category.name)),
+  })), [hiddenDefaultCategories, workspaceType]);
+  const categories = useMemo(() => {
+    const visibleDefaults = defaultCategories.filter((category) => !category.hidden);
+    const custom: Category[] = (data?.customCategories ?? []).map((category) => ({
+      name: normalizeDefaultCategoryName(category.name), type: category.type, color: category.color || CUSTOM_CATEGORY_COLOR, isCustom: true,
+    }));
+    const result: Category[] = [...visibleDefaults];
+    for (const category of custom) if (!result.some((existing) => categoriesOverlap(existing, category))) result.push(category);
+    return result;
+  }, [data?.customCategories, defaultCategories]);
 
-    const loadCategories = async () => {
-      try {
-        const token = await user.getIdToken();
-        const { customCategories: customCats, hiddenDefaultCategories: hiddenDefaults } = await getCategoriesData(token);
-        const hiddenKeys = new Set(hiddenDefaults.map(normalizeCategoryKey));
-        const defaultCats = buildDefaultCategories(workspaceType);
-        const visibleDefaultCats = defaultCats.filter(
-          (cat) => normalizeDefaultCategoryName(cat.name) === "Outros" || !hiddenKeys.has(normalizeCategoryKey(cat.name))
-        );
-        const formattedCustom: Category[] = customCats.map((cat) => ({
-          name: normalizeDefaultCategoryName(cat.name),
-          type: cat.type,
-          color: cat.color,
-          isCustom: true,
-        }));
-
-        const allCats: Category[] = [...visibleDefaultCats];
-        formattedCustom.forEach((customCategory) => {
-          if (!allCats.some((category) => categoriesOverlap(category, customCategory))) {
-            allCats.push(customCategory);
-          }
-        });
-
-        if (cancelled) return;
-        setHiddenDefaultCategories(hiddenDefaults.map(normalizeDefaultCategoryName));
-        setCategories(allCats);
-      } catch (error) {
-        console.error("Erro ao carregar categorias:", error);
-      } finally {
-        if (!cancelled) setLoadingCategories(false);
-      }
-    };
-
-    void loadCategories();
-    const stopCategories = subscribeToTableChanges({
-      table: "categories",
-      filter: `uid=eq.${effectiveUid}`,
-      onChange: () => void loadCategories(),
-    });
-    const stopSettings = subscribeToTableChanges({
-      table: "user_settings",
-      filter: `uid=eq.${effectiveUid}`,
-      onChange: () => void loadCategories(),
-    });
-    const stopActiveWorkspace = subscribeToActiveWorkspaceChanged(() => {
-      setLoadingCategories(true);
-      void loadCategories();
-    });
-
-    return () => {
-      cancelled = true;
-      stopCategories();
-      stopSettings();
-      stopActiveWorkspace();
-    };
-  }, [user, userProfile?.uid, workspaceType, locale]);
-
+  const token = async () => {
+    if (!user) throw new Error("missing_auth_user");
+    return user.getIdToken();
+  };
   const addNewCategory = async (name: string, type: CategoryType, parentName?: string) => {
-    if (!user) return;
-
     const finalName = parentName ? `${parentName}${CATEGORY_PATH_SEPARATOR}${name}` : name;
-    await addCustomCategory(await user.getIdToken(), finalName, type);
-
-    const newCat: Category = {
-      name: finalName,
-      type,
-      color: CUSTOM_CATEGORY_COLOR,
-      isCustom: true,
-    };
-
-    setCategories((prev) => {
-      if (prev.some((cat) => categoriesOverlap(cat, newCat))) return prev;
-      return [...prev, newCat];
-    });
+    await addCustomCategory(await token(), finalName, type); await refetch();
   };
-
-  const deleteCategory = async (name: string) => {
-    if (!user) return;
-    await deleteCustomCategoryByName(await user.getIdToken(), name, "Outros");
-    setCategories((prev) => prev.filter((cat) => cat.name !== name && !cat.name.startsWith(`${name}${CATEGORY_PATH_SEPARATOR}`)));
-  };
-
+  const deleteCategory = async (name: string) => { await deleteCustomCategoryByName(await token(), name, "Outros"); await refetch(); };
   const renameCategory = async (oldName: string, newName: string) => {
-    if (!user) return;
-
-    const trimmed = newName.trim();
-    if (!trimmed) return;
-    await renameCustomCategoryByName(await user.getIdToken(), oldName, trimmed);
-    setCategories((prev) =>
-      prev.map((cat) => {
-        if (cat.name === oldName || cat.name.startsWith(`${oldName}${CATEGORY_PATH_SEPARATOR}`)) {
-          const suffix = cat.name.slice(oldName.length);
-          return { ...cat, name: `${trimmed}${suffix}` };
-        }
-        return cat;
-      })
-    );
+    const trimmed = newName.trim(); if (!trimmed) return;
+    await renameCustomCategoryByName(await token(), oldName, trimmed); await refetch();
   };
-
   const toggleDefaultCategoryVisibility = async (name: string, hidden: boolean) => {
-    if (!user) return;
-    const canonicalName = normalizeDefaultCategoryName(name);
-    if (canonicalName === "Outros") return;
-
-    const defaultCategory = buildDefaultCategories(workspaceType).find(
-      (cat) => normalizeDefaultCategoryName(cat.name) === canonicalName
-    );
-    if (!defaultCategory) return;
-
-    setHiddenDefaultCategories((prev) =>
-      hidden ? Array.from(new Set([...prev, canonicalName])) : prev.filter((item) => normalizeDefaultCategoryName(item) !== canonicalName)
-    );
-
-    setCategories((prev) => {
-      if (hidden) {
-        return prev.filter((cat) => normalizeDefaultCategoryName(cat.name) !== canonicalName);
-      }
-
-      if (prev.some((cat) => normalizeDefaultCategoryName(cat.name) === canonicalName)) return prev;
-      return [{ ...defaultCategory, isDefault: true }, ...prev];
-    });
-
-    await setDefaultCategoryHidden(await user.getIdToken(), canonicalName, hidden);
+    const canonicalName = normalizeDefaultCategoryName(name); if (canonicalName === "Outros") return;
+    await setDefaultCategoryHidden(await token(), canonicalName, hidden); await refetch();
   };
 
-  const defaultCategories = buildDefaultCategories(workspaceType).map((cat) => ({
-    ...cat,
-    isDefault: true,
-    hidden:
-      normalizeDefaultCategoryName(cat.name) === "Outros"
-        ? false
-        : hiddenDefaultCategories.some((name) => normalizeCategoryKey(name) === normalizeCategoryKey(cat.name)),
-  }));
-
-  return {
-    categories,
-    defaultCategories,
-    hiddenDefaultCategories,
-    loadingCategories,
-    addNewCategory,
-    deleteCategory,
-    renameCategory,
-    toggleDefaultCategoryVisibility,
-  };
+  return { categories, defaultCategories, hiddenDefaultCategories, loadingCategories, addNewCategory, deleteCategory, renameCategory, toggleDefaultCategoryVisibility };
 }

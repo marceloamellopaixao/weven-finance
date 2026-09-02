@@ -20,6 +20,7 @@ import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseU
 import { deleteSupabaseAuthUser, isUuid, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
 import { BillingInfo, UserPaymentStatus, UserPlan, UserRole, UserStatus } from "@/types/user";
 import { DEFAULT_ACCESS_CONTROL_CONFIG } from "@/types/system";
+import { parseUserPlan } from "@/lib/plans/catalog";
 
 async function getAuthContext(request: NextRequest): Promise<ServerAccessProfile> {
   const decoded = await verifyRequestAuth(request);
@@ -31,7 +32,7 @@ async function getAuthContext(request: NextRequest): Promise<ServerAccessProfile
   return {
     uid: decoded.uid,
     role: String(row.role || raw.role || "client"),
-    plan: rawPlan === "premium" || rawPlan === "pro" ? rawPlan : "free",
+    plan: parseUserPlan(rawPlan),
     isSupremeAdmin: decoded.uid === CREATOR_SUPREME_UID,
   };
 }
@@ -74,7 +75,7 @@ function mapProfileRowToUser(row: Record<string, unknown>) {
 }
 
 function asPlan(value: unknown): UserPlan {
-  return value === "premium" || value === "pro" ? value : "free";
+  return parseUserPlan(value);
 }
 
 function asStatus(value: unknown): UserStatus {

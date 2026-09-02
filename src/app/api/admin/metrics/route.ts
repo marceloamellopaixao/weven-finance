@@ -102,6 +102,21 @@ export async function GET(request: NextRequest) {
       return status === "accepted" || status === "pending" || status === "retry_failed" || status === "error";
     }).length;
 
+    const productRows = await supabaseSelect("product_events", {
+      select: "event_name,session_id,created_at",
+      order: "created_at.desc.nullslast",
+      limit: 5000,
+    }).catch(() => []);
+    const funnelRows = productRows.filter((row) => typeof row.created_at === "string" && row.created_at >= cutoff);
+    const funnelEventNames = ["landing_viewed", "registration_started", "registration_completed", "checkout_started", "checkout_redirected", "checkout_completed", "checkout_failed"];
+    const funnel = Object.fromEntries(funnelEventNames.map((eventName) => {
+      const sessions = new Set(funnelRows.filter((row) => row.event_name === eventName).map((row) => String(row.session_id || "")).filter(Boolean));
+      return [eventName, sessions.size];
+    }));
+    const landingSessions = Number(funnel.landing_viewed || 0);
+    const registrationSessions = Number(funnel.registration_completed || 0);
+    const checkoutSessions = Number(funnel.checkout_started || 0);
+
     const alerts: MetricsAlert[] = [];
     const errorRatePct = total > 0 ? Number(((errors / total) * 100).toFixed(2)) : 0;
     const rateLimitedPct = total > 0 ? Number(((rateLimited / total) * 100).toFixed(2)) : 0;
@@ -208,6 +223,9 @@ export async function GET(request: NextRequest) {
           trafficDropPct,
           paymentFailures24h,
           webhookDelayedCount,
+          funnel,
+          landingToRegistrationPct: landingSessions > 0 ? Number(((registrationSessions / landingSessions) * 100).toFixed(2)) : 0,
+          registrationToCheckoutPct: registrationSessions > 0 ? Number(((checkoutSessions / registrationSessions) * 100).toFixed(2)) : 0,
         },
         alerts,
         byRoute,

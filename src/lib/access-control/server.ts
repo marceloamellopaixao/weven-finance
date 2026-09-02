@@ -10,14 +10,16 @@ import {
 } from "@/types/system";
 import { supabaseSelect } from "@/services/supabase/admin";
 import { BillingInfo, UserPaymentStatus } from "@/types/user";
+import type { UserPlan } from "@/types/user";
 import { CREATOR_SUPREME_UID } from "@/lib/access-control/roles";
+import { parseUserPlan } from "@/lib/plans/catalog";
 
 export { CREATOR_SUPREME_UID } from "@/lib/access-control/roles";
 
 export type ServerAccessProfile = {
   uid: string;
   role: string;
-  plan: "free" | "premium" | "pro";
+  plan: UserPlan;
   isSupremeAdmin: boolean;
 };
 
@@ -30,7 +32,7 @@ export async function getAccessProfile(uid: string): Promise<ServerAccessProfile
   const raw = (rows[0]?.raw as Record<string, unknown> | null) ?? {};
   const role = String(rows[0]?.role || raw.role || "client");
   const rawPlan = rows[0]?.plan ?? raw.plan;
-  const storedPlan = rawPlan === "premium" || rawPlan === "pro" ? rawPlan : "free";
+  const storedPlan = parseUserPlan(rawPlan);
   const paymentStatus = (rows[0]?.payment_status ?? raw.paymentStatus ?? "pending") as UserPaymentStatus;
   const billing = (rows[0]?.billing ?? raw.billing ?? {}) as BillingInfo;
   const accessControl = await getServerAccessControlConfig();

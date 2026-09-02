@@ -6,7 +6,7 @@ export const terms = {
   },
   eyebrow: "Términos",
   title: "Términos de uso resumidos",
-  description: "Esta versión resume los puntos principales de uso del producto hasta la publicación de una versión jurídica ampliada.",
+  description: "Estos términos definen las principales reglas de uso de la plataforma, cuenta, suscripción, cancelación y disponibilidad del servicio.",
   sections: {
     platformUse: {
       title: "Uso de la plataforma",
@@ -18,7 +18,7 @@ export const terms = {
     },
     billing: {
       title: "Suscripción y cobro",
-      text: "Los planes pagos pueden contratarse por suscripción recurrente, con procesamiento de pago por un socio externo. El estado del plan depende de la confirmación del pago.",
+      text: "Los planes pagos son suscripciones recurrentes procesadas por Mercado Pago. El precio y el período se muestran antes de contratar. El usuario puede cancelar la renovación en ajustes; los cobros procesados siguen la legislación aplicable y las reglas del proveedor de pago.",
     },
     availability: {
       title: "Disponibilidad y evolución",

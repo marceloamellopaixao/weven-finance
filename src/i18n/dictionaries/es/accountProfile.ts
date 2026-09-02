@@ -20,20 +20,20 @@ export const accountProfile: Dictionary["accountProfile"] = {
       description: "Controle ingresos, gastos, tarjetas, metas, deudas y el límite diario inteligente.",
     },
     professional: {
-      title: "Perfil profesional / autónomo",
-      description: "Controle ingresos de clientes, gastos de trabajo, impuestos, caja mensual e informes.",
+      title: "Business/PJ",
+      description: "Use este perfil para negocio, autónomo, iglesia, tienda, prestación de servicio o proyecto profesional.",
     },
     church: {
-      title: "Perfil iglesia / ministerio",
-      description: "Controle diezmos, ofrendas, misiones, cafetería, departamentos, eventos y gastos por área.",
+      title: "Business/PJ",
+      description: "Iglesias, ministerios y proyectos profesionales entran en el perfil Business/PJ.",
     },
     family: {
       title: "Perfil familia / hogar",
       description: "Controle cuentas compartidas, supermercado, alquiler, escuela, transporte y metas familiares.",
     },
     business: {
-      title: "Perfil pequeño negocio",
-      description: "Controle ventas, costos, cuentas por pagar y cobrar, flujo de caja y beneficio estimado.",
+      title: "Business/PJ",
+      description: "Controle ingresos, gastos, impuestos, proveedores, flujo de caja e informes del negocio.",
     },
   },
 } as const;

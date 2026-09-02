@@ -41,8 +41,16 @@ export async function getPiggyBanks(): Promise<PiggyBank[]> {
   return payload.piggyBanks || [];
 }
 
-export async function getPiggyBankBySlug(slug: string): Promise<PiggyBankDetail> {
-  const response = await fetchWithAuth(withActiveWorkspace(`/api/piggy-banks/${encodeURIComponent(slug)}`), { method: "GET" });
+export async function getPiggyBankBySlug(
+  slug: string,
+  options?: { historyPage?: number; historyLimit?: number },
+): Promise<PiggyBankDetail> {
+  const historyPage = Math.max(1, Number(options?.historyPage || 1));
+  const historyLimit = Math.max(1, Math.min(25, Number(options?.historyLimit || 10)));
+  const path = withActiveWorkspace(
+    `/api/piggy-banks/${encodeURIComponent(slug)}?historyPage=${historyPage}&historyLimit=${historyLimit}`,
+  );
+  const response = await fetchWithAuth(path, { method: "GET" });
   const payload = (await response.json()) as { ok: boolean; error?: string; piggyBank?: PiggyBankDetail };
   if (!response.ok || !payload.ok || !payload.piggyBank) {
     throw new Error(payload.error || "Não foi possível encontrar o porquinho");

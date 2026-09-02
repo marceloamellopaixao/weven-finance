@@ -1,6 +1,6 @@
 "use client";
 
-import { BriefcaseBusiness, Building2, Check, ChevronsUpDown, Home, Plus, Store, UserRound, UsersRound, WalletCards } from "lucide-react";
+import { BriefcaseBusiness, Check, ChevronsUpDown, Home, Plus, UserRound, UsersRound, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -20,25 +20,25 @@ import type { Workspace, WorkspaceType } from "@/types/workspace";
 const WORKSPACE_ICONS: Record<WorkspaceType, typeof WalletCards> = {
   personal: WalletCards,
   professional: BriefcaseBusiness,
-  church: Building2,
+  church: BriefcaseBusiness,
   family: Home,
-  business: Store,
+  business: BriefcaseBusiness,
 };
 
 const WORKSPACE_TONE: Record<WorkspaceType, string> = {
   personal: "bg-emerald-500/12 text-emerald-700 ring-emerald-500/20",
-  professional: "bg-sky-500/12 text-sky-700 ring-sky-500/20",
-  church: "bg-violet-500/12 text-violet-700 ring-violet-500/20",
+  professional: "bg-fuchsia-500/12 text-fuchsia-700 ring-fuchsia-500/20",
+  church: "bg-fuchsia-500/12 text-fuchsia-700 ring-fuchsia-500/20",
   family: "bg-amber-500/12 text-amber-700 ring-amber-500/20",
   business: "bg-fuchsia-500/12 text-fuchsia-700 ring-fuchsia-500/20",
 };
 
 const WORKSPACE_KIND_LABEL: Record<WorkspaceType, string> = {
   personal: "Pessoal",
-  professional: "Profissional",
-  church: "Igreja",
-  family: "Familia",
-  business: "Negocio",
+  professional: "Business/PJ",
+  church: "Business/PJ",
+  family: "Família",
+  business: "Business/PJ",
 };
 
 function getInitials(workspace: Workspace) {
@@ -50,8 +50,8 @@ function getInitials(workspace: Workspace) {
 function WorkspaceAvatar({ workspace, active, compact }: { workspace: Workspace; active?: boolean; compact?: boolean }) {
   const Icon = WORKSPACE_ICONS[workspace.type] || WalletCards;
   return (
-    <div className={`relative flex shrink-0 items-center justify-center ring-1 ${compact ? "h-8 w-8 rounded-full" : "h-12 w-12 rounded-2xl"} ${WORKSPACE_TONE[workspace.type]}`}>
-      {workspace.type === "family" ? <UsersRound className={compact ? "h-4 w-4" : "h-5 w-5"} /> : <Icon className={compact ? "h-4 w-4" : "h-5 w-5"} />}
+    <div className={`relative flex shrink-0 items-center justify-center ring-1 ${compact ? "h-6 w-6 rounded-full" : "h-12 w-12 rounded-2xl"} ${WORKSPACE_TONE[workspace.type]}`}>
+      {workspace.type === "family" ? <UsersRound className={compact ? "h-3 w-3" : "h-4 w-4"} /> : <Icon className={compact ? "h-4 w-4" : "h-5 w-5"} />}
       {active ? (
         <span className={`absolute flex items-center justify-center rounded-full bg-primary text-primary-foreground ring-2 ring-background ${compact ? "-right-0.5 -bottom-0.5 h-4 w-4" : "-right-1 -bottom-1 h-5 w-5"}`}>
           <Check className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
@@ -62,14 +62,14 @@ function WorkspaceAvatar({ workspace, active, compact }: { workspace: Workspace;
 }
 
 export function WorkspaceProfileSwitcher() {
-  const { workspaces, activeWorkspace, activeWorkspaceId, loading, setActiveWorkspace } = useWorkspaces();
+  const { workspaces, activeWorkspaces, activeWorkspace, activeWorkspaceId, loading, setActiveWorkspace } = useWorkspaces();
   const [open, setOpen] = useState(false);
   const canOpenFamilySettings = workspaces.some((workspace) => {
     if (workspace.type !== "family" && !workspace.settings?.familyModeEnabled && !workspace.membership) return false;
     return !workspace.membership || canViewFamilyMembers(workspace.membership);
   });
 
-  if (loading || workspaces.length === 0 || !activeWorkspace) return null;
+  if (loading || activeWorkspaces.length === 0 || !activeWorkspace) return null;
 
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
@@ -100,7 +100,7 @@ export function WorkspaceProfileSwitcher() {
         </DropdownMenuLabel>
 
         <div className="space-y-1 sm:hidden">
-          {workspaces.map((workspace) => {
+          {activeWorkspaces.map((workspace) => {
             const active = workspace.id === activeWorkspaceId;
             return (
               <button
@@ -130,7 +130,7 @@ export function WorkspaceProfileSwitcher() {
         </div>
 
         <div className="hidden grid-cols-2 gap-2 sm:grid sm:grid-cols-3">
-          {workspaces.map((workspace) => {
+          {activeWorkspaces.map((workspace) => {
             const active = workspace.id === activeWorkspaceId;
             return (
               <button
@@ -179,14 +179,14 @@ export function WorkspaceProfileSwitcher() {
           <Link href="/settings?tab=family" className="block">
             <Button variant="ghost" className="h-10 w-full justify-start rounded-xl text-sm">
               <UsersRound className="mr-2 h-4 w-4" />
-              Gerenciar perfis da familia
+              Gerenciar perfis da família
             </Button>
           </Link>
         ) : null}
         <Link href="/settings?tab=profiles" className="block">
           <Button variant="ghost" className="h-10 w-full justify-start rounded-xl text-sm">
             <WalletCards className="mr-2 h-4 w-4" />
-            Configuracoes de perfil
+            Configurações de perfil
           </Button>
         </Link>
       </DropdownMenuContent>

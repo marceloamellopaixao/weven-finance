@@ -15,11 +15,22 @@ import {
   writeSecurePiggyHistoryPayload,
   writeSecurePiggyPayload,
 } from "@/lib/secure-store/piggy-banks";
-import { supabaseDeleteByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
+import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
 import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
+import { canManageFamilyPiggyBank, canViewFamilyPiggyBank } from "@/lib/workspaces/family";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const DEFAULT_HISTORY_PAGE_SIZE = 10;
+const MAX_HISTORY_PAGE_SIZE = 25;
+const SERVER_HISTORY_SCAN_PAGE_SIZE = 200;
+
+function sanitizePositiveInteger(value: unknown, fallback: number, maximum = Number.MAX_SAFE_INTEGER) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, maximum);
+}
 
 function isMissingWorkspaceColumn(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
@@ -46,6 +57,12 @@ function getPiggyWorkspaceId(row: Record<string, unknown>) {
   const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
   const secureRaw = readSecurePiggyPayload(row.raw);
   return String(row.workspace_id || raw.workspaceId || secureRaw.workspaceId || "");
+}
+
+function getPiggyCreatedByUid(row: Record<string, unknown>) {
+  const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const secureRaw = readSecurePiggyPayload(row.raw);
+  return String(row.created_by_uid || raw.createdBy || secureRaw.createdBy || "");
 }
 
 function belongsToWorkspace(row: Record<string, unknown>, workspaceId?: string | null, includeLegacyRows = true) {
@@ -81,7 +98,8 @@ function sanitizeMoney(value: unknown) {
 function buildPiggyBankResponse(
   piggy: Record<string, unknown>,
   historyRows: Record<string, unknown>[],
-  safeSlug: string
+  safeSlug: string,
+  historyPagination: { page: number; limit: number; total: number },
 ) {
   const piggyRaw = readSecurePiggyPayload(piggy.raw);
   const history = historyRows
@@ -154,31 +172,120 @@ function buildPiggyBankResponse(
           : undefined,
     lastDepositAt: typeof piggyRaw.lastDepositAt === "string" ? piggyRaw.lastDepositAt : undefined,
     history,
+    historyPagination: {
+      ...historyPagination,
+      totalPages: Math.max(1, Math.ceil(historyPagination.total / historyPagination.limit)),
+    },
   };
 }
 
-async function loadPiggyBank(uid: string, safeSlug: string, workspaceId?: string | null, includeLegacyRows = true) {
-  const piggyRows = await supabaseSelect("piggy_banks", {
-    filters: { uid },
-  });
-  const activePiggyRows = filterActiveJsonRows(piggyRows)
-    .filter((row) => belongsToWorkspace(row, workspaceId, includeLegacyRows))
-    .filter((row) => String(row.slug || readSecurePiggyPayload(row.raw).slug || row.source_id || "") === safeSlug);
-  if (activePiggyRows.length === 0) {
-    return null;
+async function findPiggyBank(
+  uid: string,
+  safeSlug: string,
+  workspaceId?: string | null,
+  includeLegacyRows = true,
+) {
+  const workspaceScopes: Array<string | null | undefined> = workspaceId
+    ? [workspaceId, ...(includeLegacyRows ? [null] : [])]
+    : [undefined];
+
+  for (const field of ["slug", "source_id"] as const) {
+    for (const scopedWorkspaceId of workspaceScopes) {
+      const rows = filterActiveJsonRows(await supabaseSelect("piggy_banks", {
+        filters: {
+          uid,
+          [field]: safeSlug,
+          ...(scopedWorkspaceId !== undefined ? { workspace_id: scopedWorkspaceId } : {}),
+        },
+        order: "updated_at.desc.nullslast",
+        limit: 5,
+      }));
+      const matched = rows.find((row) =>
+        belongsToWorkspace(row, workspaceId, includeLegacyRows)
+        && String(row.slug || readSecurePiggyPayload(row.raw).slug || row.source_id || "") === safeSlug
+      );
+      if (matched) return matched;
+    }
   }
 
-  const piggy = activePiggyRows[0];
-  const historyRows = filterActiveJsonRows(await supabaseSelect("piggy_bank_history", {
+  return null;
+}
+
+async function loadPiggyBank(
+  uid: string,
+  safeSlug: string,
+  workspaceId?: string | null,
+  includeLegacyRows = true,
+  historyPage = 1,
+  historyLimit = DEFAULT_HISTORY_PAGE_SIZE,
+) {
+  const piggy = await findPiggyBank(uid, safeSlug, workspaceId, includeLegacyRows);
+  if (!piggy) return null;
+
+  const pagedHistory = await supabaseSelectPaged("piggy_bank_history", {
     filters: { uid, piggy_bank_id: String(piggy.id) },
     order: "created_at.desc.nullslast",
-  }));
+    page: historyPage,
+    limit: historyLimit,
+  });
+  const historyRows = filterActiveJsonRows(pagedHistory.data);
 
   return {
     piggy,
     historyRows,
-    detail: buildPiggyBankResponse(piggy, historyRows, safeSlug),
+    detail: buildPiggyBankResponse(piggy, historyRows, safeSlug, {
+      page: pagedHistory.page,
+      limit: pagedHistory.limit,
+      total: pagedHistory.total,
+    }),
   };
+}
+
+async function scanPiggyBankHistory(
+  uid: string,
+  piggyBankId: string,
+  visit: (rows: Record<string, unknown>[]) => boolean | void,
+) {
+  let page = 1;
+
+  while (true) {
+    const paged = await supabaseSelectPaged("piggy_bank_history", {
+      filters: { uid, piggy_bank_id: piggyBankId },
+      order: "created_at.desc.nullslast",
+      page,
+      limit: SERVER_HISTORY_SCAN_PAGE_SIZE,
+    });
+    const rows = filterActiveJsonRows(paged.data);
+    if (visit(rows)) return;
+    if (page * paged.limit >= paged.total || paged.data.length === 0) return;
+    page += 1;
+  }
+}
+
+async function findLinkedCardInHistory(uid: string, piggyBankId: string) {
+  let linkedCard: { cardId: string; cardLabel?: string } | null = null;
+
+  await scanPiggyBankHistory(uid, piggyBankId, (rows) => {
+    for (const row of rows) {
+      const entry = readSecurePiggyHistoryPayload(row.raw);
+      const appliedToCardLimit = Boolean(row.applied_to_card_limit ?? entry.appliedToCardLimit);
+      const cardId = typeof row.card_id === "string" ? row.card_id : typeof entry.cardId === "string" ? entry.cardId : "";
+      if (!appliedToCardLimit || !cardId) continue;
+      linkedCard = {
+        cardId,
+        cardLabel:
+          typeof row.card_label === "string"
+            ? row.card_label
+            : typeof entry.cardLabel === "string"
+              ? entry.cardLabel
+              : undefined,
+      };
+      return true;
+    }
+    return false;
+  });
+
+  return linkedCard as { cardId: string; cardLabel?: string } | null;
 }
 
 async function applyCardLimitAdjustment(
@@ -242,9 +349,26 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ sl
       return NextResponse.json({ ok: false, error: "invalid_slug" }, { status: 400 });
     }
 
-    const loaded = await loadPiggyBank(workspaceContext.ownerUid, safeSlug, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
+    const historyPage = sanitizePositiveInteger(_request.nextUrl.searchParams.get("historyPage"), 1);
+    const historyLimit = sanitizePositiveInteger(
+      _request.nextUrl.searchParams.get("historyLimit"),
+      DEFAULT_HISTORY_PAGE_SIZE,
+      MAX_HISTORY_PAGE_SIZE,
+    );
+
+    const loaded = await loadPiggyBank(
+      workspaceContext.ownerUid,
+      safeSlug,
+      workspaceContext.workspaceId,
+      workspaceContext.includeLegacyRows,
+      historyPage,
+      historyLimit,
+    );
     if (!loaded) {
       return NextResponse.json({ ok: false, error: "piggy_bank_not_found" }, { status: 404 });
+    }
+    if (!canViewFamilyPiggyBank(workspaceContext.member, getPiggyCreatedByUid(loaded.piggy))) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
     return NextResponse.json({ ok: true, piggyBank: loaded.detail }, { status: 200 });
   } catch (error) {
@@ -297,6 +421,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
     const loaded = await loadPiggyBank(uid, safeSlug, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
     if (!loaded) {
       return NextResponse.json({ ok: false, error: "piggy_bank_not_found" }, { status: 404 });
+    }
+    if (!canManageFamilyPiggyBank(workspaceContext.member, getPiggyCreatedByUid(loaded.piggy))) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
     const nowIso = new Date().toISOString();
@@ -354,7 +481,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
 
       const amountDelta = direction === "withdraw" ? -amount : amount;
       const nextTotal = loaded.detail.totalSaved + amountDelta;
-      const linkedHistoryEntry = loaded.detail.history.find((entry) => entry.appliedToCardLimit && entry.cardId);
+      const linkedHistoryEntry =
+        typeof piggyRaw.cardId === "string" && piggyRaw.cardId
+          ? null
+          : await findLinkedCardInHistory(uid, String(loaded.piggy.id));
       const linkedCardId =
         (typeof piggyRaw.cardId === "string" && piggyRaw.cardId) ||
         linkedHistoryEntry?.cardId ||
@@ -529,15 +659,23 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     if (!loaded) {
       return NextResponse.json({ ok: false, error: "piggy_bank_not_found" }, { status: 404 });
     }
+    if (!canManageFamilyPiggyBank(workspaceContext.member, getPiggyCreatedByUid(loaded.piggy))) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
 
     const nowIso = new Date().toISOString();
     const linkedAmountsByCard = new Map<string, number>();
-    for (const entry of loaded.detail.history) {
-      if (!entry.appliedToCardLimit || !entry.cardId) continue;
-      const current = linkedAmountsByCard.get(entry.cardId) || 0;
-      const direction = ((loaded.historyRows.find((row) => String(row.source_id || row.id || "") === entry.id)?.raw as Record<string, unknown> | null) ?? {}).adjustmentDirection === "withdraw" ? -1 : 1;
-      linkedAmountsByCard.set(entry.cardId, current + entry.amount * direction);
-    }
+    await scanPiggyBankHistory(uid, String(loaded.piggy.id), (rows) => {
+      for (const row of rows) {
+        const entry = readSecurePiggyHistoryPayload(row.raw);
+        const appliedToCardLimit = Boolean(row.applied_to_card_limit ?? entry.appliedToCardLimit);
+        const cardId = typeof row.card_id === "string" ? row.card_id : typeof entry.cardId === "string" ? entry.cardId : "";
+        if (!appliedToCardLimit || !cardId) continue;
+        const amount = Number(row.amount || entry.amount || 0);
+        const direction = entry.adjustmentDirection === "withdraw" ? -1 : 1;
+        linkedAmountsByCard.set(cardId, (linkedAmountsByCard.get(cardId) || 0) + amount * direction);
+      }
+    });
 
     for (const [cardId, amount] of linkedAmountsByCard.entries()) {
       if (!amount) continue;

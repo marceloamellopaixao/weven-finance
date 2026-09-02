@@ -40,6 +40,7 @@ import { ACCESS_RESOURCE_LABEL_BY_KEY, ACCESS_SCREENS, hasAccess, hasBillingExem
 import { CREATOR_SUPREME_UID, canAccessAdminArea, isCreatorSupremeUid } from "@/lib/access-control/roles";
 import { computePermanentDeleteAt } from "@/lib/account-deletion/policy";
 import { getPlanTone } from "@/lib/plans/display";
+import { isUserPlan, PLAN_CATALOG, PLAN_ORDER } from "@/lib/plans/catalog";
 import { cn } from "@/lib/utils";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -86,6 +87,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -94,7 +96,6 @@ import {
   ShieldAlert,
   UserX,
   CheckCircle2,
-  Search,
   MoreVertical,
   Trash2,
   RefreshCcw,
@@ -117,7 +118,6 @@ import {
   MessageSquare,
   Eye,
   Bell,
-  Calculator,
   Download,
   FilterX,
 } from "lucide-react";
@@ -144,66 +144,15 @@ type FeedbackData = {
 };
 
 type AccessEditorLevel = AccessPermissionLevel | "inherit";
-type AdminPermissionArea = "users" | "support" | "restore" | "metrics" | "plans" | "audit" | "permissions";
+type AdminPermissionArea = "users" | "support" | "restore" | "plans" | "permissions";
 type AdminPermissionMinimum = "read" | "write" | "full";
 
 const ADMIN_REALTIME_FALLBACK_INTERVAL_MS = 60000;
-const ADMIN_MONITORING_INTERVAL_MS = 60000;
 
 function shouldRefreshAdminNow() {
   if (typeof document === "undefined") return true;
   return document.visibilityState === "visible";
 }
-
-type AdminAuditLog = {
-  id: string;
-  actorUid: string;
-  action: string;
-  targetUid: string | null;
-  requestId: string | null;
-  route: string | null;
-  method: string | null;
-  ip: string | null;
-  createdAt: string | null;
-  details: Record<string, unknown>;
-};
-
-type AdminMetricsSummary = {
-  total: number;
-  errors: number;
-  rateLimited: number;
-  avgDurationMs: number;
-  errorRatePct: number;
-  rateLimitedPct: number;
-  previousTotal?: number;
-  trafficDropPct?: number;
-};
-
-type AdminMetricsRoute = {
-  route: string;
-  total: number;
-  errors: number;
-  rateLimited: number;
-  avgDurationMs: number;
-};
-
-type AdminMetricsAlert = {
-  code?: string;
-  level: "critical" | "high" | "medium";
-  title: string;
-  description: string;
-  value?: number;
-};
-
-type AdminHealth = {
-  dbHealthy: boolean;
-  latestWebhookAt: string | null;
-  webhookDelayMinutes: number | null;
-  failedPayments24h: number;
-  pendingRecoveryUsers: number;
-  apiErrors1h: number;
-  apiAvgLatency1h: number;
-};
 
 function formatDateSafe(value: unknown) {
   if (value instanceof Date) return value.toLocaleDateString();
@@ -224,7 +173,6 @@ function formatDateSafe(value: unknown) {
 
 const ADMIN_USERS_FILTERS_STORAGE_KEY = "wevenfinance:admin:users-filters:v1";
 const ADMIN_SUPPORT_FILTERS_STORAGE_KEY = "wevenfinance:admin:support-filters:v1";
-const ADMIN_AUDIT_FILTERS_STORAGE_KEY = "wevenfinance:admin:audit-filters:v1";
 const ADMIN_DIALOG_CONTENT_CLASS = "app-panel-soft w-[calc(100vw-1rem)] max-h-[calc(100svh-2rem)] overflow-y-auto rounded-3xl border border-color:var(--app-panel-border) p-5 shadow-2xl shadow-primary/10 sm:p-6";
 
 type TicketPriority = NonNullable<SupportTicket["priority"]>;
@@ -270,9 +218,7 @@ const ADMIN_RESOURCE_ACCESS: Record<AdminPermissionArea, { read: AccessResourceK
   users: { read: "admin.users.read", write: "admin.users.write", delete: "admin.users.delete" },
   support: { read: "admin.support.read", write: "admin.support.write", delete: "admin.support.delete" },
   restore: { read: "admin.restore.read", write: "admin.restore.write", delete: "admin.restore.delete" },
-  metrics: { read: "admin.metrics.read" },
   plans: { read: "admin.plans.read", write: "admin.plans.write" },
-  audit: { read: "admin.audit.read" },
   permissions: { read: "admin.permissions.read", write: "admin.permissions.write", delete: "admin.permissions.delete" },
 };
 
@@ -290,9 +236,6 @@ export default function AdminPage() {
   const { plans } = usePlans();
   const tAdmin = useTranslations("admin");
   const { locale } = useI18n();
-  const freePlanTone = getPlanTone("free");
-  const premiumPlanTone = getPlanTone("premium");
-  const proPlanTone = getPlanTone("pro");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -325,26 +268,7 @@ export default function AdminPage() {
   const [ticketToDelete, setTicketToDelete] = useState<SupportTicket | null>(null);
   const [restoreDetailsUser, setRestoreDetailsUser] = useState<UserProfile | null>(null);
   const [isMarkingSupportSeen, setIsMarkingSupportSeen] = useState(false);
-  const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
-  const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
-  const [auditSearch, setAuditSearch] = useState("");
-  const [auditActionFilter, setAuditActionFilter] = useState("all");
-  const [auditActorUidFilter, setAuditActorUidFilter] = useState("");
-  const [auditTargetUidFilter, setAuditTargetUidFilter] = useState("");
-  const [auditFromDate, setAuditFromDate] = useState("");
-  const [auditToDate, setAuditToDate] = useState("");
-  const [auditPage, setAuditPage] = useState(1);
-  const [auditTotal, setAuditTotal] = useState(0);
-  const auditPerPage = 20;
-  const [metricsWindowMinutes, setMetricsWindowMinutes] = useState("60");
-  const [metricsSummary, setMetricsSummary] = useState<AdminMetricsSummary | null>(null);
-  const [metricsByRoute, setMetricsByRoute] = useState<AdminMetricsRoute[]>([]);
-  const [metricsAlerts, setMetricsAlerts] = useState<AdminMetricsAlert[]>([]);
-  const [criticalMetricsAlerts, setCriticalMetricsAlerts] = useState<AdminMetricsAlert[]>([]);
-  const [healthData, setHealthData] = useState<AdminHealth | null>(null);
-  const [healthAlerts, setHealthAlerts] = useState<AdminMetricsAlert[]>([]);
-  const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
-  const [isExportingCsv, setIsExportingCsv] = useState<"users" | "support" | "audit" | null>(null);
+  const [isExportingCsv, setIsExportingCsv] = useState<"users" | "support" | null>(null);
 
   // --- FILTROS ---
   const [searchTerm, setSearchTerm] = useState("");
@@ -485,37 +409,17 @@ export default function AdminPage() {
         icon: Lock,
       });
     }
-    if (hasAdminPermission("audit", "read")) {
-      items.push({
-        id: "audit",
-        label: tAdmin("nav.audit.label"),
-        description: tAdmin("nav.audit.description"),
-        icon: ShieldCheck,
-      });
-    }
-    if (hasAdminPermission("metrics", "read")) {
-      items.push({
-        id: "metrics",
-        label: tAdmin("nav.metrics.label"),
-        description: tAdmin("nav.metrics.description"),
-        icon: Calculator,
-        badge: criticalMetricsAlerts.length,
-      });
-    }
-
     return items;
-  }, [canRestore, canViewPermissions, criticalMetricsAlerts.length, hasAdminPermission, tAdmin, unseenSupportCount]);
+  }, [canRestore, canViewPermissions, hasAdminPermission, tAdmin, unseenSupportCount]);
 
   const activeAdminNavItem = adminNavItems.find((item) => item.id === activeTab) ?? adminNavItems[0];
 
   const allowedTabs = useMemo(() => {
-    if (!userProfile) return ["users", "support", "audit"];
+    if (!userProfile) return ["users", "support"];
     const tabs: string[] = [];
     if (hasAdminPermission("users", "read")) tabs.push("users");
     if (hasAdminPermission("support", "read")) tabs.push("support");
     if (hasAdminPermission("restore", "read")) tabs.push("restore");
-    if (hasAdminPermission("audit", "read")) tabs.push("audit");
-    if (hasAdminPermission("metrics", "read")) tabs.push("metrics");
     if (hasAdminPermission("plans", "read")) tabs.push("plans");
     if (hasAdminPermission("permissions", "read")) tabs.push("permissions");
     return tabs;
@@ -548,7 +452,7 @@ export default function AdminPage() {
       return targetRole === "client" || targetRole === "support";
     };
 
-    // Suporte não tem acesso Ã  tabela de usuários
+    // Suporte não tem acesso à tabela de usuários
     return false;
   }, [hasAdminPermission, userProfile]);
 
@@ -589,7 +493,7 @@ export default function AdminPage() {
     return myRank > targetRank;
   }, [hasAdminPermission, userProfile]);
 
-  // PERMISSÃ•ES no usuário (Bloquear, Resetar, Deletar)
+  // Permissões no usuário (bloquear, resetar, deletar)
   const canEditUser = useCallback((targetUser: UserProfile) => {
     if (!userProfile) return false;
 
@@ -662,7 +566,7 @@ export default function AdminPage() {
       setAccessSubjectId("all");
       return;
     }
-    if (accessSubjectType === "plan" && !["free", "premium", "pro"].includes(accessSubjectId)) {
+    if (accessSubjectType === "plan" && !isUserPlan(accessSubjectId)) {
       setAccessSubjectId("free");
       return;
     }
@@ -751,49 +655,6 @@ export default function AdminPage() {
       // ignora falha de storage
     }
   }, [supportTypeFilter, supportStatusFilter, supportPriorityFilter, supportSearch]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = window.localStorage.getItem(ADMIN_AUDIT_FILTERS_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as Partial<{
-        auditSearch: string;
-        auditActionFilter: string;
-        auditActorUidFilter: string;
-        auditTargetUidFilter: string;
-        auditFromDate: string;
-        auditToDate: string;
-      }>;
-      if (typeof parsed.auditSearch === "string") setAuditSearch(parsed.auditSearch);
-      if (typeof parsed.auditActionFilter === "string") setAuditActionFilter(parsed.auditActionFilter);
-      if (typeof parsed.auditActorUidFilter === "string") setAuditActorUidFilter(parsed.auditActorUidFilter);
-      if (typeof parsed.auditTargetUidFilter === "string") setAuditTargetUidFilter(parsed.auditTargetUidFilter);
-      if (typeof parsed.auditFromDate === "string") setAuditFromDate(parsed.auditFromDate);
-      if (typeof parsed.auditToDate === "string") setAuditToDate(parsed.auditToDate);
-    } catch {
-      // ignora parse invalido
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(
-        ADMIN_AUDIT_FILTERS_STORAGE_KEY,
-        JSON.stringify({
-          auditSearch,
-          auditActionFilter,
-          auditActorUidFilter,
-          auditTargetUidFilter,
-          auditFromDate,
-          auditToDate,
-        })
-      );
-    } catch {
-      // ignora falha de storage
-    }
-  }, [auditSearch, auditActionFilter, auditActorUidFilter, auditTargetUidFilter, auditFromDate, auditToDate]);
 
   useEffect(() => {
     if (loading || !userProfile || isTabBootstrapped) return;
@@ -959,28 +820,6 @@ export default function AdminPage() {
       border: "border-red-200",
     };
   };
-
-  const formatAuditAction = (action: string) =>
-    action
-      .replace(/\./g, " • ")
-      .replace(/_/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-  const getMetricsAlertTone = (level: AdminMetricsAlert["level"]) => {
-    if (level === "critical") {
-      return "border-red-300 bg-red-50 text-red-800";
-    }
-    if (level === "high") {
-      return "border-orange-300 bg-orange-50 text-orange-800";
-    }
-    return "border-amber-300 bg-amber-50 text-amber-800";
-  };
-
-  const onlyCriticalAlerts = useCallback(
-    (alerts: AdminMetricsAlert[]) => alerts.filter((alert) => alert.level === "critical"),
-    []
-  );
 
   const getTicketPriorityLabel = (priority?: string) => {
     if (priority === "urgent") return tAdmin("support.priority.urgent");
@@ -1149,197 +988,6 @@ export default function AdminPage() {
       .catch((err) => console.error(err))
       .finally(() => setIsMarkingSupportSeen(false));
   }, [activeTab, unseenSupportTickets, userProfile, isMarkingSupportSeen]);
-
-  useEffect(() => {
-    if (!user || !userProfile) return;
-    if (activeTab !== "audit") return;
-
-    let cancelled = false;
-
-    const loadAuditLogs = async () => {
-      if (!shouldRefreshAdminNow()) return;
-      try {
-        setIsLoadingAuditLogs(true);
-        const token = await user.getIdToken();
-        const params = new URLSearchParams();
-        params.set("page", String(auditPage));
-        params.set("limit", String(auditPerPage));
-        if (auditSearch.trim()) params.set("q", auditSearch.trim());
-        if (auditActionFilter !== "all") params.set("action", auditActionFilter);
-        if (auditActorUidFilter.trim()) params.set("actorUid", auditActorUidFilter.trim());
-        if (auditTargetUidFilter.trim()) params.set("targetUid", auditTargetUidFilter.trim());
-        if (auditFromDate) params.set("from", auditFromDate);
-        if (auditToDate) params.set("to", auditToDate);
-
-        const response = await fetch(`/api/admin/audit-logs?${params.toString()}`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const payload = (await response.json()) as {
-          ok: boolean;
-          error?: string;
-          total?: number;
-          data?: AdminAuditLog[];
-        };
-
-        if (!response.ok || !payload.ok) {
-          throw new Error(payload.error || tAdmin("audit.errors.load"));
-        }
-
-        if (!cancelled) {
-          setAuditLogs(Array.isArray(payload.data) ? payload.data : []);
-          setAuditTotal(Number(payload.total || 0));
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setAuditLogs([]);
-          setAuditTotal(0);
-        }
-        console.error(error);
-      } finally {
-        if (!cancelled) setIsLoadingAuditLogs(false);
-      }
-    };
-
-    void loadAuditLogs();
-    const interval = setInterval(() => void loadAuditLogs(), ADMIN_REALTIME_FALLBACK_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [activeTab, auditPage, auditPerPage, auditSearch, auditActionFilter, auditActorUidFilter, auditTargetUidFilter, auditFromDate, auditToDate, tAdmin, user, userProfile]);
-
-  useEffect(() => {
-    if (!user || !userProfile) return;
-    if (activeTab !== "metrics") return;
-
-    let cancelled = false;
-
-    const loadMetrics = async () => {
-      if (!shouldRefreshAdminNow()) return;
-      try {
-        setIsLoadingMetrics(true);
-        const token = await user.getIdToken();
-        const params = new URLSearchParams();
-        params.set("windowMinutes", metricsWindowMinutes || "60");
-
-        const response = await fetch(`/api/admin/metrics?${params.toString()}`, {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const payload = (await response.json()) as {
-          ok: boolean;
-          error?: string;
-          summary?: AdminMetricsSummary;
-          byRoute?: AdminMetricsRoute[];
-          alerts?: AdminMetricsAlert[];
-        };
-        if (!response.ok || !payload.ok) {
-          throw new Error(payload.error || tAdmin("metrics.errors.load"));
-        }
-
-        if (!cancelled) {
-          setMetricsSummary(payload.summary || null);
-          setMetricsByRoute(Array.isArray(payload.byRoute) ? payload.byRoute : []);
-          const alerts = Array.isArray(payload.alerts) ? payload.alerts : [];
-          setMetricsAlerts(alerts);
-          setCriticalMetricsAlerts(onlyCriticalAlerts(alerts));
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setMetricsSummary(null);
-          setMetricsByRoute([]);
-          setMetricsAlerts([]);
-          setCriticalMetricsAlerts([]);
-        }
-        console.error(error);
-      } finally {
-        if (!cancelled) setIsLoadingMetrics(false);
-      }
-    };
-
-    void loadMetrics();
-    const interval = setInterval(() => void loadMetrics(), ADMIN_MONITORING_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [activeTab, metricsWindowMinutes, onlyCriticalAlerts, tAdmin, user, userProfile]);
-
-  useEffect(() => {
-    if (!user || !userProfile) return;
-    if (userProfile.role !== "admin" && userProfile.role !== "moderator") return;
-
-    let cancelled = false;
-
-    const loadCriticalAlerts = async () => {
-      if (!shouldRefreshAdminNow()) return;
-      try {
-        const token = await user.getIdToken();
-        const response = await fetch("/api/admin/metrics?windowMinutes=60", {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const payload = (await response.json()) as {
-          ok: boolean;
-          alerts?: AdminMetricsAlert[];
-        };
-        if (!response.ok || !payload.ok) return;
-        if (cancelled) return;
-        const alerts = Array.isArray(payload.alerts) ? payload.alerts : [];
-        setCriticalMetricsAlerts(onlyCriticalAlerts(alerts));
-      } catch {
-        if (!cancelled) setCriticalMetricsAlerts([]);
-      }
-    };
-
-    void loadCriticalAlerts();
-    const timer = setInterval(() => void loadCriticalAlerts(), ADMIN_MONITORING_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [onlyCriticalAlerts, user, userProfile]);
-
-  useEffect(() => {
-    if (!user || !userProfile) return;
-    if (userProfile.role !== "admin" && userProfile.role !== "moderator") return;
-
-    let cancelled = false;
-
-    const loadHealth = async () => {
-      if (!shouldRefreshAdminNow()) return;
-      try {
-        const token = await user.getIdToken();
-        const response = await fetch("/api/admin/health", {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const payload = (await response.json()) as {
-          ok: boolean;
-          health?: AdminHealth;
-          alerts?: AdminMetricsAlert[];
-        };
-        if (!response.ok || !payload.ok || cancelled) return;
-        setHealthData(payload.health || null);
-        setHealthAlerts(Array.isArray(payload.alerts) ? payload.alerts : []);
-      } catch {
-        if (!cancelled) {
-          setHealthData(null);
-          setHealthAlerts([]);
-        }
-      }
-    };
-
-    void loadHealth();
-    const timer = setInterval(() => void loadHealth(), ADMIN_MONITORING_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [user, userProfile]);
 
   const handleAssignTicket = async (ticketId: string, staffUid: string) => {
     const staff = staffMembers.find(s => s.uid === staffUid);
@@ -1841,25 +1489,6 @@ export default function AdminPage() {
     }
   }, [supportSearch, supportTypeFilter, supportStatusFilter, supportPriorityFilter, tAdmin]);
 
-  const handleExportAuditCsv = useCallback(async () => {
-    try {
-      setIsExportingCsv("audit");
-      await downloadAdminCsv("audit", {
-        q: auditSearch,
-        action: auditActionFilter,
-        actorUid: auditActorUidFilter,
-        targetUid: auditTargetUidFilter,
-        from: auditFromDate,
-        to: auditToDate,
-      });
-    } catch (error) {
-      console.error(error);
-      showFeedback("error", tAdmin("audit.errors.exportTitle"), tAdmin("audit.errors.exportMessage"));
-    } finally {
-      setIsExportingCsv(null);
-    }
-  }, [auditSearch, auditActionFilter, auditActorUidFilter, auditTargetUidFilter, auditFromDate, auditToDate, tAdmin]);
-
   const deletedUsers = useMemo(() => {
     return users.filter(u => u.status === 'deleted');
   }, [users]);
@@ -1913,7 +1542,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden p-4 pb-20 font-sans md:p-8">
+    <div className="relative min-h-screen overflow-x-hidden p-4 pb-20 font-sans md:p-8">
 
       {/* Background Decorativo */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
@@ -1921,7 +1550,7 @@ export default function AdminPage() {
         <div className="absolute bottom-[-10%] left-[-10%] h-[500px] w-[500px] rounded-full bg-primary/4 blur-[100px]" />
       </div>
 
-      <div className="container relative z-10 mx-auto max-w-screen-2xl">
+      <div className="container relative z-10 mx-auto w-full max-w-screen-2xl min-w-0">
         <div className={`${fadeInUp} flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8`}>
           <div>
             <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight text-foreground">
@@ -1943,18 +1572,6 @@ export default function AdminPage() {
             </Button>
           )}
         </div>
-
-        {criticalMetricsAlerts.length > 0 && (
-          <div className={`${fadeInUp} mb-4 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-red-900`}>
-            <div className="flex items-center gap-2 font-semibold text-sm">
-              <AlertTriangle className="h-4 w-4" />
-              {tAdmin("header.criticalAlerts", { count: criticalMetricsAlerts.length })}
-            </div>
-            <p className="text-xs mt-1">
-              {criticalMetricsAlerts[0]?.title}: {criticalMetricsAlerts[0]?.description}
-            </p>
-          </div>
-        )}
 
         <div className={`${fadeInUp} delay-150 grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start xl:grid-cols-[280px_minmax(0,1fr)]`}>
           <aside className="hidden lg:block">
@@ -1997,7 +1614,7 @@ export default function AdminPage() {
             </div>
           </aside>
 
-          <section className="min-w-0 space-y-6">
+          <section className="w-full min-w-0 space-y-6 overflow-x-hidden">
             <div className="lg:hidden">
               <div className="app-panel-subtle flex gap-2 overflow-x-auto rounded-2xl border border-color:var(--app-panel-border) p-1.5 shadow-sm no-scrollbar" aria-label={tAdmin("header.navAria")}>
                 {adminNavItems.map((item) => {
@@ -2080,7 +1697,7 @@ export default function AdminPage() {
                   </div>
                   <div className="space-y-3 border-b border-color:var(--app-panel-border) p-4 md:p-5">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-                      <Input
+                      <SearchInput
                         value={supportSearch}
                         onChange={(e) => setSupportSearch(e.target.value)}
                         className="h-10 rounded-xl"
@@ -2524,369 +2141,18 @@ export default function AdminPage() {
               </Card>
             </div>
           )}
-
-          {/* --- AUDIT TAB --- */}
-          {activeTab === "audit" && hasAdminPermission("audit", "read") && (
-            <div className={`${fadeInUp} delay-200 space-y-4`}>
-              <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
-                <CardHeader className="app-panel-subtle border-b border-border/70 px-4 py-4 sm:px-6">
-                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                    <ShieldCheck className="h-5 w-5 text-emerald-600" /> {tAdmin("audit.title")}
-                  </CardTitle>
-                  <CardDescription>
-                    {tAdmin("audit.description")}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-4 md:p-5 space-y-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 h-4 w-4" />
-                      <Input
-                        value={auditSearch}
-                        onChange={(e) => {
-                          setAuditSearch(e.target.value);
-                          setAuditPage(1);
-                        }}
-                        className="pl-10 h-10 rounded-xl"
-                        placeholder={tAdmin("audit.searchPlaceholder")}
-                      />
-                    </div>
-                    <Badge variant="outline" className="rounded-xl px-3 py-1.5 text-xs">
-                      {tAdmin("audit.recordsLabel", { count: auditTotal })}
-                    </Badge>
-                    <Button
-                      variant="outline"
-                      className="h-10 w-full rounded-xl md:w-auto"
-                      onClick={() => void handleExportAuditCsv()}
-                      disabled={isExportingCsv === "audit"}
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      {isExportingCsv === "audit" ? tAdmin("common.exporting") : tAdmin("common.exportCsv")}
-                    </Button>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-                    <Select
-                      value={auditActionFilter}
-                      onValueChange={(value) => {
-                        setAuditActionFilter(value);
-                        setAuditPage(1);
-                      }}
-                    >
-                      <SelectTrigger className="rounded-xl h-10">
-                        <SelectValue placeholder={tAdmin("audit.filters.action")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">{tAdmin("audit.filters.allActions")}</SelectItem>
-                        <SelectItem value="admin.users.patch">{tAdmin("audit.actions.userPatch")}</SelectItem>
-                        <SelectItem value="admin.users.normalize">{tAdmin("audit.actions.normalize")}</SelectItem>
-                        <SelectItem value="admin.users.reset_financial_data">{tAdmin("audit.actions.resetFinancialData")}</SelectItem>
-                        <SelectItem value="admin.users.soft_delete">{tAdmin("audit.actions.softDelete")}</SelectItem>
-                        <SelectItem value="admin.users.restore">{tAdmin("audit.actions.restore")}</SelectItem>
-                        <SelectItem value="admin.users.recount_transaction_count">{tAdmin("audit.actions.recountTransactions")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    <Input
-                      value={auditActorUidFilter}
-                      onChange={(e) => {
-                        setAuditActorUidFilter(e.target.value);
-                        setAuditPage(1);
-                      }}
-                      className="h-10 rounded-xl"
-                      placeholder={tAdmin("audit.actorUidPlaceholder")}
-                    />
-
-                    <Input
-                      value={auditTargetUidFilter}
-                      onChange={(e) => {
-                        setAuditTargetUidFilter(e.target.value);
-                        setAuditPage(1);
-                      }}
-                      className="h-10 rounded-xl"
-                      placeholder={tAdmin("audit.targetUidPlaceholder")}
-                    />
-
-                    <Input
-                      type="date"
-                      value={auditFromDate}
-                      onChange={(e) => {
-                        setAuditFromDate(e.target.value);
-                        setAuditPage(1);
-                      }}
-                      className="h-10 rounded-xl"
-                    />
-
-                    <Input
-                      type="date"
-                      value={auditToDate}
-                      onChange={(e) => {
-                        setAuditToDate(e.target.value);
-                        setAuditPage(1);
-                      }}
-                      className="h-10 rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-3">
-                    {isLoadingAuditLogs ? (
-                      <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" /> {tAdmin("audit.loading")}
-                      </div>
-                    ) : auditLogs.length === 0 ? (
-                      <div className="app-panel-subtle flex h-28 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-muted-foreground">
-                        {tAdmin("audit.empty")}
-                      </div>
-                    ) : (
-                      auditLogs.map((log) => (
-                        <div key={log.id} className="app-panel-subtle space-y-2 rounded-2xl border border-color:var(--app-panel-border) p-3 md:p-4">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{formatAuditAction(log.action)}</p>
-                            <Badge className="bg-zinc-800 text-white">{(log.method || "N/A").toUpperCase()}</Badge>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-zinc-600 dark:text-zinc-300">
-                            <p><span className="font-semibold">{tAdmin("audit.fields.actor")}:</span> {log.actorUid || "-"}</p>
-                            <p><span className="font-semibold">{tAdmin("audit.fields.target")}:</span> {log.targetUid || "-"}</p>
-                            <p><span className="font-semibold">{tAdmin("audit.fields.when")}:</span> {formatDateSafe(log.createdAt) ?? tAdmin("common.invalidDate")}</p>
-                            <p className="md:col-span-2 break-all"><span className="font-semibold">{tAdmin("audit.fields.route")}:</span> {log.route || "-"}</p>
-                            <p className="break-all"><span className="font-semibold">{tAdmin("audit.fields.ip")}:</span> {log.ip || "-"}</p>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  <div className="app-panel-subtle flex flex-col gap-3 border-t border-border/70 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-xs text-zinc-500">
-                      {tAdmin("audit.pageSummary", { page: auditPage, totalPages: Math.max(1, Math.ceil(auditTotal / auditPerPage)) })}
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 w-8 p-0 rounded-lg"
-                        disabled={auditPage <= 1}
-                        onClick={() => setAuditPage((prev) => Math.max(prev - 1, 1))}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 w-8 p-0 rounded-lg"
-                        disabled={auditPage >= Math.max(1, Math.ceil(auditTotal / auditPerPage))}
-                        onClick={() =>
-                          setAuditPage((prev) =>
-                            Math.min(prev + 1, Math.max(1, Math.ceil(auditTotal / auditPerPage)))
-                          )
-                        }
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* --- METRICS TAB --- */}
-          {activeTab === "metrics" && hasAdminPermission("metrics", "read") && (
-            <div className={`${fadeInUp} delay-200 space-y-4`}>
-              <Card className="app-panel-soft overflow-hidden rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-primary/10">
-                <CardHeader className="app-panel-subtle border-b border-border/70 px-4 py-4 sm:px-6">
-                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                    <Calculator className="h-5 w-5 text-primary" /> {tAdmin("metrics.title")}
-                  </CardTitle>
-                  <CardDescription>
-                    {tAdmin("metrics.description")}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-4 md:p-5 space-y-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                    <Select value={metricsWindowMinutes} onValueChange={setMetricsWindowMinutes}>
-                      <SelectTrigger className="rounded-xl h-10 w-full md:w-56">
-                        <SelectValue placeholder={tAdmin("metrics.filters.window")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="15">{tAdmin("metrics.filters.last15Minutes")}</SelectItem>
-                        <SelectItem value="60">{tAdmin("metrics.filters.lastHour")}</SelectItem>
-                        <SelectItem value="180">{tAdmin("metrics.filters.last3Hours")}</SelectItem>
-                        <SelectItem value="1440">{tAdmin("metrics.filters.last24Hours")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {healthData && (
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-                      <Card className={`rounded-2xl border ${healthData.dbHealthy ? "border-emerald-200" : "border-red-300"}`}>
-                        <CardContent className="p-3">
-                          <p className="text-xs text-zinc-500">{tAdmin("metrics.health.database")}</p>
-                          <p className={`text-base font-bold ${healthData.dbHealthy ? "text-emerald-700" : "text-red-700"}`}>
-                            {healthData.dbHealthy ? tAdmin("metrics.health.healthy") : tAdmin("metrics.health.failed")}
-                          </p>
-                        </CardContent>
-                      </Card>
-                      <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
-                        <CardContent className="p-3">
-                          <p className="text-xs text-zinc-500">{tAdmin("metrics.health.webhookDelay")}</p>
-                          <p className="text-base font-bold">{tAdmin("support.metrics.minutes", { value: healthData.webhookDelayMinutes ?? "-" })}</p>
-                        </CardContent>
-                      </Card>
-                      <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
-                        <CardContent className="p-3">
-                          <p className="text-xs text-zinc-500">{tAdmin("metrics.health.paymentFailures24h")}</p>
-                          <p className="text-base font-bold">{healthData.failedPayments24h}</p>
-                        </CardContent>
-                      </Card>
-                      <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
-                        <CardContent className="p-3">
-                          <p className="text-xs text-zinc-500">{tAdmin("metrics.health.pendingRecovery")}</p>
-                          <p className="text-base font-bold">{healthData.pendingRecoveryUsers}</p>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  )}
-
-                  {!isLoadingMetrics && healthAlerts.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {healthAlerts.map((alert, idx) => (
-                        <div key={`${alert.code}-${idx}`} className={`rounded-2xl border px-4 py-3 ${getMetricsAlertTone(alert.level)}`}>
-                          <p className="text-sm font-bold">{alert.title}</p>
-                          <p className="text-xs mt-1">{alert.description}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {!isLoadingMetrics && metricsAlerts.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {metricsAlerts.map((alert, idx) => (
-                        <div
-                          key={`${alert.code ?? alert.title}-${idx}`}
-                          className={`rounded-2xl border px-4 py-3 ${getMetricsAlertTone(alert.level)}`}
-                        >
-                          <p className="text-sm font-bold">{alert.title}</p>
-                          <p className="text-xs mt-1">{alert.description}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {isLoadingMetrics ? (
-                    <div className="app-panel-subtle flex h-24 items-center justify-center rounded-xl border border-color:var(--app-panel-border) text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" /> {tAdmin("metrics.loading")}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
-                        <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
-                          <CardContent className="p-3">
-                            <p className="text-xs text-zinc-500">{tAdmin("metrics.summary.totalRequests")}</p>
-                            <p className="text-xl font-bold">{metricsSummary?.total ?? 0}</p>
-                          </CardContent>
-                        </Card>
-                        <Card className="rounded-2xl border border-red-200">
-                          <CardContent className="p-3">
-                            <p className="text-xs text-red-600">{tAdmin("metrics.summary.serverErrors")}</p>
-                            <p className="text-xl font-bold text-red-600">{metricsSummary?.errors ?? 0}</p>
-                          </CardContent>
-                        </Card>
-                        <Card className="rounded-2xl border border-amber-200">
-                          <CardContent className="p-3">
-                            <p className="text-xs text-amber-700">{tAdmin("metrics.summary.rateLimited")}</p>
-                            <p className="text-xl font-bold text-amber-700">{metricsSummary?.rateLimited ?? 0}</p>
-                          </CardContent>
-                        </Card>
-                        <Card className="rounded-2xl border border-primary/20 bg-accent">
-                          <CardContent className="p-3">
-                            <p className="text-xs text-primary">{tAdmin("metrics.summary.averageLatency")}</p>
-                            <p className="text-xl font-bold text-primary">{tAdmin("metrics.summary.milliseconds", { value: metricsSummary?.avgDurationMs ?? 0 })}</p>
-                          </CardContent>
-                        </Card>
-                        <Card className="rounded-2xl border border-red-200">
-                          <CardContent className="p-3">
-                            <p className="text-xs text-red-600">{tAdmin("metrics.summary.errorRate")}</p>
-                            <p className="text-xl font-bold text-red-600">{metricsSummary?.errorRatePct ?? 0}%</p>
-                          </CardContent>
-                        </Card>
-                        <Card className="rounded-2xl border border-amber-200">
-                          <CardContent className="p-3">
-                            <p className="text-xs text-amber-700">{tAdmin("metrics.summary.rate429")}</p>
-                            <p className="text-xl font-bold text-amber-700">{metricsSummary?.rateLimitedPct ?? 0}%</p>
-                          </CardContent>
-                        </Card>
-                        <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
-                          <CardContent className="p-3">
-                            <p className="text-xs text-zinc-500">{tAdmin("metrics.summary.previousWindow")}</p>
-                            <p className="text-xl font-bold">{metricsSummary?.previousTotal ?? 0}</p>
-                          </CardContent>
-                        </Card>
-                        <Card className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border)">
-                          <CardContent className="p-3">
-                            <p className="text-xs text-zinc-500">{tAdmin("metrics.summary.trafficChange")}</p>
-                            <p className={`text-xl font-bold ${(metricsSummary?.trafficDropPct ?? 0) > 0 ? "text-orange-700" : "text-emerald-700"}`}>
-                              {(metricsSummary?.trafficDropPct ?? 0).toFixed(2)}%
-                            </p>
-                          </CardContent>
-                        </Card>
-                      </div>
-
-                      <div className="overflow-x-auto rounded-2xl border border-color:var(--app-panel-border)">
-                        <Table className="min-w-[720px]">
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>{tAdmin("metrics.table.route")}</TableHead>
-                              <TableHead>{tAdmin("metrics.table.total")}</TableHead>
-                              <TableHead>{tAdmin("metrics.table.errors")}</TableHead>
-                              <TableHead>429</TableHead>
-                              <TableHead>{tAdmin("metrics.table.averageLatency")}</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {metricsByRoute.length === 0 ? (
-                              <TableRow>
-                                <TableCell colSpan={5} className="h-20 text-center text-zinc-500">
-                                  {tAdmin("metrics.table.empty")}
-                                </TableCell>
-                              </TableRow>
-                            ) : (
-                              metricsByRoute.map((row) => (
-                                <TableRow key={row.route}>
-                                  <TableCell className="max-w-[360px] font-medium">
-                                    <span className="block truncate" title={row.route}>{row.route}</span>
-                                  </TableCell>
-                                  <TableCell>{row.total}</TableCell>
-                                  <TableCell className="text-red-600">{row.errors}</TableCell>
-                                  <TableCell className="text-amber-700">{row.rateLimited}</TableCell>
-                                  <TableCell>{tAdmin("metrics.summary.milliseconds", { value: row.avgDurationMs })}</TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
           {/* --- USERS TAB --- */}
           {activeTab === "users" && hasAdminPermission("users", "read") && (
             <div className={`${fadeInUp} delay-200 space-y-4`}>
               {/* Filtros e Busca */}
               <div className="space-y-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-3.5 h-4 w-4 text-zinc-400" />
-                  <Input
-                    placeholder={tAdmin("users.searchPlaceholder")}
-                    className="h-11 rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg) pl-9"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
+                <SearchInput
+                  containerClassName="flex-1"
+                  placeholder={tAdmin("users.searchPlaceholder")}
+                  className="h-11 rounded-xl border-color:var(--app-field-border) bg-var(--app-field-bg)"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   {/* Filtro: Plano */}
@@ -2896,9 +2162,9 @@ export default function AdminPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">{tAdmin("users.filters.allPlans")}</SelectItem>
-                      <SelectItem value="free">Free</SelectItem>
-                      <SelectItem value="premium">Premium</SelectItem>
-                      <SelectItem value="pro">Pro</SelectItem>
+                      {PLAN_ORDER.map((planId) => (
+                        <SelectItem key={planId} value={planId}>{PLAN_CATALOG[planId].publicName}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
 
@@ -3046,9 +2312,9 @@ export default function AdminPage() {
                                   <Select value={u.plan} onValueChange={(val) => handlePlanChange(u.uid, val)}>
                                     <SelectTrigger className="w-full h-8 text-xs rounded-lg"><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="free">Free</SelectItem>
-                                      <SelectItem value="premium">Premium</SelectItem>
-                                      <SelectItem value="pro">Pro</SelectItem>
+                                      {PLAN_ORDER.map((planId) => (
+                                        <SelectItem key={planId} value={planId}>{PLAN_CATALOG[planId].publicName}</SelectItem>
+                                      ))}
                                     </SelectContent>
                                   </Select>
                                 ) : (
@@ -3174,11 +2440,11 @@ export default function AdminPage() {
                                     <SelectTrigger className="h-8 w-[120px] rounded-lg border-color:var(--app-field-border) bg-var(--app-field-bg) text-xs">
                                       <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="free">Free</SelectItem>
-                                      <SelectItem value="premium">Premium</SelectItem>
-                                      <SelectItem value="pro">Pro</SelectItem>
-                                    </SelectContent>
+                                      <SelectContent>
+                                        {PLAN_ORDER.map((planId) => (
+                                          <SelectItem key={planId} value={planId}>{PLAN_CATALOG[planId].publicName}</SelectItem>
+                                        ))}
+                                      </SelectContent>
                                   </Select>
                                 ) : (
                                   <div className="flex items-center gap-1 text-xs text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-lg w-fit cursor-not-allowed">
@@ -3525,137 +2791,69 @@ export default function AdminPage() {
               </div>
 
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-                {/* FREE */}
-                <Card className={`app-panel-soft rounded-3xl border-2 shadow-xl transition-shadow ${freePlanTone.border}`}>
-                  <CardHeader className={`flex flex-col gap-3 rounded-t-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${freePlanTone.header}`}>
-                    <div className="flex flex-col justify-center">
-                      <CardTitle className={`${freePlanTone.headerTitle} font-bold text-lg`}>
-                        {tAdmin("plans.planTier", { name: plans.free.name, tier: tAdmin("plans.tiers.bronze") })}
-                      </CardTitle>
-                      <CardDescription className={freePlanTone.headerDescription}>{tAdmin("plans.settings")}</CardDescription>
-                    </div>
-                    <Switch checked={editedPlans.free.active} onCheckedChange={(c) => handlePlanEdit("free", "active", c)} className={freePlanTone.switchChecked} />
-                  </CardHeader>
+                {PLAN_ORDER.map((planId) => {
+                  const planTone = getPlanTone(planId);
+                  const plan = editedPlans[planId];
+                  const isFreePlan = planId === "free";
+                  return (
+                    <Card key={planId} className={`app-panel-soft rounded-3xl border-2 shadow-xl transition-shadow ${planTone.border}`}>
+                      <CardHeader className={`flex flex-col gap-3 rounded-t-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${planTone.header}`}>
+                        <div className="flex flex-col justify-center">
+                          <CardTitle className={`${planTone.headerTitle} font-bold text-lg`}>
+                            {tAdmin("plans.planTier", { name: plan.name, tier: plan.badge || plan.cta || planId })}
+                          </CardTitle>
+                          <CardDescription className={planTone.headerDescription}>{tAdmin("plans.settings")}</CardDescription>
+                        </div>
+                        <Switch checked={plan.active} onCheckedChange={(checked) => handlePlanEdit(planId, "active", checked)} className={planTone.switchChecked} />
+                      </CardHeader>
 
-                  <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.free.active ? "opacity-50 pointer-events-none" : ""}`}>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.name")}</Label>
-                      <Input className="rounded-xl h-10" value={editedPlans.free.name ?? ""} onChange={(e) => handlePlanEdit("free", "name", e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.description")}</Label>
-                      <Input className="rounded-xl h-10" value={editedPlans.free.description ?? ""} onChange={(e) => handlePlanEdit("free", "description", e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.launchLimit")}</Label>
-                      <Input className="rounded-xl h-10" type="number" value={editedPlans.free.limit ?? 0} onChange={(e) => handlePlanEdit("free", "limit", Number(e.target.value))} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.benefitsLineByLine")}</Label>
-                      <textarea
-                        className="flex min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs resize-none"
-                        value={editedPlans.free.features?.join("\n") ?? ""}
-                        onChange={(e) => handleFeaturesEdit("free", e.target.value)}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
+                      <CardContent className={`space-y-4 p-4 sm:p-6 ${!plan.active ? "opacity-50 pointer-events-none" : ""}`}>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.name")}</Label>
+                            <Input className="rounded-xl h-10" value={plan.name ?? ""} onChange={(event) => handlePlanEdit(planId, "name", event.target.value)} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase text-zinc-400">{isFreePlan ? tAdmin("plans.fields.launchLimit") : tAdmin("plans.fields.price")}</Label>
+                            <Input
+                              className="rounded-xl h-10"
+                              type="number"
+                              value={isFreePlan ? plan.limit ?? 0 : plan.price ?? 0}
+                              onChange={(event) => handlePlanEdit(planId, isFreePlan ? "limit" : "price", Number(event.target.value))}
+                            />
+                          </div>
+                        </div>
 
-                {/* PREMIUM */}
-                <Card className={`app-panel-soft rounded-3xl border-2 shadow-xl transition-shadow ${premiumPlanTone.border}`}>
-                  <CardHeader className={`flex flex-col gap-3 rounded-t-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${premiumPlanTone.header}`}>
-                    <div className="flex flex-col justify-center">
-                      <CardTitle className={`${premiumPlanTone.headerTitle} font-bold text-lg`}>
-                        {tAdmin("plans.planTier", { name: plans.premium.name, tier: tAdmin("plans.tiers.silver") })}
-                      </CardTitle>
-                      <CardDescription className={premiumPlanTone.headerDescription}>{tAdmin("plans.settings")}</CardDescription>
-                    </div>
-                    <Switch checked={editedPlans.premium.active} onCheckedChange={(c) => handlePlanEdit("premium", "active", c)} className={premiumPlanTone.switchChecked} />
-                  </CardHeader>
+                        {!isFreePlan ? (
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase text-zinc-400">Preço anual</Label>
+                              <Input className="rounded-xl h-10" type="number" value={plan.yearlyPrice ?? 0} onChange={(event) => handlePlanEdit(planId, "yearlyPrice", Number(event.target.value))} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase text-zinc-400">CTA</Label>
+                              <Input className="rounded-xl h-10" value={plan.cta ?? ""} onChange={(event) => handlePlanEdit(planId, "cta", event.target.value)} />
+                            </div>
+                          </div>
+                        ) : null}
 
-                  <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.premium.active ? "opacity-50 pointer-events-none" : ""}`}>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.name")}</Label>
-                        <Input className="rounded-xl h-10" value={editedPlans.premium.name ?? ""} onChange={(e) => handlePlanEdit("premium", "name", e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.price")}</Label>
-                        <Input className="rounded-xl h-10" type="number" value={editedPlans.premium.price ?? 0} onChange={(e) => handlePlanEdit("premium", "price", Number(e.target.value))} />
-                      </div>
-                    </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.description")}</Label>
+                          <Input className="rounded-xl h-10" value={plan.description ?? ""} onChange={(event) => handlePlanEdit(planId, "description", event.target.value)} />
+                        </div>
 
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.paymentLink")}</Label>
-                      <Input className="rounded-xl h-10 font-mono text-xs text-emerald-600" value={editedPlans.premium.paymentLink ?? ""} onChange={(e) => handlePlanEdit("premium", "paymentLink", e.target.value)} />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.description")}</Label>
-                      <Input className="rounded-xl h-10" value={editedPlans.premium.description ?? ""} onChange={(e) => handlePlanEdit("premium", "description", e.target.value)} />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.benefits")}</Label>
-                      <textarea
-                        className="flex min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs resize-none"
-                        value={editedPlans.premium.features?.join("\n") ?? ""}
-                        onChange={(e) => handleFeaturesEdit("premium", e.target.value)}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* PRO */}
-                <Card className={`app-panel-soft rounded-3xl border-2 shadow-xl transition-shadow ${proPlanTone.border}`}>
-                  <CardHeader className={`flex flex-col gap-3 rounded-t-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${proPlanTone.header}`}>
-                    <div className="flex flex-col justify-center">
-                      <CardTitle className={`${proPlanTone.headerTitle} font-bold text-lg`}>
-                        {tAdmin("plans.planTier", { name: editedPlans.pro.name, tier: tAdmin("plans.tiers.gold") })}
-                      </CardTitle>
-                      <CardDescription className={proPlanTone.headerDescription}>{tAdmin("plans.settings")}</CardDescription>
-                    </div>
-                    <Switch checked={editedPlans.pro.active} onCheckedChange={(c) => handlePlanEdit("pro", "active", c)} className={proPlanTone.switchChecked} />
-                  </CardHeader>
-
-                  <CardContent className={`space-y-4 p-4 sm:p-6 ${!editedPlans.pro.active ? "opacity-50 pointer-events-none" : ""}`}>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.name")}</Label>
-                        <Input className="rounded-xl h-10" value={editedPlans.pro.name ?? ""} onChange={(e) => handlePlanEdit("pro", "name", e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.price")}</Label>
-                        <Input className="rounded-xl h-10" type="number" value={editedPlans.pro.price ?? 0} onChange={(e) => handlePlanEdit("pro", "price", Number(e.target.value))} />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.paymentLink")}</Label>
-                      <Input className="rounded-xl h-10 font-mono text-xs text-yellow-600" value={editedPlans.pro.paymentLink ?? ""} onChange={(e) => handlePlanEdit("pro", "paymentLink", e.target.value)} />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.description")}</Label>
-                      <Input className="rounded-xl h-10" value={editedPlans.pro.description ?? ""} onChange={(e) => handlePlanEdit("pro", "description", e.target.value)} />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-400">{tAdmin("plans.fields.benefits")}</Label>
-                      <textarea
-                        className="flex min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs resize-none"
-                        value={editedPlans.pro.features?.join("\n") ?? ""}
-                        onChange={(e) => handleFeaturesEdit("pro", e.target.value)}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {plans && plans.pro.active && (
-                  <div className="col-span-1 text-center text-xs italic text-zinc-500 xl:col-span-3">
-                    {tAdmin("plans.proWarning")}
-                  </div>
-                )}
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold uppercase text-zinc-400">{isFreePlan ? tAdmin("plans.fields.benefitsLineByLine") : tAdmin("plans.fields.benefits")}</Label>
+                          <textarea
+                            className="flex min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs resize-none"
+                            value={plan.features?.join("\n") ?? ""}
+                            onChange={(event) => handleFeaturesEdit(planId, event.target.value)}
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
 
             </div>
@@ -3804,9 +3002,11 @@ export default function AdminPage() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="free">Free</SelectItem>
-                              <SelectItem value="premium">Premium</SelectItem>
-                              <SelectItem value="pro">Pro</SelectItem>
+                              {PLAN_ORDER.map((planId) => (
+                                <SelectItem key={planId} value={planId}>
+                                  {PLAN_CATALOG[planId].publicName}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         ) : accessSubjectType === "role" ? (

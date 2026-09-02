@@ -46,8 +46,8 @@ export const apps = {
     },
     "account-profile": {
       title: "Perfis",
-      eyebrow: "Troca de workspace",
-      description: "Veja como criar perfis pessoal, profissional, igreja, familia ou negocio sem misturar dados.",
+      eyebrow: "Troca de perfil",
+      description: "Veja como separar uso pessoal, família e Business/PJ sem misturar dados.",
     },
     "transactions-new": {
       title: "Novo lançamento",

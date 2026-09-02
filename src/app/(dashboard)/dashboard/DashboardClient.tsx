@@ -32,14 +32,14 @@ import { Transaction } from "@/types/transaction";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { confirmPreapproval } from "@/services/billingService";
-import { subscribeToPaymentCards } from "@/services/paymentCardService";
-import { PaymentCard } from "@/types/paymentCard";
+import { usePaymentCards } from "@/hooks/usePaymentCards";
+import type { PaymentCard } from "@/types/paymentCard";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getPlanCapabilities } from "@/lib/plans/capabilities";
-import { buildUpgradeCheckoutPath } from "@/services/billing/checkoutIntent";
+import { buildUpgradeCheckoutPath, parseUpgradePlan, type UpgradePlan } from "@/services/billing/checkoutIntent";
 import { calculateDailyLimit } from "@/lib/finance/daily-limit";
 import { useTranslations } from "@/i18n/T";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -145,6 +145,7 @@ export function DashboardClient() {
   const { plans } = usePlans();
   const { featureAccess } = useFeatureAccess();
   const { categories } = useCategories();
+  const { paymentCards } = usePaymentCards();
   const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
   const effectivePlan = userProfile?.plan || "free";
   const effectivePlanCapabilities = getPlanCapabilities(effectivePlan, plans, featureAccess);
@@ -180,7 +181,6 @@ export function DashboardClient() {
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
 
-  const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
 
   // Modais
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
@@ -194,7 +194,7 @@ export function DashboardClient() {
   const [checkinAction, setCheckinAction] = useState<"paid" | "pending" | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradeReason] = useState<"transactions" | "installments">("transactions");
-  const [isOpeningCheckout, setIsOpeningCheckout] = useState<"premium" | "pro" | null>(null);
+  const [isOpeningCheckout, setIsOpeningCheckout] = useState<UpgradePlan | null>(null);
   const [isRecoveringBilling, setIsRecoveringBilling] = useState(false);
   const [pendingCheckins, setPendingCheckins] = useState<Transaction[]>([]);
   const [showCheckinModal, setShowCheckinModal] = useState(false);
@@ -439,19 +439,6 @@ export function DashboardClient() {
     setOptimisticallyDeletedIds((prev) => prev.filter((id) => liveIds.has(id)));
   }, [transactions]);
 
-  useEffect(() => {
-    if (!user) {
-      setPaymentCards([]);
-      return;
-    }
-    const unsubscribe = subscribeToPaymentCards(
-      user.uid,
-      (cards) => setPaymentCards(cards),
-      () => setPaymentCards([])
-    );
-    return () => unsubscribe();
-  }, [user]);
-
   // --- RETORNO CONDICIONAL ---
   if (loading) return <DashboardSkeleton />;
 
@@ -640,8 +627,7 @@ export function DashboardClient() {
     (effectivePaymentStatus === "pending" || effectivePaymentStatus === "overdue" || effectivePaymentStatus === "not_paid");
   const pendingPreapprovalId = typeof userProfile?.billing?.pendingPreapprovalId === "string" ? userProfile.billing.pendingPreapprovalId : "";
   const pendingPlan = userProfile?.billing?.pendingPlan;
-  const recoveryPlan: "premium" | "pro" =
-    pendingPlan === "pro" || effectivePlan === "pro" ? "pro" : "premium";
+  const recoveryPlan: UpgradePlan = parseUpgradePlan(pendingPlan) || parseUpgradePlan(effectivePlan) || "premium";
   const selectedMonthLabel =
     availableMonths.find((month) => month.value === selectedMonth)?.label.toLowerCase() ?? selectedMonth;
   const dailyLimit = calculateDailyLimit({
@@ -723,7 +709,7 @@ export function DashboardClient() {
     return categories.find(c => c.name === root)?.color || "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200";
   };
 
-  const handleStartCheckout = async (plan: "premium" | "pro") => {
+  const handleStartCheckout = async (plan: UpgradePlan) => {
     if (!user) return;
     if (isBillingExemptRole) {
       setFeedbackModal({

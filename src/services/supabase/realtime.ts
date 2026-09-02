@@ -39,34 +39,46 @@ export function subscribeToTableChanges(options: SubscribeOptions) {
   const channelName = `rt:${schema}:${options.table}:${options.filter || "all"}:${crypto.randomUUID()}`;
 
   let channel: RealtimeChannel | null = null;
+  let disposed = false;
 
-  try {
-    channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema,
-          table: options.table,
-          ...(options.filter ? { filter: options.filter } : {}),
-        },
-        () => {
-          options.onChange();
-        }
-      )
-      .subscribe((status) => {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-          setCooldown(nowMs() + REALTIME_COOLDOWN_MS);
-        }
-      });
-  } catch {
-    setCooldown(nowMs() + REALTIME_COOLDOWN_MS);
-    return () => {};
-  }
+  // React Strict Mode monta e desmonta efeitos uma vez antes da montagem real.
+  // Adiar a conexao evita abrir e fechar o WebSocket durante esse ciclo de teste.
+  const subscribeTimer = window.setTimeout(() => {
+    if (disposed) return;
+
+    try {
+      channel = supabase
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema,
+            table: options.table,
+            ...(options.filter ? { filter: options.filter } : {}),
+          },
+          () => {
+            options.onChange();
+          }
+        )
+        .subscribe((status) => {
+          if (disposed) return;
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+            setCooldown(nowMs() + REALTIME_COOLDOWN_MS);
+          }
+        });
+    } catch {
+      if (!disposed) {
+        setCooldown(nowMs() + REALTIME_COOLDOWN_MS);
+      }
+    }
+  }, 0);
 
   return () => {
+    disposed = true;
+    window.clearTimeout(subscribeTimer);
     if (!channel) return;
     void supabase.removeChannel(channel);
+    channel = null;
   };
 }

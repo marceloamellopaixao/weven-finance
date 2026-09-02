@@ -256,6 +256,12 @@ export async function permanentlyDeleteUserData(uid: string, options?: { email?:
   });
   await deleteRowsByIds("api_request_metrics", metricRows.map((row) => String(row.id || "")));
 
+  const productEventRows = await supabaseSelect("product_events", {
+    select: "id",
+    filters: { uid },
+  }).catch(() => []);
+  await deleteRowsByIds("product_events", productEventRows.map((row) => String(row.id || "")));
+
   const notificationReferenceRows = await supabaseSelect("notifications", {
     select: "id,meta",
   });

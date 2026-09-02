@@ -1,4 +1,5 @@
 import { BillingInfo, UserPaymentStatus, UserPlan, UserRole, UserStatus } from "@/types/user";
+import { parseUserPlan } from "@/lib/plans/catalog";
 
 const BILLING_EXEMPT_ROLES = new Set<UserRole>(["admin", "moderator"]);
 const TRUSTED_PAID_SOURCES = new Set<BillingInfo["source"]>(["mercadopago_webhook", "mercadopago_confirm"]);
@@ -66,9 +67,7 @@ export function resolveEffectiveBillingState(input: BillingStateInput): Effectiv
     OVERSTRICT_ENFORCEMENT_REASONS.has(input.billing.lastError) &&
     !hasIrregularGatewayBilling(input.billing)
   ) {
-    const restoredPlan = input.billing.gatewayPlan === "premium" || input.billing.gatewayPlan === "pro"
-      ? input.billing.gatewayPlan
-      : input.plan;
+    const restoredPlan = parseUserPlan(input.billing.gatewayPlan, input.plan);
 
     return {
       ...input,

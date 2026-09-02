@@ -121,12 +121,23 @@ function stripInstallmentSuffix(value: string) {
   return String(value || "").replace(/(?:\s+\(\d+\/\d+\))+\s*$/g, "").trim();
 }
 
+function looksLikeEncryptedValue(value: unknown) {
+  return typeof value === "string" && /^[A-Za-z0-9+/]{16}={0,2}:[A-Za-z0-9+/]{20,}={0,2}$/.test(value);
+}
+
 async function parseApiTransaction(tx: ApiTransaction, cryptoUid: string): Promise<Transaction> {
   let decryptedTitle = tx.title || tx.description;
   let decryptedDesc = tx.title ? tx.description || "" : "";
   let decryptedAmount = String(tx.amount);
 
-  if (tx.isEncrypted) {
+  const shouldDecrypt = Boolean(
+    tx.isEncrypted ||
+    looksLikeEncryptedValue(tx.title) ||
+    looksLikeEncryptedValue(tx.description) ||
+    looksLikeEncryptedValue(tx.amount)
+  );
+
+  if (shouldDecrypt) {
     decryptedTitle = await decryptData(tx.title || tx.description, cryptoUid);
     decryptedDesc = tx.title ? await decryptData(tx.description || "", cryptoUid) : "";
     decryptedAmount = await decryptData(String(tx.amount), cryptoUid);
@@ -136,7 +147,7 @@ async function parseApiTransaction(tx: ApiTransaction, cryptoUid: string): Promi
   const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
   const protectedText = tx.title || tx.description;
   const isDecryptionFailed =
-    tx.isEncrypted &&
+    shouldDecrypt &&
     decryptedTitle === protectedText &&
     typeof protectedText === "string" &&
     protectedText.length > 50;
@@ -146,17 +157,23 @@ async function parseApiTransaction(tx: ApiTransaction, cryptoUid: string): Promi
     title: isDecryptionFailed ? "Dados protegidos no momento" : decryptedTitle,
     description: isDecryptionFailed ? "" : decryptedDesc,
     amount: safeAmount,
-    createdAt: tx.createdAt ? new Date(tx.createdAt) : new Date(),
+    createdAt: tx.createdAt ? new Date(tx.createdAt).toISOString() : new Date().toISOString(),
   } as Transaction;
 }
 
-type ApiTransaction = Omit<Transaction, "createdAt" | "amount" | "title" | "description"> & {
+export type ApiTransaction = Omit<Transaction, "createdAt" | "amount" | "title" | "description"> & {
   createdAt?: string | null;
   amount: number | string;
   title?: string;
   description: string;
   isEncrypted?: boolean;
 };
+
+export async function parseApiTransactions(transactions: ApiTransaction[], uid: string) {
+  const cryptoUid = resolveCryptoUid(uid);
+  const parsed = await Promise.all(transactions.map((tx) => parseApiTransaction(tx, cryptoUid)));
+  return parsed.filter((tx) => !tx.isArchived);
+}
 
 type TransactionsPage = {
   transactions: Transaction[];
@@ -166,7 +183,6 @@ type TransactionsPage = {
 };
 
 async function fetchTransactions(uid: string, groupId?: string): Promise<Transaction[]> {
-  const cryptoUid = resolveCryptoUid(uid);
   const query = groupId ? `?groupId=${encodeURIComponent(groupId)}` : "";
   const response = await apiFetch(withActiveWorkspace(`/api/transactions${query}`), { method: "GET" });
   const payload = (await response.json()) as { ok: boolean; error?: string; transactions?: ApiTransaction[] };
@@ -174,12 +190,7 @@ async function fetchTransactions(uid: string, groupId?: string): Promise<Transac
     throw new Error(payload.error || "Não foi possível carregar transações");
   }
 
-  const transactions = payload.transactions || [];
-  const parsed = await Promise.all(
-    transactions.map((tx) => parseApiTransaction(tx, cryptoUid))
-  );
-
-  return parsed.filter((t) => !t.isArchived);
+  return parseApiTransactions(payload.transactions || [], uid);
 }
 
 export async function fetchTransactionsPage(
@@ -668,7 +679,7 @@ export const syncCreditCardAmountForLimit = async (uid: string, transactions: Tr
 };
 
 async function fetchUserSettings(): Promise<UserSettings> {
-  const response = await apiFetch("/api/user-settings/finance", { method: "GET" });
+  const response = await apiFetch(withActiveWorkspace("/api/user-settings/finance"), { method: "GET" });
   const payload = (await response.json()) as UserSettings & { ok: boolean; error?: string };
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível carregar configurações financeiras");
@@ -712,8 +723,10 @@ export const subscribeToUserSettings = (
   });
   const onChangedEvent = () => void run();
   window.addEventListener(USER_SETTINGS_CHANGED_EVENT, onChangedEvent);
+  const stopWorkspaceListener = subscribeToActiveWorkspaceChanged(onChangedEvent);
   return () => {
     cancelled = true;
+    stopWorkspaceListener();
     stopRealtime();
     window.removeEventListener(USER_SETTINGS_CHANGED_EVENT, onChangedEvent);
   };
@@ -723,7 +736,7 @@ export const updateUserBalance = async (uid: string, newBalance: number) => {
   void uid;
   const { response, payload } = await apiFetchWithOptionalApproval("/api/user-settings/finance", {
     method: "PUT",
-    body: JSON.stringify({ currentBalance: newBalance }),
+    body: JSON.stringify(withActiveWorkspaceBody({ currentBalance: newBalance })),
   });
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível atualizar saldo");
@@ -738,7 +751,7 @@ export const updateUserRegionalPreferences = async (
   void uid;
   const { response, payload } = await apiFetchWithOptionalApproval("/api/user-settings/finance", {
     method: "PUT",
-    body: JSON.stringify(preferences),
+    body: JSON.stringify(withActiveWorkspaceBody(preferences)),
   });
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível salvar as preferências regionais");

@@ -15,9 +15,10 @@ import { readSecureProfilePayload, writeSecureProfilePayload } from "@/lib/secur
 import { resolvePermanentDeleteAt } from "@/lib/account-deletion/policy";
 import { BillingInfo, UserPaymentStatus, UserPlan, UserRole, UserStatus } from "@/types/user";
 import { syncSubscriptionStatus } from "@/lib/billing/mercadopago";
+import { parseUserPlan } from "@/lib/plans/catalog";
 
 function asPlan(value: unknown): UserPlan {
-  return value === "premium" || value === "pro" ? value : "free";
+  return parseUserPlan(value);
 }
 
 function asStatus(value: unknown): UserStatus {
@@ -31,6 +32,10 @@ function asPaymentStatus(value: unknown): UserPaymentStatus {
 
 function shouldSyncBillingOnRead(billing: BillingInfo) {
   if (billing.provider !== "mercadopago") return false;
+  const hasKnownSubscription = Boolean(billing.providerSubscriptionId || billing.preapprovalId);
+  const hasPendingCheckout = Boolean(billing.pendingPreapprovalId || billing.pendingCheckoutAt);
+  if (hasPendingCheckout) return false;
+  if (!hasKnownSubscription) return false;
   const lastSyncAt = typeof billing.lastSyncAt === "string" ? new Date(billing.lastSyncAt).getTime() : 0;
   if (!lastSyncAt) return true;
   return Date.now() - lastSyncAt > 15 * 60 * 1000;

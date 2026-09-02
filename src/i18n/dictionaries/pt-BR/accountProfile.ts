@@ -18,20 +18,20 @@ export const accountProfile = {
       description: "Controle salário, gastos, cartões, metas, dívidas e limite diário inteligente.",
     },
     professional: {
-      title: "Perfil profissional / autônomo",
-      description: "Controle receitas de clientes, despesas de trabalho, impostos, caixa mensal e relatórios.",
+      title: "Business/PJ",
+      description: "Use para MEI, CNPJ, igreja, loja, autônomo, prestação de serviço ou projeto profissional.",
     },
     church: {
-      title: "Perfil igreja / ministério",
-      description: "Controle dízimos, ofertas, missões, cantina, departamentos, eventos e despesas por área.",
+      title: "Business/PJ",
+      description: "Igrejas, ministérios e projetos profissionais entram no perfil Business/PJ.",
     },
     family: {
       title: "Perfil família / casa",
       description: "Controle contas compartilhadas, mercado, aluguel, escola, transporte e metas familiares.",
     },
     business: {
-      title: "Perfil pequeno negócio",
-      description: "Controle vendas, custos, contas a pagar e receber, fluxo de caixa e lucro estimado.",
+      title: "Business/PJ",
+      description: "Controle receitas, despesas, impostos, fornecedores, fluxo de caixa e relatórios do negócio.",
     },
   },
 } as const;

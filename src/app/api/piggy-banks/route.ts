@@ -13,6 +13,7 @@ import { readSecureCardPayload, writeSecureCardPayload } from "@/lib/secure-stor
 import { readSecurePiggyPayload, writeSecurePiggyHistoryPayload, writeSecurePiggyPayload } from "@/lib/secure-store/piggy-banks";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
+import { canCreateFamilyPiggyBank, canManageFamilyPiggyBank, canViewFamilyPiggyBank } from "@/lib/workspaces/family";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +43,12 @@ function getRowWorkspaceId(row: Record<string, unknown>) {
   const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
   const secureRaw = readSecurePiggyPayload(row.raw);
   return String(row.workspace_id || raw.workspaceId || secureRaw.workspaceId || "");
+}
+
+function getRowCreatedByUid(row: Record<string, unknown>) {
+  const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const secureRaw = readSecurePiggyPayload(row.raw);
+  return String(row.created_by_uid || raw.createdBy || secureRaw.createdBy || "");
 }
 
 function filterWorkspaceRows(rows: Record<string, unknown>[], workspaceId?: string | null, includeLegacyRows = true) {
@@ -112,7 +119,9 @@ export async function GET(request: NextRequest) {
       order: "updated_at.desc.nullslast",
     });
 
-    const piggyBanks = filterWorkspaceRows(rows, workspaceContext.workspaceId, workspaceContext.includeLegacyRows).map((row) => {
+    const piggyBanks = filterWorkspaceRows(rows, workspaceContext.workspaceId, workspaceContext.includeLegacyRows)
+      .filter((row) => canViewFamilyPiggyBank(workspaceContext.member, getRowCreatedByUid(row)))
+      .map((row) => {
       const raw = readSecurePiggyPayload(row.raw);
       return {
         id: String(raw.slug || row.slug || ""),
@@ -160,6 +169,9 @@ export async function POST(request: NextRequest) {
       workspaceId?: string;
     };
     const workspaceContext = await resolveActiveWorkspaceContext(acting.actingUid, body.workspaceId);
+    if (!canCreateFamilyPiggyBank(workspaceContext.member)) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
 
     if (body.action !== "deposit") {
       return NextResponse.json({ ok: false, error: "invalid_action" }, { status: 400 });
@@ -250,6 +262,9 @@ export async function POST(request: NextRequest) {
     const piggyRows = filterWorkspaceRows(await supabaseSelect("piggy_banks", {
       filters: { uid },
     }), workspaceContext.workspaceId, workspaceContext.includeLegacyRows).filter((row) => String(row.slug || readSecurePiggyPayload(row.raw).slug || row.source_id || "") === slug);
+    if (piggyRows[0] && !canManageFamilyPiggyBank(workspaceContext.member, getRowCreatedByUid(piggyRows[0]))) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
 
     if (
       !planContext.isBillingExempt &&

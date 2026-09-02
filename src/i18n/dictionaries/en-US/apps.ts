@@ -36,7 +36,7 @@ export const apps = {
   tourCopy: {
     dashboard: { title: "Dashboard", eyebrow: "Tour start", description: "Understand balance, monthly forecast, statement, and what to do first when you enter." },
     settings: { title: "Settings", eyebrow: "Account and subscription", description: "See where personal data, plan, privacy, help, and sensitive actions live." },
-    "account-profile": { title: "Profiles", eyebrow: "Workspace switch", description: "See how to create personal, professional, church, family, or business profiles without mixing data." },
+    "account-profile": { title: "Financial profiles", eyebrow: "Profile switch", description: "See how to create Personal, Family, and Business/PJ profiles without mixing data." },
     "transactions-new": { title: "New entry", eyebrow: "Record money in and out", description: "Learn how to create income, expenses, recurring entries, and installment purchases without mixing flows." },
     reports: { title: "Reports", eyebrow: "Summary and export", description: "See monthly closing, read category charts, and generate professional PDF or Excel files." },
     cards: { title: "Cards", eyebrow: "Limits and invoices", description: "See how to track used limit, invoice risk, and card health." },

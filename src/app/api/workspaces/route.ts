@@ -7,8 +7,11 @@ import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/im
 import { normalizeCurrency } from "@/lib/money/formatMoney";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
-import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
-import type { Workspace, WorkspaceSettings, WorkspaceType } from "@/types/workspace";
+import { getDefaultCategoriesForWorkspaceType } from "@/lib/categories/defaultCategories";
+import { canPlanUseProfile } from "@/lib/plans/catalog";
+import { getUserPlanContext } from "@/lib/plans/server";
+import { supabaseDeleteByFilters, supabasePatchByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
+import { toFinancialProfileType, type Workspace, type WorkspaceSettings, type WorkspaceType } from "@/types/workspace";
 import { ensureFamilyManagerMembership, getActiveMemberships, toWorkspaceMember } from "@/lib/workspaces/server";
 
 export const runtime = "nodejs";
@@ -24,92 +27,51 @@ const DEFAULT_NAMES: Record<WorkspaceType, string> = {
   business: "Meu negócio",
 };
 
-const CATEGORY_PRESETS: Record<WorkspaceType, Array<{ name: string; type: "income" | "expense" }>> = {
-  personal: [
-    { name: "Salário", type: "income" },
-    { name: "Freelance", type: "income" },
-    { name: "Reembolso", type: "income" },
-    { name: "Investimentos", type: "income" },
-    { name: "Alimentação", type: "expense" },
-    { name: "Moradia", type: "expense" },
-    { name: "Transporte", type: "expense" },
-    { name: "Saúde", type: "expense" },
-    { name: "Educação", type: "expense" },
-    { name: "Lazer", type: "expense" },
-    { name: "Cartão de crédito", type: "expense" },
-    { name: "Assinaturas", type: "expense" },
-  ],
-  professional: [
-    { name: "Cliente", type: "income" },
-    { name: "Projeto", type: "income" },
-    { name: "Serviço recorrente", type: "income" },
-    { name: "Comissão", type: "income" },
-    { name: "Ferramentas", type: "expense" },
-    { name: "Internet", type: "expense" },
-    { name: "Transporte", type: "expense" },
-    { name: "Marketing", type: "expense" },
-    { name: "Impostos", type: "expense" },
-    { name: "Equipamentos", type: "expense" },
-    { name: "Contabilidade", type: "expense" },
-  ],
-  church: [
-    { name: "Dízimos", type: "income" },
-    { name: "Ofertas", type: "income" },
-    { name: "Missões", type: "income" },
-    { name: "Cantina", type: "income" },
-    { name: "Eventos", type: "income" },
-    { name: "Doações", type: "income" },
-    { name: "Aluguel", type: "expense" },
-    { name: "Energia", type: "expense" },
-    { name: "Água", type: "expense" },
-    { name: "Som e mídia", type: "expense" },
-    { name: "Departamento infantil", type: "expense" },
-    { name: "Jovens", type: "expense" },
-    { name: "Missões", type: "expense" },
-    { name: "Cesta básica", type: "expense" },
-    { name: "Manutenção", type: "expense" },
-    { name: "Cantina", type: "expense" },
-  ],
-  family: [
-    { name: "Salário principal", type: "income" },
-    { name: "Salário secundário", type: "income" },
-    { name: "Ajuda familiar", type: "income" },
-    { name: "Mercado", type: "expense" },
-    { name: "Aluguel/Financiamento", type: "expense" },
-    { name: "Luz", type: "expense" },
-    { name: "Água", type: "expense" },
-    { name: "Internet", type: "expense" },
-    { name: "Escola", type: "expense" },
-    { name: "Saúde", type: "expense" },
-    { name: "Transporte", type: "expense" },
-    { name: "Lazer familiar", type: "expense" },
-  ],
-  business: [
-    { name: "Vendas", type: "income" },
-    { name: "Serviços", type: "income" },
-    { name: "Mensalidades", type: "income" },
-    { name: "Repasses", type: "income" },
-    { name: "Fornecedores", type: "expense" },
-    { name: "Estoque", type: "expense" },
-    { name: "Marketing", type: "expense" },
-    { name: "Taxas", type: "expense" },
-    { name: "Plataforma", type: "expense" },
-    { name: "Impostos", type: "expense" },
-    { name: "Operacional", type: "expense" },
-  ],
-};
 
 function parseType(value: unknown): WorkspaceType | null {
   return typeof value === "string" && WORKSPACE_TYPES.has(value as WorkspaceType) ? (value as WorkspaceType) : null;
 }
 
+function normalizeWorkspaceType(type: WorkspaceType): WorkspaceType {
+  return type === "professional" || type === "church" ? "business" : type;
+}
+
+function assertDocumentAllowed(type: WorkspaceType, settings?: WorkspaceSettings) {
+  const document = typeof settings?.businessDocument === "string" ? settings.businessDocument.replace(/\D/g, "") : "";
+  if (document && type !== "business") {
+    throw new Error("Para controlar um negócio, MEI, igreja, projeto profissional ou qualquer atividade com CNPJ, use o perfil Business/PJ.");
+  }
+}
+
+async function assertPlanCanUseWorkspace(uid: string, type: WorkspaceType) {
+  const planContext = await getUserPlanContext(uid);
+  const profileType = toFinancialProfileType(type);
+  if (planContext.isBillingExempt || canPlanUseProfile(planContext.plan, profileType)) return;
+  if (profileType === "family") {
+    throw new Error("Para criar um perfil Família, escolha o plano Família.");
+  }
+  if (profileType === "business") {
+    throw new Error("Para controlar MEI, CNPJ, igreja, projeto profissional ou pequeno negócio, escolha o plano Business/PJ.");
+  }
+}
+
 function parseSettings(value: unknown): WorkspaceSettings {
   const data = (value as WorkspaceSettings | null) || {};
+  const archivedAt = typeof data.archivedAt === "string" && data.archivedAt ? data.archivedAt : undefined;
   return {
     currency: normalizeCurrency(data.currency),
     monthlyReportEnabled: data.monthlyReportEnabled !== false,
     categoriesPresetApplied: Boolean(data.categoriesPresetApplied),
+    familyModeEnabled: Boolean(data.familyModeEnabled),
+    businessDocument: typeof data.businessDocument === "string" ? data.businessDocument.replace(/\D/g, "").slice(0, 14) : undefined,
+    archivedAt,
   };
+}
+
+function getWorkspaceErrorStatus(message: string) {
+  if (message.includes("CNPJ")) return 400;
+  if (message.startsWith("Para criar um perfil") || message.startsWith("Para controlar")) return 403;
+  return resolveApiErrorStatus(message);
 }
 
 function toWorkspace(uid: string, row: Record<string, unknown>): Workspace {
@@ -122,6 +84,7 @@ function toWorkspace(uid: string, row: Record<string, unknown>): Workspace {
     name: String(row.name || raw.name || DEFAULT_NAMES[type]),
     type,
     isDefault: Boolean(row.is_default ?? raw.isDefault),
+    status: settings.archivedAt ? "archived" : "active",
     createdAt: String(row.created_at || raw.createdAt || new Date().toISOString()),
     updatedAt: String(row.updated_at || raw.updatedAt || new Date().toISOString()),
     settings,
@@ -146,6 +109,7 @@ function toWorkspaceRow(uid: string, workspace: Workspace) {
     name: workspace.name,
     type: workspace.type,
     isDefault: workspace.isDefault,
+    status: workspace.status || "active",
     settings: workspace.settings,
     createdAt: workspace.createdAt,
     updatedAt: workspace.updatedAt,
@@ -210,6 +174,10 @@ async function getWorkspaceRows(uid: string) {
   return rows.map((row) => toWorkspace(uid, row));
 }
 
+function isWorkspaceActive(workspace: Workspace) {
+  return workspace.status !== "archived" && !workspace.settings?.archivedAt;
+}
+
 async function getProfileSummary(uid: string) {
   const rows = await supabaseSelect("profiles", {
     select: "uid,email,display_name,complete_name,raw",
@@ -244,12 +212,11 @@ async function applyCategoryPreset(uid: string, workspaceType: WorkspaceType, wo
   });
   const existing = new Set(workspaceRows.map((row) => `${String(row.name || "").toLowerCase()}::${String(row.category_type || "")}`));
   const now = new Date().toISOString();
-  const rows = CATEGORY_PRESETS[workspaceType]
+  const rows = getDefaultCategoriesForWorkspaceType(workspaceType)
     .filter((category) => !existing.has(`${category.name.toLowerCase()}::${category.type}`))
     .map((category) =>
       toCategoryRow(uid, `preset_${workspaceId}_${workspaceType}_${category.type}_${category.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, {
         ...category,
-        color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50",
         userId: uid,
         isCustom: true,
         workspacePreset: workspaceType,
@@ -277,8 +244,43 @@ async function ensureFamilyOwnerIfNeeded(uid: string, workspace: Workspace) {
   });
 }
 
+async function clearFamilyAccess(uid: string, workspaceId: string, now: string) {
+  try {
+    await supabasePatchByFilters(
+      "workspace_members",
+      { workspace_uid: uid, workspace_id: workspaceId },
+      { member_status: "disabled", updated_at: now, raw: { status: "disabled", archivedAt: now } },
+    );
+    await supabasePatchByFilters(
+      "workspace_invitations",
+      { workspace_uid: uid, workspace_id: workspaceId },
+      { invitation_status: "revoked", updated_at: now, raw: { status: "revoked", archivedAt: now } },
+    );
+  } catch {
+    // Older installs may not have family tables yet.
+  }
+}
+
+async function deleteWorkspaceFinancialData(uid: string, workspaceId: string) {
+  const tables = ["transactions", "categories", "payment_cards", "piggy_banks", "piggy_bank_history"];
+  for (const table of tables) {
+    try {
+      await supabaseDeleteByFilters(table, { uid, workspace_id: workspaceId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || "");
+      if (!message.includes("workspace_id") && !message.includes("PGRST204")) throw error;
+    }
+  }
+  try {
+    await supabaseDeleteByFilters("user_settings", { uid, setting_key: `categories:${workspaceId}` });
+  } catch {
+    // Non-critical cleanup.
+  }
+}
+
 function buildWorkspace(uid: string, input: { name?: string; type?: unknown; isDefault?: boolean; settings?: WorkspaceSettings }, currentCount: number): Workspace {
-  const type = parseType(input.type) || "personal";
+  const type = normalizeWorkspaceType(parseType(input.type) || "personal");
+  assertDocumentAllowed(type, input.settings);
   const now = new Date().toISOString();
   return {
     id: crypto.randomUUID(),
@@ -315,17 +317,18 @@ export async function GET(request: NextRequest) {
                   filters: { uid: member.workspaceUid, source_id: member.workspaceId },
                   limit: 1,
                 });
-                return rows[0] ? toSharedWorkspace(rows[0], uid, member) : null;
+                const workspace = rows[0] ? toSharedWorkspace(rows[0], uid, member) : null;
+                return workspace && isWorkspaceActive(workspace) ? workspace : null;
               }),
           )
         : [];
     const workspaces = [...ownedWorkspaces, ...sharedRows.filter((workspace): workspace is Workspace => Boolean(workspace))];
-    const defaultWorkspace = workspaces.find((workspace) => workspace.isDefault) || null;
+    const defaultWorkspace = workspaces.find((workspace) => workspace.isDefault && isWorkspaceActive(workspace)) || null;
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json({ ok: true, workspaces, defaultWorkspace }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = resolveApiErrorStatus(message);
+    const status = getWorkspaceErrorStatus(message);
     apiLogger.error({ message: "workspaces_get_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
@@ -346,7 +349,7 @@ export async function POST(request: NextRequest) {
       request,
       acting,
       actionType: "workspaces:create",
-      actionLabel: "Criar contexto de conta",
+      actionLabel: "Criar perfil financeiro",
     });
     if (!approval.allowed) {
       return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });
@@ -359,19 +362,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_workspace_type" }, { status: 400 });
     }
     const current = await getWorkspaceRows(uid);
+    const activeCurrent = current.filter(isWorkspaceActive);
     const workspace = buildWorkspace(uid, { ...body, type }, current.length);
-    const next = workspace.isDefault
-      ? [...current.map((item) => ({ ...item, isDefault: false, updatedAt: new Date().toISOString() })), workspace]
-      : [...current, workspace];
+    const workspaceToPersist = activeCurrent.length === 0 ? { ...workspace, isDefault: true } : workspace;
+    await assertPlanCanUseWorkspace(uid, workspace.type);
+    const next = workspaceToPersist.isDefault
+      ? [...current.map((item) => ({ ...item, isDefault: false, updatedAt: new Date().toISOString() })), workspaceToPersist]
+      : [...current, workspaceToPersist];
 
     await persistWorkspaceSet(uid, next);
-    await ensureFamilyOwnerIfNeeded(uid, workspace);
-    await applyCategoryPreset(uid, workspace.type, workspace.id);
+    await ensureFamilyOwnerIfNeeded(uid, workspaceToPersist);
+    await applyCategoryPreset(uid, workspaceToPersist.type, workspaceToPersist.id);
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
-    return NextResponse.json({ ok: true, workspace }, { status: 200 });
+    return NextResponse.json({ ok: true, workspace: workspaceToPersist }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = resolveApiErrorStatus(message);
+    const status = getWorkspaceErrorStatus(message);
     apiLogger.error({ message: "workspaces_post_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
@@ -392,7 +398,7 @@ export async function PATCH(request: NextRequest) {
       request,
       acting,
       actionType: "workspaces:update",
-      actionLabel: "Atualizar contexto de conta",
+      actionLabel: "Atualizar perfil financeiro",
     });
     if (!approval.allowed) {
       return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });
@@ -411,11 +417,12 @@ export async function PATCH(request: NextRequest) {
     const current = await getWorkspaceRows(uid);
 
     if (body.action === "ensureDefault") {
-      const existingDefault = current.find((workspace) => workspace.isDefault);
+      const existingDefault = current.find((workspace) => workspace.isDefault && isWorkspaceActive(workspace));
       if (existingDefault) {
         return NextResponse.json({ ok: true, defaultWorkspace: existingDefault }, { status: 200 });
       }
       const workspace = buildWorkspace(uid, { ...body.workspace, isDefault: true }, current.length);
+      await assertPlanCanUseWorkspace(uid, workspace.type);
       const next = [...current.map((item) => ({ ...item, isDefault: false, updatedAt: new Date().toISOString() })), workspace];
       await persistWorkspaceSet(uid, next);
       await ensureFamilyOwnerIfNeeded(uid, workspace);
@@ -432,17 +439,29 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "workspace_not_found" }, { status: 404 });
     }
 
-    const nextType = body.type === undefined ? target.type : parseType(body.type);
-    if (!nextType) {
+    const parsedNextType = body.type === undefined ? target.type : parseType(body.type);
+    if (!parsedNextType) {
       return NextResponse.json({ ok: false, error: "invalid_workspace_type" }, { status: 400 });
     }
+    const nextType = normalizeWorkspaceType(parsedNextType);
+    assertDocumentAllowed(nextType, { ...target.settings, ...body.settings });
+    if (nextType !== target.type) {
+      await assertPlanCanUseWorkspace(uid, nextType);
+    }
     const now = new Date().toISOString();
+    const nextSettings = parseSettings({ ...target.settings, ...body.settings });
+    const restoringArchived = Boolean(target.settings?.archivedAt) && body.settings && "archivedAt" in body.settings && !body.settings.archivedAt;
+    if (restoringArchived) {
+      await assertPlanCanUseWorkspace(uid, nextType);
+    }
+    const activeAfterRestore = current.filter((workspace) => workspace.id !== target.id && isWorkspaceActive(workspace));
     const updated: Workspace = {
       ...target,
       name: body.name?.trim() || target.name,
       type: nextType,
-      isDefault: typeof body.isDefault === "boolean" ? body.isDefault : target.isDefault,
-      settings: parseSettings({ ...target.settings, ...body.settings }),
+      isDefault: nextSettings.archivedAt ? false : typeof body.isDefault === "boolean" ? body.isDefault : restoringArchived && activeAfterRestore.length === 0 ? true : target.isDefault,
+      status: nextSettings.archivedAt ? "archived" : "active",
+      settings: nextSettings,
       updatedAt: now,
     };
     const next = current.map((workspace) =>
@@ -462,8 +481,93 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: true, workspace: updated }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = resolveApiErrorStatus(message);
+    const status = getWorkspaceErrorStatus(message);
     apiLogger.error({ message: "workspaces_patch_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
+    await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
+    return NextResponse.json({ ok: false, error: message }, { status });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const meta = getRequestMeta(request);
+  const startedAt = Date.now();
+  try {
+    const rate = await checkRateLimit(request, { key: "api:workspaces:delete", max: 20, windowMs: 60_000 });
+    if (!rate.allowed) {
+      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    }
+
+    const acting = await resolveActingContext(request);
+    const approval = await ensureImpersonationWriteApproval({
+      request,
+      acting,
+      actionType: "workspaces:delete",
+      actionLabel: "Excluir ou arquivar perfil financeiro",
+    });
+    if (!approval.allowed) {
+      return NextResponse.json({ ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId }, { status: 409 });
+    }
+
+    const uid = acting.actingUid;
+    const body = (await request.json()) as { id?: string; mode?: "archive" | "delete_data" };
+    const workspaceId = String(body.id || "").trim();
+    const mode = body.mode === "delete_data" ? "delete_data" : "archive";
+    if (!workspaceId) {
+      return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    }
+
+    const current = await getWorkspaceRows(uid);
+    const target = current.find((workspace) => workspace.id === workspaceId);
+    if (!target || target.membership) {
+      return NextResponse.json({ ok: false, error: "workspace_not_found" }, { status: 404 });
+    }
+
+    const activeOthers = current.filter((workspace) => workspace.id !== workspaceId && isWorkspaceActive(workspace) && !workspace.membership);
+    if (activeOthers.length === 0) {
+      return NextResponse.json({ ok: false, error: "Crie ou restaure outro perfil antes de remover este." }, { status: 400 });
+    }
+
+    const now = new Date().toISOString();
+    if (target.type === "family") {
+      await clearFamilyAccess(uid, workspaceId, now);
+    }
+
+    if (mode === "delete_data") {
+      await deleteWorkspaceFinancialData(uid, workspaceId);
+      await supabaseDeleteByFilters("workspaces", { uid, source_id: workspaceId });
+      const fallbackDefault = activeOthers[0];
+      const next = current
+        .filter((workspace) => workspace.id !== workspaceId)
+        .map((workspace) => {
+          if (workspace.id === fallbackDefault.id) return { ...workspace, isDefault: true, updatedAt: now };
+          return workspace.isDefault ? { ...workspace, isDefault: false, updatedAt: now } : workspace;
+        });
+      await persistWorkspaceSet(uid, next);
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+      return NextResponse.json({ ok: true, mode, defaultWorkspace: fallbackDefault }, { status: 200 });
+    }
+
+    const archived: Workspace = {
+      ...target,
+      isDefault: false,
+      status: "archived",
+      settings: { ...target.settings, archivedAt: now },
+      updatedAt: now,
+    };
+    const fallbackDefault = activeOthers.find((workspace) => workspace.isDefault) || activeOthers[0];
+    const next = current.map((workspace) => {
+      if (workspace.id === archived.id) return archived;
+      if (workspace.id === fallbackDefault.id) return { ...workspace, isDefault: true, updatedAt: now };
+      return workspace.isDefault ? { ...workspace, isDefault: false, updatedAt: now } : workspace;
+    });
+    await persistWorkspaceSet(uid, next);
+
+    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+    return NextResponse.json({ ok: true, mode, workspace: archived, defaultWorkspace: fallbackDefault }, { status: 200 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown_error";
+    const status = getWorkspaceErrorStatus(message);
+    apiLogger.error({ message: "workspaces_delete_failed", requestId: meta.requestId, route: meta.route, method: meta.method, meta: { error: message } });
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }

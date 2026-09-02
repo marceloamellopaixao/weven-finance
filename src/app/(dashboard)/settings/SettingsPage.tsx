@@ -34,7 +34,7 @@ import {
   UsersRound,
   WalletCards,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import { requestOwnAccountDeletion, updateOwnProfile } from "@/services/userService";
 import { rememberAccountDeletionRequest } from "@/lib/account-deletion/client";
 import { getKeyFingerprint } from "@/lib/crypto";
@@ -43,7 +43,7 @@ import { migrateCryptography } from "@/services/transactionService";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { sendFeatureRequest, sendSupportRequest, subscribeToSupportTickets, type SupportTicket } from "@/hooks/supportService";
 import { BillingHistoryItem, cancelSubscription, confirmPreapproval, getBillingHistory } from "@/services/billingService";
-import { buildUpgradeCheckoutPath } from "@/services/billing/checkoutIntent";
+import { buildUpgradeCheckoutPath, parseUpgradePlan } from "@/services/billing/checkoutIntent";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { sendPasswordAccessEmail } from "@/services/auth/passwordAccess";
 import { formatPhone, normalizePhone } from "@/lib/phone";
@@ -56,10 +56,11 @@ import { AppearanceAccent, AppearanceThemeMode } from "@/types/appearance";
 import { useFormatters } from "@/i18n/useFormatters";
 import { getPlanPrice } from "@/lib/billing/prices";
 import { getLocalizedPlanCopy, getPlanTone } from "@/lib/plans/display";
+import { getPublicPlans } from "@/lib/plans/catalog";
 import type { UpgradePlan } from "@/services/billing/checkoutIntent";
 import { useTranslations } from "@/i18n/T";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
-import { canViewFamilyMembers } from "@/lib/workspaces/family";
+import { canManageFamilyBilling, canViewFamilyMembers } from "@/lib/workspaces/family";
 import { FamilyWorkspacePanel } from "@/components/workspaces/FamilyWorkspacePanel";
 import { WorkspaceSettingsPanel } from "@/components/workspaces/WorkspaceSettingsPanel";
 
@@ -101,7 +102,7 @@ export default function SettingsPage() {
   const { user, userProfile, logout, privacyMode, togglePrivacyMode, refreshProfile } = useAuth();
   const { completeTour, isActive: isOnboardingActive, loading: onboardingLoading } = useOnboarding();
   const { appearancePreferences, appearanceLoading, updateAppearance } = useAppearance();
-  const { workspaces, loading: workspacesLoading } = useWorkspaces();
+  const { workspaces, activeWorkspace, loading: workspacesLoading } = useWorkspaces();
   const { isImpersonating } = useImpersonation();
   const { plans } = usePlans();
   const currency = usePreferredCurrency();
@@ -166,9 +167,13 @@ export default function SettingsPage() {
   const formatPlanPrice = (planId: UpgradePlan) =>
     money(getPlanPrice(planId, currency)?.amount ?? plans[planId].price);
   const canOpenFamilyWorkspaceSettings = workspaces.some((workspace) => {
+    if (workspace.status === "archived") return false;
     if (workspace.type !== "family" && !workspace.settings?.familyModeEnabled && !workspace.membership) return false;
     return !workspace.membership || canViewFamilyMembers(workspace.membership);
   });
+  const canOpenBillingSettings = !activeWorkspace?.membership || canManageFamilyBilling(activeWorkspace.membership);
+  const canOpenSecuritySettings = !activeWorkspace?.membership || activeWorkspace.membership.permissions.includes("settings.manage_security");
+  const settingsTabCount = 3 + (canOpenFamilyWorkspaceSettings ? 1 : 0) + (canOpenBillingSettings ? 1 : 0) + (canOpenSecuritySettings ? 1 : 0);
 
   usePlatformTour({
     route: "settings",
@@ -210,6 +215,27 @@ export default function SettingsPage() {
     return t("billing.events.chargeEvent");
   };
 
+  const formatBillingHistoryStatus = (value: string | null) => {
+    const status = String(value || "").toLowerCase();
+    if (status === "paid" || status === "approved" || status === "authorized") return t("billing.history.statuses.paid");
+    if (status === "pending" || status === "in_process" || status === "processed") return t("billing.history.statuses.pending");
+    if (status === "canceled" || status === "cancelled" || status === "cancelled_by_user") return t("billing.history.statuses.canceled");
+    if (status === "not_paid" || status === "rejected" || status === "refunded") return t("billing.history.statuses.notPaid");
+    if (status === "overdue" || status === "paused") return t("billing.history.statuses.overdue");
+    if (status === "failed") return t("billing.history.statuses.failed");
+    return value || t("billing.history.unavailable");
+  };
+
+  const getBillingHistoryStatusClass = (value: string | null) => {
+    const status = String(value || "").toLowerCase();
+    if (["paid", "approved", "authorized"].includes(status)) return "border-emerald-500/30 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300";
+    if (["pending", "in_process", "processed"].includes(status)) return "border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-300";
+    if (["overdue", "paused"].includes(status)) return "border-orange-500/30 bg-orange-500/15 text-orange-700 dark:text-orange-300";
+    if (["canceled", "cancelled", "cancelled_by_user"].includes(status)) return "border-zinc-500/30 bg-zinc-500/15 text-zinc-600 dark:text-zinc-300";
+    if (["not_paid", "rejected", "refunded", "failed"].includes(status)) return "border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-300";
+    return "border-slate-500/30 bg-slate-500/15 text-slate-600 dark:text-slate-300";
+  };
+
   const formatSupportStatus = (status: string) => {
     const normalized = String(status || "").toLowerCase();
     if (normalized === "pending") return t("supportStatus.pending");
@@ -243,6 +269,9 @@ export default function SettingsPage() {
   };
 
   const handleTabChange = (tab: "account" | "profiles" | "family" | "billing" | "security" | "help") => {
+    if (tab === "family" && !canOpenFamilyWorkspaceSettings) return;
+    if (tab === "billing" && !canOpenBillingSettings) return;
+    if (tab === "security" && !canOpenSecuritySettings) return;
     setActiveTab(tab);
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", tab);
@@ -483,28 +512,18 @@ export default function SettingsPage() {
     : billingPaymentStatus === "failed"
       ? "not_paid"
       : (userProfile?.paymentStatus || billingPaymentStatus || "pending");
-  const canUpgrade = !isBillingExemptRole && effectivePlan !== "pro";
+  const canUpgrade = !isBillingExemptRole;
   const currentPlanCopy = getLocalizedPlanCopy(tGlobal, effectivePlan, plans[effectivePlan]);
-  const premiumPlanCopy = getLocalizedPlanCopy(tGlobal, "premium", plans.premium);
-  const proPlanCopy = getLocalizedPlanCopy(tGlobal, "pro", plans.pro);
   const effectivePlanTone = getPlanTone(effectivePlan);
-  const premiumPlanTone = getPlanTone("premium");
-  const proPlanTone = getPlanTone("pro");
-  const planRoleLabel = effectivePlan === "free"
-    ? t("billing.role.free")
-    : effectivePlan === "premium"
-      ? t("billing.role.premium")
-      : t("billing.role.pro");
-  const planValueSummary = effectivePlan === "free"
-    ? t("billing.summary.free")
-    : effectivePlan === "premium"
-      ? t("billing.summary.premium")
-      : t("billing.summary.pro");
+  const availableUpgradePlans = getPublicPlans()
+    .map((plan) => plan.id)
+    .filter((plan): plan is UpgradePlan => plan !== "free" && plan !== effectivePlan);
+  const planRoleLabel = effectivePlan === "free" ? t("billing.role.free") : currentPlanCopy.name;
+  const planValueSummary = currentPlanCopy.description;
   const pendingPreapprovalId = userProfile?.billing?.pendingPreapprovalId;
   const pendingCheckoutAttemptId = userProfile?.billing?.pendingCheckoutAttemptId;
   const pendingPlan = userProfile?.billing?.pendingPlan;
-  const recoveryPlan: UpgradePlan =
-    pendingPlan === "pro" || currentPlan === "pro" ? "pro" : "premium";
+  const recoveryPlan: UpgradePlan = parseUpgradePlan(pendingPlan) || parseUpgradePlan(currentPlan) || "premium";
   const shouldShowRecoveryCTA =
     !isBillingExemptRole &&
     (effectivePaymentStatus === "pending" ||
@@ -512,7 +531,7 @@ export default function SettingsPage() {
       effectivePaymentStatus === "not_paid");
 
   const handleRecoverPayment = async () => {
-    if (pendingPreapprovalId || pendingCheckoutAttemptId) {
+    if (pendingPreapprovalId) {
       await handleConfirmPreapproval(pendingPreapprovalId, recoveryPlan, pendingCheckoutAttemptId);
       return;
     }
@@ -576,7 +595,7 @@ export default function SettingsPage() {
     if (isBillingExemptRole) return;
     if (!shouldShowRecoveryCTA) return;
     if (isConfirmingPreapproval || isAutoReconcilingBilling) return;
-    if (!pendingPreapprovalId && !pendingCheckoutAttemptId) return;
+    if (!pendingPreapprovalId) return;
 
     const autoAttemptKey = [
       effectiveProfileUid,
@@ -668,10 +687,14 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (workspacesLoading) return;
-    if (activeTab === "family" && !canOpenFamilyWorkspaceSettings) {
+    if (
+      (activeTab === "family" && !canOpenFamilyWorkspaceSettings) ||
+      (activeTab === "billing" && !canOpenBillingSettings) ||
+      (activeTab === "security" && !canOpenSecuritySettings)
+    ) {
       setActiveTab("account");
     }
-  }, [activeTab, canOpenFamilyWorkspaceSettings, workspacesLoading]);
+  }, [activeTab, canOpenBillingSettings, canOpenFamilyWorkspaceSettings, canOpenSecuritySettings, workspacesLoading]);
 
   return (
     <div className="min-h-screen p-3 font-sans md:p-8 pb-20">
@@ -694,7 +717,7 @@ export default function SettingsPage() {
 
         {/* Navegação de Abas Personalizada */}
         <div className={`${fadeInUp} delay-150 space-y-6`}>
-          <div id="tour-settings-tabs" className={`app-panel-subtle grid min-w-full w-full grid-cols-2 gap-1 rounded-2xl border p-1.5 shadow-sm ${canOpenFamilyWorkspaceSettings ? "sm:grid-cols-6" : "sm:grid-cols-5"}`}>
+          <div id="tour-settings-tabs" className="app-panel-subtle grid min-w-full w-full grid-cols-2 gap-1 rounded-2xl border p-1.5 shadow-sm sm:grid-cols-[repeat(var(--settings-tab-count),minmax(0,1fr))]" style={{ "--settings-tab-count": settingsTabCount } as CSSProperties & Record<"--settings-tab-count", number>}>
             <button id="tour-settings-account-tab" type="button" aria-pressed={activeTab === "account"} onClick={() => handleTabChange("account")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "account" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <User className="h-4 w-4" /> {t("tabs.account")}
             </button>
@@ -703,15 +726,19 @@ export default function SettingsPage() {
             </button>
             {canOpenFamilyWorkspaceSettings ? (
               <button id="tour-settings-family-tab" type="button" aria-pressed={activeTab === "family"} onClick={() => handleTabChange("family")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "family" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
-                <UsersRound className="h-4 w-4" /> Familia
+                <UsersRound className="h-4 w-4" /> Família
               </button>
             ) : null}
-            <button id="tour-settings-billing-tab" type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "billing" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
-              <CreditCard className="h-4 w-4" /> {t("tabs.billing")}
-            </button>
-            <button id="tour-settings-security-tab" type="button" aria-pressed={activeTab === "security"} onClick={() => handleTabChange("security")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "security" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
-              <ShieldCheck className="h-4 w-4" /> {t("tabs.security")}
-            </button>
+            {canOpenBillingSettings ? (
+              <button id="tour-settings-billing-tab" type="button" aria-pressed={activeTab === "billing"} onClick={() => handleTabChange("billing")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "billing" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+                <CreditCard className="h-4 w-4" /> {t("tabs.billing")}
+              </button>
+            ) : null}
+            {canOpenSecuritySettings ? (
+              <button id="tour-settings-security-tab" type="button" aria-pressed={activeTab === "security"} onClick={() => handleTabChange("security")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "security" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+                <ShieldCheck className="h-4 w-4" /> {t("tabs.security")}
+              </button>
+            ) : null}
             <button id="tour-settings-help-tab" type="button" aria-pressed={activeTab === "help"} onClick={() => handleTabChange("help")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "help" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
               <HelpCircle className="h-4 w-4" /> {t("tabs.help")}
             </button>
@@ -913,7 +940,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {activeTab === "family" && (
+          {activeTab === "family" && canOpenFamilyWorkspaceSettings && (
             <div id="tour-settings-family-panel" className={`${fadeInUp} delay-200`}>
               <FamilyWorkspacePanel workspaces={workspaces} loading={workspacesLoading} />
             </div>
@@ -1136,8 +1163,8 @@ export default function SettingsPage() {
                           <div key={item.id} className="app-panel-subtle rounded-xl border border-color:var(--app-panel-border) px-3 py-2">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <p className="text-sm font-semibold text-foreground">{formatBillingEventLabel(item)}</p>
-                              <Badge variant="secondary" className="text-[10px] uppercase">
-                                {item.paymentStatus || t("billing.history.unavailable")}
+                              <Badge variant="outline" className={`text-[10px] uppercase ${getBillingHistoryStatusClass(item.paymentStatus)}`}>
+                                {formatBillingHistoryStatus(item.paymentStatus)}
                               </Badge>
                             </div>
                             <p className="mt-1 text-xs text-muted-foreground">
@@ -1199,102 +1226,65 @@ export default function SettingsPage() {
                       <p className="mt-2 text-base font-semibold text-zinc-900">{t("billing.plans.freeTitle")}</p>
                       <p className="mt-1 text-sm text-zinc-600">{t("billing.plans.freeDescription")}</p>
                     </div>
-                    <div className={`rounded-2xl border px-4 py-4 ${premiumPlanTone.softCard}`}>
-                      <p className={`text-[10px] uppercase tracking-[0.2em] ${premiumPlanTone.accentText}`}>{premiumPlanCopy.title}</p>
-                      <p className="mt-2 text-base font-semibold text-zinc-900 dark:text-white">{premiumPlanCopy.tag}</p>
-                      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{premiumPlanCopy.description}</p>
-                    </div>
-                    <div className={`rounded-2xl border px-4 py-4 ${proPlanTone.softCard}`}>
-                      <p className={`text-[10px] uppercase tracking-[0.2em] ${proPlanTone.accentText}`}>{proPlanCopy.title}</p>
-                      <p className="mt-2 text-base font-semibold text-zinc-900 dark:text-white">{proPlanCopy.tag}</p>
-                      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{proPlanCopy.description}</p>
-                    </div>
+                    {availableUpgradePlans.slice(0, 2).map((planId) => {
+                      const planCopy = getLocalizedPlanCopy(tGlobal, planId, plans[planId]);
+                      const planTone = getPlanTone(planId);
+                      return (
+                        <div key={planId} className={`rounded-2xl border px-4 py-4 ${planTone.softCard}`}>
+                          <p className={`text-[10px] uppercase tracking-[0.2em] ${planTone.accentText}`}>{planCopy.title}</p>
+                          <p className="mt-2 text-base font-semibold text-zinc-900 dark:text-white">{planCopy.tag || planCopy.cta}</p>
+                          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{planCopy.description}</p>
+                        </div>
+                      );
+                    })}
                   </div>
 
-                  <div className="grid gap-6 md:grid-cols-2">
-                    {effectivePlan !== 'premium' && (
-                      <Card className={`app-panel-soft relative overflow-hidden h-full flex flex-col border-2 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300 ${premiumPlanTone.border}`}>
-                        <div className={`absolute top-0 left-0 w-full h-1 ${premiumPlanTone.topBar}`} />
-                        <CardHeader className="flex-1">
-                          <CardTitle className="flex justify-between items-center">
-                            <span className="flex items-center gap-2">
-                              <Medal className={`h-5 w-5 ${premiumPlanTone.accentText}`} /> {premiumPlanCopy.title}
-                            </span>
-                            <span className="text-xl font-bold text-zinc-900 dark:text-white">
-                              {formatPlanPrice("premium")}
-                            </span>
-                          </CardTitle>
-                          <CardDescription>
-                            {premiumPlanCopy.description}
-                          </CardDescription>
-                          <p className={`text-xs font-medium uppercase tracking-[0.18em] ${premiumPlanTone.accentText}`}>
-                            {premiumPlanCopy.tag}
-                          </p>
-                          <nav>
-                            {premiumPlanCopy.features.length > 0 &&
-                              (
+                  <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                    {availableUpgradePlans.map((planId) => {
+                      const planCopy = getLocalizedPlanCopy(tGlobal, planId, plans[planId]);
+                      const planTone = getPlanTone(planId);
+                      return (
+                        <Card key={planId} className={`app-panel-soft relative overflow-hidden h-full flex flex-col border-2 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300 ${planTone.border}`}>
+                          <div className={`absolute top-0 left-0 w-full h-1 ${planTone.topBar}`} />
+                          <CardHeader className="flex-1">
+                            <CardTitle className="flex justify-between items-center gap-3">
+                              <span className="flex items-center gap-2">
+                                <Medal className={`h-5 w-5 ${planTone.accentText}`} /> {planCopy.title}
+                              </span>
+                              <span className="text-xl font-bold text-zinc-900 dark:text-white">
+                                {formatPlanPrice(planId)}
+                              </span>
+                            </CardTitle>
+                            <CardDescription>{planCopy.description}</CardDescription>
+                            {planCopy.tag ? (
+                              <p className={`text-xs font-medium uppercase tracking-[0.18em] ${planTone.accentText}`}>
+                                {planCopy.tag}
+                              </p>
+                            ) : null}
+                            {planCopy.features.length > 0 ? (
+                              <nav>
                                 <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
-                                  {premiumPlanCopy.features.map((feature, index) => (
+                                  {planCopy.features.slice(0, 6).map((feature, index) => (
                                     <li key={index} className="flex items-center gap-2">
-                                      <CheckCircle2 className={`h-4 w-4 ${premiumPlanTone.accentText}`} /> {feature}
+                                      <CheckCircle2 className={`h-4 w-4 ${planTone.accentText}`} /> {feature}
                                     </li>
                                   ))}
                                 </ul>
-                              )}
-                          </nav>
-                        </CardHeader>
-                        <CardFooter className="mt-auto">
-                          <Button
-                            onClick={() => handleStartCheckout("premium")}
-                            disabled={isOpeningCheckout === "premium"}
-                            className={`w-full h-11 rounded-xl shadow-lg hover:cursor-pointer transition-all active:scale-[0.98] ${premiumPlanTone.action}`}
-                          >
-                            {isOpeningCheckout === "premium" ? t("billing.plans.openingCheckout") : t("billing.plans.premiumAction")}
-                          </Button>
-                        </CardFooter>
-                      </Card>
-                    )}
-                    <Card className={`app-panel-soft relative overflow-hidden h-full flex flex-col border-2 shadow-lg hover:shadow-xl transition-all rounded-3xl group transform hover:-translate-y-1 duration-300 ${proPlanTone.border}`}>
-                      <div className={`absolute top-0 left-0 w-full h-1 ${proPlanTone.topBar}`} />
-                      <CardHeader className="flex-1">
-                        <CardTitle className="flex justify-between items-center">
-                          <span className="flex items-center gap-2">
-                            <Medal className={`h-5 w-5 ${proPlanTone.accentText}`} /> {proPlanCopy.title}
-                          </span>
-                          <span className="text-xl font-bold text-zinc-900 dark:text-white">
-                            {formatPlanPrice("pro")}
-                          </span>
-                        </CardTitle>
-                        <CardDescription>
-                          {proPlanCopy.description}
-                        </CardDescription>
-                        <p className={`text-xs font-medium uppercase tracking-[0.18em] ${proPlanTone.accentText}`}>
-                          {proPlanCopy.tag}
-                        </p>
-                        <nav>
-                          {proPlanCopy.features.length > 0 &&
-                            (
-                              <ul className="mt-4 space-y-2 text-zinc-600 dark:text-zinc-400 text-sm">
-                                {proPlanCopy.features.map((feature, index) => (
-                                  <li key={index} className="flex items-center gap-2">
-                                    <CheckCircle2 className={`h-4 w-4 ${proPlanTone.accentText}`} /> {feature}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                        </nav>
-                      </CardHeader>
-                      <CardFooter className="mt-auto">
-                        <Button
-                          onClick={() => handleStartCheckout("pro")}
-                          disabled={isOpeningCheckout === "pro"}
-                          variant="outline"
-                          className={`w-full h-11 rounded-xl hover:cursor-pointer transition-all active:scale-[0.98] ${proPlanTone.actionOutline}`}
-                        >
-                          {isOpeningCheckout === "pro" ? t("billing.plans.openingCheckout") : t("billing.plans.proAction")}
-                        </Button>
-                      </CardFooter>
-                    </Card>
+                              </nav>
+                            ) : null}
+                          </CardHeader>
+                          <CardFooter className="mt-auto">
+                            <Button
+                              onClick={() => handleStartCheckout(planId)}
+                              disabled={isOpeningCheckout === planId}
+                              className={`w-full h-11 rounded-xl shadow-lg hover:cursor-pointer transition-all active:scale-[0.98] ${planTone.action}`}
+                            >
+                              {isOpeningCheckout === planId ? t("billing.plans.openingCheckout") : planCopy.cta}
+                            </Button>
+                          </CardFooter>
+                        </Card>
+                      );
+                    })}
                   </div>
                 </div>
               )}

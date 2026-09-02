@@ -166,6 +166,9 @@ export const piggyBank = {
       yield: "Rendimento: {value}",
       appliedToCardLimit: "Aplicado no limite do cartão",
       card: "Cartão: {card}",
+      pageSummary: "Página {page} de {totalPages} • {total} movimentação(ões)",
+      previous: "Anterior",
+      next: "Próxima",
     },
     source: {
       bank: "Saldo em banco",

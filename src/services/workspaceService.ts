@@ -120,6 +120,15 @@ export function subscribeToWorkspacesChanged(callback: () => void) {
   return () => window.removeEventListener(WORKSPACES_CHANGED_EVENT, callback);
 }
 
+export async function deleteWorkspace(input: { id: string; mode: "archive" | "delete_data" }) {
+  const response = await apiFetch("/api/workspaces", {
+    method: "DELETE",
+    body: JSON.stringify(input),
+  });
+  await readPayload(response);
+  emitWorkspacesChanged();
+}
+
 export function getActiveWorkspaceId() {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(ACTIVE_WORKSPACE_KEY);

@@ -13,6 +13,7 @@ import {
 } from "@/types/user";
 import { DEFAULT_ACCESS_CONTROL_CONFIG } from "@/types/system";
 import { pushNotification } from "@/lib/notifications/server";
+import { isPaidPlan, parseUserPlan } from "@/lib/plans/catalog";
 
 type MercadoPagoTopic = "payment" | "merchant_order" | "preapproval";
 
@@ -55,7 +56,14 @@ const MERCADO_PAGO_API_BASE = "https://api.mercadopago.com";
 
 const PLAN_BY_PREAPPROVAL_ID: Record<string, UserPlan> = {
   [process.env.MERCADOPAGO_PLAN_PRO_ID ?? ""]: "pro",
+  [process.env.MERCADOPAGO_PLAN_PRO_YEARLY_ID ?? ""]: "pro",
   [process.env.MERCADOPAGO_PLAN_PREMIUM_ID ?? ""]: "premium",
+  [process.env.MERCADOPAGO_PLAN_PREMIUM_YEARLY_ID ?? ""]: "premium",
+  [process.env.MERCADOPAGO_PLAN_FAMILY_ID ?? ""]: "family",
+  [process.env.MERCADOPAGO_PLAN_FAMILY_YEARLY_ID ?? ""]: "family",
+  [process.env.MERCADOPAGO_PLAN_BUSINESS_ID ?? ""]: "business",
+  [process.env.MERCADOPAGO_PLAN_BUSINESS_YEARLY_ID ?? ""]: "business",
+  [process.env.MERCADOPAGO_PLAN_FOUNDER_ID ?? ""]: "founder",
 };
 
 function allowPendingCheckoutHeuristic() {
@@ -64,6 +72,16 @@ function allowPendingCheckoutHeuristic() {
 
 function allowFallbackPlanSearchHeuristic() {
   return process.env.MERCADOPAGO_ALLOW_FALLBACK_PLAN_SEARCH === "true";
+}
+
+function getPreapprovalPlanId(plan: UserPlan, interval?: unknown) {
+  const yearly = interval === "yearly";
+  if (plan === "premium") return yearly ? process.env.MERCADOPAGO_PLAN_PREMIUM_YEARLY_ID : process.env.MERCADOPAGO_PLAN_PREMIUM_ID;
+  if (plan === "pro") return yearly ? process.env.MERCADOPAGO_PLAN_PRO_YEARLY_ID : process.env.MERCADOPAGO_PLAN_PRO_ID;
+  if (plan === "family") return yearly ? process.env.MERCADOPAGO_PLAN_FAMILY_YEARLY_ID : process.env.MERCADOPAGO_PLAN_FAMILY_ID;
+  if (plan === "business") return yearly ? process.env.MERCADOPAGO_PLAN_BUSINESS_YEARLY_ID : process.env.MERCADOPAGO_PLAN_BUSINESS_ID;
+  if (plan === "founder") return process.env.MERCADOPAGO_PLAN_FOUNDER_ID;
+  return undefined;
 }
 
 async function getProfileRow(uid: string): Promise<ProfileRow | null> {
@@ -204,9 +222,7 @@ function parseExternalReference(reference: string | undefined): { uid?: string; 
     if (!key || !value) continue;
 
     if (key === "uid") out.uid = value;
-    if (key === "plan" && (value === "free" || value === "pro" || value === "premium")) {
-      out.plan = value;
-    }
+    if (key === "plan") out.plan = parseUserPlan(value);
   }
 
   if (!out.uid && !reference.includes(":")) {
@@ -340,6 +356,30 @@ async function mpPut(path: string, payload: Record<string, unknown>): Promise<Re
   return (await response.json()) as Record<string, unknown>;
 }
 
+async function mpPost(path: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  assertToken();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  const response = await fetch(`${MERCADO_PAGO_API_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeout));
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`MercadoPago POST failed (${response.status}): ${body}`);
+  }
+
+  return (await response.json()) as Record<string, unknown>;
+}
+
 function parseTopic(value: string | null | undefined): MercadoPagoTopic | null {
   if (!value) return null;
   if (value.includes("authorized_payment")) return "payment";
@@ -401,7 +441,7 @@ export function getBillingEventDocId(input: WebhookInput): string {
 
 export function validateWebhookSignature(input: WebhookInput) {
   const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
-  if (!secret) return true;
+  if (!secret) return false;
 
   if (!input.signatureHeader || !input.requestIdHeader || !input.resourceId) {
     return false;
@@ -429,10 +469,7 @@ async function fetchGatewayDetails(topic: MercadoPagoTopic, resourceId: string):
     const externalReference = typeof payload.external_reference === "string" ? payload.external_reference : undefined;
     const metadata = (payload.metadata ?? {}) as Record<string, unknown>;
     const parsedReference = parseExternalReference(externalReference);
-    const parsedMetadataPlan =
-      metadata.plan === "free" || metadata.plan === "pro" || metadata.plan === "premium"
-        ? (metadata.plan as UserPlan)
-        : undefined;
+    const parsedMetadataPlan = metadata.plan ? parseUserPlan(metadata.plan) : undefined;
     const preapprovalId =
       typeof payload.preapproval_id === "string"
         ? payload.preapproval_id
@@ -566,7 +603,7 @@ async function findUserByWebhook(details: GatewayDetails): Promise<UserMatch | n
     }
   }
 
-  const pendingPlan = details.plan === "pro" || details.plan === "premium" ? details.plan : null;
+  const pendingPlan = details.plan && isPaidPlan(details.plan) ? details.plan : null;
   if (pendingPlan && allowPendingCheckoutHeuristic()) {
     const now = Date.now();
     const windowMs = 6 * 60 * 60 * 1000;
@@ -730,8 +767,7 @@ export async function syncFromWebhook(input: WebhookInput) {
   const pendingPlan =
     typeof userMatch.userData.billing === "object" &&
     userMatch.userData.billing !== null &&
-    ((userMatch.userData.billing as { pendingPlan?: unknown }).pendingPlan === "pro" ||
-      (userMatch.userData.billing as { pendingPlan?: unknown }).pendingPlan === "premium")
+    isPaidPlan((userMatch.userData.billing as { pendingPlan?: unknown }).pendingPlan)
       ? ((userMatch.userData.billing as { pendingPlan: UserPlan }).pendingPlan as UserPlan)
       : undefined;
   const currentRole = (userMatch.userData.role as UserRole) || "client";
@@ -857,6 +893,170 @@ export function buildCheckoutUrl(baseUrl: string, opts: { uid: string; plan: Use
   return url.toString();
 }
 
+export async function createPreapprovalCheckout(params: {
+  uid: string;
+  payerEmail: string;
+  plan: Exclude<UserPlan, "free">;
+  interval?: unknown;
+  amount: number;
+  currency?: string;
+  returnUrl?: string;
+}) {
+  if (!Number.isFinite(params.amount) || params.amount <= 0) throw new Error("invalid_checkout_amount");
+  const yearly = params.interval === "yearly";
+
+  const payload = await mpPost("/preapproval", {
+    payer_email: params.payerEmail.trim().toLowerCase(),
+    external_reference: `uid:${params.uid}|plan:${params.plan}`,
+    reason: `WevenFinance - ${params.plan}`,
+    auto_recurring: {
+      frequency: yearly ? 12 : 1,
+      frequency_type: "months",
+      transaction_amount: Number(params.amount.toFixed(2)),
+      currency_id: params.currency || "BRL",
+    },
+    status: "pending",
+    ...(params.returnUrl ? { back_url: params.returnUrl } : {}),
+  });
+
+  const preapprovalId = typeof payload.id === "string" ? payload.id : "";
+  const checkoutUrl = typeof payload.init_point === "string" ? payload.init_point : "";
+  if (!preapprovalId || !checkoutUrl) throw new Error("mercadopago_checkout_missing_data");
+
+  return { preapprovalId, checkoutUrl };
+}
+
+export async function changePreapprovalPlanForUser(params: {
+  uid: string;
+  preapprovalId: string;
+  userEmail?: string;
+  plan: Exclude<UserPlan, "free">;
+  interval?: unknown;
+  amount: number;
+  currency?: string;
+}) {
+  if (!Number.isFinite(params.amount) || params.amount <= 0) throw new Error("invalid_checkout_amount");
+
+  const currentPayload = await mpRequest(`/preapproval/${params.preapprovalId}`);
+  const currentDetails = normalizeGatewayDetailsFromPreapproval(currentPayload, params.preapprovalId);
+  const currentReference = parseExternalReference(currentDetails.externalReference);
+  if (currentReference.uid && currentReference.uid !== params.uid) throw new Error("preapproval_owner_mismatch");
+  if (
+    !currentReference.uid &&
+    params.userEmail &&
+    currentDetails.payerEmail &&
+    params.userEmail.toLowerCase() !== currentDetails.payerEmail.toLowerCase()
+  ) {
+    throw new Error("payer_email_mismatch");
+  }
+
+  const gatewayStatus = currentDetails.gatewayStatus.toLowerCase();
+  if (gatewayStatus !== "authorized" && gatewayStatus !== "approved") {
+    throw new Error("subscription_not_active_for_plan_change");
+  }
+
+  const autoRecurring = ((currentPayload.auto_recurring as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const previousAmount = typeof autoRecurring.transaction_amount === "number"
+    ? autoRecurring.transaction_amount
+    : Number(autoRecurring.transaction_amount || 0);
+  const previousPlan = currentDetails.plan ?? null;
+  const yearly = params.interval === "yearly";
+
+  await mpPut(`/preapproval/${params.preapprovalId}`, {
+    reason: `WevenFinance - ${params.plan}`,
+    external_reference: `uid:${params.uid}|plan:${params.plan}`,
+    auto_recurring: {
+      frequency: yearly ? 12 : 1,
+      frequency_type: "months",
+      transaction_amount: Number(params.amount.toFixed(2)),
+      currency_id: params.currency || "BRL",
+    },
+  });
+
+  const result = await confirmPreapprovalForUser({
+    uid: params.uid,
+    preapprovalId: params.preapprovalId,
+    expectedPlan: params.plan,
+    userEmail: params.userEmail,
+    suppressConfirmationEvent: true,
+    suppressNotification: true,
+  });
+
+  const effectiveAt = currentDetails.currentPeriodEnd ?? null;
+  await writeBillingEvent(`plan_change_${params.preapprovalId}_${Date.now()}`, {
+    topic: "subscription_plan_change",
+    action: "plan_changed_in_place",
+    resourceId: params.preapprovalId,
+    uid: params.uid,
+    status: "processed",
+    paymentStatus: "paid",
+    previousPlan,
+    targetPlan: params.plan,
+    previousAmount: Number.isFinite(previousAmount) ? previousAmount : null,
+    amount: Number(params.amount.toFixed(2)),
+    currency: params.currency || "BRL",
+    interval: yearly ? "yearly" : "monthly",
+    chargePolicy: "next_renewal_no_immediate_charge",
+    effectiveAt,
+    processedAt: new Date().toISOString(),
+  });
+
+  return {
+    ...result,
+    changedInPlace: true as const,
+    preapprovalId: params.preapprovalId,
+    nextChargeAt: effectiveAt,
+    amount: Number(params.amount.toFixed(2)),
+  };
+}
+
+async function cancelOtherPreapprovals(params: {
+  uid: string;
+  keepPreapprovalId: string;
+  payerEmail?: string;
+}) {
+  if (!params.payerEmail) return;
+  const searchPayload = await mpRequest(
+    `/preapproval/search?payer_email=${encodeURIComponent(params.payerEmail)}&limit=100&offset=0`
+  );
+  const results = Array.isArray(searchPayload.results)
+    ? (searchPayload.results as Record<string, unknown>[])
+    : [];
+
+  for (const item of results) {
+    const id = typeof item.id === "string" ? item.id : "";
+    const status = typeof item.status === "string" ? item.status.toLowerCase() : "";
+    if (!id || id === params.keepPreapprovalId || status === "cancelled") continue;
+    if (!['authorized', 'paused', 'pending'].includes(status)) continue;
+
+    try {
+      await mpPut(`/preapproval/${id}`, { status: "cancelled" });
+      await writeBillingEvent(`superseded_preapproval_${id}_${params.uid}`, {
+        topic: "preapproval_cancel",
+        action: "superseded_by_plan_change",
+        resourceId: id,
+        uid: params.uid,
+        status: "canceled",
+        paymentStatus: "canceled",
+        replacedByPreapprovalId: params.keepPreapprovalId,
+        processedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      await writeBillingEvent(`superseded_preapproval_failed_${id}_${params.uid}`, {
+        topic: "preapproval_cancel",
+        action: "superseded_cancel_failed",
+        resourceId: id,
+        uid: params.uid,
+        status: "failed",
+        paymentStatus: "not_paid",
+        replacedByPreapprovalId: params.keepPreapprovalId,
+        error: error instanceof Error ? error.message : String(error),
+        processedAt: new Date().toISOString(),
+      });
+    }
+  }
+}
+
 function normalizeGatewayDetailsFromPreapproval(payload: Record<string, unknown>, preapprovalId: string): GatewayDetails {
   const externalReference = typeof payload.external_reference === "string" ? payload.external_reference : undefined;
   const preapprovalPlanId =
@@ -883,11 +1083,18 @@ export async function confirmPreapprovalForUser(params: {
   preapprovalId: string;
   expectedPlan?: UserPlan;
   userEmail?: string;
+  suppressConfirmationEvent?: boolean;
+  suppressNotification?: boolean;
 }) {
   const payload = await mpRequest(`/preapproval/${params.preapprovalId}`);
   const details = normalizeGatewayDetailsFromPreapproval(payload, params.preapprovalId);
+  const reference = parseExternalReference(details.externalReference);
 
-  if (params.userEmail && details.payerEmail && params.userEmail.toLowerCase() !== details.payerEmail.toLowerCase()) {
+  if (reference.uid && reference.uid !== params.uid) {
+    throw new Error("preapproval_owner_mismatch");
+  }
+
+  if (!reference.uid && params.userEmail && details.payerEmail && params.userEmail.toLowerCase() !== details.payerEmail.toLowerCase()) {
     throw new Error("payer_email_mismatch");
   }
 
@@ -980,24 +1187,36 @@ export async function confirmPreapprovalForUser(params: {
     raw: { details, source: "manual_confirm" },
   });
 
-  await writeBillingEvent(`confirm_preapproval_${params.preapprovalId}_${params.uid}`, {
-    topic: "preapproval_confirm",
-    action: "manual_confirm",
-    resourceId: params.preapprovalId,
-    uid: params.uid,
-    status: "processed",
-    targetPlan,
-    targetPaymentStatus,
-    details,
-    processedAt: new Date().toISOString(),
-  });
+  if (!params.suppressConfirmationEvent) {
+    await writeBillingEvent(`confirm_preapproval_${params.preapprovalId}_${params.uid}`, {
+      topic: "preapproval_confirm",
+      action: "manual_confirm",
+      resourceId: params.preapprovalId,
+      uid: params.uid,
+      status: "processed",
+      targetPlan,
+      targetPaymentStatus,
+      details,
+      processedAt: new Date().toISOString(),
+    });
+  }
 
-  await pushBillingStatusNotification({
-    uid: params.uid,
-    paymentStatus: targetPaymentStatus,
-    targetPlan,
-    source: "confirm",
-  });
+  if (targetPaymentStatus === "paid") {
+    await cancelOtherPreapprovals({
+      uid: params.uid,
+      keepPreapprovalId: params.preapprovalId,
+      payerEmail: details.payerEmail,
+    });
+  }
+
+  if (!params.suppressNotification) {
+    await pushBillingStatusNotification({
+      uid: params.uid,
+      paymentStatus: targetPaymentStatus,
+      targetPlan,
+      source: "confirm",
+    });
+  }
 
   return {
     ok: true,
@@ -1017,12 +1236,7 @@ export async function confirmLatestPreapprovalForUser(params: {
   const searchPayload = await mpRequest(`/preapproval/search?payer_email=${encodeURIComponent(params.userEmail)}&limit=30&offset=0`);
   const results = Array.isArray(searchPayload.results) ? (searchPayload.results as Record<string, unknown>[]) : [];
 
-  const expectedPlanId =
-    params.expectedPlan === "pro"
-      ? process.env.MERCADOPAGO_PLAN_PRO_ID
-      : params.expectedPlan === "premium"
-        ? process.env.MERCADOPAGO_PLAN_PREMIUM_ID
-        : undefined;
+  const expectedPlanId = params.expectedPlan ? getPreapprovalPlanId(params.expectedPlan) : undefined;
   const minStartedAt = params.checkoutStartedAt ? new Date(params.checkoutStartedAt).getTime() - 10 * 60 * 1000 : null;
 
   const baseCandidates = results.filter((item) => {
@@ -1154,12 +1368,7 @@ export async function cancelSubscriptionForUser(params: {
       : "";
 
   if (!preapprovalId) {
-    const expectedPlanId =
-      currentPlan === "pro"
-        ? process.env.MERCADOPAGO_PLAN_PRO_ID
-        : currentPlan === "premium"
-          ? process.env.MERCADOPAGO_PLAN_PREMIUM_ID
-          : undefined;
+    const expectedPlanId = getPreapprovalPlanId(currentPlan);
     const searchPayload = await mpRequest(`/preapproval/search?payer_email=${encodeURIComponent(params.userEmail)}&limit=30&offset=0`);
     const results = Array.isArray(searchPayload.results) ? (searchPayload.results as Record<string, unknown>[]) : [];
 

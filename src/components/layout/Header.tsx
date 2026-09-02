@@ -24,6 +24,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { canAccessAdminArea, isCreatorSupremeUid } from "@/lib/access-control/roles";
 import { WorkspaceProfileSwitcher } from "@/components/workspaces/WorkspaceProfileSwitcher";
+import { formatPlanName } from "@/lib/plans/capabilities";
 
 const FLOW_ROUTES = new Set(["/login", "/register", "/forgot-password", "/first-access", "/verify-email", "/goodbye", "/blocked"]);
 const PUBLIC_FIXED_HEADER_ROUTES = new Set(["/", "/contact", "/security", "/terms"]);
@@ -31,7 +32,6 @@ const PUBLIC_FIXED_HEADER_ROUTES = new Set(["/", "/contact", "/security", "/term
 export function Header() {
   const { user, userProfile, logout } = useAuth();
   const tHeader = useTranslations("header");
-  const tCommon = useTranslations("common");
   const router = useRouter();
   const pathname = usePathname();
   const { isImpersonating, impersonationTargetUid, stopImpersonation } = useImpersonation();
@@ -119,7 +119,7 @@ export function Header() {
             <div className="rounded-xl bg-primary p-2 text-primary-foreground shadow-lg shadow-primary/20 transition-transform group-hover:scale-105">
               <Wallet className="h-5 w-5" />
             </div>
-            <span className="text-xl font-bold tracking-tight text-foreground">
+            <span className="hidden text-xl font-bold tracking-tight text-foreground sm:block">
               Weven<span className="text-primary">Finance</span>
             </span>
           </Link>
@@ -202,7 +202,7 @@ export function Header() {
             </Button>
           </DropdownMenuTrigger>
 
-          <DropdownMenuContent align="end" className="app-panel-soft w-[calc(100vw-2rem)] max-w-80 rounded-xl border-color:var(--app-panel-border) p-2 shadow-xl shadow-primary/10">
+          <DropdownMenuContent align="end" className="w-[calc(100vw-2rem)] max-w-80 rounded-xl border-color:var(--app-panel-border) p-2 shadow-xl shadow-primary/10">
             <div className="flex items-center justify-between px-2 py-1">
               <DropdownMenuLabel className="p-0">{tHeader("notifications")}</DropdownMenuLabel>
               <button
@@ -250,12 +250,12 @@ export function Header() {
           <div className="flex justify-end mt-1">
             <Badge
               variant="secondary"
-              className={`text-[10px] uppercase border h-5 px-1.5 ${userProfile?.plan === "pro" || userProfile?.plan === "premium"
+              className={`text-[10px] uppercase border h-5 px-1.5 ${userProfile?.plan && userProfile.plan !== "free"
                 ? "border-primary/25 bg-primary/10 text-primary"
                 : "border-border bg-muted text-muted-foreground"
                 }`}
             >
-              {userProfile?.plan === "pro" ? tCommon("pro") : userProfile?.plan === "premium" ? tCommon("premium") : tCommon("free")}
+              {formatPlanName(userProfile?.plan || "free")}
             </Badge>
           </div>
         </div>
@@ -272,7 +272,9 @@ export function Header() {
               </Avatar>
             </div>
           </DropdownMenuTrigger>
-          <DropdownMenuContent id="tour-account-menu-panel" align="end" className="app-panel-soft w-[calc(100vw-2rem)] max-w-56 rounded-xl border-color:var(--app-panel-border) p-2 shadow-xl shadow-primary/10">
+
+          {/* Conteúdo do Menu de Conta */}
+          <DropdownMenuContent id="tour-account-menu-panel" align="end" className="w-[calc(100vw-2rem)] max-w-56 rounded-xl border-color:var(--app-panel-border) p-2 shadow-xl shadow-primary/10">
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium leading-none truncate">{displayName || tHeader("account")}</p>
@@ -281,50 +283,50 @@ export function Header() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
 
-            <Link href="/" className="cursor-pointer">
-              <DropdownMenuItem className="cursor-pointer rounded-lg">
+            <Link href="/" className="cursor-pointer ">
+              <DropdownMenuItem className="cursor-pointer hover:bg-accent/50 hover:text-foreground focus:bg-accent focus:text-foreground rounded-lg">
                 <Home className="mr-2 h-4 w-4" />
                 <span>{tHeader("home")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/dashboard" className="cursor-pointer">
-              <DropdownMenuItem className="cursor-pointer rounded-lg">
+              <DropdownMenuItem className="cursor-pointer hover:bg-accent/50 hover:text-foreground focus:bg-accent focus:text-foreground rounded-lg">
                 <LayoutDashboard className="mr-2 h-4 w-4" />
                 <span>{tHeader("dashboard")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/reports" className="cursor-pointer">
-              <DropdownMenuItem className="cursor-pointer rounded-lg">
+              <DropdownMenuItem className="cursor-pointer hover:bg-accent/50 hover:text-foreground focus:bg-accent focus:text-foreground rounded-lg">
                 <FileText className="mr-2 h-4 w-4" />
                 <span>{tHeader("reports")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/cards" className="cursor-pointer">
-              <DropdownMenuItem className="cursor-pointer rounded-lg">
+              <DropdownMenuItem className="cursor-pointer hover:bg-accent/50 hover:text-foreground focus:bg-accent focus:text-foreground rounded-lg">
                 <CreditCard className="mr-2 h-4 w-4" />
                 <span>{tHeader("cards")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/piggy-bank" className="cursor-pointer">
-              <DropdownMenuItem className="cursor-pointer rounded-lg">
+              <DropdownMenuItem className="cursor-pointer hover:bg-accent/50 hover:text-foreground focus:bg-accent focus:text-foreground rounded-lg">
                 <PiggyBank className="mr-2 h-4 w-4" />
                 <span>{tHeader("piggyBank")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/settings" className="cursor-pointer">
-              <DropdownMenuItem className="cursor-pointer rounded-lg">
+              <DropdownMenuItem className="cursor-pointer hover:bg-accent/50 hover:text-foreground focus:bg-accent focus:text-foreground rounded-lg">
                 <Settings className="mr-2 h-4 w-4" />
                 <span>{tHeader("settings")}</span>
               </DropdownMenuItem>
             </Link>
 
             <Link href="/apps" className="cursor-pointer">
-              <DropdownMenuItem className="cursor-pointer rounded-lg">
+              <DropdownMenuItem className="cursor-pointer hover:bg-accent/50 hover:text-foreground focus:bg-accent focus:text-foreground rounded-lg">
                 <Grid2X2 className="mr-2 h-4 w-4" />
                 <span>{tHeader("apps")}</span>
               </DropdownMenuItem>
@@ -336,7 +338,7 @@ export function Header() {
                 <Link href="/admin" className="cursor-pointer">
                   <DropdownMenuItem
                     className={`cursor-pointer rounded-lg font-medium ${userProfile?.role === "admin" || isCreatorSupremeUid(userProfile?.uid)
-                      ? "text-red-600 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-900/10"
+                      ? "text-red-600 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-950/30"
                       : userProfile?.role === "moderator"
                         ? "text-amber-600 focus:text-amber-700 focus:bg-amber-50 dark:focus:bg-amber-900/10"
                         : "text-muted-foreground focus:bg-accent focus:text-foreground"

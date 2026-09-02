@@ -14,6 +14,7 @@ export default function robots(): MetadataRoute.Robots {
           "/contact",
           "/security",
           "/terms",
+          "/privacy",
           "/quanto-posso-gastar-hoje",
           "/calculadora/quanto-posso-gastar-hoje",
           "/controle-financeiro",

@@ -201,7 +201,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Perfis financeiros",
             description:
-              "Aqui voce alterna, revisa e organiza os perfis que separam sua vida pessoal, profissional, igreja, familia ou negocio.",
+              "Aqui você alterna, revisa e organiza perfis de uso pessoal, Família e Business/PJ sem misturar dados.",
             side: "bottom",
             onNextClick: clickSelectorAndAdvance("#tour-settings-profiles-tab"),
           },
@@ -211,7 +211,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Dados separados por perfil",
             description:
-              "Cada perfil funciona como um workspace independente. Ao trocar de perfil, o app recarrega somente os dados daquele contexto.",
+              "Cada perfil financeiro tem seus próprios dados. Ao trocar de perfil, o app carrega somente as informações daquele perfil.",
             side: "top",
           },
         },
@@ -219,9 +219,9 @@ export function getPlatformTourConfig(
           stepId: "familyWorkspace",
           element: "#tour-settings-family-tab",
           popover: {
-            title: "Workspace familia",
+            title: "Perfil Família",
             description:
-              "Quando existe um perfil Familia, esta aba mostra membros, convites e permissoes especificas desse contexto.",
+              "Quando existe um perfil Família, esta aba mostra membros, convites e permissões desse perfil.",
             side: "bottom",
             onNextClick: clickSelectorAndAdvance("#tour-settings-family-tab"),
           },
@@ -230,9 +230,9 @@ export function getPlatformTourConfig(
           stepId: "familyWorkspace",
           element: "#tour-settings-family-panel",
           popover: {
-            title: "Gestao da familia",
+            title: "Gestão da família",
             description:
-              "Use esta area para administrar quem participa do workspace familiar e o que cada membro pode acessar.",
+              "Use esta área para administrar quem participa da família e o que cada membro pode acessar.",
             side: "top",
           },
         },
@@ -304,7 +304,7 @@ export function getPlatformTourConfig(
           popover: {
             title: "Criar outro perfil",
             description:
-              "Use esta tela quando o usuario tiver, por exemplo, um perfil pessoal e tambem quiser um perfil de igreja, familia ou negocio.",
+              "Use esta tela para criar outro perfil financeiro, como Família ou Business/PJ.",
             side: "bottom",
             align: "start",
           },
@@ -312,7 +312,7 @@ export function getPlatformTourConfig(
         {
           element: "#tour-account-profile-options",
           popover: {
-            title: "Escolha o tipo de workspace",
+            title: "Escolha o tipo de perfil",
             description:
               "O tipo define presets e contexto, mas os dados financeiros permanecem isolados entre os perfis.",
             side: "bottom",
