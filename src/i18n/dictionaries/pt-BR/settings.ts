@@ -190,6 +190,7 @@ export const settings = {
       eventCount: "evento(s)",
       unavailable: "n/a",
       planPrefix: "Plano",
+      statuses: { paid: "Pago", pending: "Pendente", canceled: "Cancelado", notPaid: "Não pago", overdue: "Atrasado", failed: "Falhou" },
     },
     plans: {
       freeTitle: "Registrar",

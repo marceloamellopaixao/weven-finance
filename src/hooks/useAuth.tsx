@@ -22,6 +22,7 @@ import { canAccessLevel } from "@/lib/access-control/config";
 import { getMyAccessControl } from "@/services/systemService";
 
 const BLOCKED_STATUSES = new Set(["inactive", "blocked"]);
+const PROFILE_BACKGROUND_REFRESH_MS = 5 * 60 * 1000;
 const PUBLIC_ROUTES = [
   "/",
   "/login",
@@ -37,6 +38,7 @@ const PUBLIC_ROUTES = [
   "/contact",
   "/security",
   "/terms",
+  "/privacy",
   "/quanto-posso-gastar-hoje",
   "/calculadora/quanto-posso-gastar-hoje",
   "/controle-financeiro",
@@ -364,7 +366,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     void syncProfile(true);
-    const interval = setInterval(() => void syncProfile(false), 60000);
+    const interval = setInterval(() => void syncProfile(false), PROFILE_BACKGROUND_REFRESH_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -487,19 +489,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const normalizedEmail = email.trim().toLowerCase();
     if (!isValidRealEmail(normalizedEmail)) throw "Por favor, utilize um e-mail válido para cadastro.";
 
-    const phoneCheckResponse = await fetch("/api/auth/phone-availability", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ phone }),
-    });
-    const phoneCheckPayload = (await phoneCheckResponse.json()) as { ok?: boolean; error?: string };
-    if (!phoneCheckResponse.ok || !phoneCheckPayload.ok) {
-      if (phoneCheckPayload.error === "phone_already_in_use") {
-        throw "Este número já está vinculado a outra conta.";
+    if (phone) {
+      const phoneCheckResponse = await fetch("/api/auth/phone-availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const phoneCheckPayload = (await phoneCheckResponse.json()) as { ok?: boolean; error?: string };
+      if (!phoneCheckResponse.ok || !phoneCheckPayload.ok) {
+        if (phoneCheckPayload.error === "phone_already_in_use") throw "Este número já está vinculado a outra conta.";
+        throw "Não foi possível validar seu número agora.";
       }
-      throw "Não foi possível validar seu número agora.";
     }
 
     const { data, error } = await supabase.auth.signUp({

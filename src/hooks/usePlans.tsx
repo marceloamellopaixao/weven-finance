@@ -1,27 +1,10 @@
 "use client";
-
-import { useEffect, useState } from "react";
-import { PlansConfig, DEFAULT_PLANS_CONFIG } from "@/types/system";
-import { subscribeToPlansConfig } from "@/services/systemService";
-
+import { DEFAULT_PLANS_CONFIG } from "@/types/system";
+import { useGetPlansQuery } from "@/store/api/systemApi";
+import { useAuth } from "./useAuth";
 export function usePlans() {
-  const [plans, setPlans] = useState<PlansConfig>(DEFAULT_PLANS_CONFIG);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const unsubscribe = subscribeToPlansConfig(
-      (data) => {
-        setPlans(data);
-        setLoading(false);
-      },
-      () => {
-        setPlans(DEFAULT_PLANS_CONFIG);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, []);
-
-  return { plans, loading };
+  const { user, userProfile } = useAuth();
+  const userId = userProfile?.uid || user?.uid;
+  const { data, isLoading } = useGetPlansQuery({ userId: userId || "" }, { skip: !userId });
+  return { plans: data ?? DEFAULT_PLANS_CONFIG, loading: isLoading };
 }

@@ -39,6 +39,7 @@ export function Footer() {
               <li><Link href="https://weven.tech" className="transition-colors hover:text-primary">Sobre Nós</Link></li>
               <li><Link href="/contact" className="transition-colors hover:text-primary">Contato</Link></li>
               <li><Link href="/terms" className="transition-colors hover:text-primary">Termos de Uso</Link></li>
+              <li><Link href="/privacy" className="transition-colors hover:text-primary">Privacidade</Link></li>
             </ul>
           </div>
 

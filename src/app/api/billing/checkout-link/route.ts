@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { buildCheckoutUrl } from "@/lib/billing/mercadopago";
+import { changePreapprovalPlanForUser, createPreapprovalCheckout } from "@/lib/billing/mercadopago";
 import { DEFAULT_ACCESS_CONTROL_CONFIG, DEFAULT_PLANS_CONFIG, PlansConfig } from "@/types/system";
-import { UserPlan, UserRole } from "@/types/user";
+import { UserRole } from "@/types/user";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { parseBillingInterval, parseUpgradePlan } from "@/services/billing/checkoutIntent";
 import { resolveActingContext } from "@/lib/impersonation/server";
@@ -13,24 +13,10 @@ import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { hasBillingExemption, normalizeAccessControlConfig } from "@/lib/access-control/config";
 import { normalizePlansConfig as normalizeSystemPlans } from "@/lib/plans/catalog";
-import type { BillingInterval } from "@/lib/plans/catalog";
+import { canAccessResource } from "@/lib/access-control/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function getMercadoPagoPlanId(plan: Exclude<UserPlan, "free">, interval: BillingInterval) {
-  if (plan === "premium") return interval === "yearly" ? process.env.MERCADOPAGO_PLAN_PREMIUM_YEARLY_ID || process.env.MERCADOPAGO_PLAN_PREMIUM_ID : process.env.MERCADOPAGO_PLAN_PREMIUM_ID;
-  if (plan === "pro") return interval === "yearly" ? process.env.MERCADOPAGO_PLAN_PRO_YEARLY_ID || process.env.MERCADOPAGO_PLAN_PRO_ID : process.env.MERCADOPAGO_PLAN_PRO_ID;
-  if (plan === "family") return interval === "yearly" ? process.env.MERCADOPAGO_PLAN_FAMILY_YEARLY_ID || process.env.MERCADOPAGO_PLAN_FAMILY_ID : process.env.MERCADOPAGO_PLAN_FAMILY_ID;
-  if (plan === "business") return interval === "yearly" ? process.env.MERCADOPAGO_PLAN_BUSINESS_YEARLY_ID || process.env.MERCADOPAGO_PLAN_BUSINESS_ID : process.env.MERCADOPAGO_PLAN_BUSINESS_ID;
-  if (plan === "founder") return process.env.MERCADOPAGO_PLAN_FOUNDER_ID;
-  return undefined;
-}
-
-function getCheckoutBaseUrl(plan: Exclude<UserPlan, "free">, interval: BillingInterval) {
-  const planId = getMercadoPagoPlanId(plan, interval);
-  return planId ? `https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=${encodeURIComponent(planId)}` : "";
-}
 
 export async function GET(request: NextRequest) {
   const meta = getRequestMeta(request);
@@ -48,6 +34,7 @@ export async function GET(request: NextRequest) {
     uid = acting.actingUid;
     const plan = parseUpgradePlan(request.nextUrl.searchParams.get("plan"));
     const interval = parseBillingInterval(request.nextUrl.searchParams.get("interval"));
+    const adminTestRequested = request.nextUrl.searchParams.get("mode") === "admin-test";
 
     if (!plan) {
       return NextResponse.json({ ok: false, error: "invalid_plan" }, { status: 400 });
@@ -68,7 +55,11 @@ export async function GET(request: NextRequest) {
     const accessControl = accessControlRows.length > 0
       ? normalizeAccessControlConfig(accessControlRows[0]?.data)
       : DEFAULT_ACCESS_CONTROL_CONFIG;
-    if (hasBillingExemption(accessControl, { uid, role: userRole })) {
+    const canRunAdminTest = adminTestRequested && await canAccessResource(uid, "admin.pages.preview", "read");
+    if (adminTestRequested && !canRunAdminTest) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
+    if (hasBillingExemption(accessControl, { uid, role: userRole }) && !canRunAdminTest) {
       return NextResponse.json({ ok: false, error: "role_billing_exempt" }, { status: 409 });
     }
 
@@ -83,11 +74,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "plan_inactive" }, { status: 409 });
     }
 
-    const checkoutBaseUrl = getCheckoutBaseUrl(plan, interval);
-    if (!checkoutBaseUrl) {
-      return NextResponse.json({ ok: false, error: "plan_missing_mercadopago_id" }, { status: 422 });
-    }
-
     const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
     const runtimeBaseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
     const selectedBaseUrl = configuredAppUrl || runtimeBaseUrl;
@@ -96,24 +82,85 @@ export async function GET(request: NextRequest) {
       !selectedBaseUrl.includes("localhost") &&
       !selectedBaseUrl.includes("127.0.0.1");
     const checkoutAttemptId = crypto.randomUUID();
+    const activationPath = `/billing/activating?plan=${plan}&interval=${interval}&attempt=${checkoutAttemptId}${canRunAdminTest ? "&mode=admin-test" : ""}`;
+    const publicBackUrlOverride = process.env.MERCADOPAGO_BACK_URL?.trim();
+    const hasValidBackUrlOverride = Boolean(
+      publicBackUrlOverride?.startsWith("https://") &&
+      !publicBackUrlOverride.includes("localhost") &&
+      !publicBackUrlOverride.includes("127.0.0.1")
+    );
     const returnUrl = isPublicHttpsUrl
-      ? `${selectedBaseUrl}/billing/activating?plan=${plan}&interval=${interval}&attempt=${checkoutAttemptId}`
-      : undefined;
-    const checkoutUrl = buildCheckoutUrl(checkoutBaseUrl, {
-      uid,
-      plan,
-      returnUrl,
-    });
-
+      ? `${selectedBaseUrl}${activationPath}`
+      : hasValidBackUrlOverride
+        ? publicBackUrlOverride!
+        : "https://www.mercadopago.com.br/subscriptions";
+    const payerEmail = String(userRow?.email || userRaw.email || "").trim().toLowerCase();
+    if (!payerEmail) {
+      return NextResponse.json({ ok: false, error: "missing_user_email" }, { status: 422 });
+    }
+    const mercadoPagoTestMode = process.env.MERCADOPAGO_TEST_MODE === "true";
+    const configuredTestPayerEmail = process.env.MERCADOPAGO_TEST_PAYER_EMAIL?.trim().toLowerCase();
+    if (mercadoPagoTestMode && !configuredTestPayerEmail) {
+      return NextResponse.json({ ok: false, error: "missing_mercadopago_test_payer_email" }, { status: 422 });
+    }
+    const billingPayerEmail = mercadoPagoTestMode ? configuredTestPayerEmail! : payerEmail;
     const billing = ((userRow?.billing as Record<string, unknown> | undefined) ??
       (userRaw.billing as Record<string, unknown> | undefined) ??
       {}) as Record<string, unknown>;
+    const checkoutAmount = interval === "yearly" && typeof selectedPlan.yearlyPrice === "number"
+      ? selectedPlan.yearlyPrice
+      : Number(selectedPlan.price || 0);
+    if (!Number.isFinite(checkoutAmount) || checkoutAmount <= 0) {
+      return NextResponse.json({ ok: false, error: "invalid_checkout_amount" }, { status: 422 });
+    }
+    const currentPlan = String(userRow?.plan || userRaw.plan || "free");
+    const currentPaymentStatus = String(userRow?.payment_status || userRaw.paymentStatus || billing.paymentStatus || "pending");
+    const currentPreapprovalId = typeof billing.providerSubscriptionId === "string"
+      ? billing.providerSubscriptionId
+      : typeof billing.preapprovalId === "string"
+        ? billing.preapprovalId
+        : "";
 
-    billing.pendingPreapprovalId = null;
+    if (!canRunAdminTest && currentPreapprovalId && currentPaymentStatus === "paid" && currentPlan !== plan) {
+      const changed = await changePreapprovalPlanForUser({
+        uid,
+        preapprovalId: currentPreapprovalId,
+        userEmail: billingPayerEmail,
+        plan,
+        interval,
+        amount: checkoutAmount,
+        currency: "BRL",
+      });
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
+      return NextResponse.json({
+        ok: true,
+        checkoutUrl: null,
+        preapprovalId: changed.preapprovalId,
+        checkoutAttemptId: null,
+        changedInPlace: true,
+        targetPlan: changed.targetPlan,
+        nextChargeAt: changed.nextChargeAt,
+        amount: changed.amount,
+      }, { status: 200 });
+    }
+
+    const checkout = await createPreapprovalCheckout({
+      uid,
+      payerEmail: billingPayerEmail,
+      plan,
+      interval,
+      amount: checkoutAmount,
+      currency: "BRL",
+      returnUrl,
+    });
+
+    billing.pendingPreapprovalId = checkout.preapprovalId;
     billing.pendingPlan = plan;
     billing.pendingBillingInterval = interval;
     billing.pendingCheckoutAt = new Date().toISOString();
     billing.pendingCheckoutAttemptId = checkoutAttemptId;
+    billing.pendingCheckoutMode = canRunAdminTest ? "admin-test" : "standard";
+    billing.pendingPayerEmail = billingPayerEmail;
     billing.lastError = null;
 
     await supabaseUpsertRows(
@@ -142,9 +189,12 @@ export async function GET(request: NextRequest) {
             uid,
             plan,
             interval,
+            paymentStatus: "pending",
+            preapprovalId: checkout.preapprovalId,
             checkoutAttemptId,
             createdAt: new Date().toISOString(),
             returnUrl: returnUrl ?? null,
+            mode: canRunAdminTest ? "admin-test" : "standard",
           },
           created_at: new Date().toISOString(),
         },
@@ -154,7 +204,7 @@ export async function GET(request: NextRequest) {
 
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json(
-      { ok: true, checkoutUrl, preapprovalId: null, checkoutAttemptId },
+      { ok: true, checkoutUrl: checkout.checkoutUrl, preapprovalId: checkout.preapprovalId, checkoutAttemptId },
       { status: 200 }
     );
   } catch (error) {

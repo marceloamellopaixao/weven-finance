@@ -32,9 +32,19 @@ function authHeaders(idToken: string, includeJson = false) {
 export async function getCheckoutLink(
   plan: Exclude<UserPlan, "free">,
   idToken: string,
-  interval: BillingInterval = "monthly"
-): Promise<{ checkoutUrl: string; preapprovalId?: string | null; checkoutAttemptId?: string | null }> {
+  interval: BillingInterval = "monthly",
+  options?: { adminTest?: boolean }
+): Promise<{
+  checkoutUrl?: string | null;
+  preapprovalId?: string | null;
+  checkoutAttemptId?: string | null;
+  changedInPlace?: boolean;
+  targetPlan?: UserPlan;
+  nextChargeAt?: string | null;
+  amount?: number;
+}> {
   const params = new URLSearchParams({ plan, interval });
+  if (options?.adminTest) params.set("mode", "admin-test");
   const response = await fetch(`/api/billing/checkout-link?${params.toString()}`, {
     method: "GET",
     headers: authHeaders(idToken),
@@ -45,9 +55,13 @@ export async function getCheckoutLink(
     checkoutUrl?: string;
     preapprovalId?: string | null;
     checkoutAttemptId?: string | null;
+    changedInPlace?: boolean;
+    targetPlan?: UserPlan;
+    nextChargeAt?: string | null;
+    amount?: number;
     error?: string;
   };
-  if (!response.ok || !payload.ok || !payload.checkoutUrl) {
+  if (!response.ok || !payload.ok || (!payload.checkoutUrl && !payload.changedInPlace)) {
     throw new Error(payload.error || "Não foi possível gerar o link de pagamento");
   }
 
@@ -55,6 +69,10 @@ export async function getCheckoutLink(
     checkoutUrl: payload.checkoutUrl,
     preapprovalId: payload.preapprovalId ?? null,
     checkoutAttemptId: payload.checkoutAttemptId ?? null,
+    changedInPlace: payload.changedInPlace === true,
+    targetPlan: payload.targetPlan,
+    nextChargeAt: payload.nextChargeAt ?? null,
+    amount: payload.amount,
   };
 }
 

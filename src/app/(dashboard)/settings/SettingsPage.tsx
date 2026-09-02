@@ -215,6 +215,27 @@ export default function SettingsPage() {
     return t("billing.events.chargeEvent");
   };
 
+  const formatBillingHistoryStatus = (value: string | null) => {
+    const status = String(value || "").toLowerCase();
+    if (status === "paid" || status === "approved" || status === "authorized") return t("billing.history.statuses.paid");
+    if (status === "pending" || status === "in_process" || status === "processed") return t("billing.history.statuses.pending");
+    if (status === "canceled" || status === "cancelled" || status === "cancelled_by_user") return t("billing.history.statuses.canceled");
+    if (status === "not_paid" || status === "rejected" || status === "refunded") return t("billing.history.statuses.notPaid");
+    if (status === "overdue" || status === "paused") return t("billing.history.statuses.overdue");
+    if (status === "failed") return t("billing.history.statuses.failed");
+    return value || t("billing.history.unavailable");
+  };
+
+  const getBillingHistoryStatusClass = (value: string | null) => {
+    const status = String(value || "").toLowerCase();
+    if (["paid", "approved", "authorized"].includes(status)) return "border-emerald-500/30 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300";
+    if (["pending", "in_process", "processed"].includes(status)) return "border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-300";
+    if (["overdue", "paused"].includes(status)) return "border-orange-500/30 bg-orange-500/15 text-orange-700 dark:text-orange-300";
+    if (["canceled", "cancelled", "cancelled_by_user"].includes(status)) return "border-zinc-500/30 bg-zinc-500/15 text-zinc-600 dark:text-zinc-300";
+    if (["not_paid", "rejected", "refunded", "failed"].includes(status)) return "border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-300";
+    return "border-slate-500/30 bg-slate-500/15 text-slate-600 dark:text-slate-300";
+  };
+
   const formatSupportStatus = (status: string) => {
     const normalized = String(status || "").toLowerCase();
     if (normalized === "pending") return t("supportStatus.pending");
@@ -510,7 +531,7 @@ export default function SettingsPage() {
       effectivePaymentStatus === "not_paid");
 
   const handleRecoverPayment = async () => {
-    if (pendingPreapprovalId || pendingCheckoutAttemptId) {
+    if (pendingPreapprovalId) {
       await handleConfirmPreapproval(pendingPreapprovalId, recoveryPlan, pendingCheckoutAttemptId);
       return;
     }
@@ -574,7 +595,7 @@ export default function SettingsPage() {
     if (isBillingExemptRole) return;
     if (!shouldShowRecoveryCTA) return;
     if (isConfirmingPreapproval || isAutoReconcilingBilling) return;
-    if (!pendingPreapprovalId && !pendingCheckoutAttemptId) return;
+    if (!pendingPreapprovalId) return;
 
     const autoAttemptKey = [
       effectiveProfileUid,
@@ -1142,8 +1163,8 @@ export default function SettingsPage() {
                           <div key={item.id} className="app-panel-subtle rounded-xl border border-color:var(--app-panel-border) px-3 py-2">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <p className="text-sm font-semibold text-foreground">{formatBillingEventLabel(item)}</p>
-                              <Badge variant="secondary" className="text-[10px] uppercase">
-                                {item.paymentStatus || t("billing.history.unavailable")}
+                              <Badge variant="outline" className={`text-[10px] uppercase ${getBillingHistoryStatusClass(item.paymentStatus)}`}>
+                                {formatBillingHistoryStatus(item.paymentStatus)}
                               </Badge>
                             </div>
                             <p className="mt-1 text-xs text-muted-foreground">

@@ -121,12 +121,23 @@ function stripInstallmentSuffix(value: string) {
   return String(value || "").replace(/(?:\s+\(\d+\/\d+\))+\s*$/g, "").trim();
 }
 
+function looksLikeEncryptedValue(value: unknown) {
+  return typeof value === "string" && /^[A-Za-z0-9+/]{16}={0,2}:[A-Za-z0-9+/]{20,}={0,2}$/.test(value);
+}
+
 async function parseApiTransaction(tx: ApiTransaction, cryptoUid: string): Promise<Transaction> {
   let decryptedTitle = tx.title || tx.description;
   let decryptedDesc = tx.title ? tx.description || "" : "";
   let decryptedAmount = String(tx.amount);
 
-  if (tx.isEncrypted) {
+  const shouldDecrypt = Boolean(
+    tx.isEncrypted ||
+    looksLikeEncryptedValue(tx.title) ||
+    looksLikeEncryptedValue(tx.description) ||
+    looksLikeEncryptedValue(tx.amount)
+  );
+
+  if (shouldDecrypt) {
     decryptedTitle = await decryptData(tx.title || tx.description, cryptoUid);
     decryptedDesc = tx.title ? await decryptData(tx.description || "", cryptoUid) : "";
     decryptedAmount = await decryptData(String(tx.amount), cryptoUid);
@@ -136,7 +147,7 @@ async function parseApiTransaction(tx: ApiTransaction, cryptoUid: string): Promi
   const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
   const protectedText = tx.title || tx.description;
   const isDecryptionFailed =
-    tx.isEncrypted &&
+    shouldDecrypt &&
     decryptedTitle === protectedText &&
     typeof protectedText === "string" &&
     protectedText.length > 50;
@@ -150,13 +161,19 @@ async function parseApiTransaction(tx: ApiTransaction, cryptoUid: string): Promi
   } as Transaction;
 }
 
-type ApiTransaction = Omit<Transaction, "createdAt" | "amount" | "title" | "description"> & {
+export type ApiTransaction = Omit<Transaction, "createdAt" | "amount" | "title" | "description"> & {
   createdAt?: string | null;
   amount: number | string;
   title?: string;
   description: string;
   isEncrypted?: boolean;
 };
+
+export async function parseApiTransactions(transactions: ApiTransaction[], uid: string) {
+  const cryptoUid = resolveCryptoUid(uid);
+  const parsed = await Promise.all(transactions.map((tx) => parseApiTransaction(tx, cryptoUid)));
+  return parsed.filter((tx) => !tx.isArchived);
+}
 
 type TransactionsPage = {
   transactions: Transaction[];
@@ -166,7 +183,6 @@ type TransactionsPage = {
 };
 
 async function fetchTransactions(uid: string, groupId?: string): Promise<Transaction[]> {
-  const cryptoUid = resolveCryptoUid(uid);
   const query = groupId ? `?groupId=${encodeURIComponent(groupId)}` : "";
   const response = await apiFetch(withActiveWorkspace(`/api/transactions${query}`), { method: "GET" });
   const payload = (await response.json()) as { ok: boolean; error?: string; transactions?: ApiTransaction[] };
@@ -174,12 +190,7 @@ async function fetchTransactions(uid: string, groupId?: string): Promise<Transac
     throw new Error(payload.error || "Não foi possível carregar transações");
   }
 
-  const transactions = payload.transactions || [];
-  const parsed = await Promise.all(
-    transactions.map((tx) => parseApiTransaction(tx, cryptoUid))
-  );
-
-  return parsed.filter((t) => !t.isArchived);
+  return parseApiTransactions(payload.transactions || [], uid);
 }
 
 export async function fetchTransactionsPage(

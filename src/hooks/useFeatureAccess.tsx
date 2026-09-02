@@ -1,52 +1,10 @@
 "use client";
-
-import { useEffect, useState } from "react";
-import { DEFAULT_FEATURE_ACCESS_CONFIG, FeatureAccessConfig } from "@/types/system";
-import { getMyAccessControl } from "@/services/systemService";
-import { subscribeToTableChanges } from "@/services/supabase/realtime";
-
-const POLLING_INTERVAL_MS = 60000;
-
-function shouldPollNow() {
-  if (typeof document === "undefined") return true;
-  return document.visibilityState === "visible";
-}
-
+import { DEFAULT_FEATURE_ACCESS_CONFIG } from "@/types/system";
+import { useGetAccessControlQuery } from "@/store/api/systemApi";
+import { useAuth } from "./useAuth";
 export function useFeatureAccess() {
-  const [featureAccess, setFeatureAccess] = useState<FeatureAccessConfig>(DEFAULT_FEATURE_ACCESS_CONFIG);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      if (!shouldPollNow()) return;
-      try {
-        const data = await getMyAccessControl();
-        if (!cancelled) {
-          setFeatureAccess(data.featureAccess);
-          setLoading(false);
-        }
-      } catch {
-        if (!cancelled) {
-          setFeatureAccess(DEFAULT_FEATURE_ACCESS_CONFIG);
-          setLoading(false);
-        }
-      }
-    };
-
-    void run();
-    const interval = setInterval(() => void run(), POLLING_INTERVAL_MS);
-    const stopRealtime = subscribeToTableChanges({
-      table: "system_configs",
-      onChange: () => void run(),
-    });
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-      stopRealtime();
-    };
-  }, []);
-
-  return { featureAccess, loading };
+  const { user, userProfile } = useAuth();
+  const userId = userProfile?.uid || user?.uid;
+  const { data, isLoading } = useGetAccessControlQuery({ userId: userId || "" }, { skip: !userId });
+  return { featureAccess: data?.featureAccess ?? DEFAULT_FEATURE_ACCESS_CONFIG, loading: isLoading };
 }

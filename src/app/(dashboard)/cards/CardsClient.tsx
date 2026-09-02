@@ -7,6 +7,7 @@ import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { useTransactions } from "@/hooks/useTransactions";
+import { usePaymentCards } from "@/hooks/usePaymentCards";
 import { syncCreditCardAmountForLimit } from "@/services/transactionService";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createPaymentCard, deletePaymentCard, getPaymentCards, identifyPaymentCard, subscribeToPaymentCards, updatePaymentCard } from "@/services/paymentCardService";
+import { createPaymentCard, deletePaymentCard, identifyPaymentCard, updatePaymentCard } from "@/services/paymentCardService";
 import { CreditCard, ShieldAlert, RefreshCw, Save, AlertTriangle, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, CheckCircle2, Settings2, ReceiptText, PiggyBank } from "lucide-react";
 import { CreditCardSettings } from "@/types/creditCard";
 import { PaymentCard, PaymentCardType } from "@/types/paymentCard";
@@ -321,11 +322,10 @@ export function CardsClient() {
     completeTour,
   } = useOnboarding();
   const { transactions, loading: txLoading } = useTransactions();
+  const { paymentCards, loading: isLoadingState, refetch: refetchPaymentCards } = usePaymentCards();
   const searchParams = useSearchParams();
 
   const [settings, setSettings] = useState<CreditCardSettings>(defaultSettings);
-  const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
-  const [isLoadingState, setIsLoadingState] = useState(true);
   
   // UI States
   const [isSaving, setIsSaving] = useState(false);
@@ -400,26 +400,6 @@ export function CardsClient() {
   });
 
   useEffect(() => {
-    if (!user) {
-      setPaymentCards([]);
-      return;
-    }
-    setIsLoadingState(true);
-    const unsubscribe = subscribeToPaymentCards(
-      user.uid,
-      (cards) => {
-        setPaymentCards(cards);
-        setIsLoadingState(false);
-      },
-      (error) => {
-        setFeedback({ type: "error", message: error instanceof Error ? error.message : tCards("feedback.loadError") });
-        setIsLoadingState(false);
-      }
-    );
-    return () => unsubscribe();
-  }, [user, tCards]);
-
-  useEffect(() => {
     if (!activeCard || activeCard.type === "debit_card") {
       setSettings(defaultSettings);
       return;
@@ -490,8 +470,7 @@ export function CardsClient() {
         creditLimit: Number(settings.limit || 0),
         alertThresholdPct: Number(settings.alertThresholdPct || 80),
       });
-      const cards = await getPaymentCards();
-      setPaymentCards(cards);
+      await refetchPaymentCards();
       setFeedback({ type: "success", message: tCards("feedback.rulesSaved") });
       setShowSettings(false);
     } catch (error) {
@@ -607,8 +586,7 @@ export function CardsClient() {
         await createPaymentCard(payload);
       }
 
-      const cards = await getPaymentCards();
-      setPaymentCards(cards);
+      await refetchPaymentCards();
       resetCardForm();
       setFeedback({ type: "success", message: tCards("feedback.cardSaved") });
     } catch (error) {
@@ -672,8 +650,7 @@ export function CardsClient() {
     setFeedback(null);
     try {
       await deletePaymentCard(cardId);
-      const cards = await getPaymentCards();
-      setPaymentCards(cards);
+      const cards = (await refetchPaymentCards()).data ?? [];
       if (selectedCardId === cardId) {
         const fallback = cards[0]?.id || null;
         setSelectedCardId(fallback);

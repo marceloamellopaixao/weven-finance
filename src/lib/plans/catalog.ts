@@ -274,6 +274,25 @@ export function getPublicPlans() {
   );
 }
 
+export function getConfiguredPublicPlans(config: PlansConfig): PlanCatalogItem[] {
+  return getPublicPlans()
+    .map((catalogPlan) => {
+      const configured = config[catalogPlan.id];
+      return {
+        ...catalogPlan,
+        publicName: configured.name || catalogPlan.publicName,
+        description: configured.description || catalogPlan.description,
+        monthlyPrice: Number.isFinite(configured.price) ? configured.price : catalogPlan.monthlyPrice,
+        yearlyPrice: configured.yearlyPrice === undefined ? catalogPlan.yearlyPrice : configured.yearlyPrice,
+        benefits: configured.features?.length ? configured.features : catalogPlan.benefits,
+        badge: configured.badge || catalogPlan.badge,
+        cta: configured.cta || catalogPlan.cta,
+        active: configured.active,
+      };
+    })
+    .filter((plan) => plan.active);
+}
+
 export function getPlanPriceAmount(plan: UserPlan, interval: BillingInterval) {
   const item = PLAN_CATALOG[plan];
   if (interval === "yearly" && item.yearlyPrice !== null) return item.yearlyPrice;

@@ -32,8 +32,8 @@ import { Transaction } from "@/types/transaction";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { confirmPreapproval } from "@/services/billingService";
-import { subscribeToPaymentCards } from "@/services/paymentCardService";
-import { PaymentCard } from "@/types/paymentCard";
+import { usePaymentCards } from "@/hooks/usePaymentCards";
+import type { PaymentCard } from "@/types/paymentCard";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
@@ -145,6 +145,7 @@ export function DashboardClient() {
   const { plans } = usePlans();
   const { featureAccess } = useFeatureAccess();
   const { categories } = useCategories();
+  const { paymentCards } = usePaymentCards();
   const isBillingExemptRole = userProfile?.role === "admin" || userProfile?.role === "moderator";
   const effectivePlan = userProfile?.plan || "free";
   const effectivePlanCapabilities = getPlanCapabilities(effectivePlan, plans, featureAccess);
@@ -180,7 +181,6 @@ export function DashboardClient() {
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
 
-  const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
 
   // Modais
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
@@ -438,19 +438,6 @@ export function DashboardClient() {
     const liveIds = new Set(transactions.map((tx) => String(tx.id || "")).filter(Boolean));
     setOptimisticallyDeletedIds((prev) => prev.filter((id) => liveIds.has(id)));
   }, [transactions]);
-
-  useEffect(() => {
-    if (!user) {
-      setPaymentCards([]);
-      return;
-    }
-    const unsubscribe = subscribeToPaymentCards(
-      user.uid,
-      (cards) => setPaymentCards(cards),
-      () => setPaymentCards([])
-    );
-    return () => unsubscribe();
-  }, [user]);
 
   // --- RETORNO CONDICIONAL ---
   if (loading) return <DashboardSkeleton />;

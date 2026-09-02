@@ -643,3 +643,13 @@ for each row execute function public.set_updated_at();
 drop trigger if exists trg_notifications_set_updated_at on public.notifications;
 create trigger trg_notifications_set_updated_at before update on public.notifications
 for each row execute function public.set_updated_at();
+
+create table if not exists public.product_events (
+  id uuid primary key,
+  uid text null,
+  session_id text null,
+  event_name text not null,
+  path text null,
+  properties jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);

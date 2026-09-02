@@ -10,6 +10,7 @@ import { useTranslations } from "@/i18n/T";
 import { Button } from "@/components/ui/button";
 import { confirmPreapproval } from "@/services/billingService";
 import { parseUpgradePlan } from "@/services/billing/checkoutIntent";
+import { trackProductEvent } from "@/lib/analytics/client";
 
 type ActivationState = "preparing" | "confirming" | "success" | "error" | "login_required";
 
@@ -36,9 +37,11 @@ export default function BillingActivatingPage() {
   const expectedPlan = expectedPlanFromQuery || parseUpgradePlan(pendingPlan) || undefined;
   const checkoutAttemptIdFromQuery = useMemo(() => searchParams.get("attempt") || undefined, [searchParams]);
   const checkoutAttemptId = checkoutAttemptIdFromQuery || userProfile?.billing?.pendingCheckoutAttemptId;
+  const adminTestMode = searchParams.get("mode") === "admin-test";
+  const isPreviewOnly = canPreviewRestrictedPages && !adminTestMode;
 
   useEffect(() => {
-    if (loading || canPreviewRestrictedPages) return;
+    if (loading || isPreviewOnly) return;
     if (user && !expectedPlan) {
       router.replace("/settings?tab=billing");
       return;
@@ -68,6 +71,7 @@ export default function BillingActivatingPage() {
 
             await refreshProfile();
             setState("success");
+            trackProductEvent("checkout_completed", { plan: result.targetPlan });
             setMessage(t("activating.successMessage", { plan: result.targetPlan }));
             window.setTimeout(() => {
               window.location.assign("/dashboard");
@@ -79,6 +83,7 @@ export default function BillingActivatingPage() {
         }
 
         console.error("Falha ao ativar assinatura:", lastError);
+        trackProductEvent("checkout_failed", { plan: expectedPlan, stage: "activation" });
         setState("error");
         setMessage(t("activating.autoConfirmErrorMessage"));
       } catch (error) {
@@ -90,10 +95,10 @@ export default function BillingActivatingPage() {
 
     void run();
 
-  }, [canPreviewRestrictedPages, checkoutAttemptId, expectedPlan, loading, refreshProfile, router, t, user]);
+  }, [checkoutAttemptId, expectedPlan, isPreviewOnly, loading, refreshProfile, router, t, user]);
 
   const resolvedState: ActivationState =
-    canPreviewRestrictedPages
+    isPreviewOnly
       ? "preparing"
       : !loading && !user
       ? "login_required"
@@ -102,7 +107,7 @@ export default function BillingActivatingPage() {
         : state;
 
   const resolvedMessage =
-    canPreviewRestrictedPages
+    isPreviewOnly
       ? t("activating.previewMessage")
       : !loading && !user
       ? t("activating.loginRequiredMessage")
@@ -110,7 +115,7 @@ export default function BillingActivatingPage() {
         ? t("activating.missingPlanMessage")
         : message;
 
-  const isLoadingState = !canPreviewRestrictedPages && (resolvedState === "preparing" || resolvedState === "confirming");
+  const isLoadingState = !isPreviewOnly && (resolvedState === "preparing" || resolvedState === "confirming");
 
   return (
     <div className="relative flex min-h-[calc(100svh-4rem)] items-center justify-center overflow-hidden px-4 py-10 font-sans sm:px-6">
@@ -132,7 +137,7 @@ export default function BillingActivatingPage() {
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            {canPreviewRestrictedPages
+            {isPreviewOnly
               ? t("activating.previewTitle")
               : resolvedState === "success"
               ? t("activating.successTitle")

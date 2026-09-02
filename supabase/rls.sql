@@ -79,6 +79,7 @@ alter table public.notifications enable row level security;
 alter table public.admin_audit_logs enable row level security;
 alter table public.api_request_metrics enable row level security;
 alter table public.migration_runs enable row level security;
+alter table public.product_events enable row level security;
 
 drop policy if exists profiles_self_select on public.profiles;
 drop policy if exists profiles_self_update on public.profiles;
@@ -373,5 +374,10 @@ begin
     create policy migration_runs_write_admin on public.migration_runs
       for all using (public.is_admin_role())
       with check (public.is_admin_role());
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'product_events' and policyname = 'product_events_select_staff') then
+    create policy product_events_select_staff on public.product_events
+      for select using (public.is_staff_role());
   end if;
 end $$;

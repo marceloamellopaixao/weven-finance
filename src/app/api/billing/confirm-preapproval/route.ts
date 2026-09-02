@@ -39,6 +39,7 @@ function getConfirmErrorStatus(message: string) {
   if (message === "preapproval_not_found_for_user") return 404;
   if (message === "preapproval_ambiguous_match") return 409;
   if (message === "payer_email_mismatch") return 403;
+  if (message === "preapproval_owner_mismatch") return 403;
   if (message === "plan_mismatch") return 409;
   if (message === "user_not_found") return 404;
   return 500;
@@ -49,6 +50,7 @@ function isExpectedConfirmError(message: string) {
     message === "preapproval_not_found_for_user" ||
     message === "preapproval_ambiguous_match" ||
     message === "payer_email_mismatch" ||
+    message === "preapproval_owner_mismatch" ||
     message === "plan_mismatch" ||
     message === "user_not_found"
   );

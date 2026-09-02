@@ -24,6 +24,8 @@ import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { usePlatformExperience } from "@/hooks/usePlatformExperience";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { usePaymentCards } from "@/hooks/usePaymentCards";
+import type { PaymentCard } from "@/types/paymentCard";
 import { useFormatters } from "@/i18n/useFormatters";
 import { useTranslations } from "@/i18n/T";
 import { getCreditCardDueDateFromSelectedCard, isCreditCapableCard } from "@/lib/credit-card/due-date";
@@ -33,8 +35,6 @@ import { getPlanCapabilities } from "@/lib/plans/capabilities";
 import { buildInstallmentPlan } from "@/lib/transactions/installments";
 import { getCurrentMonthKey, getMonthKey } from "@/lib/transactions/recurring";
 import { addTransaction } from "@/services/transactionService";
-import { subscribeToPaymentCards } from "@/services/paymentCardService";
-import { PaymentCard } from "@/types/paymentCard";
 import { InstallmentValueMode, PaymentMethod, TransactionType } from "@/types/transaction";
 import { orderCategoryNames } from "@/lib/category-utils";
 import { calculateDailyLimit } from "@/lib/finance/daily-limit";
@@ -62,6 +62,7 @@ export default function NewTransactionPage() {
     completeTour,
   } = useOnboarding();
   const { transactions } = useTransactions();
+  const { paymentCards } = usePaymentCards();
   const currency = usePreferredCurrency();
   const { money } = useFormatters(currency);
   const {
@@ -90,7 +91,6 @@ export default function NewTransactionPage() {
   const [isRecurring, setIsRecurring] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
-  const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
   const [selectedCardId, setSelectedCardId] = useState("");
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -100,11 +100,6 @@ export default function NewTransactionPage() {
     [activeWorkspaceId, user]
   );
   const [draftReady, setDraftReady] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    return subscribeToPaymentCards(user.uid, setPaymentCards, () => setPaymentCards([]));
-  }, [user]);
 
   const monthCategories = useMemo(() => {
     const filtered = categories.filter((c) => c.type === type || c.type === "both");

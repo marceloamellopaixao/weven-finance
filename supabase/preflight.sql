@@ -331,7 +331,8 @@ where schemaname = 'public'
     'notifications',
     'admin_audit_logs',
     'api_request_metrics',
-    'migration_runs'
+    'migration_runs',
+    'product_events'
   )
 order by tablename, indexname;
 
@@ -361,6 +362,7 @@ where schemaname = 'public'
     'notifications',
     'admin_audit_logs',
     'api_request_metrics',
-    'migration_runs'
+    'migration_runs',
+    'product_events'
   )
 order by tablename, policyname;

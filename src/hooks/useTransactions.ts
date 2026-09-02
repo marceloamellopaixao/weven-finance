@@ -1,38 +1,20 @@
 "use client";
-
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useGetTransactionsQuery } from "@/store/api/transactionsApi";
+import { subscribeToTableChanges } from "@/services/supabase/realtime";
 import { useAuth } from "./useAuth";
-import { subscribeToTransactions } from "@/services/transactionService";
-import { Transaction } from "@/types/transaction";
-
+import { useWorkspaces } from "./useWorkspaces";
 export function useTransactions(options?: { syncRecurring?: boolean }) {
   const { user, userProfile } = useAuth();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
-  const syncRecurring = Boolean(options?.syncRecurring);
-
+  const { activeWorkspaceId } = useWorkspaces();
+  const userId = userProfile?.uid || user?.uid;
+  const { data, isLoading, isFetching, refetch } = useGetTransactionsQuery(
+    { userId: userId || "", workspaceId: activeWorkspaceId || "", syncRecurring: Boolean(options?.syncRecurring) },
+    { skip: !userId || !activeWorkspaceId },
+  );
   useEffect(() => {
-    // 1. Caso de Logout: Limpa os dados e retorna
-    const effectiveUid = userProfile?.uid || user?.uid;
-    if (!user || !effectiveUid) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTransactions([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-
-    // 2. Caso de Login: Cria a subscrição (agora como const)
-    const unsubscribe = subscribeToTransactions(effectiveUid, (data) => {
-      setTransactions(data);
-      setLoading(false);
-    }, undefined, { syncRecurring });
-
-    // 3. Cleanup: Executa quando o componente desmonta ou user muda
-    return () => unsubscribe();
-
-  }, [syncRecurring, user, userProfile?.uid]);
-
-  return { transactions, loading };
+    if (!userId || !activeWorkspaceId) return;
+    return subscribeToTableChanges({ table: "transactions", filter: `uid=eq.${userId}`, onChange: () => void refetch() });
+  }, [activeWorkspaceId, refetch, userId]);
+  return { transactions: data ?? [], loading: isLoading || (!data && isFetching) };
 }

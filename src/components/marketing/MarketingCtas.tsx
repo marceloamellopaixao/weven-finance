@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUiText } from "@/i18n/T";
 import { PLAN_CATALOG } from "@/lib/plans/catalog";
 import { buildUpgradeCheckoutPath, rememberPendingUpgradePlan, type UpgradePlan } from "@/services/billing/checkoutIntent";
+import { trackProductEvent } from "@/lib/analytics/client";
 
 type MarketingCtasProps = {
   variant: "hero" | "free" | UpgradePlan;
@@ -23,6 +24,7 @@ export function MarketingCtas({ variant }: MarketingCtasProps) {
   const primaryLabel = hasSession ? tt("Abrir meu painel") : tt("Começar grátis");
 
   const handlePlanCheckout = async (plan: UpgradePlan) => {
+    trackProductEvent("plan_selected", { plan, placement: variant, authenticated: hasSession });
     if (!user) {
       rememberPendingUpgradePlan(plan);
       window.location.assign(`/register?upgrade_plan=${plan}`);
@@ -42,7 +44,7 @@ export function MarketingCtas({ variant }: MarketingCtasProps) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 pt-2 sm:flex-row sm:gap-4 sm:pt-4">
         <Link href={primaryHref} className="w-full sm:w-auto">
-          <Button size="lg" className="h-12 w-full rounded-full bg-primary px-8 text-base text-primary-foreground shadow-xl shadow-primary/20 transition-transform duration-200 hover:-translate-y-1 hover:scale-105 hover:bg-primary/90 hover:cursor-pointer sm:h-14 sm:w-auto sm:text-lg">
+          <Button onClick={() => trackProductEvent("registration_started", { placement: "hero", authenticated: hasSession })} size="lg" className="h-12 w-full rounded-full bg-primary px-8 text-base text-primary-foreground shadow-xl shadow-primary/20 transition-transform duration-200 hover:-translate-y-1 hover:scale-105 hover:bg-primary/90 hover:cursor-pointer sm:h-14 sm:w-auto sm:text-lg">
             {primaryLabel} <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
         </Link>

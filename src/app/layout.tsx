@@ -14,6 +14,7 @@ import { I18nProvider } from "@/i18n/I18nProvider";
 import { getDictionary } from "@/i18n/getDictionary";
 import { getRequestLocale } from "@/i18n/server";
 import { getSiteUrl, SITE_NAME } from "@/lib/site";
+import { StoreProvider } from "@/store/provider";
 
 const siteUrl = getSiteUrl();
 const structuredData = [
@@ -162,7 +163,8 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
         <I18nProvider>
-          <AuthProvider>
+          <StoreProvider>
+            <AuthProvider>
             <PlatformExperienceProvider>
               <BlockedGuard>
                 <AppChrome>
@@ -189,7 +191,8 @@ export default async function RootLayout({
                 </AppChrome>
               </BlockedGuard>
             </PlatformExperienceProvider>
-          </AuthProvider>
+            </AuthProvider>
+          </StoreProvider>
         </I18nProvider>
       </body>
     </html>
