@@ -1025,10 +1025,12 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
       "/api/piggy-banks/{slug}": {
         get: {
           tags: ["PiggyBanks"],
-          summary: "Ler porquinho por slug com histórico",
+          summary: "Ler porquinho por slug com histórico paginado",
           security: [{ BearerAuth: [] }],
           parameters: [
             { name: "slug", in: "path", required: true, schema: { type: "string" } },
+            { name: "historyPage", in: "query", required: false, schema: { type: "integer", minimum: 1, default: 1 } },
+            { name: "historyLimit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 25, default: 10 } },
           ],
           responses: {
             200: { description: "Porquinho retornado" },

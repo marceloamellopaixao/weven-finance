@@ -30,8 +30,16 @@ export interface PiggyBankHistoryEntry {
   createdAt?: string;
 }
 
+export interface PiggyBankHistoryPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export interface PiggyBankDetail extends PiggyBank {
   withdrawalMode?: string;
   yieldType?: string;
   history: PiggyBankHistoryEntry[];
+  historyPagination: PiggyBankHistoryPagination;
 }

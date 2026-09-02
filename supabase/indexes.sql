@@ -85,6 +85,9 @@ create index if not exists idx_piggy_bank_history_uid_created
 create index if not exists idx_piggy_bank_history_uid_workspace_created
   on public.piggy_bank_history(uid, workspace_id, created_at desc);
 
+create index if not exists idx_piggy_bank_history_uid_piggy_created
+  on public.piggy_bank_history(uid, piggy_bank_id, created_at desc);
+
 create index if not exists idx_support_requests_status_priority_created
   on public.support_requests(ticket_status, created_at desc);
 

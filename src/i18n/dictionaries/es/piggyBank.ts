@@ -168,6 +168,9 @@ export const piggyBank: Dictionary["piggyBank"] = {
       yield: "Rendimiento: {value}",
       appliedToCardLimit: "Aplicado al límite de la tarjeta",
       card: "Tarjeta: {card}",
+      pageSummary: "Página {page} de {totalPages} • {total} movimiento(s)",
+      previous: "Anterior",
+      next: "Siguiente",
     },
     source: {
       bank: "Saldo en banco",

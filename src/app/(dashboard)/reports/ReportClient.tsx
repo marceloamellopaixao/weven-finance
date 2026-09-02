@@ -323,8 +323,14 @@ export function ReportClient() {
               <CardTitle>{t("charts.incomeVsExpenses")}</CardTitle>
               <CardDescription>{t("charts.selectedMonthComparison")}</CardDescription>
             </CardHeader>
-            <CardContent className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
+            <CardContent className="h-[300px] min-h-[300px] min-w-0">
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+                minWidth={0}
+                minHeight={300}
+                initialDimension={{ width: 1, height: 300 }}
+              >
                 <BarChart data={incomeExpenseData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
@@ -398,8 +404,14 @@ export function ReportClient() {
                 <CardHeader>
                   <CardTitle>{t("charts.expensesByCategory")}</CardTitle>
                 </CardHeader>
-                <CardContent className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
+                <CardContent className="h-80 min-h-80 min-w-0">
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    minWidth={0}
+                    minHeight={320}
+                    initialDimension={{ width: 1, height: 320 }}
+                  >
                     <PieChart>
                       <Pie data={translatedCategoryExpenses} dataKey="value" nameKey="name" innerRadius={58} outerRadius={98} paddingAngle={2}>
                         {translatedCategoryExpenses.map((entry, index) => (
@@ -417,8 +429,14 @@ export function ReportClient() {
                 <CardHeader>
                   <CardTitle>{t("charts.incomeByCategory")}</CardTitle>
                 </CardHeader>
-                <CardContent className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
+                <CardContent className="h-80 min-h-80 min-w-0">
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    minWidth={0}
+                    minHeight={320}
+                    initialDimension={{ width: 1, height: 320 }}
+                  >
                     <PieChart>
                       <Pie data={translatedCategoryIncomes} dataKey="value" nameKey="name" innerRadius={58} outerRadius={98} paddingAngle={2}>
                         {translatedCategoryIncomes.map((entry, index) => (
@@ -438,8 +456,14 @@ export function ReportClient() {
                 <CardHeader>
                   <CardTitle>{t("charts.dailyEvolution")}</CardTitle>
                 </CardHeader>
-                <CardContent className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
+                <CardContent className="h-[300px] min-h-[300px] min-w-0">
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    minWidth={0}
+                    minHeight={300}
+                    initialDimension={{ width: 1, height: 300 }}
+                  >
                     <AreaChart data={report.dailyEvolution}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
