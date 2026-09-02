@@ -8,6 +8,7 @@ import {
   createWorkspace as createWorkspaceRequest,
   deleteWorkspace as deleteWorkspaceRequest,
   getActiveWorkspaceId,
+  getActiveWorkspaceOwnerUid,
   setActiveWorkspaceId as setActiveWorkspaceIdRequest,
   setDefaultWorkspace as setDefaultWorkspaceRequest,
   subscribeToActiveWorkspaceChanged,
@@ -35,7 +36,11 @@ export function useWorkspaces() {
     const storedId = getActiveWorkspaceId();
     const nextId = storedId && activeWorkspaces.some((workspace) => workspace.id === storedId)
       ? storedId : defaultWorkspace?.id || activeWorkspaces[0]?.id || null;
-    if (nextId && nextId !== storedId) setActiveWorkspaceIdRequest(nextId);
+    const target = activeWorkspaces.find((workspace) => workspace.id === nextId);
+    const ownerUid = target ? target.ownerUid || target.uid : null;
+    if (nextId && (nextId !== storedId || ownerUid !== getActiveWorkspaceOwnerUid())) {
+      setActiveWorkspaceIdRequest(nextId, ownerUid);
+    }
   }, [activeWorkspaces, defaultWorkspace?.id]);
 
   useEffect(() => subscribeToWorkspacesChanged(() => { if (userId) void refetch(); }), [refetch, userId]);
@@ -49,7 +54,7 @@ export function useWorkspaces() {
   const setActiveWorkspace = useCallback((id: string) => {
     const target = activeWorkspaces.find((workspace) => workspace.id === id);
     if (!target) return;
-    setActiveWorkspaceIdRequest(id);
+    setActiveWorkspaceIdRequest(id, target.ownerUid || target.uid);
     setActiveWorkspaceIdState(id);
   }, [activeWorkspaces]);
 

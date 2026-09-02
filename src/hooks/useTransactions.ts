@@ -6,15 +6,16 @@ import { useAuth } from "./useAuth";
 import { useWorkspaces } from "./useWorkspaces";
 export function useTransactions(options?: { syncRecurring?: boolean }) {
   const { user, userProfile } = useAuth();
-  const { activeWorkspaceId } = useWorkspaces();
+  const { activeWorkspaceId, activeWorkspace } = useWorkspaces();
   const userId = userProfile?.uid || user?.uid;
+  const cryptoUid = activeWorkspace?.ownerUid || activeWorkspace?.uid || userId;
   const { data, isLoading, isFetching, refetch } = useGetTransactionsQuery(
-    { userId: userId || "", workspaceId: activeWorkspaceId || "", syncRecurring: Boolean(options?.syncRecurring) },
+    { userId: userId || "", workspaceId: activeWorkspaceId || "", cryptoUid: cryptoUid || "", syncRecurring: Boolean(options?.syncRecurring) },
     { skip: !userId || !activeWorkspaceId },
   );
   useEffect(() => {
     if (!userId || !activeWorkspaceId) return;
-    return subscribeToTableChanges({ table: "transactions", filter: `uid=eq.${userId}`, onChange: () => void refetch() });
-  }, [activeWorkspaceId, refetch, userId]);
+    return subscribeToTableChanges({ table: "transactions", filter: `uid=eq.${cryptoUid || userId}`, onChange: () => void refetch() });
+  }, [activeWorkspaceId, cryptoUid, refetch, userId]);
   return { transactions: data ?? [], loading: isLoading || (!data && isFetching) };
 }

@@ -7,6 +7,7 @@ import type { CreateWorkspaceInput, UpdateWorkspaceInput, Workspace } from "@/ty
 const WORKSPACES_CHANGED_EVENT = "wevenfinance:workspaces:changed";
 const ACTIVE_WORKSPACE_CHANGED_EVENT = "wevenfinance:workspaces:active-changed";
 const ACTIVE_WORKSPACE_KEY = "wevenfinance:active-workspace-id:v1";
+const ACTIVE_WORKSPACE_OWNER_KEY = "wevenfinance:active-workspace-owner-uid:v1";
 
 let workspacesCache: Workspace[] | null = null;
 let workspacesCacheAt = 0;
@@ -134,15 +135,23 @@ export function getActiveWorkspaceId() {
   return localStorage.getItem(ACTIVE_WORKSPACE_KEY);
 }
 
-export function setActiveWorkspaceId(workspaceId: string) {
+export function getActiveWorkspaceOwnerUid() {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(ACTIVE_WORKSPACE_OWNER_KEY);
+}
+
+export function setActiveWorkspaceId(workspaceId: string, ownerUid?: string | null) {
   if (typeof window === "undefined") return;
   localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId);
+  if (ownerUid) localStorage.setItem(ACTIVE_WORKSPACE_OWNER_KEY, ownerUid);
+  else localStorage.removeItem(ACTIVE_WORKSPACE_OWNER_KEY);
   emitActiveWorkspaceChanged();
 }
 
 export function clearActiveWorkspaceId() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+  localStorage.removeItem(ACTIVE_WORKSPACE_OWNER_KEY);
   emitActiveWorkspaceChanged();
 }
 

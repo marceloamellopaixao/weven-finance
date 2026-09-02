@@ -156,7 +156,7 @@ export function AccountProfileClient() {
           businessDocument: selectedOption.type === "business" && cleanedCnpj ? cleanedCnpj : undefined,
         },
       });
-      setActiveWorkspaceId(workspace.id);
+      setActiveWorkspaceId(workspace.id, workspace.ownerUid || workspace.uid || userProfile?.uid);
       router.replace("/dashboard");
       router.refresh();
     } catch (err) {
