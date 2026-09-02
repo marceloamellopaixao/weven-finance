@@ -114,7 +114,6 @@ export function buildMonthlyTransactionLimitMessage(params: {
   plan: UserPlan;
   max: number;
   locale?: Locale | string;
-  locale?: Locale | string;
 }) {
   const nextPlan = getNextUpgradePlan(params.plan);
   const nextPlanName = nextPlan ? formatPlanName(nextPlan) : "Premium Individual";
