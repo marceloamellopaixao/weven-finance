@@ -9,10 +9,11 @@ export interface PlanDetails {
   limit?: number;
   /** Total de pessoas incluídas, contando o titular do workspace. */
   includedSeats?: number | null;
-  /** Preço por assento adicional no ciclo mensal. Nulo desativa a venda. */
+  /** Preço por vaga adicional no ciclo mensal. Nulo desativa a venda. */
   additionalSeatPrice?: number | null;
-  /** Preço por assento adicional no ciclo anual. Nulo desativa a venda. */
+  /** Preço anual legado; quando nulo, o servidor calcula 12 vezes o valor mensal. */
   additionalSeatYearlyPrice?: number | null;
+  /** Campo legado no painel. O servidor aplica um teto técnico não configurável pelo Admin. */
   maxAdditionalSeats?: number | null;
   allowedProfileTypes?: Array<"personal" | "family" | "business">;
   cta?: string;

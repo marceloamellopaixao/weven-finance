@@ -101,6 +101,10 @@ export type WorkspaceInvitation = {
 export type PendingWorkspaceInvitation = WorkspaceInvitation & {
   workspaceName: string;
   inviterName: string;
+  currentPlan: import("@/types/user").UserPlan;
+  currentPlanName: string;
+  requiresSubscriptionCancellation: boolean;
+  isStaff: boolean;
 };
 
 export type WorkspaceSeatSummary = {

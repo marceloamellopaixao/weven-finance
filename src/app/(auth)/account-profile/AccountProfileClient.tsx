@@ -14,6 +14,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { useTranslations } from "@/i18n/T";
 import { getDefaultCurrencyForLocale } from "@/lib/money/formatMoney";
 import { canPlanUseProfile } from "@/lib/plans/catalog";
+import { canAccessAdminArea } from "@/lib/access-control/roles";
 import { createWorkspace, setActiveWorkspaceId } from "@/services/workspaceService";
 import { toFinancialProfileType, type WorkspaceType } from "@/types/workspace";
 
@@ -90,11 +91,12 @@ export function AccountProfileClient() {
   });
 
   const currentPlan = userProfile?.plan || "free";
+  const isStaff = canAccessAdminArea(userProfile);
   const availableOptions = useMemo(
-    () => OPTIONS.filter((option) => canPlanUseProfile(currentPlan, toFinancialProfileType(option.type))),
-    [currentPlan],
+    () => OPTIONS.filter((option) => isStaff || canPlanUseProfile(currentPlan, toFinancialProfileType(option.type))),
+    [currentPlan, isStaff],
   );
-  const selectedTypeAllowed = canPlanUseProfile(currentPlan, toFinancialProfileType(selectedType));
+  const selectedTypeAllowed = isStaff || canPlanUseProfile(currentPlan, toFinancialProfileType(selectedType));
   const selectedOption = useMemo(
     () => {
       if (selectedTypeAllowed) return OPTIONS.find((option) => option.type === selectedType) || OPTIONS[0];
@@ -112,7 +114,7 @@ export function AccountProfileClient() {
 
   const handleSelectType = (type: WorkspaceType) => {
     const option = OPTIONS.find((item) => item.type === type) || OPTIONS[0];
-    if (!canPlanUseProfile(currentPlan, toFinancialProfileType(type))) {
+    if (!isStaff && !canPlanUseProfile(currentPlan, toFinancialProfileType(type))) {
       setError(getRestrictionMessage(type));
       return;
     }
@@ -126,7 +128,7 @@ export function AccountProfileClient() {
   };
 
   const handleContinue = async () => {
-    if (!canPlanUseProfile(currentPlan, toFinancialProfileType(selectedOption.type))) {
+    if (!isStaff && !canPlanUseProfile(currentPlan, toFinancialProfileType(selectedOption.type))) {
       setError(getRestrictionMessage(selectedOption.type));
       return;
     }
@@ -188,7 +190,7 @@ export function AccountProfileClient() {
           {OPTIONS.map((option) => {
             const Icon = option.icon;
             const selected = option.type === selectedOption.type;
-            const allowed = canPlanUseProfile(currentPlan, toFinancialProfileType(option.type));
+            const allowed = isStaff || canPlanUseProfile(currentPlan, toFinancialProfileType(option.type));
             return (
               <button
                 key={option.type}

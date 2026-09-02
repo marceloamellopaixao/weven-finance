@@ -9,6 +9,10 @@ import type {
   WorkspaceType,
 } from "@/types/workspace";
 import { normalizeFamilyPermissions, normalizeFamilyRole } from "@/lib/workspaces/family";
+import { canAccessAdminArea } from "@/lib/access-control/roles";
+import { canPlanUseProfile } from "@/lib/plans/catalog";
+import { getUserPlanContext } from "@/lib/plans/server";
+import { toFinancialProfileType } from "@/types/workspace";
 
 type WorkspaceRow = Record<string, unknown>;
 
@@ -156,24 +160,56 @@ export async function resolveActiveWorkspaceContext(uid: string, workspaceId?: s
   member: WorkspaceMember | null;
   includeLegacyRows: boolean;
 }> {
+  const planContext = await getUserPlanContext(uid);
+  const isStaff = canAccessAdminArea({ uid, role: planContext.role });
+  const activeMemberships = isStaff ? [] : await getActiveMemberships(uid);
+  const sharedMemberships = activeMemberships.filter((membership) => membership.workspaceUid !== uid);
+
+  if (sharedMemberships.length > 0) {
+    const membership = workspaceId
+      ? sharedMemberships.find((item) => item.workspaceId === workspaceId) || null
+      : sharedMemberships[0];
+    if (!membership) throw new Error("workspace_access_denied");
+    const workspaceRows = await supabaseSelect("workspaces", {
+      filters: { uid: membership.workspaceUid, source_id: membership.workspaceId },
+      limit: 1,
+    });
+    if (!workspaceRows[0] || isWorkspaceRowArchived(workspaceRows[0])) throw new Error("workspace_archived");
+    return {
+      ownerUid: membership.workspaceUid,
+      workspaceId: membership.workspaceId,
+      workspaceType: String(workspaceRows[0].workspace_type || "family") as WorkspaceType,
+      member: membership,
+      includeLegacyRows: false,
+    };
+  }
+
   const ownedRows = await supabaseSelect("workspaces", {
-    filters: workspaceId ? { uid, source_id: workspaceId } : { uid, is_default: true },
+    filters: workspaceId ? { uid, source_id: workspaceId } : { uid },
     order: "is_default.desc,created_at.asc",
-    limit: 1,
+    limit: workspaceId ? 1 : 100,
   });
-  const owned = ownedRows[0];
+  const owned = isStaff
+    ? ownedRows[0]
+    : ownedRows.find((row) => canPlanUseProfile(
+        planContext.plan,
+        toFinancialProfileType(String(row.workspace_type || "personal") as WorkspaceType),
+      ));
   if (owned) {
     if (isWorkspaceRowArchived(owned)) {
       throw new Error("workspace_archived");
     }
+    const workspaceType = String(owned.workspace_type || "personal") as WorkspaceType;
     return {
       ownerUid: uid,
       workspaceId: String(owned.source_id || workspaceId || ""),
-      workspaceType: String(owned.workspace_type || "personal") as WorkspaceType,
+      workspaceType,
       member: null,
-      includeLegacyRows: Boolean(owned.is_default) || !workspaceId,
+      includeLegacyRows: toFinancialProfileType(workspaceType) === "personal" && (Boolean(owned.is_default) || !workspaceId),
     };
   }
+
+  if (workspaceId) throw new Error("workspace_access_denied");
 
   let memberships: Record<string, unknown>[] = [];
   try {
@@ -192,6 +228,7 @@ export async function resolveActiveWorkspaceContext(uid: string, workspaceId?: s
   }
   const membership = memberships[0] ? toWorkspaceMember(memberships[0]) : null;
   if (!membership) {
+    if (!isStaff && !canPlanUseProfile(planContext.plan, "personal")) throw new Error("workspace_access_denied");
     return { ownerUid: uid, workspaceId: workspaceId || null, workspaceType: "personal", member: null, includeLegacyRows: !workspaceId };
   }
 

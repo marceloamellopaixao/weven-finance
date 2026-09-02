@@ -2,7 +2,7 @@
 
 ## Direção funcional
 
-O Business deve reutilizar a infraestrutura segura de convites e assentos do Família, mas não seus papéis ou textos. O vínculo representa emprego ou colaboração profissional, não parentesco.
+O Business deve reutilizar a infraestrutura segura de convites e vagas do Família, mas não seus papéis ou textos. O vínculo representa emprego ou colaboração profissional, não parentesco.
 
 ## Papéis recomendados
 
@@ -15,8 +15,8 @@ O Business deve reutilizar a infraestrutura segura de convites e assentos do Fam
 
 - Conta existente aceita ou recusa o convite sem perder seu plano pessoal.
 - Conta nova cria a própria senha; o empregador nunca recebe ou define credenciais.
-- O titular ocupa um assento e convites pendentes reservam vaga.
-- Assentos adicionais usam os valores mensal/anual definidos pelo Admin e a mesma assinatura ativa.
+- O titular ocupa uma vaga e convites pendentes reservam vaga.
+- Vagas adicionais usam o valor mensal definido pelo Admin e a mesma assinatura ativa; o ciclo anual é calculado pelo servidor.
 - Remover um funcionário revoga imediatamente o acesso, preservando lançamentos e autoria para auditoria.
 - Uma pessoa pode trabalhar em mais de um workspace Business, desde que cada vínculo seja isolado.
 - Dados pessoais, Family e outras empresas nunca são agregados ao Business.
@@ -24,4 +24,4 @@ O Business deve reutilizar a infraestrutura segura de convites e assentos do Fam
 
 ## Estado atual
 
-A configuração comercial de assentos e a rota server-side de alteração da assinatura já aceitam workspaces Business. Ainda falta criar o painel e a API de funcionários com papéis próprios antes de liberar a funcionalidade em produção.
+A configuração comercial de vagas e a rota server-side de alteração da assinatura já aceitam workspaces Business. Ainda falta criar o painel e a API de funcionários com papéis próprios antes de liberar a funcionalidade em produção.

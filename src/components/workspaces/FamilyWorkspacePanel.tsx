@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, KeyRound, Loader2, MailPlus, ShieldCheck, Trash2, UserPlus, UsersRound } from "lucide-react";
+import { AlertTriangle, KeyRound, Loader2, MailPlus, Minus, Plus, ShieldCheck, Trash2, UsersRound } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import {
   canViewFamilyMembers,
   normalizeFamilyPermissions,
 } from "@/lib/workspaces/family";
-import { closeFamilyWorkspace, getFamilyWorkspace, inviteFamilyMember, resendFamilyInvitation, resendFamilyMemberAccess, updateAdditionalFamilySeats, updateFamilyMember } from "@/services/familyWorkspaceService";
+import { closeFamilyWorkspace, getFamilyWorkspace, inviteFamilyMember, resendFamilyInvitation, updateAdditionalFamilySeats, updateFamilyMember } from "@/services/familyWorkspaceService";
 import type { FamilyPermission, FamilyRole, Workspace, WorkspaceInvitation, WorkspaceMember, WorkspaceSeatSummary } from "@/types/workspace";
 
 const ROLE_OPTIONS = Object.keys(FAMILY_ROLE_LABELS) as FamilyRole[];
@@ -101,11 +101,11 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
   const [permissions, setPermissions] = useState<FamilyPermission[]>(DEFAULT_FAMILY_ROLE_PERMISSIONS.guest_member);
   const [invitations, setInvitations] = useState<WorkspaceInvitation[]>([]);
   const [seats, setSeats] = useState<WorkspaceSeatSummary | null>(null);
+  const [desiredAdditionalSeats, setDesiredAdditionalSeats] = useState(0);
   const [isLoadingFamily, setIsLoadingFamily] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
   const [isUpdatingSeats, setIsUpdatingSeats] = useState(false);
   const [resendingInvitationId, setResendingInvitationId] = useState<string | null>(null);
-  const [resendingMemberUid, setResendingMemberUid] = useState<string | null>(null);
   const [isClosingFamily, setIsClosingFamily] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -124,6 +124,7 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
       setMembers(data.members);
       setInvitations(data.invitations);
       setSeats(data.seats);
+      setDesiredAdditionalSeats(data.seats.additional);
     } catch {
       setMessage("Não foi possível carregar os membros agora. Tente novamente em alguns instantes.");
     } finally {
@@ -223,23 +224,6 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
     }
   };
 
-  const handleResendMemberAccess = async (member: WorkspaceMember) => {
-    if (!familyWorkspace) return;
-    setResendingMemberUid(member.memberUid);
-    setMessage(null);
-    try {
-      const result = await resendFamilyMemberAccess({
-        workspaceId: familyWorkspace.id,
-        memberUid: member.memberUid,
-      });
-      setMessage(result.emailSent ? "Acesso reenviado por e-mail." : "Lembrete enviado dentro do WevenFinance.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Não foi possível reenviar o acesso.");
-    } finally {
-      setResendingMemberUid(null);
-    }
-  };
-
   const handleCloseFamily = async () => {
     if (!familyWorkspace || familyWorkspace.membership) return;
     const confirmed = window.confirm(
@@ -259,20 +243,21 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
     }
   };
 
-  const handleAddSeat = async () => {
-    if (!familyWorkspace || familyWorkspace.membership || !seats?.canPurchaseAdditional) return;
+  const handleUpdateSeats = async () => {
+    if (!familyWorkspace || familyWorkspace.membership || !seats || desiredAdditionalSeats === seats.additional) return;
     const confirmed = window.confirm(
-      "Adicionar um assento ao plano Família? O valor configurado para o seu ciclo será aplicado somente na próxima renovação.",
+      "Atualizar as vagas adicionais do plano Família? O novo valor será aplicado somente na próxima renovação.",
     );
     if (!confirmed) return;
     setIsUpdatingSeats(true);
     setMessage(null);
     try {
-      const result = await updateAdditionalFamilySeats(familyWorkspace.id, seats.additional + 1);
+      const result = await updateAdditionalFamilySeats(familyWorkspace.id, desiredAdditionalSeats);
       setSeats(result.seats);
-      setMessage("Assento adicional contratado. O novo valor será cobrado na próxima renovação, sem cobrança duplicada agora.");
+      setDesiredAdditionalSeats(result.seats.additional);
+      setMessage("Vagas atualizadas. O novo valor será cobrado na próxima renovação, sem cobrança duplicada agora.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Não foi possível adicionar o assento.");
+      setMessage(error instanceof Error ? error.message : "Não foi possível atualizar as vagas.");
     } finally {
       setIsUpdatingSeats(false);
     }
@@ -322,29 +307,64 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                 <div>
                   <p className="text-sm font-semibold">Pessoas no plano</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    O titular também ocupa um assento. Convites pendentes reservam uma vaga.
+                    O titular também ocupa uma vaga. Convites pendentes reservam outra vaga.
                   </p>
                 </div>
                 <Badge variant="outline" className={seats.available > 0 ? "border-primary/30 bg-primary/10 text-primary" : "border-amber-300 bg-amber-500/10 text-amber-700"}>
-                  {seats.occupied}/{seats.capacity} assentos
+                  {seats.occupied}/{seats.capacity} vagas ocupadas
                 </Badge>
               </div>
             ) : null}
-            {!familyWorkspace.membership && seats && seats.available === 0 ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300/60 bg-amber-500/5 px-4 py-3">
+            {!familyWorkspace.membership && seats ? (
+              <div className="space-y-3 rounded-2xl border border-border/70 bg-background/45 px-4 py-4">
                 <div>
-                  <p className="text-sm font-semibold">Todos os assentos estão ocupados</p>
+                  <p className="text-sm font-semibold">Gerenciar vagas adicionais</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    {seats.canPurchaseAdditional
-                      ? `Você pode adicionar outra pessoa. Valor por assento: R$ ${seats.additionalSeatPrice?.toFixed(2).replace(".", ",")} mensal${seats.additionalSeatYearlyPrice ? ` ou R$ ${seats.additionalSeatYearlyPrice.toFixed(2).replace(".", ",")} anual` : ""}.`
-                      : "O Admin ainda não habilitou a contratação de assentos adicionais para este plano."}
+                    {seats.additionalSeatPrice
+                      ? `Cada vaga custa R$ ${seats.additionalSeatPrice.toFixed(2).replace(".", ",")} por mês. A alteração entra na próxima renovação.`
+                      : "O valor das vagas adicionais ainda não foi configurado pelo Admin."}
                   </p>
                 </div>
-                {seats.canPurchaseAdditional ? (
-                  <Button type="button" variant="outline" className="gap-2 rounded-xl" disabled={isUpdatingSeats} onClick={() => void handleAddSeat()}>
-                    {isUpdatingSeats ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-                    Adicionar assento
-                  </Button>
+                {seats.additionalSeatPrice ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2" aria-label="Quantidade de vagas adicionais">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 rounded-xl"
+                        disabled={isUpdatingSeats || desiredAdditionalSeats <= Math.max(0, seats.occupied - seats.included)}
+                        onClick={() => setDesiredAdditionalSeats((current) => Math.max(Math.max(0, seats.occupied - seats.included), current - 1))}
+                      >
+                        <Minus className="h-4 w-4" />
+                        <span className="sr-only">Remover uma vaga</span>
+                      </Button>
+                      <div className="min-w-28 text-center">
+                        <p className="text-lg font-bold">{desiredAdditionalSeats}</p>
+                        <p className="text-[11px] text-muted-foreground">vaga(s) adicional(is)</p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 rounded-xl"
+                        disabled={isUpdatingSeats || (seats.maxAdditionalSeats !== null && desiredAdditionalSeats >= seats.maxAdditionalSeats)}
+                        onClick={() => setDesiredAdditionalSeats((current) => current + 1)}
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span className="sr-only">Adicionar uma vaga</span>
+                      </Button>
+                    </div>
+                    <Button
+                      type="button"
+                      className="rounded-xl"
+                      disabled={isUpdatingSeats || desiredAdditionalSeats === seats.additional}
+                      onClick={() => void handleUpdateSeats()}
+                    >
+                      {isUpdatingSeats ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Atualizar vagas
+                    </Button>
+                  </div>
                 ) : null}
               </div>
             ) : null}
@@ -469,12 +489,6 @@ export function FamilyWorkspacePanel({ workspaces, loading }: { workspaces: Work
                                 {ROLE_OPTIONS.map((option) => <SelectItem key={option} value={option}>{FAMILY_ROLE_LABELS[option]}</SelectItem>)}
                               </SelectContent>
                             </Select>
-                          ) : null}
-                          {mayInviteMembers && member.status === "pending" ? (
-                            <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl" disabled={resendingMemberUid === member.memberUid} onClick={() => void handleResendMemberAccess(member)}>
-                              {resendingMemberUid === member.memberUid ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MailPlus className="mr-2 h-4 w-4" />}
-                              Reenviar convite
-                            </Button>
                           ) : null}
                           {mayEditMembers ? (
                             <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => void handleRemoveMember(member)}>

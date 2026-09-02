@@ -395,7 +395,7 @@ async function assertFamilyInviteAllowed(workspaceUid: string, workspaceId: stri
   if (alreadyAdded) throw new Error("family_member_already_invited");
   const seats = await getFamilySeatSummary(workspaceUid, workspaceId, memberRows);
   if (!planContext.isBillingExempt && seats.available <= 0) {
-    throw new Error(`Limite de ${seats.capacity} pessoas atingido. Contrate um assento adicional antes de convidar outro familiar.`);
+    throw new Error(`Limite de ${seats.capacity} pessoas atingido. Contrate uma vaga adicional antes de convidar outro familiar.`);
   }
   return seats;
 }

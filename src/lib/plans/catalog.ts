@@ -42,6 +42,7 @@ export type PlanCatalogItem = {
 
 export const PLAN_ORDER: UserPlan[] = ["free", "founder", "premium", "pro", "family", "business"];
 export const PAID_PLAN_IDS: Exclude<UserPlan, "free">[] = ["founder", "premium", "pro", "family", "business"];
+export const PRODUCT_MAX_ADDITIONAL_SEATS = { family: 16, business: 95 } as const;
 
 export const PLAN_CATALOG: Record<UserPlan, PlanCatalogItem> = {
   free: {
@@ -212,7 +213,7 @@ export const PLAN_CATALOG: Record<UserPlan, PlanCatalogItem> = {
     benefits: [
       "Perfil financeiro familiar",
       "Até 4 pessoas incluídas",
-      "Assentos adicionais opcionais",
+      "Vagas adicionais opcionais",
       "Permissões simples",
       "Metas familiares",
       "Relatórios da família",
@@ -249,7 +250,7 @@ export const PLAN_CATALOG: Record<UserPlan, PlanCatalogItem> = {
       "Cadastro de CNPJ opcional",
       "Perfil financeiro profissional",
       "Até 5 usuários incluídos",
-      "Assentos adicionais para funcionários",
+      "Vagas adicionais para funcionários",
       "Receitas e despesas do negócio",
       "Categorias empresariais",
       "Relatórios em PDF/Excel",
@@ -324,7 +325,11 @@ export function planCatalogToDetails(plan: PlanCatalogItem): PlanDetails {
     includedSeats: isFamily ? 4 : isBusiness ? 5 : null,
     additionalSeatPrice: null,
     additionalSeatYearlyPrice: null,
-    maxAdditionalSeats: isFamily ? 6 : isBusiness ? 45 : null,
+    maxAdditionalSeats: isFamily
+      ? PRODUCT_MAX_ADDITIONAL_SEATS.family
+      : isBusiness
+        ? PRODUCT_MAX_ADDITIONAL_SEATS.business
+        : null,
     allowedProfileTypes: plan.allowedProfileTypes,
     cta: plan.cta,
     badge: plan.badge,
@@ -347,10 +352,10 @@ export function normalizePlansConfig(value: unknown, fallback?: PlansConfig): Pl
     const merged = { ...base[plan], ...(data[plan] || {}) };
     const supportsSeats = plan === "family" || plan === "business";
     if (!supportsSeats) return merged;
-    const includedSeats = Math.max(1, Math.floor(Number(merged.includedSeats || (plan === "family" ? 4 : 5))));
-    const maxAdditionalSeats = merged.maxAdditionalSeats == null
-      ? null
-      : Math.max(0, Math.floor(Number(merged.maxAdditionalSeats) || 0));
+    const includedSeats = plan === "family" ? 4 : 5;
+    const maxAdditionalSeats = plan === "family"
+      ? PRODUCT_MAX_ADDITIONAL_SEATS.family
+      : PRODUCT_MAX_ADDITIONAL_SEATS.business;
     const normalizeSeatPrice = (price: unknown) => {
       if (price === null || price === undefined || price === "") return null;
       const parsed = Number(price);
@@ -361,7 +366,9 @@ export function normalizePlansConfig(value: unknown, fallback?: PlansConfig): Pl
       includedSeats,
       maxAdditionalSeats,
       additionalSeatPrice: normalizeSeatPrice(merged.additionalSeatPrice),
-      additionalSeatYearlyPrice: normalizeSeatPrice(merged.additionalSeatYearlyPrice),
+      additionalSeatYearlyPrice: normalizeSeatPrice(merged.additionalSeatPrice)
+        ? Number((Number(merged.additionalSeatPrice) * 12).toFixed(2))
+        : null,
     };
   };
   return {

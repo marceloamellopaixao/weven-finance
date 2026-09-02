@@ -10,6 +10,7 @@ import { writeApiMetric } from "@/lib/observability/metrics";
 import { getDefaultCategoriesForWorkspaceType } from "@/lib/categories/defaultCategories";
 import { canPlanUseProfile } from "@/lib/plans/catalog";
 import { getUserPlanContext } from "@/lib/plans/server";
+import { canAccessAdminArea } from "@/lib/access-control/roles";
 import { supabaseDeleteByFilters, supabasePatchByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { toFinancialProfileType, type Workspace, type WorkspaceSettings, type WorkspaceType } from "@/types/workspace";
 import { ensureFamilyManagerMembership, getActiveMemberships, toWorkspaceMember } from "@/lib/workspaces/server";
@@ -44,15 +45,22 @@ function assertDocumentAllowed(type: WorkspaceType, settings?: WorkspaceSettings
 }
 
 async function assertPlanCanUseWorkspace(uid: string, type: WorkspaceType) {
-  const planContext = await getUserPlanContext(uid);
+  const [planContext, memberships] = await Promise.all([
+    getUserPlanContext(uid),
+    getActiveMemberships(uid),
+  ]);
   const profileType = toFinancialProfileType(type);
-  if (planContext.isBillingExempt || canPlanUseProfile(planContext.plan, profileType)) return;
+  if (canAccessAdminArea({ uid, role: planContext.role }) || canPlanUseProfile(planContext.plan, profileType)) return;
+  if (memberships.some((membership) => membership.workspaceUid !== uid)) {
+    throw new Error("Enquanto você participar de um perfil compartilhado, não é possível criar ou reativar outro perfil financeiro.");
+  }
   if (profileType === "family") {
     throw new Error("Para criar um perfil Família, escolha o plano Família.");
   }
   if (profileType === "business") {
     throw new Error("Para controlar MEI, CNPJ, igreja, projeto profissional ou pequeno negócio, escolha o plano Business/PJ.");
   }
+  throw new Error("Este tipo de perfil não está disponível no seu plano atual.");
 }
 
 function parseSettings(value: unknown): WorkspaceSettings {
@@ -70,6 +78,7 @@ function parseSettings(value: unknown): WorkspaceSettings {
 
 function getWorkspaceErrorStatus(message: string) {
   if (message.includes("CNPJ")) return 400;
+  if (message.startsWith("Enquanto você participar")) return 409;
   if (message.startsWith("Para criar um perfil") || message.startsWith("Para controlar")) return 403;
   return resolveApiErrorStatus(message);
 }
@@ -304,8 +313,11 @@ export async function GET(request: NextRequest) {
     }
 
     const { actingUid: uid } = await resolveActingContext(request);
-    const ownedWorkspaces = await getWorkspaceRows(uid);
-    const memberships = await getActiveMemberships(uid);
+    const [ownedWorkspaces, memberships, planContext] = await Promise.all([
+      getWorkspaceRows(uid),
+      getActiveMemberships(uid),
+      getUserPlanContext(uid),
+    ]);
     const sharedRows =
       memberships.length > 0
         ? await Promise.all(
@@ -322,7 +334,13 @@ export async function GET(request: NextRequest) {
               }),
           )
         : [];
-    const workspaces = [...ownedWorkspaces, ...sharedRows.filter((workspace): workspace is Workspace => Boolean(workspace))];
+    const activeSharedWorkspaces = sharedRows.filter((workspace): workspace is Workspace => Boolean(workspace));
+    const isStaff = canAccessAdminArea({ uid, role: planContext.role });
+    const workspaces = isStaff
+      ? [...ownedWorkspaces, ...activeSharedWorkspaces]
+      : activeSharedWorkspaces.length > 0
+        ? activeSharedWorkspaces
+        : ownedWorkspaces.filter((workspace) => canPlanUseProfile(planContext.plan, toFinancialProfileType(workspace.type)));
     const defaultWorkspace = workspaces.find((workspace) => workspace.isDefault && isWorkspaceActive(workspace)) || null;
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json({ ok: true, workspaces, defaultWorkspace }, { status: 200 });
