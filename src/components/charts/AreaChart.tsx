@@ -12,7 +12,7 @@ import {
 } from "recharts";
 
 import type { Payload } from "recharts/types/component/DefaultTooltipContent";
-import { useUiText } from "@/i18n/T";
+import { useTranslations } from "@/i18n/T";
 import { useFormatters } from "@/i18n/useFormatters";
 import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 
@@ -31,7 +31,7 @@ type CustomTooltipProps = {
 };
 
 function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
-  const tt = useUiText();
+  const t = useTranslations("components.charts");
   const currency = usePreferredCurrency();
   const { money } = useFormatters(currency);
   if (!active || !payload || payload.length === 0) return null;
@@ -52,7 +52,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
       <div className="flex items-center gap-3 mt-2">
         <div className={`w-1.5 h-8 rounded-full ${bgClass}`} />
         <div className="flex flex-col">
-          <span className="text-[10px] uppercase text-zinc-400 font-bold tracking-wider">{tt("Saldo Acumulado")}</span>
+          <span className="text-[10px] uppercase text-zinc-400 font-bold tracking-wider">{t("accumulatedBalance")}</span>
           <span className={`text-xl font-bold tracking-tight ${colorClass}`}>
             {money(value)}
           </span>
@@ -63,14 +63,14 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 }
 
 const AreaChartComponent = ({ data }: { data: ChartData[] }) => {
-  const tt = useUiText();
+  const t = useTranslations("components.charts");
   const currency = usePreferredCurrency();
   const { number } = useFormatters(currency);
 
   if (!data || data.length === 0) {
     return (
       <div className="app-panel-subtle flex h-[300px] w-full flex-col items-center justify-center rounded-2xl border border-dashed text-zinc-400 animate-in fade-in">
-        <p className="text-sm font-medium">{tt("Nenhum dado financeiro para exibir.")}</p>
+        <p className="text-sm font-medium">{t("emptyFinancialData")}</p>
       </div>
     );
   }

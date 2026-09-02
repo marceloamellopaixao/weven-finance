@@ -6,7 +6,7 @@ import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { useUiText } from "@/i18n/T";
+import { useTranslations } from "@/i18n/T";
 import { PLAN_CATALOG } from "@/lib/plans/catalog";
 import { buildUpgradeCheckoutPath, rememberPendingUpgradePlan, type UpgradePlan } from "@/services/billing/checkoutIntent";
 import { trackProductEvent } from "@/lib/analytics/client";
@@ -17,11 +17,11 @@ type MarketingCtasProps = {
 
 export function MarketingCtas({ variant }: MarketingCtasProps) {
   const { user, userProfile } = useAuth();
-  const tt = useUiText();
+  const t = useTranslations("components.marketingCtas");
   const [isOpeningCheckout, setIsOpeningCheckout] = useState<UpgradePlan | null>(null);
   const hasSession = Boolean(user || userProfile);
   const primaryHref = hasSession ? "/dashboard" : "/register";
-  const primaryLabel = hasSession ? tt("Abrir meu painel") : tt("Começar grátis");
+  const primaryLabel = hasSession ? t("openDashboard") : t("startFree");
 
   const handlePlanCheckout = async (plan: UpgradePlan) => {
     trackProductEvent("plan_selected", { plan, placement: variant, authenticated: hasSession });
@@ -49,7 +49,7 @@ export function MarketingCtas({ variant }: MarketingCtasProps) {
           </Button>
         </Link>
         <Button size="lg" variant="outline" className="h-12 w-full rounded-full border-color:var(--app-panel-border) px-8 text-base text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-foreground hover:cursor-pointer sm:h-14 sm:w-auto sm:text-lg" asChild>
-          <a href="#pricing">{tt("Ver planos")}</a>
+          <a href="#pricing">{t("viewPlans")}</a>
         </Button>
       </div>
     );
@@ -59,7 +59,7 @@ export function MarketingCtas({ variant }: MarketingCtasProps) {
     return (
       <Link href={primaryHref} className="w-full">
         <Button className="h-12 w-full rounded-2xl border border-color:var(--app-panel-border) bg-card text-foreground shadow-sm transition-all duration-200 hover:scale-105 hover:bg-accent active:scale-95">
-          {hasSession ? tt("Abrir painel") : tt("Começar no Free")}
+          {hasSession ? t("openPanel") : t("startFreePlan")}
         </Button>
       </Link>
     );
@@ -76,7 +76,7 @@ export function MarketingCtas({ variant }: MarketingCtasProps) {
       disabled={isOpeningCheckout !== null}
       onClick={() => void handlePlanCheckout(plan)}
     >
-      {isOpeningCheckout === plan ? tt("Abrindo checkout...") : planCopy.cta}
+      {isOpeningCheckout === plan ? t("openingCheckout") : planCopy.cta}
     </Button>
   );
 }

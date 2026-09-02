@@ -18,6 +18,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function Page() {
   const dictionary = getDictionary(await getRequestLocale());
   const page = dictionary.seo.pages.debtFreeApp;
+  const landing = dictionary.seo.landingPage;
 
   return (
     <SeoLandingPage
@@ -27,6 +28,11 @@ export default async function Page() {
       keyword={page.keyword}
       benefits={[...page.benefits]}
       sections={[...page.sections]}
+      primaryCta={landing.primaryCta}
+      secondaryCta={landing.secondaryCta}
+      finalTitle={landing.finalTitle.replace("{keyword}", page.keyword)}
+      finalDescription={landing.finalDescription}
+      finalCta={landing.finalCta}
     />
   );
 }

@@ -1,3 +1,6 @@
+import type { Locale } from "@/i18n/config";
+import { DEFAULT_LOCALE, normalizeLocale } from "@/i18n/config";
+import { translate } from "@/i18n/getDictionary";
 import { DEFAULT_FEATURE_ACCESS_CONFIG, DEFAULT_PLANS_CONFIG, FeatureAccessConfig, PlansConfig } from "@/types/system";
 import { UserPlan } from "@/types/user";
 import { PLAN_CATALOG } from "@/lib/plans/catalog";
@@ -29,6 +32,10 @@ const PLAN_NAMES: Record<UserPlan, string> = {
 
 export function formatPlanName(plan: UserPlan) {
   return PLAN_NAMES[plan] ?? "Free";
+}
+
+export function formatLocalizedPlanName(plan: UserPlan, locale: Locale = DEFAULT_LOCALE) {
+  return translate(locale, `billing.planCatalog.${plan}.name`);
 }
 
 export function getNextUpgradePlan(plan: UserPlan): Exclude<UserPlan, "free"> | null {
@@ -81,9 +88,20 @@ export function buildPlanLimitMessage(params: {
   resourceLabel: string;
   resourcePluralLabel: string;
   max: number;
+  locale?: Locale | string;
+  resourceKey?: "cards" | "goals";
 }) {
-  const currentPlanName = formatPlanName(params.plan);
+  const locale = normalizeLocale(params.locale || DEFAULT_LOCALE);
+  const currentPlanName = formatLocalizedPlanName(params.plan, locale);
   const nextPlan = getNextUpgradePlan(params.plan);
+  // const nextPlanName = nextPlan ? formatLocalizedPlanName(nextPlan, locale) : translate(locale, "billing.planLimits.higherPlan");
+  const resourceLabel = params.resourceKey
+    ? translate(locale, `billing.planLimits.resources.${params.resourceKey}.${params.max === 1 ? "one" : "many"}`)
+    : params.max === 1 ? params.resourceLabel : params.resourcePluralLabel;
+  const resourcePlural = params.resourceKey
+    ? translate(locale, `billing.planLimits.resources.${params.resourceKey}.many`)
+    : params.resourcePluralLabel;
+  const quantityLabel = `${params.max} ${resourceLabel}`;
   const nextPlanName = nextPlan ? formatPlanName(nextPlan) : "um plano superior";
 
   return `Você atingiu o limite do plano ${currentPlanName}. Para liberar mais ${params.resourcePluralLabel}, escolha ${nextPlanName}.`;
@@ -92,6 +110,7 @@ export function buildPlanLimitMessage(params: {
 export function buildMonthlyTransactionLimitMessage(params: {
   plan: UserPlan;
   max: number;
+  locale?: Locale | string;
 }) {
   const nextPlan = getNextUpgradePlan(params.plan);
   const nextPlanName = nextPlan ? formatPlanName(nextPlan) : "Premium Individual";

@@ -19,6 +19,13 @@ export const seo: Dictionary["seo"] = {
       ],
     },
   },
+  landingPage: {
+    primaryCta: "Empezar gratis",
+    secondaryCta: "Calcular cuánto puedo gastar",
+    finalTitle: "Convierte {keyword} en una decisión diaria.",
+    finalDescription: "WevenFinance organiza lo que entra, lo que sale y lo que vence para responder lo que importa: cuánto puedes gastar hoy sin apretar el fin de mes.",
+    finalCta: "Guardar mi control en WevenFinance",
+  },
   pages: {
     home: {
       metadata: {

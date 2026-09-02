@@ -211,6 +211,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const requestLocale = request.headers.get("accept-language")?.split(",")[0];
   try {
     const acting = await resolveActingContext(request);
     const approval = await ensureImpersonationWriteApproval({
@@ -254,6 +255,8 @@ export async function POST(request: NextRequest) {
             resourceLabel: "cartão",
             resourcePluralLabel: "cartões",
             max: capabilities.maxCards,
+            locale: requestLocale,
+            resourceKey: "cards",
           }),
         },
         { status: 403 }

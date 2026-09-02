@@ -19,6 +19,7 @@ import {
   isSubcategory,
   orderCategoryNames,
 } from "@/lib/category-utils";
+import { useTranslations } from "@/i18n/T";
 
 type CategoryManagerDialogProps = {
   open: boolean;
@@ -47,6 +48,7 @@ export function CategoryManagerDialog({
   renameCategory,
   toggleDefaultCategoryVisibility,
 }: CategoryManagerDialogProps) {
+  const t = useTranslations("components.categoryManager");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryMode, setNewCategoryMode] = useState<"root" | "sub">("root");
   const [newCategoryParent, setNewCategoryParent] = useState("");
@@ -129,14 +131,14 @@ export function CategoryManagerDialog({
       } else if (parentName) {
         setCustomParentFilter(parentName);
       }
-      toast.success("Categoria adicionada com sucesso.");
+      toast.success(t("toasts.created"));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro ao criar categoria.";
       if (message === "duplicate_category_name") {
-        toast.error("Essa categoria já existe.");
+        toast.error(t("toasts.duplicate"));
         return;
       }
-      toast.error("Não foi possível criar a categoria.");
+      toast.error(t("toasts.createError"));
     }
   };
 
@@ -153,10 +155,10 @@ export function CategoryManagerDialog({
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro ao excluir categoria.";
       if (message === "duplicate_category_name") {
-        toast.error("Já existe uma categoria com esse nome.");
+        toast.error(t("toasts.duplicateRename"));
         return;
       }
-      toast.error("Não foi possível excluir a categoria.");
+      toast.error(t("toasts.deleteError"));
     } finally {
       setDeletingCategoryName(null);
     }
@@ -209,10 +211,10 @@ export function CategoryManagerDialog({
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro ao editar categoria.";
       if (message === "duplicate_category_name") {
-        toast.error("Já existe uma categoria com esse nome.");
+        toast.error(t("toasts.duplicateRename"));
         return;
       }
-      toast.error("Não foi possível salvar a categoria.");
+      toast.error(t("toasts.saveError"));
     } finally {
       setRenamingCategoryName(null);
     }
@@ -225,43 +227,42 @@ export function CategoryManagerDialog({
         <DialogHeader className="app-panel-subtle border-b px-6 py-5">
           <DialogTitle className="flex items-center gap-2 text-xl">
             <FolderTree className="h-5 w-5 text-violet-600" />
-            Gerenciar Categorias
+            {t("title")}
           </DialogTitle>
           <DialogDescription>
-            Organize suas categorias para manter seus relatórios precisos.
+            {t("description")}
           </DialogDescription>
         </DialogHeader>
 
         {/* Container de Scroll Principal */}
         <div className="px-6 py-4 max-h-[75vh] overflow-y-auto space-y-8 custom-scrollbar pb-8">
           
-          {/* SESSÃO 1: CRIAR NOVA */}
           <section className="space-y-3">
             <h3 className="text-sm font-semibold flex items-center gap-1.5 text-zinc-800 dark:text-zinc-200">
               <Plus className="h-4 w-4 text-violet-600" />
-              Criar Nova Categoria
+              {t("createTitle")}
             </h3>
             <div className="app-panel-subtle space-y-4 rounded-2xl border p-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-zinc-500">Nível da categoria</Label>
+                  <Label className="text-xs text-zinc-500">{t("levelLabel")}</Label>
                   <Select value={newCategoryMode} onValueChange={(v) => setNewCategoryMode(v as "root" | "sub")}>
                     <SelectTrigger className="bg-white dark:bg-zinc-950 rounded-xl">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="root">Categoria Principal</SelectItem>
-                      <SelectItem value="sub">Subcategoria</SelectItem>
+                      <SelectItem value="root">{t("rootCategory")}</SelectItem>
+                      <SelectItem value="sub">{t("subcategory")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 {newCategoryMode === "sub" && (
                   <div className="space-y-1.5 animate-in fade-in slide-in-from-left-2">
-                    <Label className="text-xs text-zinc-500">Pertence a qual principal?</Label>
+                    <Label className="text-xs text-zinc-500">{t("parentLabel")}</Label>
                     <Select value={newCategoryParent} onValueChange={setNewCategoryParent}>
                       <SelectTrigger className="bg-white dark:bg-zinc-950 rounded-xl">
-                        <SelectValue placeholder="Selecione..." />
+                        <SelectValue placeholder={t("selectPlaceholder")} />
                       </SelectTrigger>
                       <SelectContent>
                         {allRootCategories.map((cat) => (
@@ -277,11 +278,11 @@ export function CategoryManagerDialog({
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-zinc-500">
-                  {newCategoryMode === "sub" ? "Nome da Subcategoria" : "Nome da Categoria"}
+                  {newCategoryMode === "sub" ? t("subcategoryName") : t("categoryName")}
                 </Label>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <Input
-                    placeholder={newCategoryMode === "sub" ? "Ex: Reforma" : "Ex: Casa"}
+                    placeholder={newCategoryMode === "sub" ? t("subcategoryPlaceholder") : t("categoryPlaceholder")}
                     value={newCategoryName}
                     onChange={(e) => setNewCategoryName(e.target.value)}
                     className="bg-white dark:bg-zinc-950 rounded-xl flex-1"
@@ -291,26 +292,25 @@ export function CategoryManagerDialog({
                     disabled={!newCategoryName.trim() || (newCategoryMode === "sub" && !newCategoryParent)} 
                     className="rounded-xl bg-violet-600 hover:bg-violet-700 text-white shrink-0 shadow-sm"
                   >
-                    Adicionar Categoria
+                    {t("addCategory")}
                   </Button>
                 </div>
               </div>
             </div>
           </section>
 
-          {/* SESSÃO 2: PERSONALIZADAS (Movemos para cima pois é o que o usuário mais interage) */}
           <section className="space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <h3 className="text-sm font-semibold flex items-center gap-1.5 text-zinc-800 dark:text-zinc-200">
                 <Tag className="h-4 w-4 text-violet-600" />
-                Suas Categorias
+                {t("yourCategories")}
               </h3>
               <Select value={customParentFilter} onValueChange={setCustomParentFilter}>
                 <SelectTrigger className="h-8 w-40 text-xs rounded-lg border-zinc-200 bg-transparent">
-                  <SelectValue placeholder="Filtrar pai" />
+                  <SelectValue placeholder={t("filterParent")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas principais</SelectItem>
+                  <SelectItem value="all">{t("allRootCategories")}</SelectItem>
                   {allRootCategories.map((root) => (
                     <SelectItem key={`filter-${root.name}`} value={root.name}>
                       <CategoryLabel value={root.name} />
@@ -324,7 +324,7 @@ export function CategoryManagerDialog({
               {filteredCustomCategories.length === 0 ? (
                 <div className="p-8 text-center text-zinc-500 text-sm flex flex-col items-center">
                   <FolderOpen className="h-8 w-8 text-zinc-300 mb-2" />
-                  Nenhuma categoria personalizada encontrada.
+                  {t("emptyCustom")}
                 </div>
               ) : (
                 filteredCustomCategories.map((cat) => {
@@ -340,7 +340,7 @@ export function CategoryManagerDialog({
                           {sub && (
                             <Select value={editingCategoryParent} onValueChange={setEditingCategoryParent}>
                               <SelectTrigger className="h-9 sm:w-40 bg-white dark:bg-zinc-950">
-                                <SelectValue placeholder="Pai" />
+                                <SelectValue placeholder={t("parent")} />
                               </SelectTrigger>
                               <SelectContent>
                                 {allRootCategories.map((root) => (
@@ -381,12 +381,12 @@ export function CategoryManagerDialog({
                               </div>
                               {sub && (
                                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 text-zinc-500 font-normal">
-                                  Subcategoria
+                                  {t("subcategory")}
                                 </Badge>
                               )}
                             </div>
                             {sub && !linked && (
-                              <p className="text-[11px] text-amber-600 font-medium mt-0.5">⚠️ Sem pai vinculado</p>
+                              <p className="text-[11px] text-amber-600 font-medium mt-0.5">{t("noLinkedParent")}</p>
                             )}
                           </div>
                           
@@ -396,7 +396,7 @@ export function CategoryManagerDialog({
                               variant="ghost" 
                               className="h-8 w-8 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20" 
                               onClick={() => handleStartEditCategory(cat.name)}
-                              title="Editar"
+                              title={t("edit")}
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
@@ -406,7 +406,7 @@ export function CategoryManagerDialog({
                               className="h-8 w-8 text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" 
                               disabled={deletingCategoryName === cat.name} 
                               onClick={() => handleDeleteCategory(cat.name)}
-                              title="Excluir"
+                              title={t("delete")}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -420,11 +420,10 @@ export function CategoryManagerDialog({
             </div>
           </section>
 
-          {/* SESSÃO 3: PADRÃO DO SISTEMA */}
           <section className="space-y-3">
             <h3 className="text-sm font-semibold flex items-center gap-1.5 text-zinc-800 dark:text-zinc-200">
               <FolderTree className="h-4 w-4 text-zinc-400" />
-              Categorias do Sistema
+              {t("systemCategories")}
             </h3>
             <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden">
               {compatibleDefaultCategories
@@ -445,10 +444,10 @@ export function CategoryManagerDialog({
                           {hidden ? <EyeOff className="h-4 w-4 text-zinc-400" /> : <Eye className="h-4 w-4 text-violet-600" />}
                         </div>
                         <div>
-                          <div className={`text-sm font-medium truncate ${hidden ? 'text-zinc-500' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                          <p className={`text-sm font-medium truncate ${hidden ? 'text-zinc-500' : 'text-zinc-900 dark:text-zinc-100'}`}>
                             <CategoryLabel value={cat.name} />
-                          </div>
-                          {hidden && <p className="text-[11px] text-zinc-400">Oculta nas listagens</p>}
+                          </p>
+                          {hidden && <p className="text-[11px] text-zinc-400">{t("hiddenInLists")}</p>}
                         </div>
                       </div>
 
@@ -466,7 +465,7 @@ export function CategoryManagerDialog({
                         disabled={isOthers}
                         onClick={() => toggleDefaultCategoryVisibility(cat.name, !hidden)}
                       >
-                        {isOthers ? "Obrigatória" : hidden ? "Mostrar" : "Ocultar"}
+                        {isOthers ? t("required") : hidden ? t("show") : t("hide")}
                       </Button>
                     </div>
                   );
