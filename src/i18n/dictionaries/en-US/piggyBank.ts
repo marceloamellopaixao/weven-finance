@@ -168,6 +168,9 @@ export const piggyBank: Dictionary["piggyBank"] = {
       yield: "Yield: {value}",
       appliedToCardLimit: "Applied to card limit",
       card: "Card: {card}",
+      pageSummary: "Page {page} of {totalPages} • {total} movement(s)",
+      previous: "Previous",
+      next: "Next",
     },
     source: {
       bank: "Bank balance",

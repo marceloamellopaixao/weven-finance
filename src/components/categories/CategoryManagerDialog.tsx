@@ -434,7 +434,7 @@ export function CategoryManagerDialog({
                   return a.name.localeCompare(b.name, "pt-BR");
                 })
                 .map((cat) => {
-                  const hidden = cat.name !== "Outros" && !compatibleCategories.some((item) => item.name === cat.name);
+                  const hidden = Boolean(cat.hidden);
                   const isOthers = cat.name === "Outros";
 
                   return (

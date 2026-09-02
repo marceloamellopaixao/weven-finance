@@ -14,6 +14,7 @@ type PlatformTourRouteConfig = {
 export const PLATFORM_TOUR_ROUTE_HREFS: Record<PlatformTourRouteKey, string> = {
   dashboard: "/dashboard?tour=1",
   settings: "/settings?tab=account&tour=1",
+  "account-profile": "/account-profile?create=1&tour=1",
   "transactions-new": "/transactions/new?tour=1",
   reports: "/reports?tour=1",
   cards: "/cards?tour=1",
@@ -35,6 +36,25 @@ function clickSelectorAndAdvance(selector: string) {
     window.setTimeout(() => {
       options.driver.moveNext();
     }, 220);
+  };
+}
+
+function openSelectorAndAdvance(triggerSelector: string, targetSelector: string) {
+  return (
+    _element: Element | undefined,
+    _step: DriveStep,
+    options: {
+      driver: {
+        moveNext: () => void;
+      };
+    }
+  ) => {
+    if (!document.querySelector<HTMLElement>(targetSelector)) {
+      document.querySelector<HTMLElement>(triggerSelector)?.click();
+    }
+    window.setTimeout(() => {
+      options.driver.moveNext();
+    }, 260);
   };
 }
 
@@ -122,6 +142,15 @@ export function getPlatformTourConfig(
           },
         },
         {
+          element: "#tour-workspace-switcher",
+          popover: {
+            title: "Trocar de perfil",
+            description:
+              "Este seletor muda o perfil ativo. Cada perfil carrega seus próprios lançamentos, cartões, metas e categorias.",
+            side: "bottom",
+          },
+        },
+        {
           element: "#tour-account-avatar",
           onHighlightStarted: () => setAccountMenuOpen(true),
           onDeselected: () => setAccountMenuOpen(false),
@@ -136,8 +165,8 @@ export function getPlatformTourConfig(
       ],
     },
     settings: {
-      nextRoute: "transactions-new",
-      nextHref: "/transactions/new",
+      nextRoute: "account-profile",
+      nextHref: "/account-profile?create=1",
       steps: [
         {
           element: "#tour-settings-header",
@@ -164,6 +193,46 @@ export function getPlatformTourConfig(
             title: "Conteúdo da aba",
             description:
               "Esta área muda conforme a aba escolhida, sem tirar você da mesma tela.",
+            side: "top",
+          },
+        },
+        {
+          element: "#tour-settings-profiles-tab",
+          popover: {
+            title: "Perfis financeiros",
+            description:
+              "Aqui você alterna, revisa e organiza perfis de uso pessoal, Família e Business/PJ sem misturar dados.",
+            side: "bottom",
+            onNextClick: clickSelectorAndAdvance("#tour-settings-profiles-tab"),
+          },
+        },
+        {
+          element: "#tour-settings-profiles-panel",
+          popover: {
+            title: "Dados separados por perfil",
+            description:
+              "Cada perfil financeiro tem seus próprios dados. Ao trocar de perfil, o app carrega somente as informações daquele perfil.",
+            side: "top",
+          },
+        },
+        {
+          stepId: "familyWorkspace",
+          element: "#tour-settings-family-tab",
+          popover: {
+            title: "Perfil Família",
+            description:
+              "Quando existe um perfil Família, esta aba mostra membros, convites e permissões desse perfil.",
+            side: "bottom",
+            onNextClick: clickSelectorAndAdvance("#tour-settings-family-tab"),
+          },
+        },
+        {
+          stepId: "familyWorkspace",
+          element: "#tour-settings-family-panel",
+          popover: {
+            title: "Gestão da família",
+            description:
+              "Use esta área para administrar quem participa da família e o que cada membro pode acessar.",
             side: "top",
           },
         },
@@ -220,7 +289,41 @@ export function getPlatformTourConfig(
           popover: {
             title: "Tudo bem centralizado",
             description:
-              "Agora vamos para a tela de novo lançamento, onde o app vira valor prático no mesmo instante.",
+              "Agora vamos para a tela de perfis, onde o usuario pode criar outro contexto financeiro sem misturar dados.",
+            side: "top",
+          },
+        },
+      ],
+    },
+    "account-profile": {
+      nextRoute: "transactions-new",
+      nextHref: "/transactions/new",
+      steps: [
+        {
+          element: "#tour-account-profile-header",
+          popover: {
+            title: "Criar outro perfil",
+            description:
+              "Use esta tela para criar outro perfil financeiro, como Família ou Business/PJ.",
+            side: "bottom",
+            align: "start",
+          },
+        },
+        {
+          element: "#tour-account-profile-options",
+          popover: {
+            title: "Escolha o tipo de perfil",
+            description:
+              "O tipo define presets e contexto, mas os dados financeiros permanecem isolados entre os perfis.",
+            side: "bottom",
+          },
+        },
+        {
+          element: "#tour-account-profile-submit",
+          popover: {
+            title: "Ativar o novo perfil",
+            description:
+              "Depois de criar, ele passa a aparecer no seletor do topo para alternar como perfis independentes.",
             side: "top",
           },
         },
@@ -276,12 +379,31 @@ export function getPlatformTourConfig(
           },
         },
         {
+          element: "#tour-transactions-category-manage",
+          popover: {
+            title: "Gerenciar categorias",
+            description:
+              "Este botao abre a organizacao de categorias do perfil atual, sem misturar com outros workspaces.",
+            side: "bottom",
+          },
+        },
+        {
           element: "#tour-transactions-category",
           popover: {
             title: "Categoria (Cartão de Crédito e Débito)",
             description:
               "É necessário cadastrar primeiro o cartão para que você consiga vincular o lançamento a ele. Depois disso, as categorias de cartão ficam disponíveis para organizar seus gastos por cartão ou tipo de gasto.",
             side: "bottom",
+          },
+        },
+        {
+          element: "#tour-transactions-advanced",
+          popover: {
+            title: "Mais opcoes do lancamento",
+            description:
+              "Abra este bloco quando precisar marcar um lancamento fixo ou uma compra parcelada.",
+            side: "top",
+            onNextClick: openSelectorAndAdvance("#tour-transactions-advanced", "#tour-transactions-recurring"),
           },
         },
         {
@@ -338,7 +460,7 @@ export function getPlatformTourConfig(
           },
         },
         {
-          element: "#tour-reports-categories",
+          element: "#tour-reports-categories-section",
           popover: {
             title: "Categorias",
             description:
@@ -381,6 +503,7 @@ export function getPlatformTourConfig(
           },
         },
         {
+          stepId: "cardDetails",
           element: "#tour-cards-carousel",
           popover: {
             title: "Trocar de cartão",
@@ -390,6 +513,7 @@ export function getPlatformTourConfig(
           },
         },
         {
+          stepId: "cardDetails",
           element: "#tour-cards-limit-panel",
           popover: {
             title: "Saúde do limite",

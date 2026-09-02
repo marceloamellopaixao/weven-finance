@@ -1,4 +1,5 @@
 import { UserPlan } from "@/types/user";
+import { parseUserPlan } from "@/lib/plans/catalog";
 
 const CHECKOUT_SIGNAL_WINDOW_MS = 6 * 60 * 60 * 1000;
 
@@ -16,15 +17,12 @@ export function canMatchWebhookByEmail(
     return true;
   }
 
-  const pendingPlan =
-    billing.pendingPlan === "free" || billing.pendingPlan === "premium" || billing.pendingPlan === "pro"
-      ? (billing.pendingPlan as UserPlan)
-      : undefined;
+  const pendingPlan = parseUserPlan(billing.pendingPlan, "free");
   const pendingCheckoutAt = typeof billing.pendingCheckoutAt === "string" ? billing.pendingCheckoutAt : "";
   const pendingCheckoutAttemptId =
     typeof billing.pendingCheckoutAttemptId === "string" ? billing.pendingCheckoutAttemptId.trim() : "";
 
-  if (!details.plan || pendingPlan !== details.plan || !pendingCheckoutAt || !pendingCheckoutAttemptId) {
+  if (!details.plan || pendingPlan === "free" || pendingPlan !== details.plan || !pendingCheckoutAt || !pendingCheckoutAttemptId) {
     return false;
   }
 

@@ -6,7 +6,7 @@ export const terms = {
   },
   eyebrow: "Terms",
   title: "Summary terms of use",
-  description: "This version summarizes the main product usage points until an expanded legal version is published.",
+  description: "These terms define the main rules for platform use, accounts, subscriptions, cancellation, and service availability.",
   sections: {
     platformUse: {
       title: "Platform use",
@@ -18,7 +18,7 @@ export const terms = {
     },
     billing: {
       title: "Subscription and billing",
-      text: "Paid plans may be contracted as recurring subscriptions, with payment processing handled by an external partner. Plan status depends on payment confirmation.",
+      text: "Paid plans are recurring subscriptions processed by Mercado Pago. Price and billing period are shown before purchase. Users may cancel renewal in settings; processed charges follow applicable law and the payment provider rules.",
     },
     availability: {
       title: "Availability and evolution",

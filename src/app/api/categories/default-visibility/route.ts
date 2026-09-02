@@ -3,9 +3,15 @@ import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/im
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { isArchivedJsonRecord } from "@/lib/account-archive/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
+import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
+import { canManageFamilyWorkspaceSettings } from "@/lib/workspaces/family";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function getCategoriesSettingKey(workspaceId?: string | null) {
+  return workspaceId ? `categories:${workspaceId}` : "categories";
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,7 +30,14 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as {
       categoryName?: string;
       hidden?: boolean;
+      workspaceId?: string;
     };
+    const workspaceContext = await resolveActiveWorkspaceContext(uid, body.workspaceId);
+    const ownerUid = workspaceContext.ownerUid;
+    if (!canManageFamilyWorkspaceSettings(workspaceContext.member)) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
+    const settingKey = getCategoriesSettingKey(workspaceContext.workspaceId);
 
     const categoryName = body.categoryName?.trim();
     const hidden = body.hidden;
@@ -36,12 +49,16 @@ export async function POST(request: NextRequest) {
     }
 
     const rows = await supabaseSelect("user_settings", {
-      select: "id,data",
-      filters: { uid, setting_key: "categories" },
-      limit: 1,
+      select: "id,setting_key,data",
+      filters: { uid: ownerUid },
+      or: workspaceContext.includeLegacyRows
+        ? `setting_key.eq.${settingKey},setting_key.eq.categories`
+        : `setting_key.eq.${settingKey}`,
     });
 
-    const activeRow = rows.find((row) => !isArchivedJsonRecord(row, "data"));
+    const activeRow =
+      rows.find((row) => String(row.setting_key || "") === settingKey && !isArchivedJsonRecord(row, "data")) ||
+      rows.find((row) => !isArchivedJsonRecord(row, "data"));
     const existingData = (activeRow?.data as { hiddenDefaultCategories?: unknown } | undefined) ?? {};
     const currentHidden = Array.isArray(existingData.hiddenDefaultCategories)
       ? existingData.hiddenDefaultCategories.filter((item): item is string => typeof item === "string")
@@ -51,14 +68,15 @@ export async function POST(request: NextRequest) {
       ? Array.from(new Set([...currentHidden, categoryName]))
       : currentHidden.filter((name) => name !== categoryName);
 
-    const id = String(activeRow?.id || rows[0]?.id || `${uid}__categories`);
+    const activeRowBelongsToWorkspace = String(activeRow?.setting_key || "") === settingKey;
+    const id = String(activeRowBelongsToWorkspace ? activeRow?.id : `${ownerUid}__${settingKey}`);
     await supabaseUpsertRows(
       "user_settings",
       [
         {
           id,
-          uid,
-          setting_key: "categories",
+          uid: ownerUid,
+          setting_key: settingKey,
           data: { hiddenDefaultCategories: next, isArchived: false },
           updated_at: new Date().toISOString(),
         },

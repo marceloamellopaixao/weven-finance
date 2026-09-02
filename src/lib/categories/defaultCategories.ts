@@ -115,6 +115,53 @@ export const DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE: Record<WorkspaceType, Defaul
   ],
 };
 
+const BUSINESS_PROFILE_CATEGORIES: DefaultCategoryPreset[] = [
+  { name: "Receita de vendas", type: "income", color: COLORS.incomeTeal },
+  { name: "Receita de serviços", type: "income", color: COLORS.incomeTeal },
+  { name: "Fornecedores", type: "expense", color: COLORS.expenseOrange },
+  { name: "Impostos", type: "expense", color: COLORS.expenseOrange },
+  { name: "Taxas", type: "expense", color: COLORS.expenseOrange },
+  { name: "Ferramentas", type: "expense", color: COLORS.expenseViolet },
+  { name: "Marketing", type: "expense", color: COLORS.expensePink },
+  { name: "Transporte", type: "expense", color: COLORS.expenseBlue },
+  { name: "Pró-labore", type: "expense", color: COLORS.expenseEmerald },
+  { name: "Equipamentos", type: "expense", color: COLORS.expenseIndigo },
+  { name: "Despesas operacionais", type: "expense", color: COLORS.expenseBlue },
+];
+
+const CUSTOMER_DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE: Record<WorkspaceType, DefaultCategoryPreset[]> = {
+  personal: [
+    { name: "Moradia", type: "expense", color: COLORS.expenseBlue },
+    { name: "Alimentação", type: "expense", color: COLORS.expenseOrange },
+    { name: "Transporte", type: "expense", color: COLORS.expenseBlue },
+    { name: "Saúde", type: "expense", color: COLORS.expenseEmerald },
+    { name: "Educação", type: "expense", color: COLORS.expenseViolet },
+    { name: "Lazer", type: "expense", color: COLORS.expensePink },
+    { name: "Cartão de crédito", type: "expense", color: COLORS.expenseIndigo },
+    { name: "Dívidas", type: "expense", color: COLORS.expenseOrange },
+    { name: "Assinaturas", type: "expense", color: COLORS.expenseViolet },
+    { name: "Investimentos", type: "income", color: COLORS.incomeGreen },
+    { name: "Investimento", type: "expense", color: COLORS.expenseEmerald },
+    { name: "Salário", type: "income", color: COLORS.incomeGreen },
+  ],
+  family: [
+    { name: "Casa", type: "expense", color: COLORS.expenseBlue },
+    { name: "Mercado", type: "expense", color: COLORS.expenseOrange },
+    { name: "Contas da casa", type: "expense", color: COLORS.expenseBlue },
+    { name: "Filhos", type: "expense", color: COLORS.expenseViolet },
+    { name: "Escola", type: "expense", color: COLORS.expenseViolet },
+    { name: "Saúde da família", type: "expense", color: COLORS.expenseEmerald },
+    { name: "Transporte", type: "expense", color: COLORS.expenseBlue },
+    { name: "Lazer em família", type: "expense", color: COLORS.expensePink },
+    { name: "Reserva familiar", type: "income", color: COLORS.incomeGreen },
+    { name: "Dívidas da família", type: "expense", color: COLORS.expenseOrange },
+    { name: "Assinaturas", type: "expense", color: COLORS.expenseViolet },
+  ],
+  business: BUSINESS_PROFILE_CATEGORIES,
+  professional: BUSINESS_PROFILE_CATEGORIES,
+  church: BUSINESS_PROFILE_CATEGORIES,
+};
+
 const CATEGORY_TRANSLATIONS: Record<Exclude<Locale, "pt-BR">, Record<string, string>> = {
   "en-US": {
     "Ajuda familiar": "Family support",
@@ -251,9 +298,15 @@ for (const category of ALL_DEFAULT_CATEGORIES) {
   category.aliases?.forEach((alias) => CANONICAL_BY_NAME.set(alias, category.name));
 }
 
+Object.values(CATEGORY_TRANSLATIONS).forEach((dictionary) => {
+  Object.entries(dictionary).forEach(([canonical, translated]) => {
+    CANONICAL_BY_NAME.set(translated, canonical);
+  });
+});
+
 export function getDefaultCategoriesForWorkspaceType(workspaceType: WorkspaceType = "personal") {
   const byKey = new Map<string, DefaultCategoryPreset>();
-  [...DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE[workspaceType], ...COMMON_DEFAULT_CATEGORIES].forEach((category) => {
+  [...CUSTOMER_DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE[workspaceType], ...COMMON_DEFAULT_CATEGORIES].forEach((category) => {
     byKey.set(`${category.name}::${category.type}`, category);
   });
   return Array.from(byKey.values());

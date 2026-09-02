@@ -13,9 +13,48 @@ import {
   supabaseSelect,
   supabaseUpsertRows,
 } from "@/services/supabase/admin";
+import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
+import { canManageFamilyCard, canViewFamilyCard } from "@/lib/workspaces/family";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const CARD_SELECT_WITH_WORKSPACE =
+  "source_id,workspace_id,bank_name,last4,card_type,brand,bin,due_date,closing_day,limit_enabled,credit_limit,alert_threshold_pct,block_on_limit_exceeded,created_at,updated_at,raw";
+const CARD_SELECT_LEGACY =
+  "source_id,bank_name,last4,card_type,brand,bin,due_date,closing_day,limit_enabled,credit_limit,alert_threshold_pct,block_on_limit_exceeded,created_at,updated_at,raw";
+
+function isMissingWorkspaceColumn(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return message.includes("workspace_id") || message.includes("PGRST204");
+}
+
+function withoutWorkspaceColumn(row: Record<string, unknown>) {
+  const { workspace_id: _workspaceId, ...legacyRow } = row;
+  void _workspaceId;
+  return legacyRow;
+}
+
+async function upsertCardRows(rows: Array<Record<string, unknown>>) {
+  try {
+    await supabaseUpsertRows("payment_cards", rows, { onConflict: "id" });
+  } catch (error) {
+    if (!isMissingWorkspaceColumn(error)) throw error;
+    await supabaseUpsertRows("payment_cards", rows.map(withoutWorkspaceColumn), { onConflict: "id" });
+  }
+}
+
+function getRowWorkspaceId(row: Record<string, unknown>) {
+  const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const secureRaw = readSecureCardPayload(row.raw) || {};
+  return String(row.workspace_id || raw.workspaceId || secureRaw.workspaceId || "");
+}
+
+function getRowCreatedByUid(row: Record<string, unknown>) {
+  const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const secureRaw = readSecureCardPayload(row.raw) || {};
+  return String(row.created_by_uid || raw.createdBy || secureRaw.createdBy || "");
+}
 
 function sanitizeBankName(value: unknown) {
   return String(value || "").trim().slice(0, 40);
@@ -61,10 +100,11 @@ function sanitizePercent(value: unknown): number | null {
   return Math.min(100, Math.max(1, num));
 }
 
-function toCardRow(uid: string, sourceId: string, data: Record<string, unknown>) {
+function toCardRow(uid: string, sourceId: string, data: Record<string, unknown>, workspaceId?: string | null) {
   return {
     id: `${uid}__${sourceId}`,
     uid,
+    workspace_id: workspaceId || null,
     source_id: sourceId,
     bank_name: data.bankName ?? null,
     last4: data.last4 ?? null,
@@ -78,7 +118,7 @@ function toCardRow(uid: string, sourceId: string, data: Record<string, unknown>)
     alert_threshold_pct: sanitizePercent(data.alertThresholdPct),
     block_on_limit_exceeded:
       data.blockOnLimitExceeded == null ? null : Boolean(data.blockOnLimitExceeded),
-    raw: writeSecureCardPayload(data),
+    raw: writeSecureCardPayload({ ...data, workspaceId: workspaceId || null }),
     created_at: typeof data.createdAt === "string" ? data.createdAt : new Date().toISOString(),
     updated_at: typeof data.updatedAt === "string" ? data.updatedAt : new Date().toISOString(),
   };
@@ -114,21 +154,50 @@ function toClientCard(row: Record<string, unknown>): PaymentCard {
   };
 }
 
-async function getCards(uid: string) {
-  const rows = await supabaseSelect("payment_cards", {
-    select:
-      "source_id,bank_name,last4,card_type,brand,bin,due_date,closing_day,limit_enabled,credit_limit,alert_threshold_pct,block_on_limit_exceeded,created_at,updated_at,raw",
-    filters: { uid },
-    order: "updated_at.desc.nullslast",
+async function getCards(uid: string, workspaceId?: string | null, includeLegacyRows = true) {
+  let rows: Record<string, unknown>[];
+  try {
+    rows = await supabaseSelect("payment_cards", {
+      select: CARD_SELECT_WITH_WORKSPACE,
+      filters: { uid },
+      order: "updated_at.desc.nullslast",
+    });
+  } catch (error) {
+    if (!isMissingWorkspaceColumn(error)) throw error;
+    rows = await supabaseSelect("payment_cards", {
+      select: CARD_SELECT_LEGACY,
+      filters: { uid },
+      order: "updated_at.desc.nullslast",
+    });
+  }
+  const activeRows = filterActiveJsonRows(rows);
+  if (!workspaceId) return activeRows;
+  return activeRows.filter((row) => {
+    const rowWorkspaceId = getRowWorkspaceId(row);
+    return rowWorkspaceId === workspaceId || (!rowWorkspaceId && includeLegacyRows);
   });
-  return filterActiveJsonRows(rows);
+}
+
+async function deleteCard(uid: string, sourceId: string, workspaceId?: string | null) {
+  try {
+    await supabaseDeleteByFilters(
+      "payment_cards",
+      workspaceId ? { uid, source_id: sourceId, workspace_id: workspaceId } : { uid, source_id: sourceId }
+    );
+  } catch (error) {
+    if (!isMissingWorkspaceColumn(error)) throw error;
+    await supabaseDeleteByFilters("payment_cards", { uid, source_id: sourceId });
+  }
 }
 
 export async function GET(request: NextRequest) {
   try {
     const { actingUid } = await resolveActingContext(request);
-    const rows = await getCards(actingUid);
-    const cards = rows.map(toClientCard);
+    const workspaceContext = await resolveActiveWorkspaceContext(actingUid, request.nextUrl.searchParams.get("workspaceId"));
+    const rows = await getCards(workspaceContext.ownerUid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
+    const cards = rows
+      .filter((row) => canViewFamilyCard(workspaceContext.member, getRowCreatedByUid(row)))
+      .map(toClientCard);
 
     cards.sort((a, b) =>
       String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || ""))
@@ -158,16 +227,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = (await request.json()) as Partial<PaymentCard>;
+    const body = (await request.json()) as Partial<PaymentCard> & { workspaceId?: string };
+    const workspaceContext = await resolveActiveWorkspaceContext(acting.actingUid, body.workspaceId);
+    if (!canManageFamilyCard(workspaceContext.member, acting.actingUid)) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
+    const uid = workspaceContext.ownerUid;
     const [existingCards, planContext] = await Promise.all([
-      getCards(acting.actingUid),
-      getUserPlanContext(acting.actingUid),
+      getCards(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows),
+      getUserPlanContext(uid),
     ]);
     const capabilities = getPlanCapabilities(planContext.plan, planContext.plans, planContext.featureAccess);
 
     if (
       !planContext.isBillingExempt &&
-      !hasAccess(planContext.accessControl, { uid: acting.actingUid, plan: planContext.plan, role: planContext.role }, "cards.write", "write")
+      !hasAccess(planContext.accessControl, { uid, plan: planContext.plan, role: planContext.role }, "cards.write", "write")
     ) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
@@ -232,9 +306,7 @@ export async function POST(request: NextRequest) {
       createdBy: acting.requesterUid,
     };
 
-    await supabaseUpsertRows("payment_cards", [toCardRow(acting.actingUid, cardId, payloadData)], {
-      onConflict: "id",
-    });
+    await upsertCardRows([toCardRow(uid, cardId, payloadData, workspaceContext.workspaceId)]);
 
     return NextResponse.json({ ok: true, id: cardId }, { status: 200 });
   } catch (error) {
@@ -260,23 +332,28 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const body = (await request.json()) as { cardId?: string; updates?: Partial<PaymentCard> };
+    const body = (await request.json()) as { cardId?: string; workspaceId?: string; updates?: Partial<PaymentCard> };
     if (!body.cardId || !body.updates) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
 
-    const planContext = await getUserPlanContext(acting.actingUid);
+    const workspaceContext = await resolveActiveWorkspaceContext(acting.actingUid, body.workspaceId);
+    const uid = workspaceContext.ownerUid;
+    const planContext = await getUserPlanContext(uid);
     if (
       !planContext.isBillingExempt &&
-      !hasAccess(planContext.accessControl, { uid: acting.actingUid, plan: planContext.plan, role: planContext.role }, "cards.write", "write")
+        !hasAccess(planContext.accessControl, { uid, plan: planContext.plan, role: planContext.role }, "cards.write", "write")
     ) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
-    const rows = await getCards(acting.actingUid);
+    const rows = await getCards(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
     const existing = rows.find((row) => String(row.source_id || "") === body.cardId);
     if (!existing) {
       return NextResponse.json({ ok: false, error: "card_not_found" }, { status: 404 });
+    }
+    if (!canManageFamilyCard(workspaceContext.member, getRowCreatedByUid(existing))) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
     const raw = readSecureCardPayload(existing.raw);
@@ -331,9 +408,7 @@ export async function PATCH(request: NextRequest) {
       merged.blockOnLimitExceeded = Boolean(body.updates.blockOnLimitExceeded);
     }
 
-    await supabaseUpsertRows("payment_cards", [toCardRow(acting.actingUid, body.cardId, merged)], {
-      onConflict: "id",
-    });
+    await upsertCardRows([toCardRow(uid, body.cardId, merged, workspaceContext.workspaceId)]);
 
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
@@ -360,18 +435,28 @@ export async function DELETE(request: NextRequest) {
     }
 
     const cardId = request.nextUrl.searchParams.get("cardId")?.trim();
+    const workspaceContext = await resolveActiveWorkspaceContext(acting.actingUid, request.nextUrl.searchParams.get("workspaceId"));
+    const uid = workspaceContext.ownerUid;
     if (!cardId) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
-    const planContext = await getUserPlanContext(acting.actingUid);
+    const rows = await getCards(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows);
+    const existing = rows.find((row) => String(row.source_id || "") === cardId);
+    if (!existing) {
+      return NextResponse.json({ ok: false, error: "card_not_found" }, { status: 404 });
+    }
+    if (!canManageFamilyCard(workspaceContext.member, getRowCreatedByUid(existing))) {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
+    const planContext = await getUserPlanContext(uid);
     if (
       !planContext.isBillingExempt &&
-      !hasAccess(planContext.accessControl, { uid: acting.actingUid, plan: planContext.plan, role: planContext.role }, "cards.delete", "write")
+      !hasAccess(planContext.accessControl, { uid, plan: planContext.plan, role: planContext.role }, "cards.delete", "write")
     ) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
-    await supabaseDeleteByFilters("payment_cards", { uid: acting.actingUid, source_id: cardId });
+    await deleteCard(uid, cardId, workspaceContext.workspaceId);
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";

@@ -5,8 +5,11 @@ import Link from "next/link";
 
 import { useTranslations } from "@/i18n/T";
 
+import { useTranslations } from "@/i18n/T";
+
 export function Footer() {
   const currentYear = new Date().getFullYear();
+  const t = useTranslations("components.footer");
   const t = useTranslations("components.footer");
 
   return (
@@ -24,12 +27,17 @@ export function Footer() {
             </div>
             <p className="text-sm leading-relaxed text-muted-foreground">
               {t("description")}
+              {t("description")}
             </p>
           </div>
 
           <div className="space-y-4">
             <h3 className="font-semibold text-foreground">{t("product")}</h3>
+            <h3 className="font-semibold text-foreground">{t("product")}</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
+              <li><Link href="/#pricing" className="transition-colors hover:text-primary">{t("pricing")}</Link></li>
+              <li><Link href="/#features" className="transition-colors hover:text-primary">{t("features")}</Link></li>
+              <li><Link href="/security" className="transition-colors hover:text-primary">{t("security")}</Link></li>
               <li><Link href="/#pricing" className="transition-colors hover:text-primary">{t("pricing")}</Link></li>
               <li><Link href="/#features" className="transition-colors hover:text-primary">{t("features")}</Link></li>
               <li><Link href="/security" className="transition-colors hover:text-primary">{t("security")}</Link></li>
@@ -37,6 +45,7 @@ export function Footer() {
           </div>
 
           <div className="space-y-4">
+            <h3 className="font-semibold text-foreground">{t("company")}</h3>
             <h3 className="font-semibold text-foreground">{t("company")}</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li><Link href="https://weven.tech" className="transition-colors hover:text-primary">{t("about")}</Link></li>
@@ -46,6 +55,7 @@ export function Footer() {
           </div>
 
           <div className="space-y-4">
+            <h3 className="font-semibold text-foreground">{t("followUs")}</h3>
             <h3 className="font-semibold text-foreground">{t("followUs")}</h3>
             <div className="flex gap-4">
               <a href="https://www.instagram.com/weventech/" target="_blank" rel="noopener noreferrer" className="text-muted-foreground transition-colors hover:text-primary"><Instagram className="h-5 w-5" /></a>
@@ -57,8 +67,10 @@ export function Footer() {
         <div className="flex flex-col items-center justify-between gap-4 border-t border-border/70 pt-8 text-center md:flex-row md:text-left">
           <p className="text-xs text-muted-foreground">
             {t("rights", { year: currentYear })}
+            {t("rights", { year: currentYear })}
           </p>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>{t("madeForFreedom")}</span>
             <span>{t("madeForFreedom")}</span>
           </div>
         </div>

@@ -48,6 +48,7 @@ create table if not exists public.user_settings (
 create table if not exists public.categories (
   id text primary key,
   uid text not null references public.profiles(uid) on delete cascade,
+  workspace_id text,
   source_id text not null,
   name text not null,
   parent_name text,
@@ -75,9 +76,44 @@ create table if not exists public.workspaces (
   unique (uid, source_id)
 );
 
+create table if not exists public.workspace_members (
+  id text primary key,
+  workspace_uid text not null references public.profiles(uid) on delete cascade,
+  workspace_id text not null,
+  member_uid text not null references public.profiles(uid) on delete cascade,
+  email text,
+  display_name text,
+  member_role text not null default 'guest_member',
+  permissions text[] not null default '{}',
+  member_status text not null default 'active',
+  invited_by_uid text,
+  raw jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique (workspace_uid, workspace_id, member_uid)
+);
+
+create table if not exists public.workspace_invitations (
+  id text primary key,
+  workspace_uid text not null references public.profiles(uid) on delete cascade,
+  workspace_id text not null,
+  email text not null,
+  member_role text not null default 'guest_member',
+  permissions text[] not null default '{}',
+  invitation_status text not null default 'pending',
+  invited_by_uid text not null,
+  invited_member_uid text,
+  expires_at timestamptz,
+  raw jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
 create table if not exists public.transactions (
   id text primary key,
   uid text not null references public.profiles(uid) on delete cascade,
+  workspace_id text,
+  created_by_uid text,
   source_id text not null,
   title text,
   description text,
@@ -105,6 +141,7 @@ create table if not exists public.transactions (
 create table if not exists public.payment_cards (
   id text primary key,
   uid text not null references public.profiles(uid) on delete cascade,
+  workspace_id text,
   source_id text not null,
   bank_name text,
   last4 text,
@@ -126,6 +163,7 @@ create table if not exists public.payment_cards (
 create table if not exists public.piggy_banks (
   id text primary key,
   uid text not null references public.profiles(uid) on delete cascade,
+  workspace_id text,
   source_id text not null,
   slug text,
   name text,
@@ -143,6 +181,7 @@ create table if not exists public.piggy_bank_history (
   id text primary key,
   piggy_bank_id text not null references public.piggy_banks(id) on delete cascade,
   uid text not null references public.profiles(uid) on delete cascade,
+  workspace_id text,
   source_id text not null,
   amount numeric(17,2),
   withdrawal_mode text,
@@ -315,6 +354,7 @@ alter table if exists public.user_settings add column if not exists created_at t
 alter table if exists public.user_settings add column if not exists updated_at timestamptz default timezone('utc', now());
 
 alter table if exists public.categories add column if not exists uid text;
+alter table if exists public.categories add column if not exists workspace_id text;
 alter table if exists public.categories add column if not exists source_id text;
 alter table if exists public.categories add column if not exists name text;
 alter table if exists public.categories add column if not exists parent_name text;
@@ -336,7 +376,35 @@ alter table if exists public.workspaces add column if not exists raw jsonb defau
 alter table if exists public.workspaces add column if not exists created_at timestamptz default timezone('utc', now());
 alter table if exists public.workspaces add column if not exists updated_at timestamptz default timezone('utc', now());
 
+alter table if exists public.workspace_members add column if not exists workspace_uid text;
+alter table if exists public.workspace_members add column if not exists workspace_id text;
+alter table if exists public.workspace_members add column if not exists member_uid text;
+alter table if exists public.workspace_members add column if not exists email text;
+alter table if exists public.workspace_members add column if not exists display_name text;
+alter table if exists public.workspace_members add column if not exists member_role text default 'guest_member';
+alter table if exists public.workspace_members add column if not exists permissions text[] default '{}';
+alter table if exists public.workspace_members add column if not exists member_status text default 'active';
+alter table if exists public.workspace_members add column if not exists invited_by_uid text;
+alter table if exists public.workspace_members add column if not exists raw jsonb default '{}'::jsonb;
+alter table if exists public.workspace_members add column if not exists created_at timestamptz default timezone('utc', now());
+alter table if exists public.workspace_members add column if not exists updated_at timestamptz default timezone('utc', now());
+
+alter table if exists public.workspace_invitations add column if not exists workspace_uid text;
+alter table if exists public.workspace_invitations add column if not exists workspace_id text;
+alter table if exists public.workspace_invitations add column if not exists email text;
+alter table if exists public.workspace_invitations add column if not exists member_role text default 'guest_member';
+alter table if exists public.workspace_invitations add column if not exists permissions text[] default '{}';
+alter table if exists public.workspace_invitations add column if not exists invitation_status text default 'pending';
+alter table if exists public.workspace_invitations add column if not exists invited_by_uid text;
+alter table if exists public.workspace_invitations add column if not exists invited_member_uid text;
+alter table if exists public.workspace_invitations add column if not exists expires_at timestamptz;
+alter table if exists public.workspace_invitations add column if not exists raw jsonb default '{}'::jsonb;
+alter table if exists public.workspace_invitations add column if not exists created_at timestamptz default timezone('utc', now());
+alter table if exists public.workspace_invitations add column if not exists updated_at timestamptz default timezone('utc', now());
+
 alter table if exists public.transactions add column if not exists uid text;
+alter table if exists public.transactions add column if not exists workspace_id text;
+alter table if exists public.transactions add column if not exists created_by_uid text;
 alter table if exists public.transactions add column if not exists source_id text;
 alter table if exists public.transactions add column if not exists title text;
 alter table if exists public.transactions add column if not exists description text;
@@ -360,6 +428,7 @@ alter table if exists public.transactions add column if not exists created_at ti
 alter table if exists public.transactions add column if not exists updated_at timestamptz default timezone('utc', now());
 
 alter table if exists public.payment_cards add column if not exists uid text;
+alter table if exists public.payment_cards add column if not exists workspace_id text;
 alter table if exists public.payment_cards add column if not exists source_id text;
 alter table if exists public.payment_cards add column if not exists bank_name text;
 alter table if exists public.payment_cards add column if not exists last4 text;
@@ -377,6 +446,7 @@ alter table if exists public.payment_cards add column if not exists created_at t
 alter table if exists public.payment_cards add column if not exists updated_at timestamptz default timezone('utc', now());
 
 alter table if exists public.piggy_banks add column if not exists uid text;
+alter table if exists public.piggy_banks add column if not exists workspace_id text;
 alter table if exists public.piggy_banks add column if not exists source_id text;
 alter table if exists public.piggy_banks add column if not exists slug text;
 alter table if exists public.piggy_banks add column if not exists name text;
@@ -390,6 +460,7 @@ alter table if exists public.piggy_banks add column if not exists updated_at tim
 
 alter table if exists public.piggy_bank_history add column if not exists piggy_bank_id text;
 alter table if exists public.piggy_bank_history add column if not exists uid text;
+alter table if exists public.piggy_bank_history add column if not exists workspace_id text;
 alter table if exists public.piggy_bank_history add column if not exists source_id text;
 alter table if exists public.piggy_bank_history add column if not exists amount numeric(17,2);
 
@@ -517,6 +588,14 @@ drop trigger if exists trg_workspaces_set_updated_at on public.workspaces;
 create trigger trg_workspaces_set_updated_at before update on public.workspaces
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_workspace_members_set_updated_at on public.workspace_members;
+create trigger trg_workspace_members_set_updated_at before update on public.workspace_members
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_workspace_invitations_set_updated_at on public.workspace_invitations;
+create trigger trg_workspace_invitations_set_updated_at before update on public.workspace_invitations
+for each row execute function public.set_updated_at();
+
 drop trigger if exists trg_transactions_set_updated_at on public.transactions;
 create trigger trg_transactions_set_updated_at before update on public.transactions
 for each row execute function public.set_updated_at();
@@ -564,3 +643,13 @@ for each row execute function public.set_updated_at();
 drop trigger if exists trg_notifications_set_updated_at on public.notifications;
 create trigger trg_notifications_set_updated_at before update on public.notifications
 for each row execute function public.set_updated_at();
+
+create table if not exists public.product_events (
+  id uuid primary key,
+  uid text null,
+  session_id text null,
+  event_name text not null,
+  path text null,
+  properties jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);

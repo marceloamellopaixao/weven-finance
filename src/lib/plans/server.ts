@@ -8,10 +8,10 @@ import {
   PlansConfig,
 } from "@/types/system";
 import { UserPlan, UserRole } from "@/types/user";
+import { normalizePlansConfig, parseUserPlan } from "@/lib/plans/catalog";
 
 export function resolveUserPlan(value: unknown): UserPlan {
-  if (value === "premium" || value === "pro") return value;
-  return "free";
+  return parseUserPlan(value);
 }
 
 export function resolveUserRole(value: unknown): UserRole {
@@ -57,7 +57,7 @@ export async function getUserPlanContext(uid: string): Promise<{
   const rawRole = profileRows[0]?.role ?? raw.role;
   const plan = resolveUserPlan(rawPlan);
   const role = resolveUserRole(rawRole);
-  const plans = (plansRows[0]?.data as PlansConfig | undefined) ?? DEFAULT_PLANS_CONFIG;
+  const plans = plansRows[0]?.data ? normalizePlansConfig(plansRows[0].data, DEFAULT_PLANS_CONFIG) : DEFAULT_PLANS_CONFIG;
   const accessControl = accessControlRows.length > 0
     ? normalizeAccessControlConfig(accessControlRows[0]?.data)
     : DEFAULT_ACCESS_CONTROL_CONFIG;

@@ -11,6 +11,8 @@ type ApiMetricInput = {
 };
 
 export async function writeApiMetric(input: ApiMetricInput) {
+  if (process.env.ENABLE_API_METRICS !== "true") return;
+
   const row = {
     id: crypto.randomUUID(),
     route: input.route,

@@ -102,6 +102,7 @@ export const NAVIGATION_APP_ITEMS: NavigationAppItem[] = [
 export const PLATFORM_TOUR_ROUTE_ORDER = [
   "dashboard",
   "settings",
+  "account-profile",
   "transactions-new",
   "reports",
   "cards",

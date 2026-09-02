@@ -76,8 +76,14 @@ const AreaChartComponent = ({ data }: { data: ChartData[] }) => {
   }
 
   return (
-    <div className="h-[300px] w-full select-none">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-[300px] min-h-[300px] w-full min-w-0 select-none">
+      <ResponsiveContainer
+        width="100%"
+        height="100%"
+        minWidth={0}
+        minHeight={300}
+        initialDimension={{ width: 1, height: 300 }}
+      >
         <RechartsArea data={data} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">

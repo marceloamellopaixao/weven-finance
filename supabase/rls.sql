@@ -61,6 +61,8 @@ alter table public.profiles enable row level security;
 alter table public.user_settings enable row level security;
 alter table public.categories enable row level security;
 alter table public.workspaces enable row level security;
+alter table public.workspace_members enable row level security;
+alter table public.workspace_invitations enable row level security;
 alter table public.transactions enable row level security;
 alter table public.payment_cards enable row level security;
 alter table public.piggy_banks enable row level security;
@@ -77,6 +79,7 @@ alter table public.notifications enable row level security;
 alter table public.admin_audit_logs enable row level security;
 alter table public.api_request_metrics enable row level security;
 alter table public.migration_runs enable row level security;
+alter table public.product_events enable row level security;
 
 drop policy if exists profiles_self_select on public.profiles;
 drop policy if exists profiles_self_update on public.profiles;
@@ -84,6 +87,8 @@ drop policy if exists profiles_staff_select on public.profiles;
 drop policy if exists user_settings_self_all on public.user_settings;
 drop policy if exists categories_self_all on public.categories;
 drop policy if exists workspaces_self_all on public.workspaces;
+drop policy if exists workspace_members_self_select on public.workspace_members;
+drop policy if exists workspace_invitations_self_select on public.workspace_invitations;
 drop policy if exists transactions_self_all on public.transactions;
 drop policy if exists payment_cards_self_all on public.payment_cards;
 drop policy if exists piggy_banks_self_all on public.piggy_banks;
@@ -140,6 +145,36 @@ begin
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'workspaces' and policyname = 'workspaces_staff_read') then
     create policy workspaces_staff_read on public.workspaces
       for select using (public.is_staff_role());
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'workspace_members' and policyname = 'workspace_members_visible_to_member_owner_or_staff') then
+    create policy workspace_members_visible_to_member_owner_or_staff on public.workspace_members
+      for select using (
+        public.current_user_uid() = member_uid
+        or public.current_user_uid() = workspace_uid
+        or public.is_staff_role()
+      );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'workspace_members' and policyname = 'workspace_members_owner_or_staff_write') then
+    create policy workspace_members_owner_or_staff_write on public.workspace_members
+      for all using (public.current_user_uid() = workspace_uid or public.is_staff_role())
+      with check (public.current_user_uid() = workspace_uid or public.is_staff_role());
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'workspace_invitations' and policyname = 'workspace_invitations_owner_invitee_or_staff_read') then
+    create policy workspace_invitations_owner_invitee_or_staff_read on public.workspace_invitations
+      for select using (
+        public.current_user_uid() = workspace_uid
+        or public.current_user_uid() = invited_member_uid
+        or public.is_staff_role()
+      );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'workspace_invitations' and policyname = 'workspace_invitations_owner_or_staff_write') then
+    create policy workspace_invitations_owner_or_staff_write on public.workspace_invitations
+      for all using (public.current_user_uid() = workspace_uid or public.is_staff_role())
+      with check (public.current_user_uid() = workspace_uid or public.is_staff_role());
   end if;
 
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'transactions' and policyname = 'transactions_own_all') then
@@ -339,5 +374,10 @@ begin
     create policy migration_runs_write_admin on public.migration_runs
       for all using (public.is_admin_role())
       with check (public.is_admin_role());
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'product_events' and policyname = 'product_events_select_staff') then
+    create policy product_events_select_staff on public.product_events
+      for select using (public.is_staff_role());
   end if;
 end $$;

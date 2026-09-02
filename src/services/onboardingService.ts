@@ -24,6 +24,11 @@ type OnboardingUpdatePayload = {
   steps?: Partial<OnboardingStatus["steps"]>;
 };
 
+let onboardingCache: OnboardingStatus | null = null;
+let onboardingCacheAt = 0;
+let onboardingInFlight: Promise<OnboardingStatus> | null = null;
+const ONBOARDING_CACHE_TTL_MS = 15_000;
+
 async function apiFetch(path: string, init?: RequestInit) {
   const token = await getAccessTokenOrThrow();
   return fetch(path, {
@@ -38,16 +43,30 @@ async function apiFetch(path: string, init?: RequestInit) {
 }
 
 export async function getOnboardingStatus(): Promise<OnboardingStatus> {
-  const response = await apiFetch("/api/onboarding", { method: "GET" });
-  const payload = (await response.json()) as {
-    ok: boolean;
-    error?: string;
-    onboarding?: OnboardingStatus;
-  };
-  if (!response.ok || !payload.ok || !payload.onboarding) {
-    throw new Error(payload.error || "erro_carregar_onboarding");
+  const now = Date.now();
+  if (onboardingCache && now - onboardingCacheAt < ONBOARDING_CACHE_TTL_MS) return onboardingCache;
+  if (onboardingInFlight) return onboardingInFlight;
+
+  onboardingInFlight = (async () => {
+    const response = await apiFetch("/api/onboarding", { method: "GET" });
+    const payload = (await response.json()) as {
+      ok: boolean;
+      error?: string;
+      onboarding?: OnboardingStatus;
+    };
+    if (!response.ok || !payload.ok || !payload.onboarding) {
+      throw new Error(payload.error || "erro_carregar_onboarding");
+    }
+    onboardingCache = payload.onboarding;
+    onboardingCacheAt = Date.now();
+    return payload.onboarding;
+  })();
+
+  try {
+    return await onboardingInFlight;
+  } finally {
+    onboardingInFlight = null;
   }
-  return payload.onboarding;
 }
 
 export async function updateOnboardingStatus(data: OnboardingUpdatePayload) {
@@ -59,6 +78,8 @@ export async function updateOnboardingStatus(data: OnboardingUpdatePayload) {
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "erro_atualizar_onboarding");
   }
+  onboardingCache = null;
+  onboardingCacheAt = 0;
 }
 
 export function subscribeToOnboarding(
@@ -78,16 +99,10 @@ export function subscribeToOnboarding(
   };
 
   void run();
-  const stopTransactions = subscribeToTableChanges({ table: "transactions", filter: `uid=eq.${uid}`, onChange: () => void run() });
-  const stopCards = subscribeToTableChanges({ table: "payment_cards", filter: `uid=eq.${uid}`, onChange: () => void run() });
-  const stopGoals = subscribeToTableChanges({ table: "piggy_banks", filter: `uid=eq.${uid}`, onChange: () => void run() });
   const stopSettings = subscribeToTableChanges({ table: "user_settings", filter: `uid=eq.${uid}`, onChange: () => void run() });
 
   return () => {
     cancelled = true;
-    stopTransactions();
-    stopCards();
-    stopGoals();
     stopSettings();
   };
 }

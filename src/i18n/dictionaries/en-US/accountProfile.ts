@@ -20,20 +20,20 @@ export const accountProfile: Dictionary["accountProfile"] = {
       description: "Track income, expenses, cards, goals, debts, and the smart daily limit.",
     },
     professional: {
-      title: "Professional / self-employed profile",
-      description: "Track client income, work expenses, taxes, monthly cash flow, and reports.",
+      title: "Business/PJ",
+      description: "Use this profile for a business, self-employed work, church, store, services, or professional project.",
     },
     church: {
-      title: "Church / ministry profile",
-      description: "Track tithes, offerings, missions, cafeteria income, departments, events, and expenses by area.",
+      title: "Business/PJ",
+      description: "Churches, ministries, and professional projects use the Business/PJ profile.",
     },
     family: {
       title: "Family / household profile",
       description: "Track shared bills, groceries, rent, school, transportation, and family goals.",
     },
     business: {
-      title: "Small business profile",
-      description: "Track sales, costs, accounts payable and receivable, cash flow, and estimated profit.",
+      title: "Business/PJ",
+      description: "Track business income, expenses, taxes, suppliers, cash flow, and reports.",
     },
   },
 } as const;

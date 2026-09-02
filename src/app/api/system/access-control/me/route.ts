@@ -8,13 +8,9 @@ import {
   AccessResourceKey,
   DEFAULT_ACCESS_CONTROL_CONFIG,
 } from "@/types/system";
-import { BillingInfo, UserPaymentStatus, UserPlan } from "@/types/user";
+import { BillingInfo, UserPaymentStatus } from "@/types/user";
 import { supabaseSelect } from "@/services/supabase/admin";
-
-function resolvePlan(value: unknown): UserPlan {
-  if (value === "premium" || value === "pro") return value;
-  return "free";
-}
+import { parseUserPlan } from "@/lib/plans/catalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,7 +32,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     const raw = (profileRows[0]?.raw as Record<string, unknown> | null) ?? {};
-    const storedPlan = resolvePlan(profileRows[0]?.plan ?? raw.plan);
+    const storedPlan = parseUserPlan(profileRows[0]?.plan ?? raw.plan);
     const role = String(profileRows[0]?.role || raw.role || "client");
     const paymentStatus = String(profileRows[0]?.payment_status ?? raw.paymentStatus ?? "pending") as UserPaymentStatus;
     const billing = (profileRows[0]?.billing ?? raw.billing ?? {}) as BillingInfo;

@@ -1,191 +1,80 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useAuth } from "./useAuth";
-import {
-    getCategoriesData,
-    addCustomCategory,
-    deleteCustomCategoryByName,
-    renameCustomCategoryByName,
-    setDefaultCategoryHidden,
-} from "@/services/categoryService";
+import { useEffect, useMemo } from "react";
+
+import { getDefaultCategoriesForWorkspaceType, normalizeDefaultCategoryName, slugifyDefaultCategoryName } from "@/lib/categories/defaultCategories";
+import { addCustomCategory, deleteCustomCategoryByName, renameCustomCategoryByName, setDefaultCategoryHidden } from "@/services/categoryService";
+import { useGetCategoriesQuery } from "@/store/api/categoriesApi";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
+import type { WorkspaceType } from "@/types/workspace";
+import { useAuth } from "./useAuth";
+import { useWorkspaces } from "./useWorkspaces";
 
 export const CATEGORY_PATH_SEPARATOR = "::";
-
 export type CategoryType = "income" | "expense" | "both";
+export interface Category { name: string; type: CategoryType; color: string; isCustom?: boolean; isDefault?: boolean; }
 
-export interface Category {
-    name: string;
-    type: CategoryType;
-    color: string;
-    isCustom?: boolean;
-    isDefault?: boolean;
+const FALLBACK_WORKSPACE_TYPE: WorkspaceType = "personal";
+const CUSTOM_CATEGORY_COLOR = "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50";
+
+function buildDefaultCategories(workspaceType: WorkspaceType): Category[] {
+  return getDefaultCategoriesForWorkspaceType(workspaceType).map((category) => ({ ...category, isDefault: true }));
+}
+function normalizeCategoryKey(name: string) { return slugifyDefaultCategoryName(normalizeDefaultCategoryName(name)); }
+function categoriesOverlap(left: Category, right: Category) {
+  if (left.name === right.name) return true;
+  if (left.type !== right.type && left.type !== "both" && right.type !== "both") return false;
+  return normalizeCategoryKey(left.name) === normalizeCategoryKey(right.name);
 }
 
-const INITIAL_CATEGORIES: Category[] = [
-    { name: "Dízimo", type: "expense", color: "bg-violet-500/10 text-violet-600 border-violet-200/50 dark:text-violet-400 dark:border-violet-800/50" },
-    { name: "Casa", type: "expense", color: "bg-blue-500/10 text-blue-600 border-blue-200/50 dark:text-blue-400 dark:border-blue-800/50" },
-    { name: "Alimentação", type: "expense", color: "bg-orange-500/10 text-orange-600 border-orange-200/50 dark:text-orange-400 dark:border-orange-800/50" },
-    { name: "Investimento", type: "expense", color: "bg-emerald-500/10 text-emerald-600 border-emerald-200/50 dark:text-emerald-400 dark:border-emerald-800/50" },
-    { name: "Compras", type: "expense", color: "bg-pink-500/10 text-pink-600 border-pink-200/50 dark:text-pink-400 dark:border-pink-800/50" },
-    { name: "Streaming", type: "expense", color: "bg-indigo-500/10 text-indigo-600 border-indigo-200/50 dark:text-indigo-400 dark:border-indigo-800/50" },
-    { name: "Salário", type: "income", color: "bg-green-500/10 text-green-600 border-green-200/50 dark:text-green-400 dark:border-green-800/50" },
-    { name: "Rendimento", type: "income", color: "bg-green-500/10 text-green-600 border-green-200/50 dark:text-green-400 dark:border-green-800/50" },
-    { name: "Vendas", type: "income", color: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50" },
-    { name: "Serviços", type: "income", color: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50" },
-    { name: "Outros", type: "both", color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50" },
-];
-
 export function useCategories() {
-    const { user, userProfile } = useAuth();
-    const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
-    const [loadingCategories, setLoadingCategories] = useState(true);
-    const [hiddenDefaultCategories, setHiddenDefaultCategories] = useState<string[]>([]);
+  const { user, userProfile } = useAuth();
+  const { activeWorkspace } = useWorkspaces();
+  const workspaceType = activeWorkspace?.type || FALLBACK_WORKSPACE_TYPE;
+  const workspaceId = activeWorkspace?.id;
+  const userId = userProfile?.uid || user?.uid;
+  const { data, isLoading: loadingCategories, refetch } = useGetCategoriesQuery(
+    { userId: userId || "", workspaceId: workspaceId || "" }, { skip: !userId || !workspaceId },
+  );
+  useEffect(() => {
+    if (!userId || !workspaceId) return;
+    const stopCategories = subscribeToTableChanges({ table: "categories", filter: `uid=eq.${userId}`, onChange: () => void refetch() });
+    const stopSettings = subscribeToTableChanges({ table: "user_settings", filter: `uid=eq.${userId}`, onChange: () => void refetch() });
+    return () => { stopCategories(); stopSettings(); };
+  }, [refetch, userId, workspaceId]);
 
-    useEffect(() => {
-        const effectiveUid = userProfile?.uid || user?.uid;
-        if (!user || !effectiveUid) return;
-        let cancelled = false;
-
-        const loadCategories = async () => {
-            try {
-                const token = await user.getIdToken();
-                const { customCategories: customCats, hiddenDefaultCategories: hiddenDefaults } = await getCategoriesData(token);
-
-                const formattedCustom: Category[] = customCats.map((cat) => ({
-                    name: cat.name,
-                    type: cat.type,
-                    color: cat.color,
-                    isCustom: true,
-                }));
-
-                const hiddenSet = new Set(hiddenDefaults);
-                const visibleDefaultCats = INITIAL_CATEGORIES
-                    .map((cat) => ({ ...cat, isDefault: true }))
-                    .filter((cat) => cat.name === "Outros" || !hiddenSet.has(cat.name));
-
-                const allCats: Category[] = [...visibleDefaultCats];
-                formattedCustom.forEach((fc) => {
-                    if (!allCats.some((ac) => ac.name === fc.name)) {
-                        allCats.push(fc);
-                    }
-                });
-
-                if (cancelled) return;
-                setHiddenDefaultCategories(hiddenDefaults);
-                setCategories(allCats);
-            } catch (error) {
-                console.error("Erro ao carregar categorias:", error);
-            } finally {
-                if (!cancelled) setLoadingCategories(false);
-            }
-        };
-
-        void loadCategories();
-        const stopCategories = subscribeToTableChanges({
-            table: "categories",
-            filter: `uid=eq.${effectiveUid}`,
-            onChange: () => void loadCategories(),
-        });
-        const stopSettings = subscribeToTableChanges({
-            table: "user_settings",
-            filter: `uid=eq.${effectiveUid}`,
-            onChange: () => void loadCategories(),
-        });
-
-        return () => {
-            cancelled = true;
-            stopCategories();
-            stopSettings();
-        };
-    }, [user, userProfile?.uid]);
-
-    const addNewCategory = async (
-        name: string,
-        type: CategoryType,
-        parentName?: string
-    ) => {
-        if (!user) return;
-
-        const finalName = parentName
-            ? `${parentName}${CATEGORY_PATH_SEPARATOR}${name}`
-            : name;
-        await addCustomCategory(await user.getIdToken(), finalName, type);
-
-        const newCat: Category = {
-            name: finalName,
-            type,
-            color: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50",
-            isCustom: true,
-        };
-
-        setCategories((prev) => {
-            if (prev.some((cat) => cat.name === finalName)) return prev;
-            return [...prev, newCat];
-        });
-    };
-
-    const deleteCategory = async (name: string) => {
-        if (!user) return;
-        await deleteCustomCategoryByName(await user.getIdToken(), name, "Outros");
-        setCategories((prev) => prev.filter((cat) => cat.name !== name && !cat.name.startsWith(`${name}${CATEGORY_PATH_SEPARATOR}`)));
-    };
-
-    const renameCategory = async (oldName: string, newName: string) => {
-        if (!user) return;
-
-        const trimmed = newName.trim();
-        if (!trimmed) return;
-        await renameCustomCategoryByName(await user.getIdToken(), oldName, trimmed);
-        setCategories((prev) =>
-            prev.map((cat) => {
-                if (cat.name === oldName || cat.name.startsWith(`${oldName}${CATEGORY_PATH_SEPARATOR}`)) {
-                    const suffix = cat.name.slice(oldName.length);
-                    return { ...cat, name: `${trimmed}${suffix}` };
-                }
-                return cat;
-            })
-        );
-    };
-
-    const toggleDefaultCategoryVisibility = async (name: string, hidden: boolean) => {
-        if (!user) return;
-        if (name === "Outros") return;
-
-        const defaultCategory = INITIAL_CATEGORIES.find((cat) => cat.name === name);
-        if (!defaultCategory) return;
-
-        setHiddenDefaultCategories((prev) =>
-            hidden ? Array.from(new Set([...prev, name])) : prev.filter((n) => n !== name)
-        );
-
-        setCategories((prev) => {
-            if (hidden) {
-                return prev.filter((cat) => cat.name !== name);
-            }
-
-            if (prev.some((cat) => cat.name === name)) return prev;
-            return [{ ...defaultCategory, isDefault: true }, ...prev];
-        });
-
-        await setDefaultCategoryHidden(await user.getIdToken(), name, hidden);
-    };
-
-    const defaultCategories = INITIAL_CATEGORIES.map((cat) => ({
-        ...cat,
-        isDefault: true,
-        hidden: cat.name === "Outros" ? false : hiddenDefaultCategories.includes(cat.name),
+  const hiddenDefaultCategories = useMemo(() => (data?.hiddenDefaultCategories ?? []).map(normalizeDefaultCategoryName), [data?.hiddenDefaultCategories]);
+  const defaultCategories = useMemo(() => buildDefaultCategories(workspaceType).map((category) => ({
+    ...category,
+    hidden: normalizeDefaultCategoryName(category.name) === "Outros" ? false : hiddenDefaultCategories.some((name) => normalizeCategoryKey(name) === normalizeCategoryKey(category.name)),
+  })), [hiddenDefaultCategories, workspaceType]);
+  const categories = useMemo(() => {
+    const visibleDefaults = defaultCategories.filter((category) => !category.hidden);
+    const custom: Category[] = (data?.customCategories ?? []).map((category) => ({
+      name: normalizeDefaultCategoryName(category.name), type: category.type, color: category.color || CUSTOM_CATEGORY_COLOR, isCustom: true,
     }));
+    const result: Category[] = [...visibleDefaults];
+    for (const category of custom) if (!result.some((existing) => categoriesOverlap(existing, category))) result.push(category);
+    return result;
+  }, [data?.customCategories, defaultCategories]);
 
-    return {
-        categories,
-        defaultCategories,
-        hiddenDefaultCategories,
-        loadingCategories,
-        addNewCategory,
-        deleteCategory,
-        renameCategory,
-        toggleDefaultCategoryVisibility,
-    };
+  const token = async () => {
+    if (!user) throw new Error("missing_auth_user");
+    return user.getIdToken();
+  };
+  const addNewCategory = async (name: string, type: CategoryType, parentName?: string) => {
+    const finalName = parentName ? `${parentName}${CATEGORY_PATH_SEPARATOR}${name}` : name;
+    await addCustomCategory(await token(), finalName, type); await refetch();
+  };
+  const deleteCategory = async (name: string) => { await deleteCustomCategoryByName(await token(), name, "Outros"); await refetch(); };
+  const renameCategory = async (oldName: string, newName: string) => {
+    const trimmed = newName.trim(); if (!trimmed) return;
+    await renameCustomCategoryByName(await token(), oldName, trimmed); await refetch();
+  };
+  const toggleDefaultCategoryVisibility = async (name: string, hidden: boolean) => {
+    const canonicalName = normalizeDefaultCategoryName(name); if (canonicalName === "Outros") return;
+    await setDefaultCategoryHidden(await token(), canonicalName, hidden); await refetch();
+  };
+
+  return { categories, defaultCategories, hiddenDefaultCategories, loadingCategories, addNewCategory, deleteCategory, renameCategory, toggleDefaultCategoryVisibility };
 }

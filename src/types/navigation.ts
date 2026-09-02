@@ -31,6 +31,7 @@ export type NavigationPreferences = {
 export const ALL_PLATFORM_TOUR_ROUTES = [
   "dashboard",
   "settings",
+  "account-profile",
   "transactions-new",
   "reports",
   "cards",

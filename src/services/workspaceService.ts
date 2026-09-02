@@ -5,10 +5,24 @@ import { getAccessTokenOrThrow } from "@/services/auth/token";
 import type { CreateWorkspaceInput, UpdateWorkspaceInput, Workspace } from "@/types/workspace";
 
 const WORKSPACES_CHANGED_EVENT = "wevenfinance:workspaces:changed";
+const ACTIVE_WORKSPACE_CHANGED_EVENT = "wevenfinance:workspaces:active-changed";
+const ACTIVE_WORKSPACE_KEY = "wevenfinance:active-workspace-id:v1";
+
+let workspacesCache: Workspace[] | null = null;
+let workspacesCacheAt = 0;
+let workspacesInFlight: Promise<Workspace[]> | null = null;
+const WORKSPACES_CACHE_TTL_MS = 15_000;
 
 function emitWorkspacesChanged() {
   if (typeof window === "undefined") return;
+  workspacesCache = null;
+  workspacesCacheAt = 0;
   window.dispatchEvent(new Event(WORKSPACES_CHANGED_EVENT));
+}
+
+function emitActiveWorkspaceChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(ACTIVE_WORKSPACE_CHANGED_EVENT));
 }
 
 async function apiFetch(path: string, init?: RequestInit) {
@@ -41,9 +55,24 @@ async function readPayload(response: Response): Promise<WorkspacesPayload> {
 }
 
 export async function getUserWorkspaces() {
-  const response = await apiFetch("/api/workspaces", { method: "GET" });
-  const payload = await readPayload(response);
-  return payload.workspaces || [];
+  const now = Date.now();
+  if (workspacesCache && now - workspacesCacheAt < WORKSPACES_CACHE_TTL_MS) {
+    return workspacesCache;
+  }
+  if (workspacesInFlight) return workspacesInFlight;
+  workspacesInFlight = (async () => {
+    const response = await apiFetch("/api/workspaces", { method: "GET" });
+    const payload = await readPayload(response);
+    const next = payload.workspaces || [];
+    workspacesCache = next;
+    workspacesCacheAt = Date.now();
+    return next;
+  })();
+  try {
+    return await workspacesInFlight;
+  } finally {
+    workspacesInFlight = null;
+  }
 }
 
 export async function getDefaultWorkspace() {
@@ -89,4 +118,35 @@ export async function ensureDefaultWorkspace(input?: CreateWorkspaceInput) {
 export function subscribeToWorkspacesChanged(callback: () => void) {
   window.addEventListener(WORKSPACES_CHANGED_EVENT, callback);
   return () => window.removeEventListener(WORKSPACES_CHANGED_EVENT, callback);
+}
+
+export async function deleteWorkspace(input: { id: string; mode: "archive" | "delete_data" }) {
+  const response = await apiFetch("/api/workspaces", {
+    method: "DELETE",
+    body: JSON.stringify(input),
+  });
+  await readPayload(response);
+  emitWorkspacesChanged();
+}
+
+export function getActiveWorkspaceId() {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+}
+
+export function setActiveWorkspaceId(workspaceId: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId);
+  emitActiveWorkspaceChanged();
+}
+
+export function clearActiveWorkspaceId() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+  emitActiveWorkspaceChanged();
+}
+
+export function subscribeToActiveWorkspaceChanged(callback: () => void) {
+  window.addEventListener(ACTIVE_WORKSPACE_CHANGED_EVENT, callback);
+  return () => window.removeEventListener(ACTIVE_WORKSPACE_CHANGED_EVENT, callback);
 }

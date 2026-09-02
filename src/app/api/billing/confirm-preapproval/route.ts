@@ -9,6 +9,7 @@ import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
+import { isPaidPlan, parseUserPlan } from "@/lib/plans/catalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,8 +30,8 @@ async function getCheckoutAttemptContext(checkoutAttemptId: string) {
 }
 
 function parsePlan(value: unknown): UserPlan | undefined {
-  if (value === "free" || value === "pro" || value === "premium") return value;
-  return undefined;
+  const plan = parseUserPlan(value, "free");
+  return plan === "free" ? undefined : plan;
 }
 
 function getConfirmErrorStatus(message: string) {
@@ -38,6 +39,7 @@ function getConfirmErrorStatus(message: string) {
   if (message === "preapproval_not_found_for_user") return 404;
   if (message === "preapproval_ambiguous_match") return 409;
   if (message === "payer_email_mismatch") return 403;
+  if (message === "preapproval_owner_mismatch") return 403;
   if (message === "plan_mismatch") return 409;
   if (message === "user_not_found") return 404;
   return 500;
@@ -48,6 +50,7 @@ function isExpectedConfirmError(message: string) {
     message === "preapproval_not_found_for_user" ||
     message === "preapproval_ambiguous_match" ||
     message === "payer_email_mismatch" ||
+    message === "preapproval_owner_mismatch" ||
     message === "plan_mismatch" ||
     message === "user_not_found"
   );
@@ -137,7 +140,7 @@ export async function POST(request: NextRequest) {
         result = await confirmLatestPreapprovalForUser({
           uid,
           userEmail,
-          expectedPlan: expectedPlan === "pro" || expectedPlan === "premium" ? expectedPlan : undefined,
+          expectedPlan: isPaidPlan(expectedPlan) ? expectedPlan : undefined,
           checkoutStartedAt,
         });
       }
@@ -145,7 +148,7 @@ export async function POST(request: NextRequest) {
       result = await confirmLatestPreapprovalForUser({
         uid,
         userEmail,
-        expectedPlan: expectedPlan === "pro" || expectedPlan === "premium" ? expectedPlan : undefined,
+        expectedPlan: isPaidPlan(expectedPlan) ? expectedPlan : undefined,
         checkoutStartedAt,
       });
     }

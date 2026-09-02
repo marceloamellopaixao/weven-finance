@@ -15,6 +15,8 @@ export type TransactionCreatedAt =
 export interface Transaction {
   id?: string;
   userId: string;
+  workspaceId?: string;
+  createdByUid?: string;
   title?: string;
   description: string;
   amount: number;

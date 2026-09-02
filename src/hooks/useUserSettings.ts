@@ -9,37 +9,37 @@ const DEFAULT_SETTINGS: UserSettings = { currentBalance: 0 };
 
 export function useUserSettings() {
   const { user, userProfile } = useAuth();
+  const effectiveUid = userProfile?.uid || user?.uid;
 
   const initialSettings = useMemo<UserSettings>(() => DEFAULT_SETTINGS, []);
   const [settings, setSettings] = useState<UserSettings>(initialSettings);
 
-  // controla apenas se já recebemos o primeiro snapshot para o uid atual
-  const [hasFirstSnapshot, setHasFirstSnapshot] = useState(false);
+  const [snapshotUid, setSnapshotUid] = useState<string | null>(null);
 
   useEffect(() => {
-    const effectiveUid = userProfile?.uid || user?.uid;
     if (!effectiveUid) return;
 
     const unsubscribe = subscribeToUserSettings(
       effectiveUid,
       (data) => {
         setSettings(data ?? DEFAULT_SETTINGS);
-        setHasFirstSnapshot(true);
+        setSnapshotUid(effectiveUid);
       },
       () => {
         setSettings(DEFAULT_SETTINGS);
-        setHasFirstSnapshot(true);
+        setSnapshotUid(effectiveUid);
       }
     );
 
     return () => unsubscribe();
-  }, [user?.uid, userProfile?.uid]);
+  }, [effectiveUid]);
 
-  const loading = Boolean(userProfile?.uid || user?.uid) && !hasFirstSnapshot;
+  const loading = Boolean(effectiveUid) && snapshotUid !== effectiveUid;
+  const visibleSettings = loading ? DEFAULT_SETTINGS : settings;
 
   return {
-    settings,
-    currentBalance: settings.currentBalance,
+    settings: visibleSettings,
+    currentBalance: visibleSettings.currentBalance,
     loading,
   };
 }

@@ -58,6 +58,12 @@ const ARCHIVE_CONFIGS: ArchiveConfig[] = [
     extraFields: ["uid"],
   },
   {
+    table: "workspaces",
+    jsonField: "raw",
+    select: "id,uid,source_id,raw",
+    extraFields: ["uid", "source_id"],
+  },
+  {
     table: "support_requests",
     jsonField: "raw",
     select: "id,uid,raw",
@@ -132,6 +138,7 @@ async function deleteRowsByUidSourceId(table: string, uid: string) {
 }
 
 async function deleteUserCoreRows(uid: string) {
+  await deleteRowsByUidSourceId("workspaces", uid);
   await deleteRowsByUidSourceId("categories", uid);
   await deleteRowsByUidSourceId("transactions", uid);
   await deleteRowsByUidSourceId("payment_cards", uid);
@@ -149,12 +156,40 @@ async function deleteUserCoreRows(uid: string) {
     filters: { uid },
   });
   await deleteRowsByIds("notifications", notificationRows.map((row) => String(row.id || "")));
+
+  const workspaceMemberRows = await supabaseSelect("workspace_members", {
+    select: "id,workspace_uid,member_uid,invited_by_uid,email",
+  });
+  await deleteRowsByIds(
+    "workspace_members",
+    workspaceMemberRows
+      .filter((row) => String(row.workspace_uid || "") === uid || String(row.member_uid || "") === uid || String(row.invited_by_uid || "") === uid)
+      .map((row) => String(row.id || ""))
+  );
+
+  const workspaceInvitationRows = await supabaseSelect("workspace_invitations", {
+    select: "id,workspace_uid,invited_by_uid,invited_member_uid,email",
+  });
+  await deleteRowsByIds(
+    "workspace_invitations",
+    workspaceInvitationRows
+      .filter((row) => String(row.workspace_uid || "") === uid || String(row.invited_by_uid || "") === uid || String(row.invited_member_uid || "") === uid)
+      .map((row) => String(row.id || ""))
+  );
 }
 
 export async function permanentlyDeleteUserData(uid: string, options?: { email?: string | null }) {
   const normalizedEmail = String(options?.email || "").trim().toLowerCase();
 
   await deleteUserCoreRows(uid);
+
+  if (normalizedEmail) {
+    const invitationRowsByEmail = await supabaseSelect("workspace_invitations", {
+      select: "id,email",
+      filters: { email: normalizedEmail },
+    });
+    await deleteRowsByIds("workspace_invitations", invitationRowsByEmail.map((row) => String(row.id || "")));
+  }
 
   const supportRows = await supabaseSelect("support_requests", {
     select: "id,uid,email,raw",
@@ -220,6 +255,12 @@ export async function permanentlyDeleteUserData(uid: string, options?: { email?:
     filters: { uid },
   });
   await deleteRowsByIds("api_request_metrics", metricRows.map((row) => String(row.id || "")));
+
+  const productEventRows = await supabaseSelect("product_events", {
+    select: "id",
+    filters: { uid },
+  }).catch(() => []);
+  await deleteRowsByIds("product_events", productEventRows.map((row) => String(row.id || "")));
 
   const notificationReferenceRows = await supabaseSelect("notifications", {
     select: "id,meta",
