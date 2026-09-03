@@ -29,11 +29,11 @@ function categoriesOverlap(left: Category, right: Category) {
 
 export function useCategories() {
   const { user, userProfile } = useAuth();
-  const { activeWorkspace } = useWorkspaces();
+  const { activeWorkspace, loading: workspacesLoading } = useWorkspaces();
   const workspaceType = activeWorkspace?.type || FALLBACK_WORKSPACE_TYPE;
   const workspaceId = activeWorkspace?.id;
   const userId = userProfile?.uid || user?.uid;
-  const { data, isLoading: loadingCategories, refetch } = useGetCategoriesQuery(
+  const { data, isLoading, isFetching, refetch } = useGetCategoriesQuery(
     { userId: userId || "", workspaceId: workspaceId || "" }, { skip: !userId || !workspaceId },
   );
   useEffect(() => {
@@ -76,5 +76,7 @@ export function useCategories() {
     await setDefaultCategoryHidden(await token(), canonicalName, hidden); await refetch();
   };
 
+  const waitingForWorkspace = Boolean(userId) && (workspacesLoading || !workspaceId);
+  const loadingCategories = waitingForWorkspace || isLoading || (!data && isFetching);
   return { categories, defaultCategories, hiddenDefaultCategories, loadingCategories, addNewCategory, deleteCategory, renameCategory, toggleDefaultCategoryVisibility };
 }

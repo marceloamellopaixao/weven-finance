@@ -292,7 +292,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const authReady = !loading && (!user || !userProfile || pagePreviewAccessUid === userProfile.uid);
   const isWorkspaceGuardRoute = pathname === "/account-profile" || !PUBLIC_ROUTES.includes(pathname);
-  const canLoadWorkspaceGuard = Boolean(
+  const shouldPrefetchWorkspaces = Boolean(
+    user &&
+    !pathname.startsWith("/billing") &&
+    isWorkspaceGuardRoute
+  );
+  const canApplyWorkspaceGuard = Boolean(
     authReady &&
     user &&
     userProfile &&
@@ -307,7 +312,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const workspaceGuardUserId = userProfile?.uid || user?.uid || "";
   const { data: guardedWorkspaces = [], isLoading: isLoadingWorkspaceGuard } = useGetWorkspacesQuery(
     { userId: workspaceGuardUserId },
-    { skip: !canLoadWorkspaceGuard || !workspaceGuardUserId },
+    { skip: !shouldPrefetchWorkspaces || !workspaceGuardUserId },
+  );
+  const isCreatingAdditionalWorkspace =
+    pathname === "/account-profile" &&
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("create") === "1";
+  const activeGuardedWorkspace = guardedWorkspaces.find((workspace) => workspace.status !== "archived") || null;
+  const workspaceRedirectPending = Boolean(
+    canApplyWorkspaceGuard &&
+    !isLoadingWorkspaceGuard &&
+    ((!activeGuardedWorkspace && pathname !== "/account-profile") ||
+      (activeGuardedWorkspace && pathname === "/account-profile" && !isCreatingAdditionalWorkspace))
+  );
+  const applicationReady = Boolean(
+    authReady &&
+    (!canApplyWorkspaceGuard || (!isLoadingWorkspaceGuard && !workspaceRedirectPending))
   );
 
   useEffect(() => {
@@ -470,20 +490,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [authReady, pagePreviewAccess, pathname, resolvePostAuthPath, router, supabase.auth, user, userProfile]);
 
   useEffect(() => {
-    if (!canLoadWorkspaceGuard || isLoadingWorkspaceGuard) return;
-    const isCreatingAdditionalWorkspace =
-      pathname === "/account-profile" &&
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("create") === "1";
-    const activeWorkspace = guardedWorkspaces.find((workspace) => workspace.status !== "archived") || null;
-    if (!activeWorkspace && pathname !== "/account-profile") {
+    if (!canApplyWorkspaceGuard || isLoadingWorkspaceGuard) return;
+    if (!activeGuardedWorkspace && pathname !== "/account-profile") {
       router.replace("/account-profile");
       return;
     }
-    if (activeWorkspace && pathname === "/account-profile" && !isCreatingAdditionalWorkspace) {
+    if (activeGuardedWorkspace && pathname === "/account-profile" && !isCreatingAdditionalWorkspace) {
       router.replace(resolvePostAuthPath());
     }
-  }, [canLoadWorkspaceGuard, guardedWorkspaces, isLoadingWorkspaceGuard, pathname, resolvePostAuthPath, router]);
+  }, [activeGuardedWorkspace, canApplyWorkspaceGuard, isCreatingAdditionalWorkspace, isLoadingWorkspaceGuard, pathname, resolvePostAuthPath, router]);
 
   const togglePrivacyMode = () => {
     setPrivacyMode((prev) => {
@@ -595,7 +610,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         userProfile,
-        loading: !authReady,
+        loading: !applicationReady,
         privacyMode,
         canPreviewRestrictedPages: pagePreviewAccess,
         togglePrivacyMode,
@@ -606,7 +621,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
       }}
     >
-      {authReady ? children : <AppBootLoading />}
+      {applicationReady ? children : <AppBootLoading />}
     </AuthContext.Provider>
   );
 }
