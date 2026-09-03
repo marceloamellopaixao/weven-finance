@@ -41,6 +41,8 @@ async function readPayload<T>(response: Response): Promise<T> {
       cannot_remove_occupied_seats: "Remova membros ou convites pendentes antes de reduzir os usuários adicionais.",
       subscription_not_active_for_seat_change: "É necessário ter uma assinatura ativa para alterar os usuários adicionais.",
       invitation_not_found: "Este convite não está mais disponível.",
+      invitation_not_pending: "Este convite já foi respondido ou cancelado.",
+      family_plan_change_required: "Altere ou cancele o plano na aba Planos antes de encerrar o perfil Família.",
       shared_workspace_membership_limit_reached: "Você já participa de outro perfil compartilhado. Saia dele antes de aceitar este convite.",
     };
     throw new Error((payload.error && messages[payload.error]) || payload.error || "Não foi possível gerenciar a família");
@@ -108,8 +110,7 @@ export async function updateFamilyMember(input: {
     method: "PATCH",
     body: JSON.stringify(input),
   });
-  const payload = await readPayload<{ ok: true; member: WorkspaceMember }>(response);
-  return payload.member;
+  return readPayload<{ ok: true; member: WorkspaceMember; seats?: WorkspaceSeatSummary }>(response);
 }
 
 export async function closeFamilyWorkspace(workspaceId: string) {
@@ -123,6 +124,17 @@ export async function getPendingFamilyInvitations() {
   const response = await apiFetch("/api/workspaces/family/accept", { method: "GET" });
   const payload = await readPayload<{ ok: true; invitations: PendingWorkspaceInvitation[] }>(response);
   return payload.invitations;
+}
+
+export async function revokeFamilyInvitation(input: {
+  workspaceId: string;
+  invitationId: string;
+}) {
+  const response = await apiFetch(
+    `/api/workspaces/family?workspaceId=${encodeURIComponent(input.workspaceId)}&invitationId=${encodeURIComponent(input.invitationId)}`,
+    { method: "DELETE" },
+  );
+  return readPayload<{ ok: true; invitation: WorkspaceInvitation; seats: WorkspaceSeatSummary }>(response);
 }
 
 export async function acceptFamilyInvitation(invitationId?: string, cancelCurrentSubscription = false) {

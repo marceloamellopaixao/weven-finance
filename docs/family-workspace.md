@@ -21,6 +21,7 @@ Existe um único fluxo seguro, sem senha escolhida pelo responsável:
 - Staff não tem a assinatura alterada e pode manter múltiplos perfis para testes.
 - Conta nova: o Supabase envia o convite para a própria pessoa criar o acesso. Após o primeiro acesso, o vínculo pendente é ativado.
 - Convites expiram em sete dias. Enquanto pendentes, reservam uma vaga; quando expiram ou são revogados, liberam a vaga.
+- O gestor pode cancelar um convite pendente no próprio painel. O membro reservado e a capacidade são atualizados sem recarregar toda a lista.
 - Reenvio para conta existente cria um novo lembrete interno. E-mail de redefinição de senha não é usado nesse caso.
 
 ## Papéis e permissões
@@ -30,9 +31,9 @@ Existe um único fluxo seguro, sem senha escolhida pelo responsável:
 - `child_dependent`: filho ou dependente.
 - `guest_member`: familiar com acesso limitado.
 
-As permissões são separadas por dashboard, lançamentos, relatórios, cartões, metas, membros, configurações, segurança e cobrança. O titular ocupa uma vaga e mantém acesso administrativo completo.
+As permissões são separadas por dashboard, lançamentos, relatórios, cartões, metas, membros, configurações, segurança e cobrança. O titular ocupa uma vaga e mantém acesso administrativo completo. A interface mantém as alterações localmente e envia uma única requisição quando o gestor seleciona **Salvar permissões**.
 
-## Vagas e cobrança
+## Usuários adicionais e cobrança
 
 - Convites pendentes contam como vaga ocupada para impedir excesso por concorrência.
 - O plano Família inclui quatro pessoas, contando o titular. Esse número não é alterado no painel administrativo.
@@ -42,10 +43,11 @@ As permissões são separadas por dashboard, lançamentos, relatórios, cartões
 - A contratação atualiza a mesma preapproval do Mercado Pago; não cria outra assinatura.
 - A política é `next_renewal_no_immediate_charge`: o valor novo entra na próxima renovação, sem cobrança duplicada ou pró-rata imediato.
 - Não é possível reduzir a quantidade abaixo do total de membros ativos e convites pendentes.
+- Enquanto o titular ainda possui o plano Família, o perfil não pode ser encerrado separadamente pela API. A troca ou o cancelamento do plano é a fonte de verdade para evitar uma assinatura Família vinculada a um perfil Pessoal.
 
 ## Isolamento e segurança
 
-As APIs resolvem o workspace e as permissões no servidor. Para membros convidados, o `workspace_uid` continua sendo o dono financeiro canônico, enquanto `created_by_uid` preserva a autoria. Um usuário comum vinculado a uma Família acessa apenas o perfil compartilhado; perfis próprios ficam indisponíveis enquanto o vínculo estiver ativo. Usuários comuns sem vínculo veem somente o tipo permitido pelo plano (Pessoal, Família ou Business). Staff pode acessar vários tipos para testes. Service role e segredos permanecem exclusivamente no servidor.
+As APIs resolvem o workspace e as permissões no servidor. Para membros convidados, o `workspace_uid` continua sendo o dono financeiro canônico, enquanto `created_by_uid` preserva a autoria. Um usuário comum vinculado a uma Família acessa apenas o perfil compartilhado; perfis próprios ficam indisponíveis enquanto o vínculo estiver ativo. Usuários comuns sem vínculo veem somente o tipo permitido pelo plano (Pessoal, Família ou Business). Staff pode acessar vários tipos para testes. Service role e segredos permanecem exclusivamente no servidor. A orientação sobre contas e senhas aparece no contexto do convite, onde influencia a decisão, em vez de ocupar permanentemente o painel ou interromper o usuário com um pop-up informativo.
 
 ## Evolução para Business/PJ
 

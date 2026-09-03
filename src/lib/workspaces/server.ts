@@ -61,6 +61,7 @@ export function toWorkspaceInvitation(row: WorkspaceRow): WorkspaceInvitation {
     permissions: normalizeFamilyPermissions(row.permissions ?? raw.permissions, role),
     status: ["pending", "accepted", "revoked", "expired"].includes(status) ? status : "pending",
     invitedByUid: String(row.invited_by_uid || raw.invitedByUid || ""),
+    invitedMemberUid: typeof row.invited_member_uid === "string" ? row.invited_member_uid : typeof raw.invitedMemberUid === "string" ? raw.invitedMemberUid : undefined,
     expiresAt: typeof row.expires_at === "string" ? row.expires_at : typeof raw.expiresAt === "string" ? raw.expiresAt : undefined,
     createdAt: String(row.created_at || raw.createdAt || new Date().toISOString()),
     updatedAt: String(row.updated_at || raw.updatedAt || new Date().toISOString()),
