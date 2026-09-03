@@ -21,8 +21,8 @@ import {
 import {
   getOwnedWorkspace,
   getWorkspaceMember,
-  toWorkspaceInvitation,
-  toWorkspaceMember,
+  toFamilyWorkspaceInvitation,
+  toFamilyWorkspaceMember,
 } from "@/lib/workspaces/server";
 import { supabasePatchByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { getSupabaseServiceClient, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
@@ -160,7 +160,7 @@ async function assertCanManage(uid: string, workspaceId: string, action: FamilyM
     filters: { member_uid: uid, workspace_id: workspaceId, member_status: "active" },
     limit: 1,
   });
-  const manager = rows[0] ? toWorkspaceMember(rows[0]) : null;
+  const manager = rows[0] ? toFamilyWorkspaceMember(rows[0]) : null;
   if (!manager || !canPerformFamilyManageAction(manager, action)) throw new Error("forbidden");
   const familyWorkspace = await getOwnedWorkspace(manager.workspaceUid, workspaceId);
   if (familyWorkspace?.workspace_type !== "family") throw new Error("workspace_not_family");
@@ -178,7 +178,7 @@ async function assertCanView(uid: string, workspaceId: string) {
     filters: { member_uid: uid, workspace_id: workspaceId, member_status: "active" },
     limit: 1,
   });
-  const manager = rows[0] ? toWorkspaceMember(rows[0]) : null;
+  const manager = rows[0] ? toFamilyWorkspaceMember(rows[0]) : null;
   if (!manager || !canViewFamilyMembers(manager)) throw new Error("forbidden");
   const familyWorkspace = await getOwnedWorkspace(manager.workspaceUid, workspaceId);
   if (familyWorkspace?.workspace_type !== "family") throw new Error("workspace_not_family");
@@ -436,8 +436,8 @@ export async function GET(request: NextRequest) {
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
     return NextResponse.json({
       ok: true,
-      members: memberRows.map(toWorkspaceMember),
-      invitations: invitationRows.map(toWorkspaceInvitation),
+      members: memberRows.map(toFamilyWorkspaceMember),
+      invitations: invitationRows.map(toFamilyWorkspaceInvitation),
       seats,
     }, { status: 200 });
   } catch (error) {
@@ -527,8 +527,8 @@ export async function POST(request: NextRequest) {
       }], { onConflict: "id" });
       throw new Error("family_seat_capacity_changed");
     }
-    const member = toWorkspaceMember(memberRow);
-    const invitation = toWorkspaceInvitation(invitationRow);
+    const member = toFamilyWorkspaceMember(memberRow);
+    const invitation = toFamilyWorkspaceInvitation(invitationRow);
     if (authUser.accountExists) {
       await safePushFamilyNotification({
         uid: authUser.uid,
@@ -579,7 +579,7 @@ export async function PUT(request: NextRequest) {
       if (memberUid === access.workspaceUid) {
         return NextResponse.json({ ok: false, error: "cannot_resend_owner_access" }, { status: 400 });
       }
-      const member = await getWorkspaceMember(access.workspaceUid, workspaceId, memberUid);
+      const member = await getWorkspaceMember(access.workspaceUid, workspaceId, memberUid) as WorkspaceMember | null;
       if (!member || member.status === "disabled") return NextResponse.json({ ok: false, error: "member_not_found" }, { status: 404 });
       const memberInvitationRows = await supabaseSelect("workspace_invitations", {
         filters: { workspace_uid: access.workspaceUid, workspace_id: access.workspaceId, invited_member_uid: member.memberUid },
@@ -623,7 +623,7 @@ export async function PUT(request: NextRequest) {
     });
     const existing = rows[0];
     if (!existing) return NextResponse.json({ ok: false, error: "invitation_not_found" }, { status: 404 });
-    const invitation = toWorkspaceInvitation(existing);
+    const invitation = toFamilyWorkspaceInvitation(existing);
     if (invitation.status !== "pending") {
       return NextResponse.json({ ok: false, error: "invitation_not_pending" }, { status: 400 });
     }
@@ -659,7 +659,7 @@ export async function PUT(request: NextRequest) {
       updated_at: now,
     };
     await supabaseUpsertRows("workspace_invitations", [updatedRow], { onConflict: "id" });
-    const updatedInvitation = toWorkspaceInvitation(updatedRow);
+    const updatedInvitation = toFamilyWorkspaceInvitation(updatedRow);
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
     return NextResponse.json<{ ok: true; invitation: WorkspaceInvitation; emailSent: boolean }>({
       ok: true,
@@ -697,7 +697,7 @@ export async function PATCH(request: NextRequest) {
     if (body.permissions !== undefined && !access.owner && !canEditFamilyPermissions(access.manager)) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
-    const existing = await getWorkspaceMember(access.workspaceUid, workspaceId, memberUid);
+    const existing = await getWorkspaceMember(access.workspaceUid, workspaceId, memberUid) as WorkspaceMember | null;
     if (!existing) return NextResponse.json({ ok: false, error: "member_not_found" }, { status: 404 });
     if (memberUid === access.workspaceUid) {
       return NextResponse.json({ ok: false, error: "cannot_modify_family_manager" }, { status: 400 });
@@ -737,7 +737,7 @@ export async function PATCH(request: NextRequest) {
         }], { onConflict: "id" });
       }
     }
-    const member = toWorkspaceMember(memberRow);
+    const member = toFamilyWorkspaceMember(memberRow);
     const seats = body.status === "disabled"
       ? await getFamilySeatSummary(access.workspaceUid, access.workspaceId)
       : undefined;
@@ -775,7 +775,7 @@ export async function DELETE(request: NextRequest) {
       });
       const invitationRow = invitationRows[0];
       if (!invitationRow) return NextResponse.json({ ok: false, error: "invitation_not_found" }, { status: 404 });
-      const invitation = toWorkspaceInvitation(invitationRow);
+      const invitation = toFamilyWorkspaceInvitation(invitationRow);
       if (invitation.status !== "pending") {
         return NextResponse.json({ ok: false, error: "invitation_not_pending" }, { status: 409 });
       }
@@ -815,7 +815,7 @@ export async function DELETE(request: NextRequest) {
       }
       const seats = await getFamilySeatSummary(access.workspaceUid, access.workspaceId);
       await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
-      return NextResponse.json({ ok: true, invitation: toWorkspaceInvitation(updatedRow), seats }, { status: 200 });
+      return NextResponse.json({ ok: true, invitation: toFamilyWorkspaceInvitation(updatedRow), seats }, { status: 200 });
     }
 
     const owned = await getOwnedWorkspace(auth.uid, workspaceId);
