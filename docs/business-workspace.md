@@ -24,4 +24,6 @@ O Business deve reutilizar a infraestrutura segura de convites e vagas do Famíl
 
 ## Estado atual
 
-A configuração comercial de vagas e a rota server-side de alteração da assinatura já aceitam workspaces Business. Ainda falta criar o painel e a API de funcionários com papéis próprios antes de liberar a funcionalidade em produção.
+A configuração comercial de usuários adicionais e a rota server-side de alteração da assinatura já aceitam workspaces Business. A base de domínio agora possui papéis e permissões empresariais próprios, cria o proprietário do workspace, preserva a conta e a assinatura pessoal de funcionários convidados e encerra os acessos da equipe quando o titular troca para um plano não Business.
+
+Ainda falta concluir o painel e a API de funcionários antes de liberar a funcionalidade em produção. O fluxo será entregue atrás da própria disponibilidade do plano Business, sem reaproveitar textos ou papéis familiares.

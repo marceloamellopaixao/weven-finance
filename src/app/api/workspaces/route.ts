@@ -13,7 +13,7 @@ import { getUserPlanContext } from "@/lib/plans/server";
 import { canAccessAdminArea } from "@/lib/access-control/roles";
 import { supabaseDeleteByFilters, supabasePatchByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { toFinancialProfileType, type Workspace, type WorkspaceSettings, type WorkspaceType } from "@/types/workspace";
-import { ensureFamilyManagerMembership, getActiveMemberships, toWorkspaceMember } from "@/lib/workspaces/server";
+import { ensureBusinessOwnerMembership, ensureFamilyManagerMembership, getActiveMemberships, toWorkspaceMember } from "@/lib/workspaces/server";
 import { reconcileOwnedWorkspacesForPlan } from "@/lib/workspaces/reconcile-server";
 
 export const runtime = "nodejs";
@@ -244,18 +244,23 @@ async function persistWorkspaceSet(uid: string, workspaces: Workspace[]) {
   await supabaseUpsertRows("workspaces", workspaces.map((workspace) => toWorkspaceRow(uid, workspace)), { onConflict: "id" });
 }
 
-async function ensureFamilyOwnerIfNeeded(uid: string, workspace: Workspace) {
-  if (workspace.type !== "family") return;
+async function ensureSharedWorkspaceOwnerIfNeeded(uid: string, workspace: Workspace) {
+  if (workspace.type !== "family" && workspace.type !== "business") return;
   const profile = await getProfileSummary(uid);
-  await ensureFamilyManagerMembership({
+  const input = {
     workspaceUid: uid,
     workspaceId: workspace.id,
     email: profile.email,
     displayName: profile.displayName,
-  });
+  };
+  if (workspace.type === "business") {
+    await ensureBusinessOwnerMembership(input);
+  } else {
+    await ensureFamilyManagerMembership(input);
+  }
 }
 
-async function clearFamilyAccess(uid: string, workspaceId: string, now: string) {
+async function clearSharedWorkspaceAccess(uid: string, workspaceId: string, now: string) {
   try {
     await supabasePatchByFilters(
       "workspace_members",
@@ -268,7 +273,7 @@ async function clearFamilyAccess(uid: string, workspaceId: string, now: string) 
       { invitation_status: "revoked", updated_at: now, raw: { status: "revoked", archivedAt: now } },
     );
   } catch {
-    // Older installs may not have family tables yet.
+    // Older installs may not have shared-workspace tables yet.
   }
 }
 
@@ -329,6 +334,11 @@ export async function GET(request: NextRequest) {
         })
       : await reconcileOwnedWorkspacesForPlan(uid, planContext.plan);
     const ownedWorkspaces = ownedWorkspaceRows.map((row) => toWorkspace(uid, row));
+    await Promise.all(
+      ownedWorkspaces
+        .filter((workspace) => isWorkspaceActive(workspace) && (workspace.type === "family" || workspace.type === "business"))
+        .map((workspace) => ensureSharedWorkspaceOwnerIfNeeded(uid, workspace)),
+    );
     const sharedRows =
       memberships.length > 0
         ? await Promise.all(
@@ -405,7 +415,7 @@ export async function POST(request: NextRequest) {
       : [...current, workspaceToPersist];
 
     await persistWorkspaceSet(uid, next);
-    await ensureFamilyOwnerIfNeeded(uid, workspaceToPersist);
+    await ensureSharedWorkspaceOwnerIfNeeded(uid, workspaceToPersist);
     await applyCategoryPreset(uid, workspaceToPersist.type, workspaceToPersist.id);
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json({ ok: true, workspace: workspaceToPersist }, { status: 200 });
@@ -459,7 +469,7 @@ export async function PATCH(request: NextRequest) {
       await assertPlanCanUseWorkspace(uid, workspace.type);
       const next = [...current.map((item) => ({ ...item, isDefault: false, updatedAt: new Date().toISOString() })), workspace];
       await persistWorkspaceSet(uid, next);
-      await ensureFamilyOwnerIfNeeded(uid, workspace);
+      await ensureSharedWorkspaceOwnerIfNeeded(uid, workspace);
       await applyCategoryPreset(uid, workspace.type, workspace.id);
       return NextResponse.json({ ok: true, defaultWorkspace: workspace }, { status: 200 });
     }
@@ -510,7 +520,7 @@ export async function PATCH(request: NextRequest) {
           : workspace
     );
     await persistWorkspaceSet(uid, next);
-    await ensureFamilyOwnerIfNeeded(uid, updated);
+    await ensureSharedWorkspaceOwnerIfNeeded(uid, updated);
     if (updated.settings?.categoriesPresetApplied !== true || updated.type !== target.type) {
       await applyCategoryPreset(uid, updated.type, updated.id);
     }
@@ -566,8 +576,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     const now = new Date().toISOString();
-    if (target.type === "family") {
-      await clearFamilyAccess(uid, workspaceId, now);
+    if (target.type === "family" || target.type === "business") {
+      await clearSharedWorkspaceAccess(uid, workspaceId, now);
     }
 
     if (mode === "delete_data") {

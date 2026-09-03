@@ -2,7 +2,7 @@
 
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
-import type { FamilyPermission, FamilyRole, PendingWorkspaceInvitation, WorkspaceInvitation, WorkspaceMember, WorkspaceSeatSummary } from "@/types/workspace";
+import type { FamilyPermission, FamilyRole, PendingWorkspaceInvitation, SharedWorkspaceMember, WorkspaceInvitation, WorkspaceMember, WorkspaceSeatSummary } from "@/types/workspace";
 
 export type FamilyWorkspacePayload = {
   members: WorkspaceMember[];
@@ -137,7 +137,7 @@ export async function acceptFamilyInvitation(invitationId?: string, cancelCurren
   });
   const payload = await readPayload<{
     ok: true;
-    members: WorkspaceMember[];
+    members: SharedWorkspaceMember[];
     invitations: WorkspaceInvitation[];
     subscriptionCanceled: boolean;
   }>(response);

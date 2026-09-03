@@ -12,7 +12,7 @@ import { formatPlanName } from "@/lib/plans/capabilities";
 import { getUserPlanContext } from "@/lib/plans/server";
 import { getActiveMemberships, toWorkspaceInvitation, toWorkspaceMember } from "@/lib/workspaces/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
-import type { PendingWorkspaceInvitation, WorkspaceInvitation, WorkspaceMember } from "@/types/workspace";
+import type { PendingWorkspaceInvitation, SharedWorkspaceInvitation, SharedWorkspaceMember } from "@/types/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,7 +89,7 @@ async function decorateInvitation(
   const invitation = toWorkspaceInvitation(row);
   const [workspaceRows, inviterRows] = await Promise.all([
     supabaseSelect("workspaces", {
-      select: "name",
+      select: "name,workspace_type",
       filters: { uid: invitation.workspaceUid, source_id: invitation.workspaceId },
       limit: 1,
     }),
@@ -99,13 +99,15 @@ async function decorateInvitation(
       limit: 1,
     }),
   ]);
+  const workspaceType = workspaceRows[0]?.workspace_type === "business" ? "business" : "family";
   return {
     ...invitation,
-    workspaceName: String(workspaceRows[0]?.name || "Família"),
-    inviterName: String(inviterRows[0]?.display_name || inviterRows[0]?.email || "Responsável da família"),
+    workspaceType,
+    workspaceName: String(workspaceRows[0]?.name || (workspaceType === "business" ? "Empresa" : "Família")),
+    inviterName: String(inviterRows[0]?.display_name || inviterRows[0]?.email || (workspaceType === "business" ? "Responsável da empresa" : "Responsável da família")),
     currentPlan: impact.currentPlan,
     currentPlanName: impact.currentPlanName,
-    requiresSubscriptionCancellation: impact.requiresSubscriptionCancellation,
+    requiresSubscriptionCancellation: workspaceType === "family" && impact.requiresSubscriptionCancellation,
     isStaff: impact.isStaff,
   };
 }
@@ -142,7 +144,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "invitation_not_found" }, { status: 404 });
     }
 
-    const validatedMembers: Array<{ row: Record<string, unknown>; memberRow: Record<string, unknown> }> = [];
+    const validatedMembers: Array<{ row: Record<string, unknown>; memberRow: Record<string, unknown>; workspaceType: "family" | "business" }> = [];
     for (const row of invitationRows) {
       const invitation = toWorkspaceInvitation(row);
       const email = normalizeEmail(auth.email);
@@ -153,7 +155,13 @@ export async function POST(request: NextRequest) {
       });
       const memberRow = memberRows[0];
       if (!memberRow || memberRow.member_status === "disabled") throw new Error("invitation_member_not_found");
-      validatedMembers.push({ row, memberRow });
+      const workspaceRows = await supabaseSelect("workspaces", {
+        select: "workspace_type",
+        filters: { uid: invitation.workspaceUid, source_id: invitation.workspaceId },
+        limit: 1,
+      });
+      const workspaceType = workspaceRows[0]?.workspace_type === "business" ? "business" : "family";
+      validatedMembers.push({ row, memberRow, workspaceType });
     }
 
     const impact = await getInvitationAccountImpact(auth);
@@ -164,20 +172,22 @@ export async function POST(request: NextRequest) {
       (membership) => membership.workspaceUid !== auth.uid
         && !targetWorkspaceKeys.has(`${membership.workspaceUid}:${membership.workspaceId}`),
     );
-    if (!impact.isStaff && existingSharedMemberships.length > 0) {
+    const acceptsFamily = validatedMembers.some((item) => item.workspaceType === "family");
+    const requiresSubscriptionCancellation = acceptsFamily && impact.requiresSubscriptionCancellation;
+    if (!impact.isStaff && acceptsFamily && existingSharedMemberships.length > 0) {
       return NextResponse.json({ ok: false, error: "shared_workspace_membership_limit_reached" }, { status: 409 });
     }
-    if (impact.requiresSubscriptionCancellation && body.cancelCurrentSubscription !== true) {
+    if (requiresSubscriptionCancellation && body.cancelCurrentSubscription !== true) {
       return NextResponse.json({ ok: false, error: "subscription_cancellation_confirmation_required", currentPlan: impact.currentPlan }, { status: 409 });
     }
-    if (impact.requiresSubscriptionCancellation) {
+    if (requiresSubscriptionCancellation) {
       if (!impact.userEmail) return NextResponse.json({ ok: false, error: "missing_user_email" }, { status: 409 });
       await cancelSubscriptionForUser({ uid: auth.uid, userEmail: impact.userEmail });
     }
 
     const now = new Date().toISOString();
-    const acceptedInvitations: WorkspaceInvitation[] = [];
-    const activatedMembers: WorkspaceMember[] = [];
+    const acceptedInvitations: SharedWorkspaceInvitation[] = [];
+    const activatedMembers: SharedWorkspaceMember[] = [];
     for (const { row, memberRow } of validatedMembers) {
       const updatedInvitationRow = {
         ...row,
@@ -206,7 +216,7 @@ export async function POST(request: NextRequest) {
       activatedMembers.push(toWorkspaceMember(updatedMemberRow));
     }
 
-    if (impact.requiresSubscriptionCancellation) {
+    if (requiresSubscriptionCancellation) {
       await pushNotification({
         uid: auth.uid,
         kind: "billing",
@@ -222,7 +232,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       invitations: acceptedInvitations,
       members: activatedMembers,
-      subscriptionCanceled: impact.requiresSubscriptionCancellation,
+      subscriptionCanceled: requiresSubscriptionCancellation,
     }, { status: 200 });
   } catch (error) {
     return handleError(error, meta, startedAt, "workspaces_family_accept_failed");

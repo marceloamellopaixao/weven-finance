@@ -1,4 +1,4 @@
-import type { FamilyPermission, FamilyRole, WorkspaceMember } from "@/types/workspace";
+import type { FamilyPermission, FamilyRole, SharedWorkspaceMember as WorkspaceMember } from "@/types/workspace";
 
 export const FAMILY_ROLES: FamilyRole[] = [
   "family_manager",
@@ -296,7 +296,7 @@ export function normalizeFamilyPermissions(value: unknown, role: FamilyRole): Fa
 }
 
 export function hasFamilyPermission(member: WorkspaceMember | null | undefined, permission: FamilyPermission) {
-  return Boolean(member?.permissions.includes(permission));
+  return Boolean(member?.permissions.some((item) => item === permission));
 }
 
 export function canViewFamilyTransaction(member: WorkspaceMember | null | undefined, createdByUid: string) {

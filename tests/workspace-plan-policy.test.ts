@@ -61,3 +61,36 @@ test("switching to family reuses the existing personal workspace", () => {
   assert.equal(result.rows[0].name, "Família / Casa");
   assert.equal((result.rows[0].settings as Record<string, unknown>).familyModeEnabled, true);
 });
+
+test("business to pro converts the current profile and closes team access", () => {
+  const result = reconcileWorkspaceRowsForPlan([{
+    id: "owner__business",
+    source_id: "business",
+    name: "Meu negócio",
+    workspace_type: "business",
+    is_default: true,
+    settings: { businessDocument: "12345678000199" },
+    raw: { type: "business", settings: { businessDocument: "12345678000199" } },
+  }], "pro", "2026-09-03T12:00:00.000Z");
+
+  assert.equal(result.rows[0].workspace_type, "personal");
+  assert.equal(result.rows[0].name, "Minha vida financeira");
+  assert.equal((result.rows[0].settings as Record<string, unknown>).businessDocument, undefined);
+  assert.deepEqual(result.closedSharedWorkspaceIds, ["business"]);
+});
+
+test("switching from family to business closes previous family memberships", () => {
+  const result = reconcileWorkspaceRowsForPlan([{
+    id: "owner__shared",
+    source_id: "shared",
+    name: "Família / Casa",
+    workspace_type: "family",
+    is_default: true,
+    settings: { familyModeEnabled: true },
+    raw: { type: "family", settings: { familyModeEnabled: true } },
+  }], "business", "2026-09-03T12:00:00.000Z");
+
+  assert.equal(result.rows[0].workspace_type, "business");
+  assert.equal(result.rows[0].name, "Meu negócio");
+  assert.deepEqual(result.closedSharedWorkspaceIds, ["shared"]);
+});

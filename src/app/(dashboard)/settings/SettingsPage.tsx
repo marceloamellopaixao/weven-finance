@@ -33,6 +33,7 @@ import {
   Sun,
   UsersRound,
   WalletCards,
+  BriefcaseBusiness,
 } from "lucide-react";
 import { useState, useEffect, type CSSProperties } from "react";
 import { requestOwnAccountDeletion, updateOwnProfile } from "@/services/userService";
@@ -61,7 +62,10 @@ import { useTranslations } from "@/i18n/T";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { canManageFamilyBilling, canViewFamilyMembers } from "@/lib/workspaces/family";
 import { FamilyWorkspacePanel } from "@/components/workspaces/FamilyWorkspacePanel";
+import { BusinessWorkspacePanel } from "@/components/workspaces/BusinessWorkspacePanel";
 import { WorkspaceSettingsPanel } from "@/components/workspaces/WorkspaceSettingsPanel";
+import { canViewBusinessMembers } from "@/lib/workspaces/business";
+import type { BusinessWorkspaceMember } from "@/types/workspace";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -170,9 +174,13 @@ export default function SettingsPage() {
     if (workspace.type !== "family" && !workspace.settings?.familyModeEnabled && !workspace.membership) return false;
     return !workspace.membership || canViewFamilyMembers(workspace.membership);
   });
+  const canOpenBusinessWorkspaceSettings = workspaces.some((workspace) => {
+    if (workspace.status === "archived" || workspace.type !== "business") return false;
+    return !workspace.membership || canViewBusinessMembers(workspace.membership as BusinessWorkspaceMember);
+  });
   const canOpenBillingSettings = !activeWorkspace?.membership || canManageFamilyBilling(activeWorkspace.membership);
   const canOpenSecuritySettings = !activeWorkspace?.membership || activeWorkspace.membership.permissions.includes("settings.manage_security");
-  const settingsTabCount = 3 + (canOpenFamilyWorkspaceSettings ? 1 : 0) + (canOpenBillingSettings ? 1 : 0) + (canOpenSecuritySettings ? 1 : 0);
+  const settingsTabCount = 3 + (canOpenFamilyWorkspaceSettings ? 1 : 0) + (canOpenBusinessWorkspaceSettings ? 1 : 0) + (canOpenBillingSettings ? 1 : 0) + (canOpenSecuritySettings ? 1 : 0);
 
   usePlatformTour({
     route: "settings",
@@ -267,8 +275,9 @@ export default function SettingsPage() {
     return t("ticketTypes.support");
   };
 
-  const handleTabChange = (tab: "account" | "profiles" | "family" | "billing" | "security" | "help") => {
+  const handleTabChange = (tab: "account" | "profiles" | "family" | "business" | "billing" | "security" | "help") => {
     if (tab === "family" && !canOpenFamilyWorkspaceSettings) return;
+    if (tab === "business" && !canOpenBusinessWorkspaceSettings) return;
     if (tab === "billing" && !canOpenBillingSettings) return;
     if (tab === "security" && !canOpenSecuritySettings) return;
     setActiveTab(tab);
@@ -540,7 +549,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (isTabBootstrapped) return;
     const tab = searchParams.get("tab");
-    if (tab === "account" || tab === "profiles" || tab === "family" || tab === "billing" || tab === "security" || tab === "help") {
+    if (tab === "account" || tab === "profiles" || tab === "family" || tab === "business" || tab === "billing" || tab === "security" || tab === "help") {
       setActiveTab(tab);
     }
     setIsTabBootstrapped(true);
@@ -688,12 +697,13 @@ export default function SettingsPage() {
     if (workspacesLoading) return;
     if (
       (activeTab === "family" && !canOpenFamilyWorkspaceSettings) ||
+      (activeTab === "business" && !canOpenBusinessWorkspaceSettings) ||
       (activeTab === "billing" && !canOpenBillingSettings) ||
       (activeTab === "security" && !canOpenSecuritySettings)
     ) {
       setActiveTab("account");
     }
-  }, [activeTab, canOpenBillingSettings, canOpenFamilyWorkspaceSettings, canOpenSecuritySettings, workspacesLoading]);
+  }, [activeTab, canOpenBillingSettings, canOpenBusinessWorkspaceSettings, canOpenFamilyWorkspaceSettings, canOpenSecuritySettings, workspacesLoading]);
 
   return (
     <div className="min-h-screen p-3 font-sans md:p-8 pb-20">
@@ -726,6 +736,11 @@ export default function SettingsPage() {
             {canOpenFamilyWorkspaceSettings ? (
               <button id="tour-settings-family-tab" type="button" aria-pressed={activeTab === "family"} onClick={() => handleTabChange("family")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "family" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
                 <UsersRound className="h-4 w-4" /> Família
+              </button>
+            ) : null}
+            {canOpenBusinessWorkspaceSettings ? (
+              <button id="tour-settings-business-tab" type="button" aria-pressed={activeTab === "business"} onClick={() => handleTabChange("business")} className={`flex w-full items-center sm:justify-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-all duration-200 hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${activeTab === "business" ? "app-panel-soft border border-color:var(--app-panel-border) text-zinc-900 shadow-sm dark:text-white" : "text-zinc-500 hover:bg-accent hover:text-zinc-900 dark:hover:text-zinc-300"}`}>
+                <BriefcaseBusiness className="h-4 w-4" /> Equipe
               </button>
             ) : null}
             {canOpenBillingSettings ? (
@@ -942,6 +957,12 @@ export default function SettingsPage() {
           {activeTab === "family" && canOpenFamilyWorkspaceSettings && (
             <div id="tour-settings-family-panel" className={`${fadeInUp} delay-200`}>
               <FamilyWorkspacePanel workspaces={workspaces} loading={workspacesLoading} />
+            </div>
+          )}
+
+          {activeTab === "business" && canOpenBusinessWorkspaceSettings && (
+            <div id="tour-settings-business-panel" className={`${fadeInUp} delay-200`}>
+              <BusinessWorkspacePanel workspaces={workspaces} loading={workspacesLoading} />
             </div>
           )}
 
