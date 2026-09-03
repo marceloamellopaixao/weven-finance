@@ -738,8 +738,11 @@ export async function PATCH(request: NextRequest) {
       }
     }
     const member = toWorkspaceMember(memberRow);
+    const seats = body.status === "disabled"
+      ? await getFamilySeatSummary(access.workspaceUid, access.workspaceId)
+      : undefined;
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
-    return NextResponse.json({ ok: true, member }, { status: 200 });
+    return NextResponse.json({ ok: true, member, ...(seats ? { seats } : {}) }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     const status = getFamilyErrorStatus(message);
@@ -757,11 +760,74 @@ export async function DELETE(request: NextRequest) {
     if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     const auth = await verifyRequestAuth(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
+    const invitationId = request.nextUrl.searchParams.get("invitationId")?.trim();
     if (!workspaceId) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+
+    if (invitationId) {
+      const access = await assertCanManage(auth.uid, workspaceId, "invite_members");
+      const invitationRows = await supabaseSelect("workspace_invitations", {
+        filters: {
+          id: invitationId,
+          workspace_uid: access.workspaceUid,
+          workspace_id: access.workspaceId,
+        },
+        limit: 1,
+      });
+      const invitationRow = invitationRows[0];
+      if (!invitationRow) return NextResponse.json({ ok: false, error: "invitation_not_found" }, { status: 404 });
+      const invitation = toWorkspaceInvitation(invitationRow);
+      if (invitation.status !== "pending") {
+        return NextResponse.json({ ok: false, error: "invitation_not_pending" }, { status: 409 });
+      }
+
+      const now = new Date().toISOString();
+      const raw = ((invitationRow.raw as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+      const updatedRow = {
+        ...invitationRow,
+        invitation_status: "revoked",
+        raw: { ...raw, status: "revoked", revokedAt: now, revokedByUid: auth.uid, updatedAt: now },
+        updated_at: now,
+      };
+      await supabaseUpsertRows("workspace_invitations", [updatedRow], { onConflict: "id" });
+      if (invitation.invitedMemberUid) {
+        const pendingMemberRows = await supabaseSelect("workspace_members", {
+          filters: {
+            workspace_uid: access.workspaceUid,
+            workspace_id: access.workspaceId,
+            member_uid: invitation.invitedMemberUid,
+          },
+          limit: 1,
+        });
+        const memberRaw = ((pendingMemberRows[0]?.raw as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+        await supabasePatchByFilters(
+          "workspace_members",
+          {
+            workspace_uid: access.workspaceUid,
+            workspace_id: access.workspaceId,
+            member_uid: invitation.invitedMemberUid,
+          },
+          {
+            member_status: "disabled",
+            raw: { ...memberRaw, status: "disabled", invitationRevokedAt: now, updatedAt: now },
+            updated_at: now,
+          },
+        );
+      }
+      const seats = await getFamilySeatSummary(access.workspaceUid, access.workspaceId);
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
+      return NextResponse.json({ ok: true, invitation: toWorkspaceInvitation(updatedRow), seats }, { status: 200 });
+    }
 
     const owned = await getOwnedWorkspace(auth.uid, workspaceId);
     if (!owned || owned.workspace_type !== "family") {
       return NextResponse.json({ ok: false, error: "workspace_not_family" }, { status: 404 });
+    }
+    const ownerPlanContext = await getUserPlanContext(auth.uid);
+    if (!ownerPlanContext.isBillingExempt && ownerPlanContext.plan === "family") {
+      return NextResponse.json(
+        { ok: false, error: "family_plan_change_required" },
+        { status: 409 },
+      );
     }
 
     const now = new Date().toISOString();

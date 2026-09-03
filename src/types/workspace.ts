@@ -93,6 +93,7 @@ export type WorkspaceInvitation = {
   permissions: FamilyPermission[];
   status: WorkspaceInvitationStatus;
   invitedByUid: string;
+  invitedMemberUid?: string;
   expiresAt?: string;
   createdAt: string;
   updatedAt: string;

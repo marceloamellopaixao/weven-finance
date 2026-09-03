@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, UsersRound } from "lucide-react";
 import { usePathname } from "next/navigation";
 
@@ -23,9 +23,11 @@ export function WorkspaceInvitationModal() {
   const [isResponding, setIsResponding] = useState(false);
   const [cancellationConfirmed, setCancellationConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loadedForUserRef = useRef<string | null>(null);
 
   const loadInvitations = useCallback(async () => {
     if (!user) {
+      loadedForUserRef.current = null;
       setInvitations([]);
       return;
     }
@@ -33,11 +35,14 @@ export function WorkspaceInvitationModal() {
       setInvitations([]);
       return;
     }
+    if (loadedForUserRef.current === user.uid) return;
+    loadedForUserRef.current = user.uid;
     setIsLoading(true);
     try {
       setInvitations(await getPendingFamilyInvitations());
     } catch {
       // O convite continua disponível nas notificações e no próximo acesso privado.
+      loadedForUserRef.current = null;
     } finally {
       setIsLoading(false);
     }
