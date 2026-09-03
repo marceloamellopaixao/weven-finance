@@ -113,13 +113,6 @@ export async function updateFamilyMember(input: {
   return readPayload<{ ok: true; member: WorkspaceMember; seats?: WorkspaceSeatSummary }>(response);
 }
 
-export async function closeFamilyWorkspace(workspaceId: string) {
-  const response = await apiFetch(`/api/workspaces/family?workspaceId=${encodeURIComponent(workspaceId)}`, {
-    method: "DELETE",
-  });
-  await readPayload<{ ok: true }>(response);
-}
-
 export async function getPendingFamilyInvitations() {
   const response = await apiFetch("/api/workspaces/family/accept", { method: "GET" });
   const payload = await readPayload<{ ok: true; invitations: PendingWorkspaceInvitation[] }>(response);
