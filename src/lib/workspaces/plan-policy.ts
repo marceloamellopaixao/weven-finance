@@ -88,8 +88,9 @@ export function reconcileWorkspaceRowsForPlan(
     const rawSettings = { ...(((raw.settings as Record<string, unknown> | null) || {}) as Record<string, unknown>) };
 
     if (rowId === canonicalId) {
-      const wasFamily = toFinancialProfileType(rowType) === "family";
-      if (wasFamily && desiredType !== "family") closedSharedWorkspaceIds.push(rowId);
+      const previousProfileType = toFinancialProfileType(rowType);
+      const wasShared = previousProfileType === "family" || previousProfileType === "business";
+      if (wasShared && previousProfileType !== desiredType) closedSharedWorkspaceIds.push(rowId);
       delete settings.archivedAt;
       delete rawSettings.archivedAt;
       if (desiredType !== "business") {
@@ -129,7 +130,8 @@ export function reconcileWorkspaceRowsForPlan(
     }
 
     if (!isActiveRow(row) && !row.is_default) return row;
-    if (toFinancialProfileType(rowType) === "family" && desiredType !== "family") {
+    const rowProfileType = toFinancialProfileType(rowType);
+    if ((rowProfileType === "family" || rowProfileType === "business") && rowProfileType !== desiredType) {
       closedSharedWorkspaceIds.push(rowId);
     }
     changed = true;

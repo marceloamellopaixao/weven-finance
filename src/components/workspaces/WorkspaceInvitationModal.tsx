@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Loader2, UsersRound } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Building2, Loader2, UsersRound } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { FAMILY_ROLE_LABELS } from "@/lib/workspaces/family";
+import { BUSINESS_ROLE_LABELS, BUSINESS_ROLES } from "@/lib/workspaces/business";
 import { acceptFamilyInvitation, getPendingFamilyInvitations, rejectFamilyInvitation } from "@/services/familyWorkspaceService";
 import { setActiveWorkspaceId } from "@/services/workspaceService";
 import type { PendingWorkspaceInvitation } from "@/types/workspace";
@@ -23,9 +24,11 @@ export function WorkspaceInvitationModal() {
   const [isResponding, setIsResponding] = useState(false);
   const [cancellationConfirmed, setCancellationConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loadedForUserRef = useRef<string | null>(null);
 
   const loadInvitations = useCallback(async () => {
     if (!user) {
+      loadedForUserRef.current = null;
       setInvitations([]);
       return;
     }
@@ -33,11 +36,14 @@ export function WorkspaceInvitationModal() {
       setInvitations([]);
       return;
     }
+    if (loadedForUserRef.current === user.uid) return;
+    loadedForUserRef.current = user.uid;
     setIsLoading(true);
     try {
       setInvitations(await getPendingFamilyInvitations());
     } catch {
       // O convite continua disponível nas notificações e no próximo acesso privado.
+      loadedForUserRef.current = null;
     } finally {
       setIsLoading(false);
     }
@@ -90,17 +96,22 @@ export function WorkspaceInvitationModal() {
   };
 
   if (isLoading || !invitation) return null;
+  const isBusiness = invitation.workspaceType === "business";
+  const roleLabel = isBusiness && BUSINESS_ROLES.includes(invitation.role as (typeof BUSINESS_ROLES)[number])
+    ? BUSINESS_ROLE_LABELS[invitation.role as keyof typeof BUSINESS_ROLE_LABELS]
+    : FAMILY_ROLE_LABELS[invitation.role as keyof typeof FAMILY_ROLE_LABELS];
+  const InvitationIcon = isBusiness ? Building2 : UsersRound;
 
   return (
     <Dialog open>
       <DialogContent className="rounded-3xl border border-border/70 bg-card sm:max-w-[520px]" showCloseButton={false}>
         <DialogHeader>
           <div className="mb-2 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <UsersRound className="h-5 w-5" />
+            <InvitationIcon className="h-5 w-5" />
           </div>
-          <DialogTitle>Convite para compartilhar uma família</DialogTitle>
+          <DialogTitle>{isBusiness ? "Convite para participar de uma empresa" : "Convite para compartilhar uma família"}</DialogTitle>
           <DialogDescription>
-            {invitation.inviterName} convidou você para participar de <strong>{invitation.workspaceName}</strong> como {FAMILY_ROLE_LABELS[invitation.role].toLowerCase()}.
+            {invitation.inviterName} convidou você para participar de <strong>{invitation.workspaceName}</strong> como {roleLabel.toLowerCase()}.
           </DialogDescription>
         </DialogHeader>
 
@@ -117,7 +128,9 @@ export function WorkspaceInvitationModal() {
           </div>
         ) : (
           <div className="rounded-2xl border border-border/70 bg-background/50 p-4 text-sm text-muted-foreground">
-            Ao aceitar, você passará a usar o perfil Família compartilhado. Sua senha e seus dados pessoais não serão alterados.
+            {isBusiness
+              ? "Ao aceitar, você terá acesso somente aos dados profissionais permitidos. Sua conta pessoal, assinatura, senha e outros perfis não serão alterados."
+              : "Ao aceitar, você passará a usar o perfil Família compartilhado. Sua senha e seus dados pessoais não serão alterados."}
           </div>
         )}
         {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}

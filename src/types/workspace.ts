@@ -27,6 +27,7 @@ export function getFinancialProfileLabel(type: WorkspaceType | null | undefined)
 }
 
 export type FamilyRole = "family_manager" | "spouse_responsible" | "child_dependent" | "guest_member";
+export type BusinessRole = "business_owner" | "financial_admin" | "collaborator" | "accountant_viewer";
 
 export type FamilyPermission =
   | "view_all"
@@ -65,6 +66,13 @@ export type FamilyPermission =
   | "family.manage_members"
   | "family.manage_permissions";
 
+export type BusinessPermission =
+  | Exclude<FamilyPermission, `family.${string}`>
+  | "business.view_members"
+  | "business.invite_members"
+  | "business.manage_members"
+  | "business.manage_permissions";
+
 export type FamilyMemberStatus = "active" | "pending" | "disabled";
 
 export type WorkspaceMember = {
@@ -82,6 +90,13 @@ export type WorkspaceMember = {
   updatedAt: string;
 };
 
+export type BusinessWorkspaceMember = Omit<WorkspaceMember, "role" | "permissions"> & {
+  role: BusinessRole;
+  permissions: BusinessPermission[];
+};
+
+export type SharedWorkspaceMember = WorkspaceMember | BusinessWorkspaceMember;
+
 export type WorkspaceInvitationStatus = "pending" | "accepted" | "revoked" | "expired";
 
 export type WorkspaceInvitation = {
@@ -93,12 +108,21 @@ export type WorkspaceInvitation = {
   permissions: FamilyPermission[];
   status: WorkspaceInvitationStatus;
   invitedByUid: string;
+  invitedMemberUid?: string;
   expiresAt?: string;
   createdAt: string;
   updatedAt: string;
 };
 
-export type PendingWorkspaceInvitation = WorkspaceInvitation & {
+export type BusinessWorkspaceInvitation = Omit<WorkspaceInvitation, "role" | "permissions"> & {
+  role: BusinessRole;
+  permissions: BusinessPermission[];
+};
+
+export type SharedWorkspaceInvitation = WorkspaceInvitation | BusinessWorkspaceInvitation;
+
+export type PendingWorkspaceInvitation = SharedWorkspaceInvitation & {
+  workspaceType: "family" | "business";
   workspaceName: string;
   inviterName: string;
   currentPlan: import("@/types/user").UserPlan;
@@ -127,7 +151,7 @@ export type Workspace = {
   isDefault: boolean;
   status?: WorkspaceStatus;
   ownerUid?: string;
-  membership?: WorkspaceMember;
+  membership?: SharedWorkspaceMember;
   createdAt: string;
   updatedAt: string;
   settings?: WorkspaceSettings;
