@@ -22,8 +22,18 @@ O Business deve reutilizar a infraestrutura segura de convites e vagas do Famíl
 - Dados pessoais, Family e outras empresas nunca são agregados ao Business.
 - Alterações sensíveis devem gerar auditoria: convite, aceite, recusa, papel, permissão, remoção e cobrança.
 
-## Estado atual
+## Implementação
 
-A configuração comercial de usuários adicionais e a rota server-side de alteração da assinatura já aceitam workspaces Business. A base de domínio agora possui papéis e permissões empresariais próprios, cria o proprietário do workspace, preserva a conta e a assinatura pessoal de funcionários convidados e encerra os acessos da equipe quando o titular troca para um plano não Business.
+A configuração comercial de usuários adicionais e a rota server-side de alteração da assinatura aceitam workspaces Business. A base de domínio possui papéis e permissões empresariais próprios, cria o proprietário do workspace, preserva a conta e a assinatura pessoal de funcionários convidados e encerra os acessos da equipe quando o titular troca para um plano não Business.
 
-Ainda falta concluir o painel e a API de funcionários antes de liberar a funcionalidade em produção. O fluxo será entregue atrás da própria disponibilidade do plano Business, sem reaproveitar textos ou papéis familiares.
+As operações de equipe ficam em `/api/workspaces/business`:
+
+- `GET`: lista funcionários, convites e capacidade do plano.
+- `POST`: convida conta existente ou cria convite seguro para uma conta nova.
+- `PUT`: reenvia um convite pendente.
+- `PATCH`: altera papel, permissões ou remove o acesso de um funcionário.
+- `DELETE`: revoga um convite pendente.
+
+O painel fica em **Configurações > Equipe** e só aparece para um workspace Business que o usuário possa consultar. Permissões avançadas ficam recolhidas por padrão; o papel escolhido já aplica uma configuração segura recomendada.
+
+Antes da liberação em produção, valide o fluxo completo com credenciais de teste: convite de conta existente, convite de conta nova, aceite, recusa, remoção, troca de papel, isolamento de dados e alteração de usuários adicionais.

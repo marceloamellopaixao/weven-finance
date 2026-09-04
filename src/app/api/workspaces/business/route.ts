@@ -342,6 +342,8 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const startedAt = Date.now();
   try {
+    const rate = await checkRateLimit(request, { key: "api:workspaces-business:put", max: 30, windowMs: 60_000 });
+    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     const auth = await verifyRequestAuth(request);
     const body = await request.json() as { workspaceId?: string; invitationId?: string };
     const workspaceId = String(body.workspaceId || "").trim();
@@ -372,6 +374,8 @@ export async function PUT(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const startedAt = Date.now();
   try {
+    const rate = await checkRateLimit(request, { key: "api:workspaces-business:patch", max: 60, windowMs: 60_000 });
+    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     const auth = await verifyRequestAuth(request);
     const body = await request.json() as { workspaceId?: string; memberUid?: string; role?: unknown; permissions?: unknown; status?: "active" | "pending" | "disabled" };
     const workspaceId = String(body.workspaceId || "").trim();
@@ -401,6 +405,8 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const startedAt = Date.now();
   try {
+    const rate = await checkRateLimit(request, { key: "api:workspaces-business:delete", max: 20, windowMs: 60_000 });
+    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     const auth = await verifyRequestAuth(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
     const invitationId = request.nextUrl.searchParams.get("invitationId")?.trim();

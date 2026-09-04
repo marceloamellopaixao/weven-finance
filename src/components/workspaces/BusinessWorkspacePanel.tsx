@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BriefcaseBusiness, Loader2, MailPlus, Minus, Plus, RefreshCw, ShieldCheck, Trash2, UsersRound } from "lucide-react";
+import { BriefcaseBusiness, ChevronDown, Crown, Loader2, MailPlus, Minus, Plus, RefreshCw, Trash2, UserPlus, UsersRound } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,27 +47,24 @@ function isBusinessMember(member: Workspace["membership"]): member is BusinessWo
 
 function PermissionMatrix({ value, onChange, disabled }: { value: BusinessPermission[]; onChange: (permissions: BusinessPermission[]) => void; disabled?: boolean }) {
   return (
-    <div className="space-y-2">
+    <div className="grid gap-3 lg:grid-cols-2">
       {BUSINESS_PERMISSION_GROUPS.map((group) => {
         const selected = group.permissions.filter((permission) => value.includes(permission)).length;
         return (
-          <details key={group.id} className="rounded-2xl border border-border/70 bg-background/55 open:bg-accent/25">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
-              <span>
-                <span className="block text-sm font-semibold">{group.title}</span>
-                <span className="block text-xs text-muted-foreground">{group.description}</span>
-              </span>
-              <Badge variant="outline">{selected}/{group.permissions.length}</Badge>
-            </summary>
-            <div className="grid gap-2 border-t border-border/60 p-3 md:grid-cols-2">
+          <div key={group.id} className="rounded-2xl bg-muted/35 p-4 ring-1 ring-border/55">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <span><span className="block text-sm font-semibold">{group.title}</span><span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{group.description}</span></span>
+              <Badge variant="secondary" className="shrink-0">{selected}/{group.permissions.length}</Badge>
+            </div>
+            <div className="space-y-1.5">
               {group.permissions.map((permission) => (
-                <label key={permission} className="flex items-center gap-2 rounded-xl border border-border/50 px-3 py-2 text-sm">
+                <label key={permission} className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm transition-colors hover:bg-background/70">
                   <Checkbox disabled={disabled} checked={value.includes(permission)} onCheckedChange={() => onChange(toggleBusinessPermissionSelection(value, permission))} />
                   {BUSINESS_PERMISSION_LABELS[permission]}
                 </label>
               ))}
             </div>
-          </details>
+          </div>
         );
       })}
     </div>
@@ -197,77 +194,57 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
   }
   if (!workspace) return null;
 
+  const roleDescriptions: Record<Exclude<BusinessRole, "business_owner">, string> = {
+    financial_admin: "Opera as finanças e gerencia a equipe, sem acesso à cobrança e à segurança.",
+    collaborator: "Registra e acompanha apenas os próprios lançamentos.",
+    accountant_viewer: "Consulta dados consolidados e exporta relatórios, sem fazer alterações.",
+  };
+
   return (
     <div className="space-y-6">
-      <Card className="overflow-hidden rounded-3xl border-primary/20">
-        <CardHeader className="bg-linear-to-r from-primary/12 via-primary/5 to-transparent">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-xl"><BriefcaseBusiness className="h-5 w-5 text-primary" /> Equipe Business/PJ</CardTitle>
-              <CardDescription>Convide funcionários e defina exatamente quais dados cada pessoa pode consultar ou alterar.</CardDescription>
+      <Card className="relative overflow-hidden rounded-3xl border-primary/20 bg-linear-to-br from-primary/15 via-card to-card shadow-lg shadow-primary/5">
+        <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-primary/15 blur-3xl" />
+        <CardContent className="relative p-6 md:p-8">
+          <div className="flex flex-wrap items-start justify-between gap-5">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20"><BriefcaseBusiness className="h-6 w-6" /></div>
+              <div><Badge variant="outline" className="mb-2 border-primary/25 bg-primary/10 text-primary">Business/PJ</Badge><h2 className="text-2xl font-bold tracking-tight">Sua equipe, com acesso sob controle</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Convide funcionários, escolha responsabilidades e mantenha os dados da empresa separados dos perfis pessoais.</p></div>
             </div>
-            <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={Boolean(busy)}><RefreshCw className="mr-2 h-4 w-4" /> Atualizar</Button>
+            <Button variant="ghost" size="sm" onClick={() => void refresh()} disabled={Boolean(busy)} className="text-muted-foreground"><RefreshCw className={`mr-2 h-4 w-4 ${busy === "load" ? "animate-spin" : ""}`} /> Atualizar</Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-6 pt-6">
-          {message ? <div className="rounded-2xl border border-primary/20 bg-primary/8 px-4 py-3 text-sm">{message}</div> : null}
-
           {seats ? (
-            <div className="grid gap-3 sm:grid-cols-4">
-              {[["Incluídos", seats.included], ["Adicionais", seats.additional], ["Em uso", seats.occupied], ["Disponíveis", seats.available]].map(([label, value]) => (
-                <div key={label} className="rounded-2xl border bg-background/60 p-4"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-bold">{value}</p></div>
+            <div className="mt-7 grid grid-cols-2 overflow-hidden rounded-2xl border border-primary/15 bg-background/55 backdrop-blur-sm sm:grid-cols-4">
+              {[["Incluídos no plano", seats.included], ["Usuários adicionais", seats.additional], ["Em uso agora", seats.occupied], ["Disponíveis", seats.available]].map(([label, value], index) => (
+                <div key={label} className={`p-4 md:p-5 ${index % 2 ? "border-l" : ""} ${index > 1 ? "border-t sm:border-t-0 sm:border-l" : ""}`}><p className="text-2xl font-bold text-foreground">{value}</p><p className="mt-1 text-xs text-muted-foreground">{label}</p></div>
               ))}
             </div>
-          ) : null}
-
-          {mayInvite ? (
-            <section className="space-y-4 rounded-2xl border bg-background/45 p-4">
-              <div><h3 className="font-semibold">Convidar funcionário</h3><p className="text-sm text-muted-foreground">Contas existentes recebem o convite no aplicativo; novas contas recebem o acesso por e-mail.</p></div>
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="space-y-2"><Label>Nome</Label><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Nome do funcionário" /></div>
-                <div className="space-y-2"><Label>E-mail</Label><Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="pessoa@empresa.com" /></div>
-                <div className="space-y-2"><Label>Papel</Label><Select value={role} onValueChange={(value) => handleRole(value as Exclude<BusinessRole, "business_owner">)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{ROLE_OPTIONS.map((item) => <SelectItem key={item} value={item}>{BUSINESS_ROLE_LABELS[item]}</SelectItem>)}</SelectContent></Select></div>
-              </div>
-              <PermissionMatrix value={permissions} onChange={setPermissions} />
-              <Button onClick={() => void invite()} disabled={!email.trim() || Boolean(busy)}><MailPlus className="mr-2 h-4 w-4" />{busy === "invite" ? "Enviando..." : "Enviar convite"}</Button>
-            </section>
-          ) : null}
-
-          {seats && !workspace.membership ? (
-            <section className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border bg-background/45 p-4">
-              <div><h3 className="font-semibold">Gerenciar usuários adicionais</h3><p className="text-sm text-muted-foreground">O proprietário já ocupa um usuário. Reduções só são permitidas quando não há pessoas ou convites ocupando a capacidade.</p></div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" onClick={() => setAdditionalSeats((value) => Math.max(0, value - 1))}><Minus className="h-4 w-4" /></Button>
-                <span className="min-w-10 text-center font-semibold">{additionalSeats}</span>
-                <Button variant="outline" size="icon" onClick={() => setAdditionalSeats((value) => Math.min(seats.maxAdditionalSeats ?? value + 1, value + 1))}><Plus className="h-4 w-4" /></Button>
-                <Button onClick={() => void changeSeats()} disabled={busy === "seats" || additionalSeats === seats.additional}>Aplicar</Button>
-              </div>
-            </section>
           ) : null}
         </CardContent>
       </Card>
 
+      {message ? <div role="status" className="rounded-2xl border border-primary/20 bg-primary/8 px-4 py-3 text-sm text-foreground">{message}</div> : null}
+
       {mayView ? (
-        <Card className="rounded-3xl">
-          <CardHeader><CardTitle className="flex items-center gap-2"><UsersRound className="h-5 w-5" /> Funcionários</CardTitle><CardDescription>{members.length} pessoa(s) vinculada(s) ao perfil.</CardDescription></CardHeader>
-          <CardContent className="space-y-3">
+        <Card className="rounded-3xl border-border/70 shadow-sm">
+          <CardHeader className="border-b border-border/60 pb-5"><div className="flex items-center gap-3"><div className="rounded-xl bg-primary/10 p-2.5 text-primary"><UsersRound className="h-5 w-5" /></div><div><CardTitle className="text-lg">Pessoas da equipe</CardTitle><CardDescription>{members.length} pessoa(s) com acesso a este perfil.</CardDescription></div></div></CardHeader>
+          <CardContent className="space-y-3 pt-5">
             {members.map((member) => {
               const owner = member.role === "business_owner" || member.memberUid === workspace.uid;
               const draft = permissionDrafts[member.memberUid] || member.permissions;
               return (
-                <div key={member.id} className="rounded-2xl border bg-background/55 p-4">
+                <div key={member.id} className="rounded-2xl bg-muted/25 p-4 ring-1 ring-border/55 transition-colors hover:bg-muted/40">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div><p className="font-semibold">{member.displayName || member.email}</p><p className="text-sm text-muted-foreground">{member.email}</p></div>
+                    <div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/12 text-sm font-bold text-primary">{(member.displayName || member.email).slice(0, 2).toUpperCase()}</div><div className="min-w-0"><p className="truncate font-semibold">{member.displayName || member.email}</p><p className="truncate text-sm text-muted-foreground">{member.email}</p></div></div>
                     <div className="flex items-center gap-2">
-                      <Badge variant={member.status === "active" ? "default" : "outline"}>{member.status === "active" ? "Ativo" : "Convite pendente"}</Badge>
-                      {owner ? <Badge variant="secondary"><ShieldCheck className="mr-1 h-3 w-3" /> Proprietário</Badge> : (
+                      <Badge variant="outline" className={member.status === "active" ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300" : "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-300"}>{member.status === "active" ? "Ativo" : "Convite pendente"}</Badge>
+                      {owner ? <Badge variant="secondary"><Crown className="mr-1 h-3 w-3" /> Proprietário</Badge> : (
                         <Select value={member.role} disabled={!mayEdit || busy === member.memberUid} onValueChange={(value) => void changeRole(member, value as Exclude<BusinessRole, "business_owner">)}><SelectTrigger className="w-52"><SelectValue /></SelectTrigger><SelectContent>{ROLE_OPTIONS.map((item) => <SelectItem key={item} value={item}>{BUSINESS_ROLE_LABELS[item]}</SelectItem>)}</SelectContent></Select>
                       )}
-                      {!owner && mayEdit ? <Button variant="destructive" size="icon" onClick={() => void removeMember(member)} disabled={busy === member.memberUid}><Trash2 className="h-4 w-4" /></Button> : null}
+                      {!owner && mayEdit ? <Button variant="ghost" size="icon" className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive" title="Remover da equipe" onClick={() => void removeMember(member)} disabled={busy === member.memberUid}><Trash2 className="h-4 w-4" /></Button> : null}
                     </div>
                   </div>
                   {!owner && mayEditPermissions ? (
-                    <details className="mt-4"><summary className="cursor-pointer text-sm font-medium text-primary">Editar permissões</summary><div className="mt-3 space-y-3"><PermissionMatrix value={draft} onChange={(next) => setPermissionDrafts((current) => ({ ...current, [member.memberUid]: next }))} disabled={busy === member.memberUid} /><Button size="sm" disabled={!permissionDrafts[member.memberUid] || busy === member.memberUid} onClick={() => void savePermissions(member)}>Salvar permissões</Button></div></details>
+                    <details className="group mt-3 border-t border-border/50 pt-3"><summary className="flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-primary">Acessos personalizados <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" /></summary><div className="mt-4 space-y-4"><PermissionMatrix value={draft} onChange={(next) => setPermissionDrafts((current) => ({ ...current, [member.memberUid]: next }))} disabled={busy === member.memberUid} /><div className="flex justify-end"><Button size="sm" disabled={!permissionDrafts[member.memberUid] || busy === member.memberUid} onClick={() => void savePermissions(member)}>Salvar acessos</Button></div></div></details>
                   ) : null}
                 </div>
               );
@@ -277,8 +254,24 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
         </Card>
       ) : null}
 
+      {mayInvite ? (
+        <Card className="rounded-3xl border-border/70 shadow-sm">
+          <CardHeader className="pb-4"><div className="flex items-center gap-3"><div className="rounded-xl bg-primary/10 p-2.5 text-primary"><UserPlus className="h-5 w-5" /></div><div><CardTitle className="text-lg">Adicionar alguém à equipe</CardTitle><CardDescription>Se a pessoa já tiver conta, o perfil pessoal e a assinatura dela continuarão separados.</CardDescription></div></div></CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid gap-4 md:grid-cols-3"><div className="space-y-2"><Label>Nome</Label><Input className="h-11 rounded-xl" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Nome do funcionário" /></div><div className="space-y-2"><Label>E-mail</Label><Input className="h-11 rounded-xl" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="pessoa@empresa.com" /></div><div className="space-y-2"><Label>Papel na equipe</Label><Select value={role} onValueChange={(value) => handleRole(value as Exclude<BusinessRole, "business_owner">)}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{ROLE_OPTIONS.map((item) => <SelectItem key={item} value={item}>{BUSINESS_ROLE_LABELS[item]}</SelectItem>)}</SelectContent></Select></div></div>
+            <div className="rounded-2xl bg-primary/6 px-4 py-3 text-sm"><span className="font-semibold text-primary">{BUSINESS_ROLE_LABELS[role]}:</span> <span className="text-muted-foreground">{roleDescriptions[role]}</span></div>
+            <details className="group rounded-2xl border border-border/60"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5"><span><span className="block text-sm font-semibold">Personalizar acessos</span><span className="block text-xs text-muted-foreground">Opcional — o papel escolhido já vem com acessos recomendados.</span></span><ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" /></summary><div className="border-t border-border/60 p-4"><PermissionMatrix value={permissions} onChange={setPermissions} /></div></details>
+            <div className="flex justify-end"><Button className="h-11 rounded-xl px-6" onClick={() => void invite()} disabled={!email.trim() || Boolean(busy)}>{busy === "invite" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MailPlus className="mr-2 h-4 w-4" />}{busy === "invite" ? "Enviando convite..." : "Enviar convite"}</Button></div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {seats && !workspace.membership ? (
+        <Card className="rounded-3xl border-border/70 shadow-sm"><CardContent className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold">Usuários adicionais</h3><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Seu plano inclui {seats.included}. Adicione capacidade apenas quando precisar{seats.additionalSeatPrice ? ` por R$ ${seats.additionalSeatPrice.toFixed(2).replace(".", ",")} por usuário/mês` : ""}.</p></div><div className="flex shrink-0 items-center gap-2 rounded-2xl bg-muted/40 p-2"><Button variant="ghost" size="icon" onClick={() => setAdditionalSeats((value) => Math.max(0, value - 1))}><Minus className="h-4 w-4" /></Button><span className="min-w-8 text-center text-lg font-bold">{additionalSeats}</span><Button variant="ghost" size="icon" onClick={() => setAdditionalSeats((value) => Math.min(seats.maxAdditionalSeats ?? value + 1, value + 1))}><Plus className="h-4 w-4" /></Button><Button size="sm" className="rounded-xl" onClick={() => void changeSeats()} disabled={busy === "seats" || additionalSeats === seats.additional}>{busy === "seats" ? "Salvando..." : "Atualizar"}</Button></div></CardContent></Card>
+      ) : null}
+
       {mayInvite && invitations.some((item) => item.status === "pending") ? (
-        <Card className="rounded-3xl"><CardHeader><CardTitle className="text-lg">Convites pendentes</CardTitle></CardHeader><CardContent className="space-y-2">{invitations.filter((item) => item.status === "pending").map((invitation) => <div key={invitation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-3"><div><p className="font-medium">{invitation.email}</p><p className="text-xs text-muted-foreground">{BUSINESS_ROLE_LABELS[invitation.role]}</p></div><div className="flex gap-2"><Button variant="outline" size="sm" onClick={async () => { if (!workspace) return; setBusy(invitation.id); try { await resendBusinessInvitation(workspace.id, invitation.id); setMessage("Convite reenviado."); } catch (error) { setMessage(error instanceof Error ? error.message : "Falha ao reenviar."); } finally { setBusy(null); } }} disabled={busy === invitation.id}><MailPlus className="mr-2 h-4 w-4" />Reenviar</Button><Button variant="outline" size="sm" onClick={async () => { if (!workspace) return; setBusy(invitation.id); try { const result = await revokeBusinessInvitation(workspace.id, invitation.id); setInvitations((current) => current.filter((item) => item.id !== invitation.id)); setMembers((current) => current.filter((item) => item.memberUid !== invitation.invitedMemberUid)); setSeats(result.seats); } catch (error) { setMessage(error instanceof Error ? error.message : "Falha ao cancelar."); } finally { setBusy(null); } }} disabled={busy === invitation.id}><Trash2 className="mr-2 h-4 w-4" />Cancelar</Button></div></div>)}</CardContent></Card>
+        <Card className="rounded-3xl border-amber-500/15 bg-amber-500/3"><CardHeader><CardTitle className="text-lg">Aguardando resposta</CardTitle><CardDescription>Convites expiram automaticamente após 7 dias.</CardDescription></CardHeader><CardContent className="space-y-2">{invitations.filter((item) => item.status === "pending").map((invitation) => <div key={invitation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-background/60 p-3 ring-1 ring-border/50"><div><p className="font-medium">{invitation.email}</p><p className="text-xs text-muted-foreground">{BUSINESS_ROLE_LABELS[invitation.role]}</p></div><div className="flex gap-2"><Button variant="ghost" size="sm" onClick={async () => { if (!workspace) return; setBusy(invitation.id); try { await resendBusinessInvitation(workspace.id, invitation.id); setMessage("Convite reenviado."); } catch (error) { setMessage(error instanceof Error ? error.message : "Falha ao reenviar."); } finally { setBusy(null); } }} disabled={busy === invitation.id}><MailPlus className="mr-2 h-4 w-4" />Reenviar</Button><Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={async () => { if (!workspace) return; setBusy(invitation.id); try { const result = await revokeBusinessInvitation(workspace.id, invitation.id); setInvitations((current) => current.filter((item) => item.id !== invitation.id)); setMembers((current) => current.filter((item) => item.memberUid !== invitation.invitedMemberUid)); setSeats(result.seats); } catch (error) { setMessage(error instanceof Error ? error.message : "Falha ao cancelar."); } finally { setBusy(null); } }} disabled={busy === invitation.id}><Trash2 className="mr-2 h-4 w-4" />Cancelar</Button></div></div>)}</CardContent></Card>
       ) : null}
     </div>
   );
