@@ -18,7 +18,7 @@ export const BUSINESS_PERMISSION_GROUPS: BusinessPermissionGroup[] = [
   {
     id: "dashboard",
     title: "Dashboard",
-    description: "Define se a pessoa acompanha toda a empresa ou somente os próprios lançamentos.",
+    description: "Define se a pessoa acompanha toda a organização ou somente os próprios lançamentos.",
     permissions: ["dashboard.view_all", "dashboard.view_own"],
   },
   {
@@ -44,7 +44,7 @@ export const BUSINESS_PERMISSION_GROUPS: BusinessPermissionGroup[] = [
   {
     id: "cards",
     title: "Cartões corporativos",
-    description: "Controla a consulta e a gestão dos cartões vinculados à empresa.",
+    description: "Controla a consulta e a gestão dos cartões vinculados à organização.",
     permissions: ["cards.view_all", "cards.view_own", "cards.manage_own", "cards.manage_all"],
   },
   {
@@ -56,7 +56,7 @@ export const BUSINESS_PERMISSION_GROUPS: BusinessPermissionGroup[] = [
   {
     id: "settings",
     title: "Configurações",
-    description: "Separa dados pessoais, configurações da empresa, cobrança e segurança.",
+    description: "Separa dados pessoais, configurações da organização, cobrança e segurança.",
     permissions: [
       "settings.view",
       "settings.edit_self",
@@ -68,7 +68,7 @@ export const BUSINESS_PERMISSION_GROUPS: BusinessPermissionGroup[] = [
   {
     id: "team",
     title: "Equipe",
-    description: "Controla visualização, convites, papéis e permissões dos funcionários.",
+    description: "Controla visualização, convites, papéis e permissões da equipe.",
     permissions: [
       "business.view_members",
       "business.invite_members",
@@ -116,7 +116,7 @@ export const BUSINESS_PERMISSION_LABELS: Record<BusinessPermission, string> = {
   edit_all_entries: "Editar todos os lançamentos",
   view_consolidated_reports: "Ver relatórios consolidados",
   manage_members: "Gerenciar equipe",
-  "dashboard.view_all": "Ver toda a empresa",
+  "dashboard.view_all": "Ver toda a organização",
   "dashboard.view_own": "Ver somente os próprios lançamentos",
   "transactions.view_all": "Ver todos os lançamentos",
   "transactions.view_own": "Ver somente os próprios lançamentos",
@@ -141,8 +141,8 @@ export const BUSINESS_PERMISSION_LABELS: Record<BusinessPermission, string> = {
   "settings.manage_billing": "Gerenciar plano e cobrança",
   "settings.manage_security": "Gerenciar segurança",
   "business.view_members": "Ver equipe",
-  "business.invite_members": "Convidar funcionários",
-  "business.manage_members": "Gerenciar funcionários",
+  "business.invite_members": "Convidar pessoas",
+  "business.manage_members": "Gerenciar equipe",
   "business.manage_permissions": "Editar papéis e permissões",
 };
 

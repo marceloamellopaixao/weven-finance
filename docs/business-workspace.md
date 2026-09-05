@@ -37,3 +37,21 @@ As operações de equipe ficam em `/api/workspaces/business`:
 O painel fica em **Configurações > Equipe** e só aparece para um workspace Business que o usuário possa consultar. Permissões avançadas ficam recolhidas por padrão; o papel escolhido já aplica uma configuração segura recomendada.
 
 Antes da liberação em produção, valide o fluxo completo com credenciais de teste: convite de conta existente, convite de conta nova, aceite, recusa, remoção, troca de papel, isolamento de dados e alteração de usuários adicionais.
+
+## Perfil da organização
+
+Todo perfil continua usando o tipo técnico `business`. A finalidade é registrada em `settings.businessOrganizationKind` e não cria outro plano ou cache financeiro. As opções são MEI/autônomo, empresa/comércio, serviços, igreja/ministério, associação/ONG, projeto/equipe e outro.
+
+O porte aproximado fica em `settings.businessTeamSize`. Equipes acima de 100 pessoas são direcionadas para atendimento Enterprise porque o Business padrão possui 5 acessos incluídos e até 95 adicionais.
+
+A classificação escolhe apenas recomendações iniciais de categorias. Alterá-la posteriormente adiciona categorias ausentes de forma idempotente e nunca remove categorias personalizadas nem movimentações existentes.
+
+## Segurança operacional
+
+- A listagem da equipe é paginada no servidor e aceita busca por nome ou e-mail.
+- Convites Business reservam capacidade pela função transacional `reserve_business_workspace_invitation`, evitando ultrapassar o limite em solicitações simultâneas.
+- Aceite, recusa, reenvio, alteração de papel/permissões, saída e remoção produzem registros de auditoria com escopo do workspace.
+- Mudanças de acesso notificam a pessoa afetada e aceite, recusa ou saída notificam o proprietário.
+- O endpoint canônico de resposta a convites é `/api/workspaces/invitations`; o caminho anterior permanece somente para compatibilidade temporária.
+
+Após atualizar o código, execute `supabase/schema.sql` antes de testar novos convites Business para instalar a função transacional.

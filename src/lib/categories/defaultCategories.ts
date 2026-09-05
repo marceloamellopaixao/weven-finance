@@ -5,7 +5,7 @@ import {
   isLegacySubcategory,
   isLinkedSubcategory,
 } from "@/lib/category-utils";
-import type { WorkspaceType } from "@/types/workspace";
+import type { BusinessOrganizationKind, WorkspaceType } from "@/types/workspace";
 
 export const CATEGORY_PATH_SEPARATOR = "::";
 
@@ -128,6 +128,47 @@ const BUSINESS_PROFILE_CATEGORIES: DefaultCategoryPreset[] = [
   { name: "Equipamentos", type: "expense", color: COLORS.expenseIndigo },
   { name: "Despesas operacionais", type: "expense", color: COLORS.expenseBlue },
 ];
+
+const BUSINESS_CATEGORY_PRESETS_BY_KIND: Record<BusinessOrganizationKind, DefaultCategoryPreset[]> = {
+  self_employed: [
+    { name: "Receita de serviços", type: "income", color: COLORS.incomeTeal },
+    { name: "Clientes", type: "income", color: COLORS.incomeGreen },
+    { name: "DAS / MEI", type: "expense", color: COLORS.expenseOrange },
+    { name: "Ferramentas", type: "expense", color: COLORS.expenseViolet },
+    { name: "Transporte", type: "expense", color: COLORS.expenseBlue },
+  ],
+  company: BUSINESS_PROFILE_CATEGORIES,
+  services: [
+    { name: "Receita de serviços", type: "income", color: COLORS.incomeTeal },
+    { name: "Contratos", type: "income", color: COLORS.incomeGreen },
+    { name: "Terceirizados", type: "expense", color: COLORS.expenseOrange },
+    { name: "Software e ferramentas", type: "expense", color: COLORS.expenseViolet },
+    { name: "Contabilidade", type: "expense", color: COLORS.expenseEmerald },
+  ],
+  church: [
+    { name: "Dízimos", type: "income", color: COLORS.incomeGreen },
+    { name: "Ofertas", type: "income", color: COLORS.incomeGreen },
+    { name: "Doações", type: "income", color: COLORS.incomeTeal },
+    { name: "Missões", type: "expense", color: COLORS.expenseViolet },
+    { name: "Eventos", type: "both", color: COLORS.expensePink },
+    { name: "Manutenção", type: "expense", color: COLORS.expenseBlue },
+  ],
+  nonprofit: [
+    { name: "Doações", type: "income", color: COLORS.incomeGreen },
+    { name: "Repasses e convênios", type: "income", color: COLORS.incomeTeal },
+    { name: "Projetos sociais", type: "expense", color: COLORS.expenseViolet },
+    { name: "Despesas administrativas", type: "expense", color: COLORS.expenseBlue },
+    { name: "Eventos", type: "both", color: COLORS.expensePink },
+  ],
+  project: [
+    { name: "Aportes", type: "income", color: COLORS.incomeGreen },
+    { name: "Receitas do projeto", type: "income", color: COLORS.incomeTeal },
+    { name: "Equipe e terceiros", type: "expense", color: COLORS.expenseOrange },
+    { name: "Ferramentas", type: "expense", color: COLORS.expenseViolet },
+    { name: "Operação do projeto", type: "expense", color: COLORS.expenseBlue },
+  ],
+  other: BUSINESS_PROFILE_CATEGORIES,
+};
 
 const CUSTOMER_DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE: Record<WorkspaceType, DefaultCategoryPreset[]> = {
   personal: [
@@ -289,7 +330,9 @@ const CATEGORY_TRANSLATIONS: Record<Exclude<Locale, "pt-BR">, Record<string, str
   },
 };
 
-const ALL_DEFAULT_CATEGORIES = Object.values(DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE).flat().concat(COMMON_DEFAULT_CATEGORIES);
+const ALL_DEFAULT_CATEGORIES = Object.values(DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE)
+  .flat()
+  .concat(Object.values(BUSINESS_CATEGORY_PRESETS_BY_KIND).flat(), COMMON_DEFAULT_CATEGORIES);
 
 const CANONICAL_BY_NAME = new Map<string, string>();
 
@@ -304,9 +347,15 @@ Object.values(CATEGORY_TRANSLATIONS).forEach((dictionary) => {
   });
 });
 
-export function getDefaultCategoriesForWorkspaceType(workspaceType: WorkspaceType = "personal") {
+export function getDefaultCategoriesForWorkspaceType(
+  workspaceType: WorkspaceType = "personal",
+  businessKind?: BusinessOrganizationKind,
+) {
   const byKey = new Map<string, DefaultCategoryPreset>();
-  [...CUSTOMER_DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE[workspaceType], ...COMMON_DEFAULT_CATEGORIES].forEach((category) => {
+  const presets = workspaceType === "business" && businessKind
+    ? BUSINESS_CATEGORY_PRESETS_BY_KIND[businessKind]
+    : CUSTOMER_DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE[workspaceType];
+  [...presets, ...COMMON_DEFAULT_CATEGORIES].forEach((category) => {
     byKey.set(`${category.name}::${category.type}`, category);
   });
   return Array.from(byKey.values());

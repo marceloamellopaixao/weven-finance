@@ -95,7 +95,11 @@ export function reconcileWorkspaceRowsForPlan(
       delete rawSettings.archivedAt;
       if (desiredType !== "business") {
         delete settings.businessDocument;
+        delete settings.businessOrganizationKind;
+        delete settings.businessTeamSize;
         delete rawSettings.businessDocument;
+        delete rawSettings.businessOrganizationKind;
+        delete rawSettings.businessTeamSize;
       }
       settings.familyModeEnabled = desiredType === "family";
       rawSettings.familyModeEnabled = desiredType === "family";

@@ -21,13 +21,14 @@ import {
   normalizeBusinessRole,
 } from "@/lib/workspaces/business";
 import { buildWorkspaceSeatSummary, countOccupiedWorkspaceSeats } from "@/lib/workspaces/seats";
+import { writeWorkspaceAuditLog } from "@/lib/workspaces/audit";
 import {
   getOwnedWorkspace,
   getWorkspaceMember,
   toBusinessWorkspaceInvitation,
   toBusinessWorkspaceMember,
 } from "@/lib/workspaces/server";
-import { supabasePatchByFilters, supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
+import { supabasePatchByFilters, supabaseRpc, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
 import { getSupabaseServiceClient, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
 import type {
   BusinessPermission,
@@ -263,7 +264,7 @@ async function assertInviteAllowed(workspaceUid: string, workspaceId: string, em
 function errorStatus(message: string) {
   if (["business_member_already_invited", "business_seat_capacity_changed"].includes(message)) return 409;
   if (["business_plan_required", "business_seat_limit_reached", "forbidden"].includes(message)) return 403;
-  if (message === "cannot_invite_yourself") return 400;
+  if (["cannot_invite_yourself", "cannot_assign_business_owner", "cannot_modify_business_owner"].includes(message)) return 400;
   return resolveApiErrorStatus(message);
 }
 
@@ -286,11 +287,20 @@ export async function GET(request: NextRequest) {
     if (!workspaceId) return NextResponse.json({ ok: false, error: "missing_workspace_id" }, { status: 400 });
     const access = await resolveAccess(auth.uid, workspaceId);
     await expireInvitations(access.workspaceUid, workspaceId);
-    const [members, invitations] = await Promise.all([
-      supabaseSelect("workspace_members", { filters: { workspace_uid: access.workspaceUid, workspace_id: workspaceId }, conditions: { member_status: "in.(active,pending)" }, order: "created_at.asc", limit: 100 }),
+    const page = Math.max(1, Number(request.nextUrl.searchParams.get("page") || 1));
+    const limit = Math.max(1, Math.min(25, Number(request.nextUrl.searchParams.get("limit") || 10)));
+    const search = String(request.nextUrl.searchParams.get("search") || "").replace(/[,%().]/g, " ").trim().slice(0, 80);
+    const [memberPage, invitations] = await Promise.all([
+      supabaseSelectPaged("workspace_members", { filters: { workspace_uid: access.workspaceUid, workspace_id: workspaceId }, conditions: { member_status: "in.(active,pending)" }, ...(search ? { or: `display_name.ilike.*${search}*,email.ilike.*${search}*` } : {}), order: "created_at.asc", page, limit }),
       supabaseSelect("workspace_invitations", { filters: { workspace_uid: access.workspaceUid, workspace_id: workspaceId }, order: "created_at.desc", limit: 50 }),
     ]);
-    return NextResponse.json({ ok: true, members: members.map(toBusinessWorkspaceMember), invitations: invitations.map(toBusinessWorkspaceInvitation), seats: await seatSummary(access.workspaceUid, workspaceId, members) });
+    return NextResponse.json({
+      ok: true,
+      members: memberPage.data.map(toBusinessWorkspaceMember),
+      invitations: invitations.map(toBusinessWorkspaceInvitation),
+      seats: await seatSummary(access.workspaceUid, workspaceId),
+      pagination: { page: memberPage.page, limit: memberPage.limit, total: memberPage.total, pages: Math.max(1, Math.ceil(memberPage.total / memberPage.limit)) },
+    });
   } catch (error) {
     return respondError(request, startedAt, error);
   }
@@ -318,21 +328,26 @@ export async function POST(request: NextRequest) {
     if (!authUser.profileExists) await ensureProfile({ uid: authUser.uid, email, displayName, needsPasswordSetup: authUser.needsPasswordSetup });
     const row = memberRow({ workspaceUid: access.workspaceUid, workspaceId, memberUid: authUser.uid, email, displayName: authUser.displayName || displayName, role, permissions, invitedByUid: auth.uid, status: "pending" });
     const invite = invitationRow({ workspaceUid: access.workspaceUid, workspaceId, email, role, permissions, invitedByUid: auth.uid, invitedMemberUid: authUser.uid, recipientAccountExisted: authUser.accountExists });
-    await supabaseUpsertRows("workspace_members", [row], { onConflict: "id" });
-    await supabaseUpsertRows("workspace_invitations", [invite], { onConflict: "id" });
-    const seats = await seatSummary(access.workspaceUid, workspaceId);
     const context = await getUserPlanContext(access.workspaceUid);
-    if (!context.isBillingExempt && seats.occupied > seats.capacity) {
-      const now = new Date().toISOString();
-      await supabasePatchByFilters("workspace_members", { id: row.id }, { member_status: "disabled", updated_at: now });
-      await supabasePatchByFilters("workspace_invitations", { id: invite.id }, { invitation_status: "revoked", updated_at: now });
+    const capacity = context.isBillingExempt ? 10_000 : (await seatSummary(access.workspaceUid, workspaceId)).capacity;
+    const reserved = await supabaseRpc("reserve_business_workspace_invitation", {
+      p_workspace_uid: access.workspaceUid,
+      p_workspace_id: workspaceId,
+      p_capacity: capacity,
+      p_member: row,
+      p_invitation: invite,
+    });
+    if (reserved !== true) {
       throw new Error("business_seat_capacity_changed");
     }
+    const seats = await seatSummary(access.workspaceUid, workspaceId);
     const member = toBusinessWorkspaceMember(row);
     const invitation = toBusinessWorkspaceInvitation(invite);
     if (authUser.accountExists) {
       await pushNotification({ uid: authUser.uid, kind: "workspace", title: "Convite para uma equipe", message: `${auth.name || "Um responsável"} convidou você para um perfil Business/PJ.`, href: "/dashboard?workspaceInvite=1", meta: { invitationId: invitation.id, workspaceId, workspaceUid: access.workspaceUid } }).catch(() => undefined);
     }
+    const meta = getRequestMeta(request);
+    await writeWorkspaceAuditLog({ actorUid: auth.uid, action: "member.invited", workspaceUid: access.workspaceUid, workspaceId, targetUid: authUser.uid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { role, recipientType: authUser.accountExists ? "existing_account" : "new_account" } });
     return NextResponse.json({ ok: true, member, invitation, generatedPasswordExposed: false, emailSent: authUser.emailSent, recipientType: authUser.accountExists ? "existing_account" : "new_account", seats });
   } catch (error) {
     return respondError(request, startedAt, error);
@@ -365,6 +380,8 @@ export async function PUT(request: NextRequest) {
     const now = new Date().toISOString();
     const updated = { ...rows[0], raw: { ...raw, resentAt: now, updatedAt: now }, updated_at: now };
     await supabaseUpsertRows("workspace_invitations", [updated], { onConflict: "id" });
+    const meta = getRequestMeta(request);
+    await writeWorkspaceAuditLog({ actorUid: auth.uid, action: "invitation.resent", workspaceUid: access.workspaceUid, workspaceId, targetUid: invitation.invitedMemberUid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { invitationId } });
     return NextResponse.json({ ok: true, invitation: toBusinessWorkspaceInvitation(updated), emailSent: !existed });
   } catch (error) {
     return respondError(request, startedAt, error);
@@ -396,6 +413,10 @@ export async function PATCH(request: NextRequest) {
     if (body.status === "disabled") {
       await supabasePatchByFilters("workspace_invitations", { workspace_uid: access.workspaceUid, workspace_id: workspaceId, invited_member_uid: memberUid, invitation_status: "pending" }, { invitation_status: "revoked", updated_at: new Date().toISOString() });
     }
+    const meta = getRequestMeta(request);
+    const auditAction = body.status === "disabled" ? "member.removed" : body.role !== undefined ? "member.role_changed" : "member.permissions_changed";
+    await writeWorkspaceAuditLog({ actorUid: auth.uid, action: auditAction, workspaceUid: access.workspaceUid, workspaceId, targetUid: memberUid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { previousRole: current.role, role, status: body.status || current.status } });
+    await pushNotification({ uid: memberUid, kind: "workspace", title: body.status === "disabled" ? "Acesso à equipe removido" : "Seu acesso Business/PJ foi atualizado", message: body.status === "disabled" ? "Seu acesso a este perfil Business/PJ foi encerrado. Seus outros perfis não foram alterados." : `Seu papel agora é ${role}.`, href: "/dashboard", meta: { workspaceId, action: auditAction } }).catch(() => undefined);
     return NextResponse.json({ ok: true, member: toBusinessWorkspaceMember(row), ...(body.status === "disabled" ? { seats: await seatSummary(access.workspaceUid, workspaceId) } : {}) });
   } catch (error) {
     return respondError(request, startedAt, error);
@@ -419,6 +440,8 @@ export async function DELETE(request: NextRequest) {
     const now = new Date().toISOString();
     await supabasePatchByFilters("workspace_invitations", { id: invitationId }, { invitation_status: "revoked", raw: { ...((rows[0].raw as object | null) || {}), status: "revoked", revokedAt: now, revokedByUid: auth.uid }, updated_at: now });
     if (invitation.invitedMemberUid) await supabasePatchByFilters("workspace_members", { workspace_uid: access.workspaceUid, workspace_id: workspaceId, member_uid: invitation.invitedMemberUid, member_status: "pending" }, { member_status: "disabled", updated_at: now });
+    const meta = getRequestMeta(request);
+    await writeWorkspaceAuditLog({ actorUid: auth.uid, action: "invitation.revoked", workspaceUid: access.workspaceUid, workspaceId, targetUid: invitation.invitedMemberUid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { invitationId } });
     return NextResponse.json({ ok: true, invitation: { ...invitation, status: "revoked", updatedAt: now } satisfies BusinessWorkspaceInvitation, seats: await seatSummary(access.workspaceUid, workspaceId) });
   } catch (error) {
     return respondError(request, startedAt, error);

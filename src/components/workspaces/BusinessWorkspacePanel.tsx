@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BriefcaseBusiness, ChevronDown, Crown, Loader2, MailPlus, Minus, Plus, RefreshCw, Trash2, UserPlus, UsersRound } from "lucide-react";
+import { ChevronDown, Crown, Loader2, MailPlus, Minus, Plus, RefreshCw, Trash2, UserPlus, UsersRound } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,9 +30,20 @@ import {
   updateAdditionalBusinessSeats,
   updateBusinessMember,
 } from "@/services/businessWorkspaceService";
+import { updateWorkspace } from "@/services/workspaceService";
+import {
+  BUSINESS_ORGANIZATION_KINDS,
+  BUSINESS_ORGANIZATION_LABELS,
+  BUSINESS_TEAM_SIZE_LABELS,
+  BUSINESS_TEAM_SIZES,
+  normalizeBusinessOrganizationKind,
+  normalizeBusinessTeamSize,
+} from "@/lib/workspaces/business-profile";
 import type {
+  BusinessOrganizationKind,
   BusinessPermission,
   BusinessRole,
+  BusinessTeamSize,
   BusinessWorkspaceInvitation,
   BusinessWorkspaceMember,
   Workspace,
@@ -91,27 +102,42 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
   const [permissions, setPermissions] = useState<BusinessPermission[]>(DEFAULT_BUSINESS_ROLE_PERMISSIONS.collaborator);
   const [permissionDrafts, setPermissionDrafts] = useState<Record<string, BusinessPermission[]>>({});
   const [additionalSeats, setAdditionalSeats] = useState(0);
+  const [organizationKind, setOrganizationKind] = useState<BusinessOrganizationKind>("company");
+  const [teamSize, setTeamSize] = useState<BusinessTeamSize>("solo");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [memberPage, setMemberPage] = useState(1);
+  const [memberPages, setMemberPages] = useState(1);
+  const [memberTotal, setMemberTotal] = useState(0);
+  const [memberSearch, setMemberSearch] = useState("");
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
 
   const refresh = useCallback(async () => {
     if (!workspace || !mayView) return;
     setBusy("load");
     setMessage(null);
     try {
-      const result = await getBusinessWorkspace(workspace.id);
+      const result = await getBusinessWorkspace(workspace.id, { page: memberPage, limit: 10, search: memberSearchQuery });
       setMembers(result.members);
       setInvitations(result.invitations);
       setSeats(result.seats);
       setAdditionalSeats(result.seats.additional);
+      setMemberPages(result.pagination.pages);
+      setMemberTotal(result.pagination.total);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Não foi possível carregar a equipe.");
     } finally {
       setBusy(null);
     }
-  }, [mayView, workspace]);
+  }, [mayView, memberPage, memberSearchQuery, workspace]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  useEffect(() => {
+    if (!workspace) return;
+    setOrganizationKind(normalizeBusinessOrganizationKind(workspace.settings?.businessOrganizationKind));
+    setTeamSize(normalizeBusinessTeamSize(workspace.settings?.businessTeamSize));
+  }, [workspace]);
 
   const handleRole = (next: Exclude<BusinessRole, "business_owner">) => {
     setRole(next);
@@ -127,6 +153,7 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
       setMembers((current) => current.some((item) => item.id === result.member.id) ? current : [...current, result.member]);
       setInvitations((current) => [result.invitation, ...current.filter((item) => item.id !== result.invitation.id)]);
       setSeats(result.seats);
+      setMemberTotal((total) => total + 1);
       setEmail("");
       setDisplayName("");
       setMessage(result.recipientType === "existing_account" ? "Convite enviado para uma conta existente." : "Convite enviado. A pessoa definirá a própria senha no primeiro acesso.");
@@ -146,7 +173,7 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
       setPermissionDrafts((current) => { const next = { ...current }; delete next[member.memberUid]; return next; });
       setMessage("Papel e permissões atualizados.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Não foi possível atualizar o funcionário.");
+      setMessage(error instanceof Error ? error.message : "Não foi possível atualizar esta pessoa.");
     } finally { setBusy(null); }
   };
 
@@ -170,10 +197,11 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
     try {
       const result = await updateBusinessMember({ workspaceId: workspace.id, memberUid: member.memberUid, status: "disabled" });
       setMembers((current) => current.filter((item) => item.memberUid !== member.memberUid));
+      setMemberTotal((total) => Math.max(0, total - 1));
       if (result.seats) setSeats(result.seats);
       setMessage("Funcionário removido da equipe. Os lançamentos anteriores foram preservados.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Não foi possível remover o funcionário.");
+      setMessage(error instanceof Error ? error.message : "Não foi possível remover esta pessoa.");
     } finally { setBusy(null); }
   };
 
@@ -187,6 +215,23 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Não foi possível atualizar os usuários adicionais.");
     } finally { setBusy(null); }
+  };
+
+  const saveOrganizationProfile = async () => {
+    if (!workspace || workspace.membership) return;
+    setBusy("organization");
+    setMessage(null);
+    try {
+      await updateWorkspace({
+        id: workspace.id,
+        settings: { ...workspace.settings, businessOrganizationKind: organizationKind, businessTeamSize: teamSize },
+      });
+      setMessage("Perfil da organização atualizado. Novas categorias recomendadas foram adicionadas sem alterar as suas categorias personalizadas.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Não foi possível atualizar o perfil da organização.");
+    } finally {
+      setBusy(null);
+    }
   };
 
   if (loading || (busy === "load" && !seats)) {
@@ -207,8 +252,7 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
         <CardContent className="relative p-6 md:p-8">
           <div className="flex flex-wrap items-start justify-between gap-5">
             <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20"><BriefcaseBusiness className="h-6 w-6" /></div>
-              <div><Badge variant="outline" className="mb-2 border-primary/25 bg-primary/10 text-primary">Business/PJ</Badge><h2 className="text-2xl font-bold tracking-tight">Sua equipe, com acesso sob controle</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Convide funcionários, escolha responsabilidades e mantenha os dados da empresa separados dos perfis pessoais.</p></div>
+              <div><h2 className="text-2xl font-bold tracking-tight">Sua equipe, com acesso sob controle</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Convide pessoas, escolha responsabilidades e mantenha os dados da organização separados dos perfis pessoais.</p></div>
             </div>
             <Button variant="ghost" size="sm" onClick={() => void refresh()} disabled={Boolean(busy)} className="text-muted-foreground"><RefreshCw className={`mr-2 h-4 w-4 ${busy === "load" ? "animate-spin" : ""}`} /> Atualizar</Button>
           </div>
@@ -224,9 +268,21 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
 
       {message ? <div role="status" className="rounded-2xl border border-primary/20 bg-primary/8 px-4 py-3 text-sm text-foreground">{message}</div> : null}
 
+      {!workspace.membership ? (
+        <Card className="rounded-3xl border-border/70 shadow-sm">
+          <CardHeader><CardTitle className="text-lg">Perfil da organização</CardTitle><CardDescription>Personalize categorias e linguagem sem mudar o plano ou separar os dados em outro workspace.</CardDescription></CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            <div className="space-y-2"><Label>Tipo de organização</Label><Select value={organizationKind} onValueChange={(value) => setOrganizationKind(value as BusinessOrganizationKind)}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{BUSINESS_ORGANIZATION_KINDS.map((kind) => <SelectItem key={kind} value={kind}>{BUSINESS_ORGANIZATION_LABELS[kind]}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Tamanho da equipe</Label><Select value={teamSize} onValueChange={(value) => setTeamSize(value as BusinessTeamSize)}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{BUSINESS_TEAM_SIZES.map((size) => <SelectItem key={size} value={size}>{BUSINESS_TEAM_SIZE_LABELS[size]}</SelectItem>)}</SelectContent></Select></div>
+            <Button className="h-11 rounded-xl" disabled={busy === "organization" || teamSize === "100_plus"} onClick={() => void saveOrganizationProfile()}>{busy === "organization" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Salvar perfil</Button>
+            {teamSize === "100_plus" ? <p className="md:col-span-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">Para mais de 100 pessoas, use o atendimento Enterprise. O Business padrão permite até 100 acessos.</p> : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
       {mayView ? (
         <Card className="rounded-3xl border-border/70 shadow-sm">
-          <CardHeader className="border-b border-border/60 pb-5"><div className="flex items-center gap-3"><div className="rounded-xl bg-primary/10 p-2.5 text-primary"><UsersRound className="h-5 w-5" /></div><div><CardTitle className="text-lg">Pessoas da equipe</CardTitle><CardDescription>{members.length} pessoa(s) com acesso a este perfil.</CardDescription></div></div></CardHeader>
+          <CardHeader className="border-b border-border/60 pb-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="rounded-xl bg-primary/10 p-2.5 text-primary"><UsersRound className="h-5 w-5" /></div><div><CardTitle className="text-lg">Pessoas da equipe</CardTitle><CardDescription>{memberTotal} pessoa(s) com acesso a este perfil.</CardDescription></div></div><form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); setMemberPage(1); setMemberSearchQuery(memberSearch.trim()); }}><Input aria-label="Buscar pessoa" className="h-10 w-full rounded-xl sm:w-56" value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Buscar nome ou e-mail" /><Button type="submit" variant="outline" className="rounded-xl">Buscar</Button></form></div></CardHeader>
           <CardContent className="space-y-3 pt-5">
             {members.map((member) => {
               const owner = member.role === "business_owner" || member.memberUid === workspace.uid;
@@ -249,7 +305,8 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
                 </div>
               );
             })}
-            {members.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">Nenhum funcionário vinculado.</p> : null}
+            {members.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma pessoa vinculada.</p> : null}
+            {memberPages > 1 ? <div className="flex items-center justify-between border-t border-border/60 pt-4"><Button variant="outline" size="sm" className="rounded-xl" disabled={memberPage <= 1 || busy === "load"} onClick={() => setMemberPage((page) => Math.max(1, page - 1))}>Anterior</Button><span className="text-xs text-muted-foreground">Página {memberPage} de {memberPages}</span><Button variant="outline" size="sm" className="rounded-xl" disabled={memberPage >= memberPages || busy === "load"} onClick={() => setMemberPage((page) => Math.min(memberPages, page + 1))}>Próxima</Button></div> : null}
           </CardContent>
         </Card>
       ) : null}
@@ -258,10 +315,10 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
         <Card className="rounded-3xl border-border/70 shadow-sm">
           <CardHeader className="pb-4"><div className="flex items-center gap-3"><div className="rounded-xl bg-primary/10 p-2.5 text-primary"><UserPlus className="h-5 w-5" /></div><div><CardTitle className="text-lg">Adicionar alguém à equipe</CardTitle><CardDescription>Se a pessoa já tiver conta, o perfil pessoal e a assinatura dela continuarão separados.</CardDescription></div></div></CardHeader>
           <CardContent className="space-y-5">
-            <div className="grid gap-4 md:grid-cols-3"><div className="space-y-2"><Label>Nome</Label><Input className="h-11 rounded-xl" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Nome do funcionário" /></div><div className="space-y-2"><Label>E-mail</Label><Input className="h-11 rounded-xl" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="pessoa@empresa.com" /></div><div className="space-y-2"><Label>Papel na equipe</Label><Select value={role} onValueChange={(value) => handleRole(value as Exclude<BusinessRole, "business_owner">)}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{ROLE_OPTIONS.map((item) => <SelectItem key={item} value={item}>{BUSINESS_ROLE_LABELS[item]}</SelectItem>)}</SelectContent></Select></div></div>
+            <div className="grid gap-4 md:grid-cols-3"><div className="space-y-2"><Label>Nome</Label><Input className="h-11 rounded-xl" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Nome da pessoa" /></div><div className="space-y-2"><Label>E-mail</Label><Input className="h-11 rounded-xl" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="pessoa@organizacao.com" /></div><div className="space-y-2"><Label>Papel na equipe</Label><Select value={role} onValueChange={(value) => handleRole(value as Exclude<BusinessRole, "business_owner">)}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{ROLE_OPTIONS.map((item) => <SelectItem key={item} value={item}>{BUSINESS_ROLE_LABELS[item]}</SelectItem>)}</SelectContent></Select></div></div>
             <div className="rounded-2xl bg-primary/6 px-4 py-3 text-sm"><span className="font-semibold text-primary">{BUSINESS_ROLE_LABELS[role]}:</span> <span className="text-muted-foreground">{roleDescriptions[role]}</span></div>
             <details className="group rounded-2xl border border-border/60"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5"><span><span className="block text-sm font-semibold">Personalizar acessos</span><span className="block text-xs text-muted-foreground">Opcional — o papel escolhido já vem com acessos recomendados.</span></span><ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" /></summary><div className="border-t border-border/60 p-4"><PermissionMatrix value={permissions} onChange={setPermissions} /></div></details>
-            <div className="flex justify-end"><Button className="h-11 rounded-xl px-6" onClick={() => void invite()} disabled={!email.trim() || Boolean(busy)}>{busy === "invite" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MailPlus className="mr-2 h-4 w-4" />}{busy === "invite" ? "Enviando convite..." : "Enviar convite"}</Button></div>
+            <div className="flex justify-end"><Button className="h-11 rounded-xl px-6" onClick={() => void invite()} disabled={!email.trim() || Boolean(busy) || Boolean(seats && seats.available <= 0)}>{busy === "invite" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MailPlus className="mr-2 h-4 w-4" />}{busy === "invite" ? "Enviando convite..." : seats && seats.available <= 0 ? "Sem acessos disponíveis" : "Enviar convite"}</Button></div>
           </CardContent>
         </Card>
       ) : null}
@@ -271,7 +328,7 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
       ) : null}
 
       {mayInvite && invitations.some((item) => item.status === "pending") ? (
-        <Card className="rounded-3xl border-amber-500/15 bg-amber-500/3"><CardHeader><CardTitle className="text-lg">Aguardando resposta</CardTitle><CardDescription>Convites expiram automaticamente após 7 dias.</CardDescription></CardHeader><CardContent className="space-y-2">{invitations.filter((item) => item.status === "pending").map((invitation) => <div key={invitation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-background/60 p-3 ring-1 ring-border/50"><div><p className="font-medium">{invitation.email}</p><p className="text-xs text-muted-foreground">{BUSINESS_ROLE_LABELS[invitation.role]}</p></div><div className="flex gap-2"><Button variant="ghost" size="sm" onClick={async () => { if (!workspace) return; setBusy(invitation.id); try { await resendBusinessInvitation(workspace.id, invitation.id); setMessage("Convite reenviado."); } catch (error) { setMessage(error instanceof Error ? error.message : "Falha ao reenviar."); } finally { setBusy(null); } }} disabled={busy === invitation.id}><MailPlus className="mr-2 h-4 w-4" />Reenviar</Button><Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={async () => { if (!workspace) return; setBusy(invitation.id); try { const result = await revokeBusinessInvitation(workspace.id, invitation.id); setInvitations((current) => current.filter((item) => item.id !== invitation.id)); setMembers((current) => current.filter((item) => item.memberUid !== invitation.invitedMemberUid)); setSeats(result.seats); } catch (error) { setMessage(error instanceof Error ? error.message : "Falha ao cancelar."); } finally { setBusy(null); } }} disabled={busy === invitation.id}><Trash2 className="mr-2 h-4 w-4" />Cancelar</Button></div></div>)}</CardContent></Card>
+        <Card className="rounded-3xl border-amber-500/15 bg-amber-500/3"><CardHeader><CardTitle className="text-lg">Aguardando resposta</CardTitle><CardDescription>Convites expiram automaticamente após 7 dias.</CardDescription></CardHeader><CardContent className="space-y-2">{invitations.filter((item) => item.status === "pending").map((invitation) => <div key={invitation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-background/60 p-3 ring-1 ring-border/50"><div><p className="font-medium">{invitation.email}</p><p className="text-xs text-muted-foreground">{BUSINESS_ROLE_LABELS[invitation.role]}</p></div><div className="flex gap-2"><Button variant="ghost" size="sm" onClick={async () => { if (!workspace) return; setBusy(invitation.id); try { await resendBusinessInvitation(workspace.id, invitation.id); setMessage("Convite reenviado."); } catch (error) { setMessage(error instanceof Error ? error.message : "Falha ao reenviar."); } finally { setBusy(null); } }} disabled={busy === invitation.id}><MailPlus className="mr-2 h-4 w-4" />Reenviar</Button><Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={async () => { if (!workspace) return; setBusy(invitation.id); try { const result = await revokeBusinessInvitation(workspace.id, invitation.id); setInvitations((current) => current.filter((item) => item.id !== invitation.id)); setMembers((current) => current.filter((item) => item.memberUid !== invitation.invitedMemberUid)); setMemberTotal((total) => Math.max(0, total - 1)); setSeats(result.seats); } catch (error) { setMessage(error instanceof Error ? error.message : "Falha ao cancelar."); } finally { setBusy(null); } }} disabled={busy === invitation.id}><Trash2 className="mr-2 h-4 w-4" />Cancelar</Button></div></div>)}</CardContent></Card>
       ) : null}
     </div>
   );

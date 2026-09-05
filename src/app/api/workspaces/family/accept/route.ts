@@ -11,6 +11,7 @@ import { writeApiMetric } from "@/lib/observability/metrics";
 import { formatPlanName } from "@/lib/plans/capabilities";
 import { getUserPlanContext } from "@/lib/plans/server";
 import { getActiveMemberships, toWorkspaceInvitation, toWorkspaceMember } from "@/lib/workspaces/server";
+import { writeWorkspaceAuditLog } from "@/lib/workspaces/audit";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import type { PendingWorkspaceInvitation, SharedWorkspaceInvitation, SharedWorkspaceMember } from "@/types/workspace";
 
@@ -188,7 +189,7 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
     const acceptedInvitations: SharedWorkspaceInvitation[] = [];
     const activatedMembers: SharedWorkspaceMember[] = [];
-    for (const { row, memberRow } of validatedMembers) {
+    for (const { row, memberRow, workspaceType } of validatedMembers) {
       const updatedInvitationRow = {
         ...row,
         invited_member_uid: auth.uid,
@@ -214,6 +215,12 @@ export async function POST(request: NextRequest) {
       };
       await supabaseUpsertRows("workspace_members", [updatedMemberRow], { onConflict: "id" });
       activatedMembers.push(toWorkspaceMember(updatedMemberRow));
+      const workspaceUid = String(row.workspace_uid || "");
+      const workspaceId = String(row.workspace_id || "");
+      await writeWorkspaceAuditLog({ actorUid: auth.uid, action: "invitation.accepted", workspaceUid, workspaceId, targetUid: auth.uid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { invitationId: String(row.id || ""), workspaceType } });
+      if (workspaceUid && workspaceUid !== auth.uid) {
+        await pushNotification({ uid: workspaceUid, kind: "workspace", title: workspaceType === "business" ? "Convite Business/PJ aceito" : "Convite da família aceito", message: `${auth.name || auth.email || "Uma pessoa"} aceitou o convite e já pode acessar o perfil.`, href: workspaceType === "business" ? "/settings?tab=business" : "/settings?tab=family", meta: { invitationId: String(row.id || ""), workspaceId } }).catch(() => undefined);
+      }
     }
 
     if (requiresSubscriptionCancellation) {
@@ -270,6 +277,11 @@ export async function DELETE(request: NextRequest) {
         },
         updated_at: now,
       }], { onConflict: "id" });
+      const workspaceUid = String(memberRow.workspace_uid || "");
+      await writeWorkspaceAuditLog({ actorUid: auth.uid, action: "member.left", workspaceUid, workspaceId, targetUid: auth.uid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent });
+      if (workspaceUid && workspaceUid !== auth.uid) {
+        await pushNotification({ uid: workspaceUid, kind: "workspace", title: "Uma pessoa saiu do perfil", message: `${auth.name || auth.email || "Uma pessoa"} encerrou o próprio acesso ao workspace compartilhado.`, href: "/settings", meta: { workspaceId } }).catch(() => undefined);
+      }
       await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
       return NextResponse.json({ ok: true, leftWorkspaceId: workspaceId }, { status: 200 });
     }
@@ -299,6 +311,11 @@ export async function DELETE(request: NextRequest) {
         raw: { ...(((memberRow.raw as Record<string, unknown> | null) || {}) as Record<string, unknown>), status: "disabled", rejectedAt: now, updatedAt: now },
         updated_at: now,
       }], { onConflict: "id" });
+    }
+
+    await writeWorkspaceAuditLog({ actorUid: auth.uid, action: "invitation.rejected", workspaceUid: invitation.workspaceUid, workspaceId: invitation.workspaceId, targetUid: auth.uid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { invitationId } });
+    if (invitation.workspaceUid !== auth.uid) {
+      await pushNotification({ uid: invitation.workspaceUid, kind: "workspace", title: "Convite recusado", message: `${auth.name || auth.email || "Uma pessoa"} recusou o convite para o perfil compartilhado.`, href: "/settings", meta: { invitationId, workspaceId: invitation.workspaceId } }).catch(() => undefined);
     }
 
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });

@@ -15,6 +15,8 @@ import { supabaseDeleteByFilters, supabasePatchByFilters, supabaseSelect, supaba
 import { toFinancialProfileType, type Workspace, type WorkspaceSettings, type WorkspaceType } from "@/types/workspace";
 import { ensureBusinessOwnerMembership, ensureFamilyManagerMembership, getActiveMemberships, toWorkspaceMember } from "@/lib/workspaces/server";
 import { reconcileOwnedWorkspacesForPlan } from "@/lib/workspaces/reconcile-server";
+import { normalizeBusinessOrganizationKind, normalizeBusinessTeamSize } from "@/lib/workspaces/business-profile";
+import { isValidCnpj, stripCnpj } from "@/lib/business/cnpj";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,10 +41,11 @@ function normalizeWorkspaceType(type: WorkspaceType): WorkspaceType {
 }
 
 function assertDocumentAllowed(type: WorkspaceType, settings?: WorkspaceSettings) {
-  const document = typeof settings?.businessDocument === "string" ? settings.businessDocument.replace(/\D/g, "") : "";
+  const document = typeof settings?.businessDocument === "string" ? stripCnpj(settings.businessDocument) : "";
   if (document && type !== "business") {
     throw new Error("Para controlar um negócio, MEI, igreja, projeto profissional ou qualquer atividade com CNPJ, use o perfil Business/PJ.");
   }
+  if (document && !isValidCnpj(document)) throw new Error("invalid_business_document");
 }
 
 async function assertPlanCanUseWorkspace(uid: string, type: WorkspaceType) {
@@ -73,12 +76,15 @@ function parseSettings(value: unknown): WorkspaceSettings {
     monthlyReportEnabled: data.monthlyReportEnabled !== false,
     categoriesPresetApplied: Boolean(data.categoriesPresetApplied),
     familyModeEnabled: Boolean(data.familyModeEnabled),
-    businessDocument: typeof data.businessDocument === "string" ? data.businessDocument.replace(/\D/g, "").slice(0, 14) : undefined,
+    businessDocument: typeof data.businessDocument === "string" ? stripCnpj(data.businessDocument) : undefined,
+    businessOrganizationKind: data.businessOrganizationKind ? normalizeBusinessOrganizationKind(data.businessOrganizationKind) : undefined,
+    businessTeamSize: data.businessTeamSize ? normalizeBusinessTeamSize(data.businessTeamSize) : undefined,
     archivedAt,
   };
 }
 
 function getWorkspaceErrorStatus(message: string) {
+  if (message === "invalid_business_document") return 400;
   if (message.includes("CNPJ")) return 400;
   if (message.startsWith("Enquanto você participar")) return 409;
   if (message.startsWith("Para criar um perfil") || message.startsWith("Para controlar")) return 403;
@@ -203,7 +209,7 @@ async function getProfileSummary(uid: string) {
   };
 }
 
-async function applyCategoryPreset(uid: string, workspaceType: WorkspaceType, workspaceId: string) {
+async function applyCategoryPreset(uid: string, workspaceType: WorkspaceType, workspaceId: string, settings?: WorkspaceSettings) {
   let existingRows: Record<string, unknown>[];
   try {
     existingRows = await supabaseSelect("categories", {
@@ -223,7 +229,7 @@ async function applyCategoryPreset(uid: string, workspaceType: WorkspaceType, wo
   });
   const existing = new Set(workspaceRows.map((row) => `${String(row.name || "").toLowerCase()}::${String(row.category_type || "")}`));
   const now = new Date().toISOString();
-  const rows = getDefaultCategoriesForWorkspaceType(workspaceType)
+  const rows = getDefaultCategoriesForWorkspaceType(workspaceType, settings?.businessOrganizationKind)
     .filter((category) => !existing.has(`${category.name.toLowerCase()}::${category.type}`))
     .map((category) =>
       toCategoryRow(uid, `preset_${workspaceId}_${workspaceType}_${category.type}_${category.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, {
@@ -416,7 +422,7 @@ export async function POST(request: NextRequest) {
 
     await persistWorkspaceSet(uid, next);
     await ensureSharedWorkspaceOwnerIfNeeded(uid, workspaceToPersist);
-    await applyCategoryPreset(uid, workspaceToPersist.type, workspaceToPersist.id);
+    await applyCategoryPreset(uid, workspaceToPersist.type, workspaceToPersist.id, workspaceToPersist.settings);
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json({ ok: true, workspace: workspaceToPersist }, { status: 200 });
   } catch (error) {
@@ -470,7 +476,7 @@ export async function PATCH(request: NextRequest) {
       const next = [...current.map((item) => ({ ...item, isDefault: false, updatedAt: new Date().toISOString() })), workspace];
       await persistWorkspaceSet(uid, next);
       await ensureSharedWorkspaceOwnerIfNeeded(uid, workspace);
-      await applyCategoryPreset(uid, workspace.type, workspace.id);
+      await applyCategoryPreset(uid, workspace.type, workspace.id, workspace.settings);
       return NextResponse.json({ ok: true, defaultWorkspace: workspace }, { status: 200 });
     }
 
@@ -521,8 +527,12 @@ export async function PATCH(request: NextRequest) {
     );
     await persistWorkspaceSet(uid, next);
     await ensureSharedWorkspaceOwnerIfNeeded(uid, updated);
-    if (updated.settings?.categoriesPresetApplied !== true || updated.type !== target.type) {
-      await applyCategoryPreset(uid, updated.type, updated.id);
+    if (
+      updated.settings?.categoriesPresetApplied !== true
+      || updated.type !== target.type
+      || updated.settings?.businessOrganizationKind !== target.settings?.businessOrganizationKind
+    ) {
+      await applyCategoryPreset(uid, updated.type, updated.id, updated.settings);
     }
 
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });

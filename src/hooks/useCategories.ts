@@ -6,7 +6,7 @@ import { getDefaultCategoriesForWorkspaceType, normalizeDefaultCategoryName, slu
 import { addCustomCategory, deleteCustomCategoryByName, renameCustomCategoryByName, setDefaultCategoryHidden } from "@/services/categoryService";
 import { useGetCategoriesQuery } from "@/store/api/categoriesApi";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
-import type { WorkspaceType } from "@/types/workspace";
+import type { BusinessOrganizationKind, WorkspaceType } from "@/types/workspace";
 import { useAuth } from "./useAuth";
 import { useWorkspaces } from "./useWorkspaces";
 
@@ -17,8 +17,8 @@ export interface Category { name: string; type: CategoryType; color: string; isC
 const FALLBACK_WORKSPACE_TYPE: WorkspaceType = "personal";
 const CUSTOM_CATEGORY_COLOR = "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50";
 
-function buildDefaultCategories(workspaceType: WorkspaceType): Category[] {
-  return getDefaultCategoriesForWorkspaceType(workspaceType).map((category) => ({ ...category, isDefault: true }));
+function buildDefaultCategories(workspaceType: WorkspaceType, businessKind?: BusinessOrganizationKind): Category[] {
+  return getDefaultCategoriesForWorkspaceType(workspaceType, businessKind).map((category) => ({ ...category, isDefault: true }));
 }
 function normalizeCategoryKey(name: string) { return slugifyDefaultCategoryName(normalizeDefaultCategoryName(name)); }
 function categoriesOverlap(left: Category, right: Category) {
@@ -44,10 +44,10 @@ export function useCategories() {
   }, [refetch, userId, workspaceId]);
 
   const hiddenDefaultCategories = useMemo(() => (data?.hiddenDefaultCategories ?? []).map(normalizeDefaultCategoryName), [data?.hiddenDefaultCategories]);
-  const defaultCategories = useMemo(() => buildDefaultCategories(workspaceType).map((category) => ({
+  const defaultCategories = useMemo(() => buildDefaultCategories(workspaceType, activeWorkspace?.settings?.businessOrganizationKind).map((category) => ({
     ...category,
     hidden: normalizeDefaultCategoryName(category.name) === "Outros" ? false : hiddenDefaultCategories.some((name) => normalizeCategoryKey(name) === normalizeCategoryKey(category.name)),
-  })), [hiddenDefaultCategories, workspaceType]);
+  })), [activeWorkspace?.settings?.businessOrganizationKind, hiddenDefaultCategories, workspaceType]);
   const categories = useMemo(() => {
     const visibleDefaults = defaultCategories.filter((category) => !category.hidden);
     const custom: Category[] = (data?.customCategories ?? []).map((category) => ({

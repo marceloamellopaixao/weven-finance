@@ -109,6 +109,91 @@ create table if not exists public.workspace_invitations (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create or replace function public.reserve_business_workspace_invitation(
+  p_workspace_uid text,
+  p_workspace_id text,
+  p_capacity integer,
+  p_member jsonb,
+  p_invitation jsonb
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  occupied_slots integer;
+begin
+  if p_workspace_uid is null or btrim(p_workspace_uid) = ''
+    or p_workspace_id is null or btrim(p_workspace_id) = ''
+    or p_capacity is null or p_capacity < 1 then
+    return false;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('wevenfinance:workspace-seat:' || p_workspace_uid || ':' || p_workspace_id));
+
+  select count(distinct member_uid) into occupied_slots
+  from public.workspace_members
+  where workspace_uid = p_workspace_uid
+    and workspace_id = p_workspace_id
+    and member_status in ('active', 'pending');
+
+  if not exists (
+    select 1 from public.workspace_members
+    where workspace_uid = p_workspace_uid
+      and workspace_id = p_workspace_id
+      and member_uid = p_workspace_uid
+      and member_status in ('active', 'pending')
+  ) then
+    occupied_slots := occupied_slots + 1;
+  end if;
+
+  if occupied_slots >= p_capacity then
+    return false;
+  end if;
+
+  insert into public.workspace_members (
+    id, workspace_uid, workspace_id, member_uid, email, display_name, member_role,
+    permissions, member_status, invited_by_uid, raw, created_at, updated_at
+  ) values (
+    p_member->>'id', p_workspace_uid, p_workspace_id, p_member->>'member_uid',
+    p_member->>'email', p_member->>'display_name', p_member->>'member_role',
+    array(select jsonb_array_elements_text(coalesce(p_member->'permissions', '[]'::jsonb))),
+    coalesce(p_member->>'member_status', 'pending'), p_member->>'invited_by_uid',
+    coalesce(p_member->'raw', '{}'::jsonb),
+    coalesce((p_member->>'created_at')::timestamptz, timezone('utc', now())),
+    coalesce((p_member->>'updated_at')::timestamptz, timezone('utc', now()))
+  ) on conflict (id) do update set
+    email = excluded.email,
+    display_name = excluded.display_name,
+    member_role = excluded.member_role,
+    permissions = excluded.permissions,
+    member_status = excluded.member_status,
+    invited_by_uid = excluded.invited_by_uid,
+    raw = excluded.raw,
+    updated_at = excluded.updated_at;
+
+  insert into public.workspace_invitations (
+    id, workspace_uid, workspace_id, email, member_role, permissions,
+    invitation_status, invited_by_uid, invited_member_uid, expires_at, raw, created_at, updated_at
+  ) values (
+    p_invitation->>'id', p_workspace_uid, p_workspace_id, p_invitation->>'email',
+    p_invitation->>'member_role',
+    array(select jsonb_array_elements_text(coalesce(p_invitation->'permissions', '[]'::jsonb))),
+    coalesce(p_invitation->>'invitation_status', 'pending'), p_invitation->>'invited_by_uid',
+    p_invitation->>'invited_member_uid', (p_invitation->>'expires_at')::timestamptz,
+    coalesce(p_invitation->'raw', '{}'::jsonb),
+    coalesce((p_invitation->>'created_at')::timestamptz, timezone('utc', now())),
+    coalesce((p_invitation->>'updated_at')::timestamptz, timezone('utc', now()))
+  );
+
+  return true;
+end;
+$$;
+
+revoke all on function public.reserve_business_workspace_invitation(text, text, integer, jsonb, jsonb) from public;
+grant execute on function public.reserve_business_workspace_invitation(text, text, integer, jsonb, jsonb) to service_role;
+
 create table if not exists public.transactions (
   id text primary key,
   uid text not null references public.profiles(uid) on delete cascade,

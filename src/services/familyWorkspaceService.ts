@@ -114,7 +114,7 @@ export async function updateFamilyMember(input: {
 }
 
 export async function getPendingFamilyInvitations() {
-  const response = await apiFetch("/api/workspaces/family/accept", { method: "GET" });
+  const response = await apiFetch("/api/workspaces/invitations", { method: "GET" });
   const payload = await readPayload<{ ok: true; invitations: PendingWorkspaceInvitation[] }>(response);
   return payload.invitations;
 }
@@ -131,7 +131,7 @@ export async function revokeFamilyInvitation(input: {
 }
 
 export async function acceptFamilyInvitation(invitationId?: string, cancelCurrentSubscription = false) {
-  const response = await apiFetch("/api/workspaces/family/accept", {
+  const response = await apiFetch("/api/workspaces/invitations", {
     method: "POST",
     body: JSON.stringify({ ...(invitationId ? { invitationId } : {}), cancelCurrentSubscription }),
   });
@@ -145,14 +145,14 @@ export async function acceptFamilyInvitation(invitationId?: string, cancelCurren
 }
 
 export async function rejectFamilyInvitation(invitationId: string) {
-  const response = await apiFetch(`/api/workspaces/family/accept?invitationId=${encodeURIComponent(invitationId)}`, {
+  const response = await apiFetch(`/api/workspaces/invitations?invitationId=${encodeURIComponent(invitationId)}`, {
     method: "DELETE",
   });
   await readPayload<{ ok: true }>(response);
 }
 
 export async function leaveFamilyWorkspace(workspaceId: string) {
-  const response = await apiFetch(`/api/workspaces/family/accept?workspaceId=${encodeURIComponent(workspaceId)}`, {
+  const response = await apiFetch(`/api/workspaces/invitations?workspaceId=${encodeURIComponent(workspaceId)}`, {
     method: "DELETE",
   });
   await readPayload<{ ok: true; leftWorkspaceId: string }>(response);
