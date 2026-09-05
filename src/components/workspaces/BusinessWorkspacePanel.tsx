@@ -58,16 +58,22 @@ function isBusinessMember(member: Workspace["membership"]): member is BusinessWo
 
 function PermissionMatrix({ value, onChange, disabled }: { value: BusinessPermission[]; onChange: (permissions: BusinessPermission[]) => void; disabled?: boolean }) {
   return (
-    <div className="grid gap-3 lg:grid-cols-2">
+    <div className="space-y-2">
       {BUSINESS_PERMISSION_GROUPS.map((group) => {
         const selected = group.permissions.filter((permission) => value.includes(permission)).length;
         return (
-          <div key={group.id} className="rounded-2xl bg-muted/35 p-4 ring-1 ring-border/55">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <span><span className="block text-sm font-semibold">{group.title}</span><span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{group.description}</span></span>
-              <Badge variant="secondary" className="shrink-0">{selected}/{group.permissions.length}</Badge>
-            </div>
-            <div className="space-y-1.5">
+          <details key={group.id} className="group/permission overflow-hidden rounded-2xl border border-border/60 bg-muted/20 open:bg-muted/30">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-muted/40">
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold">{group.title}</span>
+                <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{group.description}</span>
+              </span>
+              <span className="flex shrink-0 items-center gap-2">
+                <Badge variant="secondary">{selected}/{group.permissions.length}</Badge>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open/permission:rotate-180" />
+              </span>
+            </summary>
+            <div className="space-y-1 border-t border-border/55 bg-background/45 p-3">
               {group.permissions.map((permission) => (
                 <label key={permission} className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm transition-colors hover:bg-background/70">
                   <Checkbox disabled={disabled} checked={value.includes(permission)} onCheckedChange={() => onChange(toggleBusinessPermissionSelection(value, permission))} />
@@ -75,7 +81,7 @@ function PermissionMatrix({ value, onChange, disabled }: { value: BusinessPermis
                 </label>
               ))}
             </div>
-          </div>
+          </details>
         );
       })}
     </div>
@@ -327,7 +333,7 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
           <CardContent className="space-y-5">
             <div className="grid gap-4 md:grid-cols-3"><div className="space-y-2"><Label>Nome</Label><Input className="h-11 rounded-xl" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Nome da pessoa" /></div><div className="space-y-2"><Label>E-mail</Label><Input className="h-11 rounded-xl" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="pessoa@organizacao.com" /></div><div className="space-y-2"><Label>Papel na equipe</Label><Select value={role} onValueChange={(value) => handleRole(value as Exclude<BusinessRole, "business_owner">)}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{ROLE_OPTIONS.map((item) => <SelectItem key={item} value={item}>{BUSINESS_ROLE_LABELS[item]}</SelectItem>)}</SelectContent></Select></div></div>
             <div className="rounded-2xl bg-primary/6 px-4 py-3 text-sm"><span className="font-semibold text-primary">{BUSINESS_ROLE_LABELS[role]}:</span> <span className="text-muted-foreground">{roleDescriptions[role]}</span></div>
-            <details className="group rounded-2xl border border-border/60"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5"><span><span className="block text-sm font-semibold">Personalizar acessos</span><span className="block text-xs text-muted-foreground">Opcional — o papel escolhido já vem com acessos recomendados.</span></span><ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" /></summary><div className="border-t border-border/60 p-4"><PermissionMatrix value={permissions} onChange={setPermissions} /></div></details>
+            <div className="space-y-3"><div><p className="text-sm font-semibold">Personalizar acessos</p><p className="text-xs text-muted-foreground">Opcional — abra somente a área que deseja revisar. O papel escolhido já traz acessos recomendados.</p></div><PermissionMatrix value={permissions} onChange={setPermissions} /></div>
             <div className="flex justify-end"><Button className="h-11 rounded-xl px-6" onClick={() => void invite()} disabled={!email.trim() || Boolean(busy) || Boolean(seats && seats.available <= 0)}>{busy === "invite" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MailPlus className="mr-2 h-4 w-4" />}{busy === "invite" ? "Enviando convite..." : seats && seats.available <= 0 ? "Sem acessos disponíveis" : "Enviar convite"}</Button></div>
           </CardContent>
         </Card>
