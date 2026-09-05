@@ -4,6 +4,7 @@ import { baseApi, type UserScope } from "./baseApi";
 type ProfileResponse = { ok: boolean; profile?: UserProfile | null };
 
 export const profileApi = baseApi.injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === "development",
   endpoints: (build) => ({
     getProfile: build.query<UserProfile | null, UserScope>({
       query: () => "profile/me",

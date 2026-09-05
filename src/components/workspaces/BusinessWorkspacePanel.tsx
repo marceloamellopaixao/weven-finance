@@ -104,6 +104,8 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
   const [additionalSeats, setAdditionalSeats] = useState(0);
   const [organizationKind, setOrganizationKind] = useState<BusinessOrganizationKind>("company");
   const [teamSize, setTeamSize] = useState<BusinessTeamSize>("solo");
+  const [savedOrganizationKind, setSavedOrganizationKind] = useState<BusinessOrganizationKind>("company");
+  const [savedTeamSize, setSavedTeamSize] = useState<BusinessTeamSize>("solo");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [memberPage, setMemberPage] = useState(1);
@@ -135,9 +137,15 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
 
   useEffect(() => {
     if (!workspace) return;
-    setOrganizationKind(normalizeBusinessOrganizationKind(workspace.settings?.businessOrganizationKind));
-    setTeamSize(normalizeBusinessTeamSize(workspace.settings?.businessTeamSize));
+    const nextKind = normalizeBusinessOrganizationKind(workspace.settings?.businessOrganizationKind);
+    const nextSize = normalizeBusinessTeamSize(workspace.settings?.businessTeamSize);
+    setOrganizationKind(nextKind);
+    setTeamSize(nextSize);
+    setSavedOrganizationKind(nextKind);
+    setSavedTeamSize(nextSize);
   }, [workspace]);
+
+  const organizationProfileDirty = organizationKind !== savedOrganizationKind || teamSize !== savedTeamSize;
 
   const handleRole = (next: Exclude<BusinessRole, "business_owner">) => {
     setRole(next);
@@ -226,6 +234,8 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
         id: workspace.id,
         settings: { ...workspace.settings, businessOrganizationKind: organizationKind, businessTeamSize: teamSize },
       });
+      setSavedOrganizationKind(organizationKind);
+      setSavedTeamSize(teamSize);
       setMessage("Perfil da organização atualizado. Novas categorias recomendadas foram adicionadas sem alterar as suas categorias personalizadas.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Não foi possível atualizar o perfil da organização.");
@@ -274,7 +284,7 @@ export function BusinessWorkspacePanel({ workspaces, loading }: { workspaces: Wo
           <CardContent className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
             <div className="space-y-2"><Label>Tipo de organização</Label><Select value={organizationKind} onValueChange={(value) => setOrganizationKind(value as BusinessOrganizationKind)}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{BUSINESS_ORGANIZATION_KINDS.map((kind) => <SelectItem key={kind} value={kind}>{BUSINESS_ORGANIZATION_LABELS[kind]}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Tamanho da equipe</Label><Select value={teamSize} onValueChange={(value) => setTeamSize(value as BusinessTeamSize)}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{BUSINESS_TEAM_SIZES.map((size) => <SelectItem key={size} value={size}>{BUSINESS_TEAM_SIZE_LABELS[size]}</SelectItem>)}</SelectContent></Select></div>
-            <Button className="h-11 rounded-xl" disabled={busy === "organization" || teamSize === "100_plus"} onClick={() => void saveOrganizationProfile()}>{busy === "organization" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Salvar perfil</Button>
+            <Button className="h-11 rounded-xl" disabled={!organizationProfileDirty || busy === "organization" || teamSize === "100_plus"} onClick={() => void saveOrganizationProfile()}>{busy === "organization" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{organizationProfileDirty ? "Salvar perfil" : "Perfil atualizado"}</Button>
             {teamSize === "100_plus" ? <p className="md:col-span-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">Para mais de 100 pessoas, use o atendimento Enterprise. O Business padrão permite até 100 acessos.</p> : null}
           </CardContent>
         </Card>

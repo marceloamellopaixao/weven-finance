@@ -3,6 +3,7 @@ import type { PaymentCard } from "@/types/paymentCard";
 import { baseApi, type WorkspaceScope } from "./baseApi";
 
 export const cardsApi = baseApi.injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === "development",
   endpoints: (build) => ({
     getPaymentCards: build.query<PaymentCard[], WorkspaceScope>({
       query: ({ workspaceId }) => ({ url: "payment-cards", params: { workspaceId } }),

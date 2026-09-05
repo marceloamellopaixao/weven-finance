@@ -7,6 +7,7 @@ export type FinanceSettings = {
 type FinanceResponse = FinanceSettings & { ok: boolean };
 
 export const financeApi = baseApi.injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === "development",
   endpoints: (build) => ({
     getFinanceSettings: build.query<FinanceSettings, WorkspaceScope>({
       query: ({ workspaceId }) => ({ url: "user-settings/finance", params: { workspaceId } }),

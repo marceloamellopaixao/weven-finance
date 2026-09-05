@@ -4,6 +4,7 @@ import { baseApi, type UserScope } from "./baseApi";
 type WorkspacesResponse = { ok: boolean; workspaces?: Workspace[]; workspace?: Workspace };
 
 export const workspacesApi = baseApi.injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === "development",
   endpoints: (build) => ({
     getWorkspaces: build.query<Workspace[], UserScope>({
       query: () => "workspaces",

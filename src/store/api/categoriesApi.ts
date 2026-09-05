@@ -4,6 +4,7 @@ import { baseApi, type WorkspaceScope } from "./baseApi";
 export type CategoriesData = { customCategories: CustomCategory[]; hiddenDefaultCategories: string[] };
 
 export const categoriesApi = baseApi.injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === "development",
   endpoints: (build) => ({
     getCategories: build.query<CategoriesData, WorkspaceScope>({
       query: ({ workspaceId }) => ({ url: "categories", params: { workspaceId } }),

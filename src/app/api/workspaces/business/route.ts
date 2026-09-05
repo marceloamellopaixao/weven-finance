@@ -292,7 +292,7 @@ export async function GET(request: NextRequest) {
     const search = String(request.nextUrl.searchParams.get("search") || "").replace(/[,%().]/g, " ").trim().slice(0, 80);
     const [memberPage, invitations] = await Promise.all([
       supabaseSelectPaged("workspace_members", { filters: { workspace_uid: access.workspaceUid, workspace_id: workspaceId }, conditions: { member_status: "in.(active,pending)" }, ...(search ? { or: `display_name.ilike.*${search}*,email.ilike.*${search}*` } : {}), order: "created_at.asc", page, limit }),
-      supabaseSelect("workspace_invitations", { filters: { workspace_uid: access.workspaceUid, workspace_id: workspaceId }, order: "created_at.desc", limit: 50 }),
+      supabaseSelect("workspace_invitations", { filters: { workspace_uid: access.workspaceUid, workspace_id: workspaceId, invitation_status: "pending" }, order: "created_at.desc", limit: 100 }),
     ]);
     return NextResponse.json({
       ok: true,

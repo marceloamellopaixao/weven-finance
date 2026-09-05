@@ -5,6 +5,7 @@ type AccessResult = { access: Partial<Record<AccessResourceKey, AccessPermission
 type UpdatePlansArgs = UserScope & { plans: PlansConfig };
 
 export const systemApi = baseApi.injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === "development",
   endpoints: (build) => ({
     getPlans: build.query<PlansConfig, UserScope>({
       query: () => "system/plans",

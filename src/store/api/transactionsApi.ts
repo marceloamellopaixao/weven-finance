@@ -5,6 +5,7 @@ import { baseApi, type WorkspaceScope } from "./baseApi";
 export type TransactionsArgs = WorkspaceScope & { cryptoUid?: string; month?: string; type?: string; page?: number; pageSize?: number; syncRecurring?: boolean };
 
 export const transactionsApi = baseApi.injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === "development",
   endpoints: (build) => ({
     getTransactions: build.query<Transaction[], TransactionsArgs>({
       queryFn: async ({ userId, workspaceId, cryptoUid, syncRecurring, ...filters }, _api, _extra, baseQuery) => {

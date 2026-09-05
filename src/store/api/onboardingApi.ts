@@ -2,6 +2,7 @@ import type { OnboardingStatus } from "@/services/onboardingService";
 import { baseApi, type UserScope } from "./baseApi";
 
 export const onboardingApi = baseApi.injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === "development",
   endpoints: (build) => ({
     getOnboarding: build.query<OnboardingStatus, UserScope>({
       query: () => "onboarding",
