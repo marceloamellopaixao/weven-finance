@@ -1,5 +1,6 @@
 import type { AccessPermissionLevel, AccessResourceKey, FeatureAccessConfig, PlansConfig } from "@/types/system";
 import { baseApi, type UserScope } from "./baseApi";
+import { keepQueryFreshFromRealtime } from "./cacheLifecycle";
 
 type AccessResult = { access: Partial<Record<AccessResourceKey, AccessPermissionLevel>>; featureAccess: FeatureAccessConfig };
 type UpdatePlansArgs = UserScope & { plans: PlansConfig };
@@ -12,6 +13,13 @@ export const systemApi = baseApi.injectEndpoints({
       transformResponse: (response: { plans: PlansConfig }) => response.plans,
       providesTags: ["Plans"],
       keepUnusedDataFor: 300,
+      onCacheEntryAdded: (_arg, { cacheDataLoaded, cacheEntryRemoved, dispatch }) =>
+        keepQueryFreshFromRealtime({
+          cacheDataLoaded,
+          cacheEntryRemoved,
+          sources: [{ table: "system_configs", filter: "key=eq.plans" }],
+          onChange: () => { dispatch(baseApi.util.invalidateTags(["Plans"])); },
+        }),
     }),
     updatePlans: build.mutation<PlansConfig, UpdatePlansArgs>({
       query: ({ plans }) => ({
@@ -36,8 +44,18 @@ export const systemApi = baseApi.injectEndpoints({
       query: () => "system/access-control/me",
       transformResponse: (response: AccessResult & { ok: boolean }) => ({ access: response.access ?? {}, featureAccess: response.featureAccess }),
       providesTags: (_result, _error, arg) => [{ type: "AccessControl", id: arg.userId }],
+      onCacheEntryAdded: (arg, { cacheDataLoaded, cacheEntryRemoved, dispatch }) =>
+        keepQueryFreshFromRealtime({
+          cacheDataLoaded,
+          cacheEntryRemoved,
+          sources: [
+            { table: "system_configs", filter: "key=eq.access_control" },
+            { table: "profiles", filter: `uid=eq.${arg.userId}` },
+          ],
+          onChange: () => { dispatch(baseApi.util.invalidateTags([{ type: "AccessControl", id: arg.userId }])); },
+        }),
     }),
   }),
 });
 
-export const { useGetPlansQuery, useUpdatePlansMutation, useGetAccessControlQuery } = systemApi;
+export const { useGetPlansQuery, useUpdatePlansMutation, useGetAccessControlQuery, useLazyGetAccessControlQuery } = systemApi;

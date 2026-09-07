@@ -1,41 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { subscribeToUserSettings } from "@/services/transactionService";
+import { useMemo } from "react";
+import { useGetFinanceSettingsQuery } from "@/store/api/financeApi";
 import { useAuth } from "./useAuth";
+import { useWorkspaces } from "./useWorkspaces";
 import { UserSettings } from "@/types/transaction";
 
 const DEFAULT_SETTINGS: UserSettings = { currentBalance: 0 };
 
 export function useUserSettings() {
   const { user, userProfile } = useAuth();
+  const { activeWorkspace, activeWorkspaceId, loading: workspacesLoading } = useWorkspaces();
   const effectiveUid = userProfile?.uid || user?.uid;
-
-  const initialSettings = useMemo<UserSettings>(() => DEFAULT_SETTINGS, []);
-  const [settings, setSettings] = useState<UserSettings>(initialSettings);
-
-  const [snapshotUid, setSnapshotUid] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!effectiveUid) return;
-
-    const unsubscribe = subscribeToUserSettings(
-      effectiveUid,
-      (data) => {
-        setSettings(data ?? DEFAULT_SETTINGS);
-        setSnapshotUid(effectiveUid);
-      },
-      () => {
-        setSettings(DEFAULT_SETTINGS);
-        setSnapshotUid(effectiveUid);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [effectiveUid]);
-
-  const loading = Boolean(effectiveUid) && snapshotUid !== effectiveUid;
-  const visibleSettings = loading ? DEFAULT_SETTINGS : settings;
+  const ownerId = activeWorkspace?.ownerUid || activeWorkspace?.uid || effectiveUid;
+  const { data, isLoading, isFetching } = useGetFinanceSettingsQuery(
+    { userId: effectiveUid || "", workspaceId: activeWorkspaceId || "", ownerId: ownerId || "" },
+    { skip: !effectiveUid || !activeWorkspaceId },
+  );
+  const visibleSettings = useMemo<UserSettings>(() => data ?? DEFAULT_SETTINGS, [data]);
+  const loading = Boolean(effectiveUid) && (workspacesLoading || !activeWorkspaceId || isLoading || (!data && isFetching));
 
   return {
     settings: visibleSettings,

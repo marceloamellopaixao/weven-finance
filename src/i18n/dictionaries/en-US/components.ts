@@ -55,6 +55,8 @@ export const components: Dictionary["components"] = {
     noLinkedParent: "No linked parent",
     toasts: {
       created: "Category added successfully.",
+      updated: "Category updated successfully.",
+      deleted: "Category deleted successfully.",
       duplicate: "This category already exists.",
       duplicateRename: "A category with this name already exists.",
       createError: "We could not create the category.",

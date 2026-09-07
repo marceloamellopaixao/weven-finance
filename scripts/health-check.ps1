@@ -23,7 +23,7 @@ function Test-Endpoint {
   $details = ""
 
   try {
-    $response = Invoke-WebRequest -Method $Method -Uri $Url -Headers $Headers -TimeoutSec $TimeoutSec
+    $response = Invoke-WebRequest -UseBasicParsing -Method $Method -Uri $Url -Headers $Headers -TimeoutSec $TimeoutSec
     $status = [int]$response.StatusCode
     $ok = $ExpectedStatus -contains $status
     $details = "status=$status"

@@ -53,6 +53,8 @@ export const components = {
     noLinkedParent: "Sem pai vinculado",
     toasts: {
       created: "Categoria adicionada com sucesso.",
+      updated: "Categoria atualizada com sucesso.",
+      deleted: "Categoria excluída com sucesso.",
       duplicate: "Essa categoria já existe.",
       duplicateRename: "Já existe uma categoria com esse nome.",
       createError: "Não foi possível criar a categoria.",

@@ -1,5 +1,6 @@
-import type { CustomCategory } from "@/services/categoryService";
+import { CATEGORIES_CHANGED_EVENT, type CustomCategory } from "@/services/categoryService";
 import { baseApi, type WorkspaceScope } from "./baseApi";
+import { keepQueryFreshFromRealtime } from "./cacheLifecycle";
 
 export type CategoriesData = { customCategories: CustomCategory[]; hiddenDefaultCategories: string[] };
 
@@ -10,6 +11,17 @@ export const categoriesApi = baseApi.injectEndpoints({
       query: ({ workspaceId }) => ({ url: "categories", params: { workspaceId } }),
       transformResponse: (response: CategoriesData & { ok: boolean }) => ({ customCategories: response.customCategories ?? [], hiddenDefaultCategories: response.hiddenDefaultCategories ?? [] }),
       providesTags: (_result, _error, arg) => [{ type: "Categories", id: `${arg.userId}:${arg.workspaceId}` }],
+      onCacheEntryAdded: (arg, { cacheDataLoaded, cacheEntryRemoved, dispatch }) =>
+        keepQueryFreshFromRealtime({
+          cacheDataLoaded,
+          cacheEntryRemoved,
+          sources: [
+            { table: "categories", filter: `uid=eq.${arg.ownerId || arg.userId}` },
+            { table: "user_settings", filter: `uid=eq.${arg.ownerId || arg.userId}` },
+          ],
+          browserEvents: [CATEGORIES_CHANGED_EVENT],
+          onChange: () => { dispatch(baseApi.util.invalidateTags([{ type: "Categories", id: `${arg.userId}:${arg.workspaceId}` }])); },
+        }),
     }),
     setDefaultCategoryVisibility: build.mutation<void, WorkspaceScope & { categoryName: string; hidden: boolean }>({
       query: ({ userId, ...body }) => { void userId; return { url: "categories/default-visibility", method: "POST", body }; },

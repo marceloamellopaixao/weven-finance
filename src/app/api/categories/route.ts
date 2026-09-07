@@ -9,6 +9,7 @@ import {
 } from "@/services/supabase/admin";
 import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
 import { canManageFamilyWorkspaceSettings } from "@/lib/workspaces/family";
+import { getStoredCategoryName, isCategoryOrDescendant } from "@/lib/categories/records";
 
 type CategoryType = "income" | "expense" | "both";
 type WorkspaceType = "personal" | "professional" | "church" | "family" | "business";
@@ -163,16 +164,10 @@ async function getUserTransactions(uid: string, workspaceId?: string | null, inc
   });
 }
 
-async function deleteCategory(uid: string, sourceId: string, workspaceId?: string | null) {
-  try {
-    await supabaseDeleteByFilters(
-      "categories",
-      workspaceId ? { uid, source_id: sourceId, workspace_id: workspaceId } : { uid, source_id: sourceId }
-    );
-  } catch (error) {
-    if (!isMissingWorkspaceColumn(error)) throw error;
-    await supabaseDeleteByFilters("categories", { uid, source_id: sourceId });
-  }
+async function deleteCategory(uid: string, sourceId: string) {
+  // source_id is unique per owner. Avoid filtering by workspace_id here because
+  // legacy categories intentionally have no workspace_id and would not be deleted.
+  await supabaseDeleteByFilters("categories", { uid, source_id: sourceId });
 }
 
 export async function GET(request: NextRequest) {
@@ -257,7 +252,8 @@ export async function POST(request: NextRequest) {
     }
 
     const existing = await getUserCategories(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows, workspaceContext.workspaceType);
-    const hasDuplicate = existing.some((row) => String(row.name || "") === name);
+    const normalizedName = name.toLocaleLowerCase("pt-BR");
+    const hasDuplicate = existing.some((row) => getStoredCategoryName(row).toLocaleLowerCase("pt-BR") === normalizedName);
     if (hasDuplicate) {
       return NextResponse.json({ ok: false, error: "duplicate_category_name" }, { status: 409 });
     }
@@ -326,11 +322,11 @@ export async function PATCH(request: NextRequest) {
     });
 
     const affected = scopedCategories
-      .map((row) => ({ id: String(row.source_id || ""), name: String(row.name || "") }))
-      .filter((item) => item.name === oldName || item.name.startsWith(`${oldName}::`));
+      .map((row) => ({ id: String(row.source_id || ""), name: getStoredCategoryName(row) }))
+      .filter((item) => isCategoryOrDescendant(item.name, oldName));
 
     if (affected.length === 0) {
-      return NextResponse.json({ ok: true, updated: 0 }, { status: 200 });
+      return NextResponse.json({ ok: false, error: "category_not_found" }, { status: 404 });
     }
 
     const renameMap = new Map<string, string>();
@@ -341,7 +337,7 @@ export async function PATCH(request: NextRequest) {
 
     const existingNames = new Set(
       scopedCategories
-        .map((row) => String(row.name || ""))
+        .map(getStoredCategoryName)
         .filter((name) => !renameMap.has(name))
     );
 
@@ -425,12 +421,14 @@ export async function DELETE(request: NextRequest) {
     });
 
     const affected = scopedCategories
-      .map((row) => ({ id: String(row.source_id || ""), name: String(row.name || "") }))
-      .filter((item) => item.name === categoryName || item.name.startsWith(`${categoryName}::`));
+      .map((row) => ({ id: String(row.source_id || ""), name: getStoredCategoryName(row) }))
+      .filter((item) => isCategoryOrDescendant(item.name, categoryName));
 
-    for (const item of affected) {
-      await deleteCategory(uid, item.id, workspaceContext.workspaceId);
+    if (affected.length === 0) {
+      return NextResponse.json({ ok: false, error: "category_not_found" }, { status: 404 });
     }
+
+    await Promise.all(affected.map((item) => deleteCategory(uid, item.id)));
 
     const txUpserts: Array<Record<string, unknown>> = [];
     for (const tx of allTransactions) {

@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 
 import { getDefaultCategoriesForWorkspaceType, normalizeDefaultCategoryName, slugifyDefaultCategoryName } from "@/lib/categories/defaultCategories";
 import { addCustomCategory, deleteCustomCategoryByName, renameCustomCategoryByName, setDefaultCategoryHidden } from "@/services/categoryService";
 import { useGetCategoriesQuery } from "@/store/api/categoriesApi";
-import { subscribeToTableChanges } from "@/services/supabase/realtime";
 import type { BusinessOrganizationKind, WorkspaceType } from "@/types/workspace";
 import { useAuth } from "./useAuth";
 import { useWorkspaces } from "./useWorkspaces";
@@ -32,16 +31,11 @@ export function useCategories() {
   const { activeWorkspace, loading: workspacesLoading } = useWorkspaces();
   const workspaceType = activeWorkspace?.type || FALLBACK_WORKSPACE_TYPE;
   const workspaceId = activeWorkspace?.id;
+  const ownerId = activeWorkspace?.ownerUid || activeWorkspace?.uid;
   const userId = userProfile?.uid || user?.uid;
-  const { data, isLoading, isFetching, refetch } = useGetCategoriesQuery(
-    { userId: userId || "", workspaceId: workspaceId || "" }, { skip: !userId || !workspaceId },
+  const { data, isLoading, isFetching } = useGetCategoriesQuery(
+    { userId: userId || "", workspaceId: workspaceId || "", ownerId: ownerId || userId || "" }, { skip: !userId || !workspaceId },
   );
-  useEffect(() => {
-    if (!userId || !workspaceId) return;
-    const stopCategories = subscribeToTableChanges({ table: "categories", filter: `uid=eq.${userId}`, onChange: () => void refetch() });
-    const stopSettings = subscribeToTableChanges({ table: "user_settings", filter: `uid=eq.${userId}`, onChange: () => void refetch() });
-    return () => { stopCategories(); stopSettings(); };
-  }, [refetch, userId, workspaceId]);
 
   const hiddenDefaultCategories = useMemo(() => (data?.hiddenDefaultCategories ?? []).map(normalizeDefaultCategoryName), [data?.hiddenDefaultCategories]);
   const defaultCategories = useMemo(() => buildDefaultCategories(workspaceType, activeWorkspace?.settings?.businessOrganizationKind).map((category) => ({
@@ -64,16 +58,16 @@ export function useCategories() {
   };
   const addNewCategory = async (name: string, type: CategoryType, parentName?: string) => {
     const finalName = parentName ? `${parentName}${CATEGORY_PATH_SEPARATOR}${name}` : name;
-    await addCustomCategory(await token(), finalName, type); await refetch();
+    await addCustomCategory(await token(), finalName, type);
   };
-  const deleteCategory = async (name: string) => { await deleteCustomCategoryByName(await token(), name, "Outros"); await refetch(); };
+  const deleteCategory = async (name: string) => { await deleteCustomCategoryByName(await token(), name, "Outros"); };
   const renameCategory = async (oldName: string, newName: string) => {
     const trimmed = newName.trim(); if (!trimmed) return;
-    await renameCustomCategoryByName(await token(), oldName, trimmed); await refetch();
+    await renameCustomCategoryByName(await token(), oldName, trimmed);
   };
   const toggleDefaultCategoryVisibility = async (name: string, hidden: boolean) => {
     const canonicalName = normalizeDefaultCategoryName(name); if (canonicalName === "Outros") return;
-    await setDefaultCategoryHidden(await token(), canonicalName, hidden); await refetch();
+    await setDefaultCategoryHidden(await token(), canonicalName, hidden);
   };
 
   const waitingForWorkspace = Boolean(userId) && (workspacesLoading || !workspaceId);

@@ -152,6 +152,7 @@ export function CategoryManagerDialog({
       ) {
         onSelectCategory?.("Outros");
       }
+      toast.success(t("toasts.deleted"));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro ao excluir categoria.";
       if (message === "duplicate_category_name") {
@@ -208,6 +209,7 @@ export function CategoryManagerDialog({
       }
 
       handleCancelEditCategory();
+      toast.success(t("toasts.updated"));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro ao editar categoria.";
       if (message === "duplicate_category_name") {
