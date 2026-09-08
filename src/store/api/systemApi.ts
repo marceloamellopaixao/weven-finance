@@ -1,9 +1,11 @@
 import type { AccessPermissionLevel, AccessResourceKey, FeatureAccessConfig, PlansConfig } from "@/types/system";
 import { baseApi, type UserScope } from "./baseApi";
 import { keepQueryFreshFromRealtime } from "./cacheLifecycle";
+import type { CategoryPresetsConfig } from "@/lib/categories/defaultCategories";
 
 type AccessResult = { access: Partial<Record<AccessResourceKey, AccessPermissionLevel>>; featureAccess: FeatureAccessConfig };
 type UpdatePlansArgs = UserScope & { plans: PlansConfig };
+type UpdateCategoryPresetsArgs = UserScope & { categoryPresets: CategoryPresetsConfig };
 
 export const systemApi = baseApi.injectEndpoints({
   overrideExisting: process.env.NODE_ENV === "development",
@@ -40,6 +42,28 @@ export const systemApi = baseApi.injectEndpoints({
         }
       },
     }),
+    getCategoryPresets: build.query<CategoryPresetsConfig, UserScope>({
+      query: () => "system/category-presets",
+      transformResponse: (response: { categoryPresets: CategoryPresetsConfig }) => response.categoryPresets,
+      providesTags: ["CategoryPresets"],
+      keepUnusedDataFor: 300,
+      onCacheEntryAdded: (_arg, { cacheDataLoaded, cacheEntryRemoved, dispatch }) =>
+        keepQueryFreshFromRealtime({
+          cacheDataLoaded,
+          cacheEntryRemoved,
+          sources: [{ table: "system_configs", filter: "key=eq.category_presets" }],
+          onChange: () => { dispatch(baseApi.util.invalidateTags(["CategoryPresets", "Categories"])); },
+        }),
+    }),
+    updateCategoryPresets: build.mutation<CategoryPresetsConfig, UpdateCategoryPresetsArgs>({
+      query: ({ categoryPresets }) => ({
+        url: "system/category-presets",
+        method: "PUT",
+        body: { categoryPresets },
+      }),
+      transformResponse: (response: { categoryPresets: CategoryPresetsConfig }) => response.categoryPresets,
+      invalidatesTags: ["CategoryPresets", "Categories"],
+    }),
     getAccessControl: build.query<AccessResult, UserScope>({
       query: () => "system/access-control/me",
       transformResponse: (response: AccessResult & { ok: boolean }) => ({ access: response.access ?? {}, featureAccess: response.featureAccess }),
@@ -58,4 +82,11 @@ export const systemApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useGetPlansQuery, useUpdatePlansMutation, useGetAccessControlQuery, useLazyGetAccessControlQuery } = systemApi;
+export const {
+  useGetPlansQuery,
+  useUpdatePlansMutation,
+  useGetCategoryPresetsQuery,
+  useUpdateCategoryPresetsMutation,
+  useGetAccessControlQuery,
+  useLazyGetAccessControlQuery,
+} = systemApi;

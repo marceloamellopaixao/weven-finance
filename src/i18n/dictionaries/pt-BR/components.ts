@@ -60,6 +60,8 @@ export const components = {
       createError: "Não foi possível criar a categoria.",
       deleteError: "Não foi possível excluir a categoria.",
       saveError: "Não foi possível salvar a categoria.",
+      visibilityUpdated: "Visibilidade da categoria atualizada.",
+      visibilityError: "Não foi possível alterar a visibilidade da categoria.",
     },
   },
   impersonation: {

@@ -62,6 +62,8 @@ export const components: Dictionary["components"] = {
       createError: "No fue posible crear la categoría.",
       deleteError: "No fue posible eliminar la categoría.",
       saveError: "No fue posible guardar la categoría.",
+      visibilityUpdated: "Visibilidad de la categoría actualizada.",
+      visibilityError: "No fue posible cambiar la visibilidad de la categoría.",
     },
   },
   impersonation: {

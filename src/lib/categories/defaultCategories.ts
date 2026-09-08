@@ -18,6 +18,22 @@ export type DefaultCategoryPreset = {
   aliases?: string[];
 };
 
+export const CATEGORY_PRESET_SCOPES = [
+  "personal",
+  "family",
+  "business",
+  "business_self_employed",
+  "business_company",
+  "business_services",
+  "business_church",
+  "business_nonprofit",
+  "business_project",
+  "business_other",
+] as const;
+
+export type CategoryPresetScope = (typeof CATEGORY_PRESET_SCOPES)[number];
+export type CategoryPresetsConfig = Record<CategoryPresetScope, DefaultCategoryPreset[]>;
+
 const COLORS = {
   incomeGreen: "bg-green-500/10 text-green-600 border-green-200/50 dark:text-green-400 dark:border-green-800/50",
   incomeTeal: "bg-teal-500/10 text-teal-600 border-teal-200/50 dark:text-teal-400 dark:border-teal-800/50",
@@ -29,6 +45,18 @@ const COLORS = {
   expenseIndigo: "bg-indigo-500/10 text-indigo-600 border-indigo-200/50 dark:text-indigo-400 dark:border-indigo-800/50",
   neutral: "bg-zinc-500/10 text-zinc-600 border-zinc-200/50 dark:text-zinc-400 dark:border-zinc-800/50",
 };
+
+export const CATEGORY_PRESET_COLOR_OPTIONS = [
+  { id: "green", label: "Verde", value: COLORS.incomeGreen },
+  { id: "teal", label: "Turquesa", value: COLORS.incomeTeal },
+  { id: "blue", label: "Azul", value: COLORS.expenseBlue },
+  { id: "orange", label: "Laranja", value: COLORS.expenseOrange },
+  { id: "violet", label: "Violeta", value: COLORS.expenseViolet },
+  { id: "emerald", label: "Esmeralda", value: COLORS.expenseEmerald },
+  { id: "pink", label: "Rosa", value: COLORS.expensePink },
+  { id: "indigo", label: "Índigo", value: COLORS.expenseIndigo },
+  { id: "neutral", label: "Neutro", value: COLORS.neutral },
+] as const;
 
 const COMMON_DEFAULT_CATEGORIES: DefaultCategoryPreset[] = [
   { name: "Outros", type: "both", color: COLORS.neutral },
@@ -203,6 +231,72 @@ const CUSTOMER_DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE: Record<WorkspaceType, Defa
   church: BUSINESS_PROFILE_CATEGORIES,
 };
 
+function includeRequiredOther(categories: DefaultCategoryPreset[]) {
+  return [...categories.filter((category) => category.name !== "Outros"), ...COMMON_DEFAULT_CATEGORIES]
+    .map((category) => ({ ...category, aliases: category.aliases ? [...category.aliases] : undefined }));
+}
+
+export const DEFAULT_CATEGORY_PRESETS_CONFIG: CategoryPresetsConfig = {
+  personal: includeRequiredOther(CUSTOMER_DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE.personal),
+  family: includeRequiredOther(CUSTOMER_DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE.family),
+  business: includeRequiredOther(CUSTOMER_DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE.business),
+  business_self_employed: includeRequiredOther(BUSINESS_CATEGORY_PRESETS_BY_KIND.self_employed),
+  business_company: includeRequiredOther(BUSINESS_CATEGORY_PRESETS_BY_KIND.company),
+  business_services: includeRequiredOther(BUSINESS_CATEGORY_PRESETS_BY_KIND.services),
+  business_church: includeRequiredOther(BUSINESS_CATEGORY_PRESETS_BY_KIND.church),
+  business_nonprofit: includeRequiredOther(BUSINESS_CATEGORY_PRESETS_BY_KIND.nonprofit),
+  business_project: includeRequiredOther(BUSINESS_CATEGORY_PRESETS_BY_KIND.project),
+  business_other: includeRequiredOther(BUSINESS_CATEGORY_PRESETS_BY_KIND.other),
+};
+
+const CATEGORY_COLOR_VALUES = new Set<string>(CATEGORY_PRESET_COLOR_OPTIONS.map((option) => option.value));
+
+function normalizeCategoryPreset(value: unknown): DefaultCategoryPreset | null {
+  if (!value || typeof value !== "object") return null;
+  const input = value as Partial<DefaultCategoryPreset>;
+  if (typeof input.name !== "string") return null;
+  const name = input.name.trim().slice(0, 60);
+  if (!name) return null;
+  const type: DefaultCategoryType = input.type === "income" || input.type === "expense" || input.type === "both"
+    ? input.type
+    : "both";
+  const color = typeof input.color === "string" && CATEGORY_COLOR_VALUES.has(input.color) ? input.color : COLORS.neutral;
+  const aliases = Array.isArray(input.aliases)
+    ? Array.from(new Set(input.aliases.filter((alias): alias is string => typeof alias === "string").map((alias) => alias.trim().slice(0, 60)).filter(Boolean))).slice(0, 10)
+    : undefined;
+  return { name, type, color, aliases: aliases?.length ? aliases : undefined };
+}
+
+export function normalizeCategoryPresetsConfig(
+  value: unknown,
+  fallback: CategoryPresetsConfig = DEFAULT_CATEGORY_PRESETS_CONFIG,
+): CategoryPresetsConfig {
+  const input = value && typeof value === "object" ? value as Partial<Record<CategoryPresetScope, unknown>> : {};
+  return Object.fromEntries(CATEGORY_PRESET_SCOPES.map((scope) => {
+    const source = Array.isArray(input[scope]) ? input[scope] : fallback[scope];
+    const byName = new Map<string, DefaultCategoryPreset>();
+    source.slice(0, 50).forEach((candidate) => {
+      const category = normalizeCategoryPreset(candidate);
+      if (!category) return;
+      const key = category.name.toLocaleLowerCase("pt-BR");
+      if (!byName.has(key)) byName.set(key, category);
+    });
+    byName.delete("outros");
+    return [scope, [...Array.from(byName.values()).slice(0, 49), { ...COMMON_DEFAULT_CATEGORIES[0] }]];
+  })) as CategoryPresetsConfig;
+}
+
+export function getCategoryPresetScope(
+  workspaceType: WorkspaceType = "personal",
+  businessKind?: BusinessOrganizationKind,
+): CategoryPresetScope {
+  if (workspaceType === "family") return "family";
+  if (workspaceType === "church") return "business_church";
+  if (workspaceType === "business" && businessKind) return `business_${businessKind}` as CategoryPresetScope;
+  if (workspaceType === "business" || workspaceType === "professional") return "business";
+  return "personal";
+}
+
 const CATEGORY_TRANSLATIONS: Record<Exclude<Locale, "pt-BR">, Record<string, string>> = {
   "en-US": {
     "Ajuda familiar": "Family support",
@@ -350,12 +444,11 @@ Object.values(CATEGORY_TRANSLATIONS).forEach((dictionary) => {
 export function getDefaultCategoriesForWorkspaceType(
   workspaceType: WorkspaceType = "personal",
   businessKind?: BusinessOrganizationKind,
+  config: CategoryPresetsConfig = DEFAULT_CATEGORY_PRESETS_CONFIG,
 ) {
+  const normalized = normalizeCategoryPresetsConfig(config);
   const byKey = new Map<string, DefaultCategoryPreset>();
-  const presets = workspaceType === "business" && businessKind
-    ? BUSINESS_CATEGORY_PRESETS_BY_KIND[businessKind]
-    : CUSTOMER_DEFAULT_CATEGORY_PRESETS_BY_WORKSPACE[workspaceType];
-  [...presets, ...COMMON_DEFAULT_CATEGORIES].forEach((category) => {
+  normalized[getCategoryPresetScope(workspaceType, businessKind)].forEach((category) => {
     byKey.set(`${category.name}::${category.type}`, category);
   });
   return Array.from(byKey.values());

@@ -10,6 +10,10 @@ import {
 import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
 import { canManageFamilyWorkspaceSettings } from "@/lib/workspaces/family";
 import { getStoredCategoryName, isCategoryOrDescendant } from "@/lib/categories/records";
+import {
+  getDefaultCategoriesForWorkspaceType,
+} from "@/lib/categories/defaultCategories";
+import { getCategoryPresetsConfig } from "@/lib/categories/server";
 
 type CategoryType = "income" | "expense" | "both";
 type WorkspaceType = "personal" | "professional" | "church" | "family" | "business";
@@ -68,6 +72,11 @@ function belongsToActiveWorkspace(row: Record<string, unknown>, workspaceId?: st
 
 function getCategoriesSettingKey(workspaceId?: string | null) {
   return workspaceId ? `categories:${workspaceId}` : "categories";
+}
+
+function isLegacyMaterializedPreset(row: Record<string, unknown>) {
+  const raw = (row.raw as Record<string, unknown> | null) ?? {};
+  return String(row.source_id || "").startsWith("preset_") && typeof raw.workspacePreset === "string";
 }
 
 function toCategoryRow(uid: string, sourceId: string, data: Record<string, unknown>, workspaceId?: string | null) {
@@ -137,7 +146,7 @@ async function getUserCategories(uid: string, workspaceId?: string | null, inclu
       filters: { uid },
     });
   }
-  const activeRows = filterActiveJsonRows(rows);
+  const activeRows = filterActiveJsonRows(rows).filter((row) => !isLegacyMaterializedPreset(row));
   if (!workspaceId) return activeRows;
   return activeRows.filter((row) => belongsToActiveWorkspace(row, workspaceId, includeLegacyRows, workspaceType));
 }
@@ -177,7 +186,7 @@ export async function GET(request: NextRequest) {
     const uid = workspaceContext.ownerUid;
     const settingKey = getCategoriesSettingKey(workspaceContext.workspaceId);
 
-    const [categoryRows, settingsRows] = await Promise.all([
+    const [categoryRows, settingsRows, categoryPresets] = await Promise.all([
       getUserCategories(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows, workspaceContext.workspaceType),
       supabaseSelect("user_settings", {
         select: "setting_key,data",
@@ -186,6 +195,7 @@ export async function GET(request: NextRequest) {
           ? `setting_key.eq.${settingKey},setting_key.eq.categories`
           : `setting_key.eq.${settingKey}`,
       }),
+      getCategoryPresetsConfig(),
     ]);
 
     const customCategories = categoryRows.map((row) => {
@@ -211,7 +221,13 @@ export async function GET(request: NextRequest) {
       ? settingsData.hiddenDefaultCategories.filter((item): item is string => typeof item === "string")
       : [];
 
-    return NextResponse.json({ ok: true, customCategories, hiddenDefaultCategories }, { status: 200 });
+    const defaultCategories = getDefaultCategoriesForWorkspaceType(
+      workspaceContext.workspaceType,
+      workspaceContext.workspaceSettings?.businessOrganizationKind,
+      categoryPresets,
+    );
+
+    return NextResponse.json({ ok: true, customCategories, defaultCategories, hiddenDefaultCategories }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     const status = resolveApiErrorStatus(message);
@@ -251,9 +267,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
 
-    const existing = await getUserCategories(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows, workspaceContext.workspaceType);
+    const [existing, categoryPresets] = await Promise.all([
+      getUserCategories(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows, workspaceContext.workspaceType),
+      getCategoryPresetsConfig(),
+    ]);
     const normalizedName = name.toLocaleLowerCase("pt-BR");
-    const hasDuplicate = existing.some((row) => getStoredCategoryName(row).toLocaleLowerCase("pt-BR") === normalizedName);
+    const defaultCategories = getDefaultCategoriesForWorkspaceType(
+      workspaceContext.workspaceType,
+      workspaceContext.workspaceSettings?.businessOrganizationKind,
+      categoryPresets,
+    );
+    const hasDuplicate = existing.some((row) => getStoredCategoryName(row).toLocaleLowerCase("pt-BR") === normalizedName)
+      || defaultCategories.some((category) => category.name.toLocaleLowerCase("pt-BR") === normalizedName);
     if (hasDuplicate) {
       return NextResponse.json({ ok: false, error: "duplicate_category_name" }, { status: 409 });
     }
@@ -313,9 +338,10 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
 
-    const [allCategories, allTransactions] = await Promise.all([
+    const [allCategories, allTransactions, categoryPresets] = await Promise.all([
       getUserCategories(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows, workspaceContext.workspaceType),
       getUserTransactions(uid, workspaceContext.workspaceId, workspaceContext.includeLegacyRows),
+      getCategoryPresetsConfig(),
     ]);
     const scopedCategories = allCategories.filter((row) => {
       return belongsToActiveWorkspace(row, workspaceContext.workspaceId, workspaceContext.includeLegacyRows, workspaceContext.workspaceType);
@@ -339,10 +365,16 @@ export async function PATCH(request: NextRequest) {
       scopedCategories
         .map(getStoredCategoryName)
         .filter((name) => !renameMap.has(name))
+        .map((name) => name.toLocaleLowerCase("pt-BR"))
     );
+    getDefaultCategoriesForWorkspaceType(
+      workspaceContext.workspaceType,
+      workspaceContext.workspaceSettings?.businessOrganizationKind,
+      categoryPresets,
+    ).forEach((category) => existingNames.add(category.name.toLocaleLowerCase("pt-BR")));
 
     for (const targetName of renameMap.values()) {
-      if (existingNames.has(targetName)) {
+      if (existingNames.has(targetName.toLocaleLowerCase("pt-BR"))) {
         return NextResponse.json({ ok: false, error: "duplicate_category_name" }, { status: 409 });
       }
     }

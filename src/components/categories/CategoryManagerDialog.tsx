@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Pencil, Trash2, Plus, EyeOff, Eye, FolderTree, Tag, Check, X, FolderOpen } from "lucide-react";
+import { Pencil, Trash2, Plus, EyeOff, Eye, FolderTree, Tag, Check, X, FolderOpen, Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
 import { CategoryLabel } from "@/components/categories/CategoryLabel";
@@ -58,6 +58,8 @@ export function CategoryManagerDialog({
   const [editingCategoryParent, setEditingCategoryParent] = useState("");
   const [renamingCategoryName, setRenamingCategoryName] = useState<string | null>(null);
   const [customParentFilter, setCustomParentFilter] = useState("all");
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [updatingVisibilityName, setUpdatingVisibilityName] = useState<string | null>(null);
 
   const compatibleCategories = useMemo(() => {
     const filtered = categories.filter((cat) => cat.type === type || cat.type === "both");
@@ -105,6 +107,8 @@ export function CategoryManagerDialog({
     setEditingCategoryParent("");
     setRenamingCategoryName(null);
     setCustomParentFilter("all");
+    setCreatingCategory(false);
+    setUpdatingVisibilityName(null);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -122,6 +126,7 @@ export function CategoryManagerDialog({
       ? `${parentName}${CATEGORY_PATH_SEPARATOR}${categoryName}`
       : categoryName;
 
+    setCreatingCategory(true);
     try {
       await addNewCategory(categoryName, type, parentName);
       onSelectCategory?.(fullCategoryName);
@@ -139,6 +144,8 @@ export function CategoryManagerDialog({
         return;
       }
       toast.error(t("toasts.createError"));
+    } finally {
+      setCreatingCategory(false);
     }
   };
 
@@ -222,6 +229,18 @@ export function CategoryManagerDialog({
     }
   };
 
+  const handleToggleDefaultVisibility = async (categoryName: string, hidden: boolean) => {
+    setUpdatingVisibilityName(categoryName);
+    try {
+      await toggleDefaultCategoryVisibility(categoryName, hidden);
+      toast.success(t("toasts.visibilityUpdated"));
+    } catch {
+      toast.error(t("toasts.visibilityError"));
+    } finally {
+      setUpdatingVisibilityName(null);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {/* Removemos o p-0 e max-h para controlar o scroll internamente de forma mais limpa */}
@@ -290,10 +309,12 @@ export function CategoryManagerDialog({
                     className="bg-white dark:bg-zinc-950 rounded-xl flex-1"
                   />
                   <Button 
+                    type="button"
                     onClick={handleCreateCategory} 
-                    disabled={!newCategoryName.trim() || (newCategoryMode === "sub" && !newCategoryParent)} 
+                    disabled={creatingCategory || !newCategoryName.trim() || (newCategoryMode === "sub" && !newCategoryParent)}
                     className="rounded-xl bg-violet-600 hover:bg-violet-700 text-white shrink-0 shadow-sm"
                   >
+                    {creatingCategory ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                     {t("addCategory")}
                   </Button>
                 </div>
@@ -360,16 +381,17 @@ export function CategoryManagerDialog({
                             autoFocus
                           />
                           <div className="flex items-center gap-1 shrink-0 justify-end">
-                            <Button size="icon" variant="ghost" className="h-9 w-9 text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200" onClick={handleCancelEditCategory}>
+                            <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200" onClick={handleCancelEditCategory}>
                               <X className="h-4 w-4" />
                             </Button>
                             <Button 
+                              type="button"
                               size="icon" 
                               className="h-9 w-9 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border border-emerald-200" 
                               disabled={renamingCategoryName === cat.name || (sub && !editingCategoryParent)} 
                               onClick={() => handleSaveEditCategory(cat.name)}
                             >
-                              <Check className="h-4 w-4" />
+                              {renamingCategoryName === cat.name ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                             </Button>
                           </div>
                         </div>
@@ -394,6 +416,7 @@ export function CategoryManagerDialog({
                           
                           <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                             <Button 
+                              type="button"
                               size="icon" 
                               variant="ghost" 
                               className="h-8 w-8 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20" 
@@ -403,6 +426,7 @@ export function CategoryManagerDialog({
                               <Pencil className="h-4 w-4" />
                             </Button>
                             <Button 
+                              type="button"
                               size="icon" 
                               variant="ghost" 
                               className="h-8 w-8 text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" 
@@ -410,7 +434,7 @@ export function CategoryManagerDialog({
                               onClick={() => handleDeleteCategory(cat.name)}
                               title={t("delete")}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              {deletingCategoryName === cat.name ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                             </Button>
                           </div>
                         </div>
@@ -464,9 +488,10 @@ export function CategoryManagerDialog({
                               ? "bg-zinc-800 hover:bg-zinc-900 text-white dark:bg-zinc-200 dark:text-zinc-900"
                               : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
                         }`}
-                        disabled={isOthers}
-                        onClick={() => toggleDefaultCategoryVisibility(cat.name, !hidden)}
+                        disabled={isOthers || updatingVisibilityName === cat.name}
+                        onClick={() => void handleToggleDefaultVisibility(cat.name, !hidden)}
                       >
+                        {updatingVisibilityName === cat.name ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
                         {isOthers ? t("required") : hidden ? t("show") : t("hide")}
                       </Button>
                     </div>

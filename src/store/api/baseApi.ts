@@ -44,7 +44,7 @@ export const baseApi = createApi({
   refetchOnReconnect: true,
   tagTypes: [
     "Profile", "FinanceSettings", "Plans", "AccessControl", "Workspaces",
-    "Categories", "Transactions", "PaymentCards", "CreditCard", "PiggyBanks", "Onboarding",
+    "Categories", "CategoryPresets", "Transactions", "PaymentCards", "CreditCard", "PiggyBanks", "Onboarding",
   ],
   endpoints: () => ({}),
 });
