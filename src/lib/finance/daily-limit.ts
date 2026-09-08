@@ -1,5 +1,6 @@
 import type { PaymentCard } from "@/types/paymentCard";
 import type { Transaction } from "@/types/transaction";
+import { calculateCurrentCashBalance, roundMoney } from "@/lib/finance/cash-flow";
 
 export type DailyLimitRisk = "positive" | "neutral" | "warning" | "danger";
 
@@ -57,15 +58,11 @@ export function calculateDailyLimit(input: DailyLimitInput): DailyLimitResult {
   const cardById = new Map((input.cards || []).map((card) => [card.id, card]));
   const transactions = input.transactions.filter(isRealOccurrence);
 
-  const currentBalance = transactions.reduce((acc, transaction) => {
-    const dueDate = transaction.dueDate || transaction.date || today;
-    if (transaction.status === "paid" || dueDate < today) return acc + signedAmount(transaction);
-    return acc;
-  }, 0);
+  const currentBalance = calculateCurrentCashBalance(transactions);
 
   const pendingInMonth = transactions.filter((transaction) => {
     const dueDate = transaction.dueDate || transaction.date || "";
-    return transaction.status !== "paid" && dueDate >= today && dueDate.startsWith(month);
+    return transaction.status !== "paid" && dueDate.startsWith(month);
   });
 
   const pendingIncome = pendingInMonth
@@ -84,7 +81,7 @@ export function calculateDailyLimit(input: DailyLimitInput): DailyLimitResult {
     })
     .reduce((acc, transaction) => acc + Number(transaction.amountForLimit ?? transaction.amount ?? 0), 0);
 
-  const projectedEndBalance = currentBalance + pendingIncome - pendingExpenses - goalReserve;
+  const projectedEndBalance = roundMoney(currentBalance + pendingIncome - pendingExpenses - goalReserve);
   const amount = daysRemaining > 0 ? projectedEndBalance / daysRemaining : null;
   const risk: DailyLimitRisk =
     amount === null ? "neutral" : amount < 0 ? "danger" : amount < 25 ? "warning" : amount < 50 ? "neutral" : "positive";

@@ -1,7 +1,11 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
-import { getImpersonationHeader } from "@/lib/impersonation/client";
+import {
+  clearImpersonationTargetUid,
+  getImpersonationHeader,
+  isTerminalImpersonationError,
+} from "@/lib/impersonation/client";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
 
 export type UserScope = { userId: string };
@@ -25,7 +29,12 @@ const authenticatedBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBase
   api,
   extraOptions,
 ) => {
-  const result = await rawBaseQuery(args, api, extraOptions);
+  let result = await rawBaseQuery(args, api, extraOptions);
+  const errorPayload = result.error?.data as { error?: unknown } | undefined;
+  if (isTerminalImpersonationError(errorPayload?.error)) {
+    clearImpersonationTargetUid();
+    result = await rawBaseQuery(args, api, extraOptions);
+  }
   if (result.error?.status === 401 && typeof window !== "undefined") {
     const now = Date.now();
     if (now - lastUnauthorizedEventAt > 5_000) {
