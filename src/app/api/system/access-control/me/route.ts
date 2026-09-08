@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
-import { verifyRequestAuth } from "@/lib/auth/server";
+import { resolveActingContext } from "@/lib/impersonation/server";
 import { ACCESS_RESOURCE_KEYS, buildEffectiveFeatureAccessConfig, hasBillingExemption, normalizeAccessControlConfig, resolveAccessLevel } from "@/lib/access-control/config";
 import { hasIrregularGatewayBilling, hasTrustedPaidBilling } from "@/lib/billing/effective";
 import {
@@ -17,11 +17,12 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await verifyRequestAuth(request);
+    const acting = await resolveActingContext(request);
+    const effectiveUid = acting.actingUid;
     const [profileRows, accessControlRows] = await Promise.all([
       supabaseSelect("profiles", {
         select: "plan,role,payment_status,billing,raw",
-        filters: { uid: auth.uid },
+        filters: { uid: effectiveUid },
         limit: 1,
       }),
       supabaseSelect("system_configs", {
@@ -39,16 +40,16 @@ export async function GET(request: NextRequest) {
     const accessControl = accessControlRows.length > 0
       ? normalizeAccessControlConfig(accessControlRows[0]?.data)
       : DEFAULT_ACCESS_CONTROL_CONFIG;
-    const billingExempt = hasBillingExemption(accessControl, { uid: auth.uid, role });
+    const billingExempt = hasBillingExemption(accessControl, { uid: effectiveUid, role });
     const plan =
       billingExempt || storedPlan === "free" || hasTrustedPaidBilling(paymentStatus, billing) || !hasIrregularGatewayBilling(billing)
         ? storedPlan
         : "free";
-    const effectiveFeatureAccess = buildEffectiveFeatureAccessConfig(accessControl, { uid: auth.uid, plan, role });
+    const effectiveFeatureAccess = buildEffectiveFeatureAccessConfig(accessControl, { uid: effectiveUid, plan, role });
 
     const access: Partial<Record<AccessResourceKey, AccessPermissionLevel>> = {};
     for (const resource of ACCESS_RESOURCE_KEYS) {
-      access[resource] = resolveAccessLevel(accessControl, { uid: auth.uid, plan, role }, resource);
+      access[resource] = resolveAccessLevel(accessControl, { uid: effectiveUid, plan, role }, resource);
     }
 
     return NextResponse.json(

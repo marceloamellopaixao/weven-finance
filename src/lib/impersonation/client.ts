@@ -1,6 +1,16 @@
 const IMPERSONATION_STORAGE_KEY = "wevenfinance:impersonation:targetUid";
 const IMPERSONATION_EVENT = "wevenfinance:impersonation:changed";
 
+const TERMINAL_IMPERSONATION_ERRORS = new Set([
+  "impersonation_expired",
+  "impersonation_not_allowed",
+  "impersonation_forbidden_role",
+]);
+
+export function isTerminalImpersonationError(value: unknown) {
+  return typeof value === "string" && TERMINAL_IMPERSONATION_ERRORS.has(value);
+}
+
 function safeWindow(): Window | null {
   if (typeof window === "undefined") return null;
   return window;

@@ -41,6 +41,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { getPlanCapabilities } from "@/lib/plans/capabilities";
 import { buildUpgradeCheckoutPath, parseUpgradePlan, type UpgradePlan } from "@/services/billing/checkoutIntent";
 import { calculateDailyLimit } from "@/lib/finance/daily-limit";
+import { calculateCurrentCashBalance, calculateProjectedCashBalance } from "@/lib/finance/cash-flow";
 import { useTranslations } from "@/i18n/T";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useFormatters } from "@/i18n/useFormatters";
@@ -283,39 +284,15 @@ export function DashboardClient() {
 
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
 
-  const paidCurrentBalance = useMemo(() => {
-    return transactions.reduce((acc, t) => {
-      if (t.status === 'paid') {
-        return t.type === 'income' ? acc + t.amount : acc - t.amount;
-      }
-      return acc;
-    }, 0);
-  }, [transactions]);
-
-  const overduePendingNet = useMemo(() => {
-    return transactions
-      .filter((t) => t.status !== "paid" && typeof t.dueDate === "string" && t.dueDate < todayStr)
-      .reduce((acc, t) => (t.type === "income" ? acc + t.amount : acc - t.amount), 0);
-  }, [transactions, todayStr]);
-
   const realCurrentBalance = useMemo(() => {
-    return paidCurrentBalance + overduePendingNet;
-  }, [paidCurrentBalance, overduePendingNet]);
+    return calculateCurrentCashBalance(transactions);
+  }, [transactions]);
 
   const selectedMonthEnd = selectedMonth + "-31";
 
   const projectedAccumulatedBalance = useMemo(() => {
-    const pendingTransactions = transactions.filter(t => {
-      if (t.status === 'paid') return false;
-      if (typeof t.dueDate !== "string") return false;
-      if (t.dueDate < todayStr) return false;
-      return t.dueDate <= selectedMonthEnd;
-    });
-    const pendingNet = pendingTransactions.reduce((acc, t) => {
-      return t.type === 'income' ? acc + t.amount : acc - t.amount;
-    }, 0);
-    return realCurrentBalance + pendingNet;
-  }, [transactions, realCurrentBalance, selectedMonthEnd, todayStr]);
+    return calculateProjectedCashBalance(transactions, selectedMonthEnd);
+  }, [transactions, selectedMonthEnd]);
 
   // Filtra categorias baseado no estado (lista dinámica do Hook)
   const transactionsThisMonthCount = useMemo(() => {

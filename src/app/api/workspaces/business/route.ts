@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
-import { verifyRequestAuth } from "@/lib/auth/server";
+import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { resolveUserUidFromMetadata } from "@/lib/auth/user-uid";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
@@ -277,12 +277,39 @@ async function respondError(request: NextRequest, startedAt: number, error: unkn
   return NextResponse.json({ ok: false, error: message }, { status });
 }
 
+async function resolveBusinessRouteAuth(request: NextRequest) {
+  const acting = await resolveActingContext(request);
+  return {
+    acting,
+    auth: {
+      uid: acting.actingUid,
+      email: acting.actingEmail,
+      name: acting.actingDisplayName,
+    },
+  };
+}
+
+async function requireBusinessImpersonationApproval(
+  request: NextRequest,
+  acting: Awaited<ReturnType<typeof resolveActingContext>>,
+  actionType: string,
+  actionLabel: string,
+) {
+  const approval = await ensureImpersonationWriteApproval({ request, acting, actionType, actionLabel });
+  return approval.allowed
+    ? null
+    : NextResponse.json(
+        { ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId },
+        { status: 409 },
+      );
+}
+
 export async function GET(request: NextRequest) {
   const startedAt = Date.now();
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-business:get", max: 120, windowMs: 60_000 });
     if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
-    const auth = await verifyRequestAuth(request);
+    const { auth } = await resolveBusinessRouteAuth(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
     if (!workspaceId) return NextResponse.json({ ok: false, error: "missing_workspace_id" }, { status: 400 });
     const access = await resolveAccess(auth.uid, workspaceId);
@@ -311,11 +338,13 @@ export async function POST(request: NextRequest) {
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-business:post", max: 30, windowMs: 60_000 });
     if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
-    const auth = await verifyRequestAuth(request);
+    const { acting, auth } = await resolveBusinessRouteAuth(request);
     const body = await request.json() as { workspaceId?: string; email?: string; displayName?: string; role?: unknown; permissions?: unknown };
     const workspaceId = String(body.workspaceId || "").trim();
     const email = normalizeEmail(body.email);
     if (!workspaceId || !email) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    const approvalResponse = await requireBusinessImpersonationApproval(request, acting, "business:invite-member", "Convidar membro para o perfil Business/PJ");
+    if (approvalResponse) return approvalResponse;
     if (email === normalizeEmail(auth.email)) throw new Error("cannot_invite_yourself");
     const access = await resolveAccess(auth.uid, workspaceId, "invite_members");
     await assertInviteAllowed(access.workspaceUid, workspaceId, email);
@@ -326,8 +355,8 @@ export async function POST(request: NextRequest) {
     const authUser = await resolveOrInviteUser({ email, displayName, redirectTo: new URL("/first-access?intent=first-access&businessInvite=1", request.nextUrl.origin).toString() });
     if (!authUser.uid) throw new Error("supabase_user_create_failed:missing_user_id");
     if (!authUser.profileExists) await ensureProfile({ uid: authUser.uid, email, displayName, needsPasswordSetup: authUser.needsPasswordSetup });
-    const row = memberRow({ workspaceUid: access.workspaceUid, workspaceId, memberUid: authUser.uid, email, displayName: authUser.displayName || displayName, role, permissions, invitedByUid: auth.uid, status: "pending" });
-    const invite = invitationRow({ workspaceUid: access.workspaceUid, workspaceId, email, role, permissions, invitedByUid: auth.uid, invitedMemberUid: authUser.uid, recipientAccountExisted: authUser.accountExists });
+    const row = memberRow({ workspaceUid: access.workspaceUid, workspaceId, memberUid: authUser.uid, email, displayName: authUser.displayName || displayName, role, permissions, invitedByUid: acting.requesterUid, status: "pending" });
+    const invite = invitationRow({ workspaceUid: access.workspaceUid, workspaceId, email, role, permissions, invitedByUid: acting.requesterUid, invitedMemberUid: authUser.uid, recipientAccountExisted: authUser.accountExists });
     const context = await getUserPlanContext(access.workspaceUid);
     const capacity = context.isBillingExempt ? 10_000 : (await seatSummary(access.workspaceUid, workspaceId)).capacity;
     const reserved = await supabaseRpc("reserve_business_workspace_invitation", {
@@ -347,7 +376,7 @@ export async function POST(request: NextRequest) {
       await pushNotification({ uid: authUser.uid, kind: "workspace", title: "Convite para uma equipe", message: `${auth.name || "Um responsável"} convidou você para um perfil Business/PJ.`, href: "/dashboard?workspaceInvite=1", meta: { invitationId: invitation.id, workspaceId, workspaceUid: access.workspaceUid } }).catch(() => undefined);
     }
     const meta = getRequestMeta(request);
-    await writeWorkspaceAuditLog({ actorUid: auth.uid, action: "member.invited", workspaceUid: access.workspaceUid, workspaceId, targetUid: authUser.uid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { role, recipientType: authUser.accountExists ? "existing_account" : "new_account" } });
+    await writeWorkspaceAuditLog({ actorUid: acting.requesterUid, action: "member.invited", workspaceUid: access.workspaceUid, workspaceId, targetUid: authUser.uid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { role, recipientType: authUser.accountExists ? "existing_account" : "new_account" } });
     return NextResponse.json({ ok: true, member, invitation, generatedPasswordExposed: false, emailSent: authUser.emailSent, recipientType: authUser.accountExists ? "existing_account" : "new_account", seats });
   } catch (error) {
     return respondError(request, startedAt, error);
@@ -359,11 +388,13 @@ export async function PUT(request: NextRequest) {
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-business:put", max: 30, windowMs: 60_000 });
     if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
-    const auth = await verifyRequestAuth(request);
+    const { acting, auth } = await resolveBusinessRouteAuth(request);
     const body = await request.json() as { workspaceId?: string; invitationId?: string };
     const workspaceId = String(body.workspaceId || "").trim();
     const invitationId = String(body.invitationId || "").trim();
     if (!workspaceId || !invitationId) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    const approvalResponse = await requireBusinessImpersonationApproval(request, acting, "business:resend-invitation", "Reenviar convite do perfil Business/PJ");
+    if (approvalResponse) return approvalResponse;
     const access = await resolveAccess(auth.uid, workspaceId, "invite_members");
     const rows = await supabaseSelect("workspace_invitations", { filters: { id: invitationId, workspace_uid: access.workspaceUid, workspace_id: workspaceId }, limit: 1 });
     if (!rows[0]) return NextResponse.json({ ok: false, error: "invitation_not_found" }, { status: 404 });
@@ -381,7 +412,7 @@ export async function PUT(request: NextRequest) {
     const updated = { ...rows[0], raw: { ...raw, resentAt: now, updatedAt: now }, updated_at: now };
     await supabaseUpsertRows("workspace_invitations", [updated], { onConflict: "id" });
     const meta = getRequestMeta(request);
-    await writeWorkspaceAuditLog({ actorUid: auth.uid, action: "invitation.resent", workspaceUid: access.workspaceUid, workspaceId, targetUid: invitation.invitedMemberUid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { invitationId } });
+    await writeWorkspaceAuditLog({ actorUid: acting.requesterUid, action: "invitation.resent", workspaceUid: access.workspaceUid, workspaceId, targetUid: invitation.invitedMemberUid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { invitationId } });
     return NextResponse.json({ ok: true, invitation: toBusinessWorkspaceInvitation(updated), emailSent: !existed });
   } catch (error) {
     return respondError(request, startedAt, error);
@@ -393,11 +424,13 @@ export async function PATCH(request: NextRequest) {
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-business:patch", max: 60, windowMs: 60_000 });
     if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
-    const auth = await verifyRequestAuth(request);
+    const { acting, auth } = await resolveBusinessRouteAuth(request);
     const body = await request.json() as { workspaceId?: string; memberUid?: string; role?: unknown; permissions?: unknown; status?: "active" | "pending" | "disabled" };
     const workspaceId = String(body.workspaceId || "").trim();
     const memberUid = String(body.memberUid || "").trim();
     if (!workspaceId || !memberUid) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    const approvalResponse = await requireBusinessImpersonationApproval(request, acting, "business:update-member", "Alterar membro do perfil Business/PJ");
+    if (approvalResponse) return approvalResponse;
     const action: ManageAction = body.role !== undefined || body.status !== undefined ? "manage_members" : "edit_permissions";
     const access = await resolveAccess(auth.uid, workspaceId, action);
     if (body.permissions !== undefined && !access.owner && !canEditBusinessPermissions(access.manager)) throw new Error("forbidden");
@@ -415,7 +448,7 @@ export async function PATCH(request: NextRequest) {
     }
     const meta = getRequestMeta(request);
     const auditAction = body.status === "disabled" ? "member.removed" : body.role !== undefined ? "member.role_changed" : "member.permissions_changed";
-    await writeWorkspaceAuditLog({ actorUid: auth.uid, action: auditAction, workspaceUid: access.workspaceUid, workspaceId, targetUid: memberUid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { previousRole: current.role, role, status: body.status || current.status } });
+    await writeWorkspaceAuditLog({ actorUid: acting.requesterUid, action: auditAction, workspaceUid: access.workspaceUid, workspaceId, targetUid: memberUid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { previousRole: current.role, role, status: body.status || current.status } });
     await pushNotification({ uid: memberUid, kind: "workspace", title: body.status === "disabled" ? "Acesso à equipe removido" : "Seu acesso Business/PJ foi atualizado", message: body.status === "disabled" ? "Seu acesso a este perfil Business/PJ foi encerrado. Seus outros perfis não foram alterados." : `Seu papel agora é ${role}.`, href: "/dashboard", meta: { workspaceId, action: auditAction } }).catch(() => undefined);
     return NextResponse.json({ ok: true, member: toBusinessWorkspaceMember(row), ...(body.status === "disabled" ? { seats: await seatSummary(access.workspaceUid, workspaceId) } : {}) });
   } catch (error) {
@@ -428,20 +461,22 @@ export async function DELETE(request: NextRequest) {
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-business:delete", max: 20, windowMs: 60_000 });
     if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
-    const auth = await verifyRequestAuth(request);
+    const { acting, auth } = await resolveBusinessRouteAuth(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
     const invitationId = request.nextUrl.searchParams.get("invitationId")?.trim();
     if (!workspaceId || !invitationId) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    const approvalResponse = await requireBusinessImpersonationApproval(request, acting, "business:revoke-invitation", "Revogar convite do perfil Business/PJ");
+    if (approvalResponse) return approvalResponse;
     const access = await resolveAccess(auth.uid, workspaceId, "invite_members");
     const rows = await supabaseSelect("workspace_invitations", { filters: { id: invitationId, workspace_uid: access.workspaceUid, workspace_id: workspaceId }, limit: 1 });
     if (!rows[0]) return NextResponse.json({ ok: false, error: "invitation_not_found" }, { status: 404 });
     const invitation = toBusinessWorkspaceInvitation(rows[0]);
     if (invitation.status !== "pending") return NextResponse.json({ ok: false, error: "invitation_not_pending" }, { status: 409 });
     const now = new Date().toISOString();
-    await supabasePatchByFilters("workspace_invitations", { id: invitationId }, { invitation_status: "revoked", raw: { ...((rows[0].raw as object | null) || {}), status: "revoked", revokedAt: now, revokedByUid: auth.uid }, updated_at: now });
+    await supabasePatchByFilters("workspace_invitations", { id: invitationId }, { invitation_status: "revoked", raw: { ...((rows[0].raw as object | null) || {}), status: "revoked", revokedAt: now, revokedByUid: acting.requesterUid }, updated_at: now });
     if (invitation.invitedMemberUid) await supabasePatchByFilters("workspace_members", { workspace_uid: access.workspaceUid, workspace_id: workspaceId, member_uid: invitation.invitedMemberUid, member_status: "pending" }, { member_status: "disabled", updated_at: now });
     const meta = getRequestMeta(request);
-    await writeWorkspaceAuditLog({ actorUid: auth.uid, action: "invitation.revoked", workspaceUid: access.workspaceUid, workspaceId, targetUid: invitation.invitedMemberUid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { invitationId } });
+    await writeWorkspaceAuditLog({ actorUid: acting.requesterUid, action: "invitation.revoked", workspaceUid: access.workspaceUid, workspaceId, targetUid: invitation.invitedMemberUid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { invitationId } });
     return NextResponse.json({ ok: true, invitation: { ...invitation, status: "revoked", updatedAt: now } satisfies BusinessWorkspaceInvitation, seats: await seatSummary(access.workspaceUid, workspaceId) });
   } catch (error) {
     return respondError(request, startedAt, error);

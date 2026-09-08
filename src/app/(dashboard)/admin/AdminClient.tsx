@@ -357,7 +357,16 @@ export default function AdminPage() {
     hasAdminPermission("support", "full") ||
     hasAdminPermission("restore", "full");
   const canRestore = hasAdminPermission("restore", "read");
-  const canImpersonateUsers = hasAdminPermission("users", "write") || hasAdminPermission("support", "write");
+  const canImpersonateUsers = Boolean(
+    userProfile && (
+      isSupremeAdmin ||
+      hasAccess(accessControlConfig, {
+        uid: userProfile.uid,
+        plan: userProfile.plan,
+        role: userProfile.role,
+      }, "admin.impersonation", "write")
+    )
+  );
 
   const unseenSupportTickets = useMemo(() => {
     if (!userProfile) return [];

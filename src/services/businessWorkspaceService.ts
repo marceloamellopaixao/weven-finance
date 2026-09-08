@@ -2,6 +2,7 @@
 
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { fetchWithImpersonationApproval } from "@/services/impersonationApprovalFetch";
 import type {
   BusinessPermission,
   BusinessRole,
@@ -67,7 +68,7 @@ export async function inviteBusinessMember(input: {
   role: BusinessRole;
   permissions?: BusinessPermission[];
 }) {
-  const response = await apiFetch("/api/workspaces/business", { method: "POST", body: JSON.stringify(input) });
+  const response = await fetchWithImpersonationApproval("/api/workspaces/business", { method: "POST", body: JSON.stringify(input) });
   return readPayload<{
     ok: true;
     member: BusinessWorkspaceMember;
@@ -86,17 +87,17 @@ export async function updateBusinessMember(input: {
   permissions?: BusinessPermission[];
   status?: "active" | "pending" | "disabled";
 }) {
-  const response = await apiFetch("/api/workspaces/business", { method: "PATCH", body: JSON.stringify(input) });
+  const response = await fetchWithImpersonationApproval("/api/workspaces/business", { method: "PATCH", body: JSON.stringify(input) });
   return readPayload<{ ok: true; member: BusinessWorkspaceMember; seats?: WorkspaceSeatSummary }>(response);
 }
 
 export async function resendBusinessInvitation(workspaceId: string, invitationId: string) {
-  const response = await apiFetch("/api/workspaces/business", { method: "PUT", body: JSON.stringify({ workspaceId, invitationId }) });
+  const response = await fetchWithImpersonationApproval("/api/workspaces/business", { method: "PUT", body: JSON.stringify({ workspaceId, invitationId }) });
   return readPayload<{ ok: true; invitation: BusinessWorkspaceInvitation; emailSent: boolean }>(response);
 }
 
 export async function revokeBusinessInvitation(workspaceId: string, invitationId: string) {
-  const response = await apiFetch(`/api/workspaces/business?workspaceId=${encodeURIComponent(workspaceId)}&invitationId=${encodeURIComponent(invitationId)}`, { method: "DELETE" });
+  const response = await fetchWithImpersonationApproval(`/api/workspaces/business?workspaceId=${encodeURIComponent(workspaceId)}&invitationId=${encodeURIComponent(invitationId)}`, { method: "DELETE" });
   return readPayload<{ ok: true; invitation: BusinessWorkspaceInvitation; seats: WorkspaceSeatSummary }>(response);
 }
 

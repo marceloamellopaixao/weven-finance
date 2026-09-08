@@ -45,3 +45,19 @@ test("calculateDailyLimit reports current month credit card impact", () => {
 
   assert.equal(result.currentMonthCardImpact, 150);
 });
+
+test("calculateDailyLimit keeps overdue pending bills out of current cash and in the forecast", () => {
+  const result = calculateDailyLimit({
+    today: "2026-09-08",
+    month: "2026-09",
+    transactions: [
+      { type: "income", amount: 914.92, status: "paid", dueDate: "2026-09-04", date: "2026-09-04", paymentMethod: "pix" },
+      { type: "expense", amount: 596.66, status: "pending", dueDate: "2026-09-04", date: "2026-09-04", paymentMethod: "boleto" },
+      { type: "expense", amount: 90.96, status: "pending", dueDate: "2026-09-07", date: "2026-09-07", paymentMethod: "pix" },
+    ],
+  });
+
+  assert.equal(result.currentBalance, 914.92);
+  assert.equal(result.pendingExpenses, 687.62);
+  assert.equal(result.projectedEndBalance, 227.3);
+});
