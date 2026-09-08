@@ -94,16 +94,16 @@ export function SupportReporter() {
 
   const authenticated = Boolean(user || userProfile);
   const contextRows = useMemo(() => [
-    [t("context.route"), technicalContext.route],
-    [t("context.version"), technicalContext.appVersion],
-    [t("context.browser"), technicalContext.browser],
-    [t("context.os"), technicalContext.operatingSystem],
-    [t("context.viewport"), technicalContext.viewport],
-    [t("context.locale"), technicalContext.locale],
-    [t("context.timezone"), technicalContext.timezone],
-    [t("context.workspace"), technicalContext.workspaceType],
-    [t("context.plan"), userProfile?.plan],
-  ].filter((row): row is [string, string] => Boolean(row[1])), [t, technicalContext, userProfile?.plan]);
+    ["route", t("context.route"), technicalContext.route],
+    ["version", t("context.version"), technicalContext.appVersion],
+    ["browser", t("context.browser"), technicalContext.browser],
+    ["os", t("context.os"), technicalContext.operatingSystem],
+    ["viewport", t("context.viewport"), technicalContext.viewport],
+    ["locale", t("context.locale"), technicalContext.locale],
+    ["timezone", t("context.timezone"), technicalContext.timezone],
+    ["workspace", t("context.workspace"), technicalContext.workspaceType],
+    ["plan", t("context.plan"), userProfile?.plan],
+  ].filter((row): row is [string, string, string] => Boolean(row[2])), [t, technicalContext, userProfile?.plan]);
 
   const prepareOpen = useCallback(() => {
     const userAgent = navigator.userAgent || "";
@@ -346,8 +346,8 @@ export function SupportReporter() {
                 </label>
                 {includeContext ? (
                   <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-1 border-t border-border pt-3 text-xs sm:grid-cols-2">
-                    {contextRows.map(([label, value]) => (
-                      <div key={label} className="flex min-w-0 gap-1">
+                    {contextRows.map(([id, label, value]) => (
+                      <div key={id} className="flex min-w-0 gap-1">
                         <dt className="font-medium text-foreground">{label}:</dt>
                         <dd className="truncate text-muted-foreground">{value}</dd>
                       </div>

@@ -82,6 +82,7 @@ alter table public.system_configs enable row level security;
 alter table public.notifications enable row level security;
 alter table public.admin_audit_logs enable row level security;
 alter table public.api_request_metrics enable row level security;
+alter table public.performance_metrics enable row level security;
 alter table public.migration_runs enable row level security;
 alter table public.product_events enable row level security;
 
@@ -368,6 +369,11 @@ begin
 
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'api_request_metrics' and policyname = 'api_request_metrics_select_staff') then
     create policy api_request_metrics_select_staff on public.api_request_metrics
+      for select using (public.is_staff_role());
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'performance_metrics' and policyname = 'performance_metrics_select_staff') then
+    create policy performance_metrics_select_staff on public.performance_metrics
       for select using (public.is_staff_role());
   end if;
 

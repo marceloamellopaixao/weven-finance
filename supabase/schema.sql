@@ -362,6 +362,7 @@ create table if not exists public.support_request_messages (
   author_uid text not null,
   author_kind text not null check (author_kind in ('client', 'staff')),
   visibility text not null default 'public' check (visibility in ('public', 'internal')),
+  client_request_id text,
   message text not null check (char_length(message) between 1 and 5000),
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
@@ -477,6 +478,7 @@ create table if not exists public.notifications (
   title text not null,
   message text not null,
   href text,
+  dedupe_key text,
   is_read boolean not null default false,
   meta jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc', now()),
@@ -505,6 +507,17 @@ create table if not exists public.api_request_metrics (
   duration_ms integer not null default 0,
   request_id text,
   uid text,
+  error_code text,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.performance_metrics (
+  id text primary key,
+  metric_name text not null,
+  duration_ms numeric(12,2) not null check (duration_ms >= 0),
+  route text,
+  correlation_id text,
+  rating text,
   error_code text,
   created_at timestamptz not null default timezone('utc', now())
 );
@@ -728,6 +741,7 @@ alter table if exists public.support_request_messages add column if not exists t
 alter table if exists public.support_request_messages add column if not exists author_uid text;
 alter table if exists public.support_request_messages add column if not exists author_kind text;
 alter table if exists public.support_request_messages add column if not exists visibility text default 'public';
+alter table if exists public.support_request_messages add column if not exists client_request_id text;
 alter table if exists public.support_request_messages add column if not exists message text;
 alter table if exists public.support_request_messages add column if not exists created_at timestamptz default timezone('utc', now());
 alter table if exists public.support_request_messages add column if not exists updated_at timestamptz default timezone('utc', now());
@@ -798,6 +812,7 @@ alter table if exists public.notifications add column if not exists kind text de
 alter table if exists public.notifications add column if not exists title text;
 alter table if exists public.notifications add column if not exists message text;
 alter table if exists public.notifications add column if not exists href text;
+alter table if exists public.notifications add column if not exists dedupe_key text;
 alter table if exists public.notifications add column if not exists is_read boolean default false;
 alter table if exists public.notifications add column if not exists meta jsonb default '{}'::jsonb;
 alter table if exists public.notifications add column if not exists created_at timestamptz default timezone('utc', now());
@@ -822,6 +837,13 @@ alter table if exists public.api_request_metrics add column if not exists reques
 alter table if exists public.api_request_metrics add column if not exists uid text;
 alter table if exists public.api_request_metrics add column if not exists error_code text;
 alter table if exists public.api_request_metrics add column if not exists created_at timestamptz default timezone('utc', now());
+alter table if exists public.performance_metrics add column if not exists metric_name text;
+alter table if exists public.performance_metrics add column if not exists duration_ms numeric(12,2) default 0;
+alter table if exists public.performance_metrics add column if not exists route text;
+alter table if exists public.performance_metrics add column if not exists correlation_id text;
+alter table if exists public.performance_metrics add column if not exists rating text;
+alter table if exists public.performance_metrics add column if not exists error_code text;
+alter table if exists public.performance_metrics add column if not exists created_at timestamptz default timezone('utc', now());
 
 drop trigger if exists trg_profiles_set_updated_at on public.profiles;
 create trigger trg_profiles_set_updated_at before update on public.profiles

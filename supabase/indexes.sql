@@ -144,6 +144,10 @@ create unique index if not exists idx_support_requests_protocol
 create index if not exists idx_support_request_messages_ticket_created
   on public.support_request_messages(ticket_id, created_at asc);
 
+create unique index if not exists idx_support_request_messages_ticket_client_request
+  on public.support_request_messages(ticket_id, client_request_id)
+  where client_request_id is not null;
+
 create index if not exists idx_support_request_events_ticket_created
   on public.support_request_events(ticket_id, created_at asc);
 
@@ -171,6 +175,10 @@ create index if not exists idx_foundation_plan_claims_status_claimed
 create index if not exists idx_notifications_uid_created_at
   on public.notifications(uid, created_at desc);
 
+create unique index if not exists idx_notifications_uid_dedupe_key
+  on public.notifications(uid, dedupe_key)
+  where dedupe_key is not null;
+
 create index if not exists idx_notifications_uid_is_read
   on public.notifications(uid, is_read, created_at desc);
 
@@ -188,6 +196,9 @@ create index if not exists idx_api_request_metrics_created_at
 
 create index if not exists idx_api_request_metrics_route_method_created_at
   on public.api_request_metrics(route, method, created_at desc);
+
+create index if not exists idx_performance_metrics_name_created
+  on public.performance_metrics(metric_name, created_at desc);
 
 create index if not exists idx_product_events_name_created
   on public.product_events(event_name, created_at desc);

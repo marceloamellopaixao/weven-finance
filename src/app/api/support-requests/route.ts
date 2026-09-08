@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkRateLimit } from "@/lib/api/rate-limit";
+import { checkRateLimit, rateLimitResponse, RateLimitExceededError } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     const rate = await checkRateLimit(request, { key: "api:support:get", max: 120, windowMs: 60_000 });
     if (!rate.allowed) {
       await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
     const auth = await getSupportAuthContext(request);
@@ -216,13 +216,13 @@ export async function POST(request: NextRequest) {
   const meta = getRequestMeta(request);
   const startedAt = Date.now();
   try {
-    const rate = await checkRateLimit(request, { key: "api:support:post", max: 40, windowMs: 60_000 });
+    const auth = await getSupportAuthContext(request);
+    const rate = await checkRateLimit(request, { key: "api:support:post", max: Number(process.env.RATE_LIMIT_SUPPORT_TICKETS_PER_HOUR || 10), windowMs: 3_600_000, identity: { userId: auth.requesterUid, tenantId: auth.uid }, critical: true });
     if (!rate.allowed) {
       await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
-    const auth = await getSupportAuthContext(request);
     const accessControl = await getServerAccessControlConfig();
     if (!isAccessAllowed(auth, accessControl, "support.write", "write")) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
@@ -253,6 +253,7 @@ export async function POST(request: NextRequest) {
     await writeApiMetric({ route: meta.route, method: meta.method, status: responseStatus, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
     return NextResponse.json({ ok: true, id, protocol, duplicated: result.duplicated }, { status: responseStatus });
   } catch (error) {
+    if (error instanceof RateLimitExceededError) return rateLimitResponse(error.result);
     const message = error instanceof Error ? error.message : "unknown_error";
     apiLogger.error({
       message: "support_requests_post_failed",
@@ -287,7 +288,7 @@ export async function PATCH(request: NextRequest) {
     const rate = await checkRateLimit(request, { key: "api:support:patch", max: 80, windowMs: 60_000 });
     if (!rate.allowed) {
       await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
     const auth = await getSupportAuthContext(request);
@@ -455,6 +456,7 @@ export async function PATCH(request: NextRequest) {
         message: FINAL_STATUSES.has(nextStatus) ? `Seu chamado foi finalizado com status: ${statusLabel}.` : `O status do seu chamado mudou para ${nextStatus}.`,
         href: `/settings?tab=help&ticket=${encodeURIComponent(ticketId)}`,
         meta: { ticketId, status: nextStatus, protocol },
+        dedupeKey: `support-status:${ticketId}:${nextStatus}`,
       });
     }
 
@@ -482,7 +484,7 @@ export async function DELETE(request: NextRequest) {
     const rate = await checkRateLimit(request, { key: "api:support:delete", max: 30, windowMs: 60_000 });
     if (!rate.allowed) {
       await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
     const auth = await getSupportAuthContext(request);

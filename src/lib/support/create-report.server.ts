@@ -17,6 +17,8 @@ import {
 } from "@/lib/support/report";
 import { resolveActiveWorkspaceContext } from "@/lib/workspaces/server";
 import { getSupabaseServiceClient } from "@/services/supabase/service-client";
+import { assertRateLimit, checkRateLimit } from "@/lib/api/rate-limit";
+import { writePerformanceMetric } from "@/lib/observability/metrics";
 
 const SUPPORT_EVIDENCE_BUCKET = "support-evidence";
 const FINAL_STATUSES = new Set(["resolved", "implemented", "rejected"]);
@@ -110,16 +112,22 @@ export async function enforceSupportDailyQuota(ownerUid: string, incomingFiles: 
   }
 }
 
-export async function uploadSupportEvidence(input: { ownerUid: string; ticketId: string; files: File[] }) {
+export async function uploadSupportEvidence(input: { ownerUid: string; ticketId: string; files: File[]; request?: NextRequest; requesterUid?: string }) {
   if (input.files.length > MAX_SUPPORT_ATTACHMENTS) throw new Error("too_many_attachments");
   if (!/^[A-Za-z0-9_-]{1,160}$/.test(input.ownerUid)) throw new Error("invalid_owner_uid");
   const incomingBytes = input.files.reduce((total, file) => total + file.size, 0);
+  if (input.request && input.files.length > 0) {
+    const identity = { userId: input.requesterUid || input.ownerUid, tenantId: input.ownerUid };
+    assertRateLimit(await checkRateLimit(input.request, { key: "api:support:upload:files", max: Number(process.env.RATE_LIMIT_SUPPORT_FILES_PER_DAY || MAX_SUPPORT_DAILY_ATTACHMENTS), windowMs: 86_400_000, cost: input.files.length, identity, critical: true }));
+    assertRateLimit(await checkRateLimit(input.request, { key: "api:support:upload:bytes", max: Number(process.env.RATE_LIMIT_SUPPORT_BYTES_PER_DAY || MAX_SUPPORT_DAILY_BYTES), windowMs: 86_400_000, cost: incomingBytes, identity, critical: true }));
+  }
   await enforceSupportDailyQuota(input.ownerUid, input.files.length, incomingBytes);
   const processed = await Promise.all(input.files.map(processSupportEvidence));
   const supabase = getSupabaseServiceClient();
   const uploaded: UploadedEvidence[] = [];
   try {
     for (const evidence of processed) {
+      const uploadStartedAt = performance.now();
       const id = crypto.randomUUID();
       const extension = extensionForSupportEvidence(evidence.mimeType);
       const storagePath = `${input.ownerUid}/${input.ticketId}/${id}.${extension}`;
@@ -130,6 +138,11 @@ export async function uploadSupportEvidence(input: { ownerUid: string; ticketId:
       });
       if (error) throw new Error("support_attachment_upload_failed");
       uploaded.push({ ...evidence, id, storagePath });
+      void writePerformanceMetric({
+        name: "support.evidence_upload",
+        durationMs: performance.now() - uploadStartedAt,
+        route: "/api/support-requests",
+      });
     }
     return uploaded;
   } catch (error) {
@@ -207,7 +220,7 @@ export async function createSupportReport(request: NextRequest, auth: SupportAut
   }
 
   const ticketId = crypto.randomUUID();
-  const uploaded = await uploadSupportEvidence({ ownerUid: auth.uid, ticketId, files });
+  const uploaded = await uploadSupportEvidence({ ownerUid: auth.uid, ticketId, files, request, requesterUid: auth.requesterUid });
 
   try {
     const nowIso = new Date().toISOString();

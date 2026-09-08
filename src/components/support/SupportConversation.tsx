@@ -32,6 +32,7 @@ export function SupportConversation({ ticket, staff = false, onRequestAccess, on
   const [mode, setMode] = useState<"reply" | "internal_note" | "request_info">("reply");
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
+  const [activityRequestId, setActivityRequestId] = useState("");
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [lightbox, setLightbox] = useState<string | null>(null);
 
@@ -67,9 +68,12 @@ export function SupportConversation({ ticket, staff = false, onRequestAccess, on
     setSending(true);
     setError("");
     try {
-      await postSupportActivity({ ticketId: ticket.id, action: mode, message, attachments: files });
+      const clientRequestId = activityRequestId || crypto.randomUUID();
+      setActivityRequestId(clientRequestId);
+      await postSupportActivity({ ticketId: ticket.id, action: mode, message, attachments: files, clientRequestId });
       setMessage("");
       setFiles([]);
+      setActivityRequestId("");
       await load();
       onChanged?.();
     } catch (cause) {

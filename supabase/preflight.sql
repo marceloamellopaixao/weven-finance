@@ -27,6 +27,7 @@ with required_tables as (
       ('notifications'),
       ('admin_audit_logs'),
       ('api_request_metrics'),
+      ('performance_metrics'),
       ('migration_runs')
   ) as t(table_name)
 )
@@ -227,6 +228,7 @@ with required_columns as (
       ('support_request_messages', 'author_uid', 'text'),
       ('support_request_messages', 'author_kind', 'text'),
       ('support_request_messages', 'visibility', 'text'),
+      ('support_request_messages', 'client_request_id', 'text'),
       ('support_request_messages', 'message', 'text'),
       ('support_request_messages', 'created_at', 'timestamp with time zone'),
       ('support_request_messages', 'updated_at', 'timestamp with time zone'),
@@ -298,6 +300,7 @@ with required_columns as (
       ('notifications', 'title', 'text'),
       ('notifications', 'message', 'text'),
       ('notifications', 'href', 'text'),
+      ('notifications', 'dedupe_key', 'text'),
       ('notifications', 'is_read', 'boolean'),
       ('notifications', 'meta', 'jsonb'),
       ('notifications', 'created_at', 'timestamp with time zone'),
@@ -324,6 +327,14 @@ with required_columns as (
       ('api_request_metrics', 'uid', 'text'),
       ('api_request_metrics', 'error_code', 'text'),
       ('api_request_metrics', 'created_at', 'timestamp with time zone'),
+      ('performance_metrics', 'id', 'text'),
+      ('performance_metrics', 'metric_name', 'text'),
+      ('performance_metrics', 'duration_ms', 'numeric'),
+      ('performance_metrics', 'route', 'text'),
+      ('performance_metrics', 'correlation_id', 'text'),
+      ('performance_metrics', 'rating', 'text'),
+      ('performance_metrics', 'error_code', 'text'),
+      ('performance_metrics', 'created_at', 'timestamp with time zone'),
 
       ('migration_runs', 'id', 'uuid'),
       ('migration_runs', 'source', 'text'),
@@ -377,6 +388,7 @@ where schemaname = 'public'
     'notifications',
     'admin_audit_logs',
     'api_request_metrics',
+    'performance_metrics',
     'migration_runs',
     'product_events'
   )
@@ -411,6 +423,7 @@ where schemaname = 'public'
     'notifications',
     'admin_audit_logs',
     'api_request_metrics',
+    'performance_metrics',
     'migration_runs',
     'product_events'
   )

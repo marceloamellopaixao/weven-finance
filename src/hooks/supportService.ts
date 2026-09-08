@@ -2,6 +2,7 @@
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
 import type { SupportReportType, SupportTechnicalContext } from "@/lib/support/report";
+import { sendPerformanceMetric } from "@/lib/observability/client-performance";
 
 export type SupportRequestStatus = "pending" | "in_progress" | "resolved" | "rejected";
 export type FeatureRequestStatus = "pending" | "under_review" | "approved" | "rejected" | "implemented";
@@ -117,6 +118,7 @@ async function fetchWithAuth(path: string, init?: RequestInit) {
 }
 
 export async function createSupportReport(input: CreateSupportReportInput) {
+  const startedAt = performance.now();
   const token = await getIdTokenOrThrow();
   const form = new FormData();
   form.set("type", input.type);
@@ -135,6 +137,7 @@ export async function createSupportReport(input: CreateSupportReportInput) {
     headers: {
       Authorization: `Bearer ${token}`,
       "Idempotency-Key": input.clientRequestId,
+      "X-Request-Id": input.clientRequestId,
       ...getImpersonationHeader(),
     },
     body: form,
@@ -146,7 +149,11 @@ export async function createSupportReport(input: CreateSupportReportInput) {
     protocol?: string;
     duplicated?: boolean;
   };
-  if (!response.ok || !payload.ok) throw new Error(payload.error || "support_report_failed");
+  if (!response.ok || !payload.ok) {
+    sendPerformanceMetric({ name: "support.ticket_submit", durationMs: performance.now() - startedAt, correlationId: input.clientRequestId, errorCode: payload.error || "request_failed" });
+    throw new Error(payload.error || "support_report_failed");
+  }
+  sendPerformanceMetric({ name: "support.ticket_submit", durationMs: performance.now() - startedAt, correlationId: input.clientRequestId });
   return payload;
 }
 
@@ -404,11 +411,12 @@ export async function fetchSupportActivity(ticketId: string) {
   return payload.activity;
 }
 
-export async function postSupportActivity(input: { ticketId: string; action: "reply" | "internal_note" | "request_info" | "reopen"; message?: string; attachments?: File[] }) {
+export async function postSupportActivity(input: { ticketId: string; action: "reply" | "internal_note" | "request_info" | "reopen"; message?: string; attachments?: File[]; clientRequestId?: string }) {
   const token = await getIdTokenOrThrow();
   const form = new FormData();
   form.set("ticketId", input.ticketId);
   form.set("action", input.action);
+  form.set("clientRequestId", input.clientRequestId || crypto.randomUUID());
   if (input.message) form.set("message", input.message);
   for (const file of input.attachments || []) form.append("attachments", file, file.name);
   const response = await fetch("/api/support-requests/activity", { method: "POST", headers: { Authorization: `Bearer ${token}`, ...getImpersonationHeader() }, body: form });

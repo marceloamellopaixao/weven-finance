@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { resolveApiErrorStatus } from "@/lib/api/error";
-import { checkRateLimit } from "@/lib/api/rate-limit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { normalizeCurrency } from "@/lib/money/formatMoney";
@@ -247,7 +247,7 @@ export async function GET(request: NextRequest) {
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces:get", max: 120, windowMs: 60_000 });
     if (!rate.allowed) {
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
     const { actingUid: uid } = await resolveActingContext(request);
@@ -311,7 +311,7 @@ export async function POST(request: NextRequest) {
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces:post", max: 40, windowMs: 60_000 });
     if (!rate.allowed) {
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
     const acting = await resolveActingContext(request);
@@ -364,7 +364,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces:patch", max: 60, windowMs: 60_000 });
     if (!rate.allowed) {
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
     const acting = await resolveActingContext(request);
@@ -467,7 +467,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces:delete", max: 20, windowMs: 60_000 });
     if (!rate.allowed) {
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
     const acting = await resolveActingContext(request);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getServerAccessControlConfig, isAccessAllowed } from "@/lib/access-control/server";
-import { checkRateLimit } from "@/lib/api/rate-limit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { writeAdminAuditLog } from "@/lib/audit/admin";
 import { getSupportAuthContext } from "@/lib/support/auth.server";
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   try {
     const rate = await checkRateLimit(request, { key: "api:support:attachment:get", max: 60, windowMs: 60_000 });
     if (!rate.allowed) {
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
     const attachmentId = request.nextUrl.searchParams.get("attachmentId")?.trim() || "";
@@ -104,7 +104,7 @@ export async function DELETE(request: NextRequest) {
   const meta = getRequestMeta(request);
   try {
     const rate = await checkRateLimit(request, { key: "api:support:attachment:delete", max: 30, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const attachmentId = request.nextUrl.searchParams.get("attachmentId")?.trim() || "";
     if (!UUID_REGEX.test(attachmentId)) return NextResponse.json({ ok: false, error: "invalid_attachment_id" }, { status: 400 });
 

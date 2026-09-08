@@ -14,6 +14,7 @@ import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { apiLogger } from "@/lib/observability/logger";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { writeAdminAuditLog } from "@/lib/audit/admin";
+import { checkRateLimit, rateLimitResponse } from "@/lib/api/rate-limit";
 
 function toUserRole(value: unknown): UserRole {
   if (value === "admin" || value === "moderator" || value === "support" || value === "client") {
@@ -58,6 +59,8 @@ async function upsertSupportAccessRequestRow(row: Record<string, unknown>) {
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthContextFromRequest(request);
+    const rate = await checkRateLimit(request, { key: "api:impersonation:get", max: Number(process.env.RATE_LIMIT_IMPERSONATION_READS_PER_MINUTE || 60), windowMs: 60_000, identity: { userId: auth.uid, tenantId: auth.uid } });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const requesterCandidates = Array.from(new Set([auth.uid, auth.rawUid].filter(Boolean)));
     const mode = request.nextUrl.searchParams.get("mode") || "pending";
 
@@ -187,6 +190,8 @@ export async function POST(request: NextRequest) {
   const meta = getRequestMeta(request);
   try {
     const auth = await getAuthContextFromRequest(request);
+    const rate = await checkRateLimit(request, { key: "api:impersonation:post", max: Number(process.env.RATE_LIMIT_IMPERSONATION_ACTIONS_PER_MINUTE || 10), windowMs: 60_000, identity: { userId: auth.uid, tenantId: auth.uid }, critical: true });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const body = (await request.json()) as
       | { action: "request"; targetUid?: string }
       | { action: "respond"; requestId?: string; approved?: boolean }

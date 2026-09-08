@@ -1,6 +1,14 @@
+"use client";
+
 import { LoaderCircle } from "lucide-react";
+import { useEffect } from "react";
+import { sendPerformanceMetric } from "@/lib/observability/client-performance";
 
 export function AppBootLoading() {
+  useEffect(() => {
+    const startedAt = performance.now();
+    return () => sendPerformanceMetric({ name: "boot.app_loading", durationMs: performance.now() - startedAt });
+  }, []);
   return (
     <main className="flex min-h-svh items-center justify-center bg-background px-6 text-foreground" role="status" aria-live="polite">
       <div className="w-full max-w-sm text-center">

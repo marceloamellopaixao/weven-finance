@@ -23,6 +23,7 @@ import { useLazyGetAccessControlQuery } from "@/store/api/systemApi";
 import { AUTH_UNAUTHORIZED_EVENT, baseApi } from "@/store/api/baseApi";
 import { useAppDispatch } from "@/store/hooks";
 import { AppBootLoading } from "@/components/loading/AppBootLoading";
+import { createCorrelationId, sendPerformanceMetric } from "@/lib/observability/client-performance";
 
 const BLOCKED_STATUSES = new Set(["inactive", "blocked"]);
 const PUBLIC_ROUTES = [
@@ -141,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getImpersonationTargetUid()
   );
   const authUserFingerprintRef = useRef<string | null>(null);
+  const workspaceMetricStartedAtRef = useRef<number | null>(null);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -210,6 +212,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    const sessionStartedAt = performance.now();
+    const sessionCorrelationId = createCorrelationId();
     const applySessionUser = (sessionUser: Parameters<typeof mapSupabaseUserToAuthUser>[0] | null) => {
       if (!mounted) return;
       if (!sessionUser) {
@@ -239,6 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     supabase.auth.getSession().then(({ data }) => {
+      sendPerformanceMetric({ name: "boot.session_restore", durationMs: performance.now() - sessionStartedAt, correlationId: sessionCorrelationId });
       applySessionUser(data.session?.user ?? null);
     });
 
@@ -333,12 +338,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    if (canApplyWorkspaceGuard && isLoadingWorkspaceGuard && workspaceMetricStartedAtRef.current === null) {
+      workspaceMetricStartedAtRef.current = performance.now();
+      return;
+    }
+    if (!isLoadingWorkspaceGuard && workspaceMetricStartedAtRef.current !== null) {
+      sendPerformanceMetric({
+        name: "boot.workspace_impersonation",
+        durationMs: performance.now() - workspaceMetricStartedAtRef.current,
+      });
+      workspaceMetricStartedAtRef.current = null;
+    }
+  }, [canApplyWorkspaceGuard, isLoadingWorkspaceGuard]);
+
+  useEffect(() => {
     if (!user) return;
     let cancelled = false;
 
     const syncProfile = async (showLoadingState: boolean) => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       if (showLoadingState) setLoading(true);
+      const profileStartedAt = performance.now();
+      const profileCorrelationId = createCorrelationId();
       try {
         const token = await getAccessTokenOrThrow();
         const bootstrapProfile: Partial<UserProfile> = {
@@ -417,6 +438,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } finally {
+        sendPerformanceMetric({
+          name: "boot.profile_plan_permissions",
+          durationMs: performance.now() - profileStartedAt,
+          correlationId: profileCorrelationId,
+        });
         if (!cancelled) setLoading(false);
       }
     };

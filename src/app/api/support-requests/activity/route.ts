@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getServerAccessControlConfig, isAccessAllowed } from "@/lib/access-control/server";
-import { checkRateLimit } from "@/lib/api/rate-limit";
+import { checkRateLimit, rateLimitResponse, RateLimitExceededError } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { writeAdminAuditLog } from "@/lib/audit/admin";
 import { pushNotification } from "@/lib/notifications/server";
@@ -73,7 +73,7 @@ async function recordEvent(input: {
 export async function GET(request: NextRequest) {
   try {
     const rate = await checkRateLimit(request, { key: "api:support:activity:get", max: 120, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const ticketId = safeTicketId(request);
     if (!ticketId) return NextResponse.json({ ok: false, error: "invalid_ticket_id" }, { status: 400 });
     const context = await resolveTicketAccess(request, ticketId);
@@ -158,14 +158,15 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const meta = getRequestMeta(request);
   try {
-    const rate = await checkRateLimit(request, { key: "api:support:activity:post", max: 40, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     const form = await request.formData();
     const ticketId = String(form.get("ticketId") || "").trim();
     const action = String(form.get("action") || "reply").trim();
+    const clientRequestId = String(form.get("clientRequestId") || request.headers.get("idempotency-key") || "").trim();
     if (!UUID_REGEX.test(ticketId)) return NextResponse.json({ ok: false, error: "invalid_ticket_id" }, { status: 400 });
     const context = await resolveTicketAccess(request, ticketId);
     if (!context) return NextResponse.json({ ok: false, error: "ticket_not_found" }, { status: 404 });
+    const rate = await checkRateLimit(request, { key: "api:support:activity:post", max: Number(process.env.RATE_LIMIT_SUPPORT_RESPONSES_PER_MINUTE || 12), windowMs: 60_000, identity: { userId: context.auth.requesterUid, tenantId: String(context.ticket.uid) }, critical: true });
+    if (!rate.allowed) return rateLimitResponse(rate);
 
     if (action === "reopen") {
       if (!context.access.isOwner || context.auth.isImpersonating) return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
@@ -184,6 +185,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, status: nextStatus });
     }
 
+    if (!UUID_REGEX.test(clientRequestId)) return NextResponse.json({ ok: false, error: "invalid_client_request_id" }, { status: 400 });
+    const { data: duplicate, error: duplicateError } = await context.supabase.from("support_request_messages").select("id").eq("ticket_id", ticketId).eq("client_request_id", clientRequestId).maybeSingle();
+    if (duplicateError) throw new Error("support_idempotency_lookup_failed");
+    if (duplicate) return NextResponse.json({ ok: true, duplicated: true });
+
     const visibility = action === "internal_note" ? "internal" : "public";
     if (visibility === "internal" && !context.access.canWriteInternal) return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     if (visibility === "public" && !context.access.canReplyPublic) return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
@@ -191,17 +197,18 @@ export async function POST(request: NextRequest) {
     const files = form.getAll("attachments").filter((item): item is File => typeof item !== "string");
     const { count } = await context.supabase.from("support_request_attachments").select("id", { count: "exact", head: true }).eq("ticket_id", ticketId);
     if ((count || 0) + files.length > 3) return NextResponse.json({ ok: false, error: "too_many_attachments" }, { status: 400 });
-    const uploaded = await uploadSupportEvidence({ ownerUid: String(context.ticket.uid), ticketId, files });
+    const uploaded = await uploadSupportEvidence({ ownerUid: String(context.ticket.uid), ticketId, files, request, requesterUid: context.auth.requesterUid });
 
     const nowIso = new Date().toISOString();
     const messageId = crypto.randomUUID();
     const { error: messageError } = await context.supabase.from("support_request_messages").insert({
       id: messageId, ticket_id: ticketId, author_uid: context.auth.requesterUid,
       author_kind: context.canWriteStaff && !context.auth.isImpersonating ? "staff" : "client",
-      visibility, message, created_at: nowIso, updated_at: nowIso,
+      visibility, client_request_id: clientRequestId, message, created_at: nowIso, updated_at: nowIso,
     });
     if (messageError) {
       if (uploaded.length) await context.supabase.storage.from("support-evidence").remove(uploaded.map((item) => item.storagePath));
+      if (messageError.code === "23505") return NextResponse.json({ ok: true, duplicated: true });
       throw new Error("support_message_write_failed");
     }
     try {
@@ -229,11 +236,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (!context.access.isOwner && visibility === "public") {
-      await pushNotification({ uid: String(context.ticket.uid), kind: "support", title: action === "request_info" ? "O suporte pediu mais informações" : "Nova resposta no seu chamado", message: `Protocolo ${String(context.ticket.protocol || currentRaw.protocol || "")}`, href: `/settings?tab=help&ticket=${encodeURIComponent(ticketId)}`, meta: { ticketId } });
+      await pushNotification({ uid: String(context.ticket.uid), kind: "support", title: action === "request_info" ? "O suporte pediu mais informações" : "Nova resposta no seu chamado", message: `Protocolo ${String(context.ticket.protocol || currentRaw.protocol || "")}`, href: `/settings?tab=help&ticket=${encodeURIComponent(ticketId)}`, meta: { ticketId }, dedupeKey: `support-reply:${ticketId}:${clientRequestId}` });
     }
     await writeAdminAuditLog({ actorUid: context.auth.requesterUid, action: `support.${eventType}`, targetUid: String(context.ticket.uid), requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { ticketId, visibility, attachments: uploaded.length, impersonating: context.auth.isImpersonating } });
     return NextResponse.json({ ok: true });
   } catch (error) {
+    if (error instanceof RateLimitExceededError) return rateLimitResponse(error.result);
     const message = error instanceof Error ? error.message : "unknown_error";
     const bad = new Set(["invalid_message", "too_many_attachments", "empty_file", "file_too_large", "invalid_file_name", "unsupported_file_type", "file_type_mismatch"]);
     const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : bad.has(message) ? 400 : 500;

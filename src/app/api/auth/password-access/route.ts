@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { resolveApiErrorStatus } from "@/lib/api/error";
-import { checkRateLimit } from "@/lib/api/rate-limit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/api/rate-limit";
 import { findProfileByEmail } from "@/lib/profile/server";
 
 export const runtime = "nodejs";
@@ -13,10 +13,11 @@ export async function POST(request: NextRequest) {
       key: "api:auth:password-access:post",
       max: 12,
       windowMs: 60_000,
+      critical: true,
     });
 
     if (!rate.allowed) {
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
     const body = (await request.json()) as { email?: string };
@@ -25,11 +26,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "missing_email" }, { status: 400 });
     }
 
-    const profile = await findProfileByEmail(email);
-    if (!profile) {
-      return NextResponse.json({ ok: false, error: "email_not_found" }, { status: 404 });
-    }
-
+    await findProfileByEmail(email);
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";

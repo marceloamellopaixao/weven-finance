@@ -4,6 +4,7 @@ import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { requireAccessResource } from "@/lib/access-control/server";
 import { supabaseSelect } from "@/services/supabase/admin";
+import { PERFORMANCE_BUDGETS_MS, percentile } from "@/lib/observability/performance";
 
 type MetricsAlert = {
   code: string;
@@ -78,6 +79,30 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => b.total - a.total)
       .slice(0, 12);
+
+    const performanceRows = await supabaseSelect("performance_metrics", {
+      select: "metric_name,duration_ms,route,rating,error_code,created_at",
+      order: "created_at.desc.nullslast",
+      limit: 5000,
+    }).catch(() => []);
+    const performanceInWindow = performanceRows.filter(
+      (row) => typeof row.created_at === "string" && row.created_at >= cutoff,
+    );
+    const performanceByNameMap = new Map<string, number[]>();
+    for (const row of performanceInWindow) {
+      const name = String(row.metric_name || "unknown");
+      const duration = Number(row.duration_ms);
+      if (!Number.isFinite(duration)) continue;
+      performanceByNameMap.set(name, [...(performanceByNameMap.get(name) || []), duration]);
+    }
+    const performance = Array.from(performanceByNameMap, ([name, durations]) => ({
+      name,
+      samples: durations.length,
+      p50: percentile(durations, 0.5),
+      p75: percentile(durations, 0.75),
+      p95: percentile(durations, 0.95),
+      budgetMs: PERFORMANCE_BUDGETS_MS[name as keyof typeof PERFORMANCE_BUDGETS_MS] || null,
+    })).sort((a, b) => b.p75 - a.p75);
 
     const billingRows = await supabaseSelect("billing_events", {
       select: "id,event_type,raw,created_at",
@@ -208,6 +233,18 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    for (const metric of performance) {
+      if (metric.budgetMs && metric.p75 > metric.budgetMs) {
+        alerts.push({
+          code: `performance_budget_${metric.name.replace(/[^a-z0-9]+/gi, "_")}`,
+          level: metric.p75 > metric.budgetMs * 1.5 ? "high" : "medium",
+          title: "Orçamento de desempenho excedido",
+          description: `${metric.name}: p75 de ${metric.p75}ms (orçamento ${metric.budgetMs}ms).`,
+          value: metric.p75,
+        });
+      }
+    }
+
     return NextResponse.json(
       {
         ok: true,
@@ -229,6 +266,7 @@ export async function GET(request: NextRequest) {
         },
         alerts,
         byRoute,
+        performance,
       },
       { status: 200 }
     );
