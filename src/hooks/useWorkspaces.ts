@@ -12,7 +12,6 @@ import {
   setActiveWorkspaceId as setActiveWorkspaceIdRequest,
   setDefaultWorkspace as setDefaultWorkspaceRequest,
   subscribeToActiveWorkspaceChanged,
-  subscribeToWorkspacesChanged,
   updateWorkspace as updateWorkspaceRequest,
 } from "@/services/workspaceService";
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from "@/types/workspace";
@@ -43,7 +42,6 @@ export function useWorkspaces() {
     }
   }, [activeWorkspaces, defaultWorkspace?.id]);
 
-  useEffect(() => subscribeToWorkspacesChanged(() => { if (userId) void refetch(); }), [refetch, userId]);
   useEffect(() => subscribeToActiveWorkspaceChanged(() => setActiveWorkspaceIdState(getActiveWorkspaceId())), []);
 
   const refresh = useCallback(async () => { if (userId) await refetch(); }, [refetch, userId]);

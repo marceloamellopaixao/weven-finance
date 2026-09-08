@@ -4,7 +4,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { usePathname, useRouter } from "next/navigation";
 import { UserProfile } from "@/types/user";
 import {
-  getImpersonationHeader,
   getImpersonationTargetUid,
   subscribeToImpersonationChange,
 } from "@/lib/impersonation/client";
@@ -18,12 +17,14 @@ import { buildEmailVerificationRedirectUrl, rememberPendingVerificationEmail } f
 import { buildUpgradeCheckoutPath, readPendingUpgradePlan } from "@/services/billing/checkoutIntent";
 import { canAccessAdminArea, isCreatorSupremeUid } from "@/lib/access-control/roles";
 import { canAccessLevel } from "@/lib/access-control/config";
-import { getMyAccessControl } from "@/services/systemService";
 import { useGetWorkspacesQuery } from "@/store/api/workspacesApi";
+import { useLazyGetProfileQuery } from "@/store/api/profileApi";
+import { useLazyGetAccessControlQuery } from "@/store/api/systemApi";
+import { AUTH_UNAUTHORIZED_EVENT, baseApi } from "@/store/api/baseApi";
+import { useAppDispatch } from "@/store/hooks";
 import { AppBootLoading } from "@/components/loading/AppBootLoading";
 
 const BLOCKED_STATUSES = new Set(["inactive", "blocked"]);
-const PROFILE_BACKGROUND_REFRESH_MS = 5 * 60 * 1000;
 const PUBLIC_ROUTES = [
   "/",
   "/login",
@@ -127,6 +128,9 @@ function mapSupabaseUserToAuthUser(input: {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const dispatch = useAppDispatch();
+  const [loadProfile] = useLazyGetProfileQuery();
+  const [loadAccessControl] = useLazyGetAccessControlQuery();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -174,27 +178,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
-  const apiFetchWithToken = async (path: string, init?: RequestInit) => {
-    const token = await getAccessTokenOrThrow();
-    return fetch(path, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        ...getImpersonationHeader(),
-        ...(init?.headers || {}),
-      },
-    });
-  };
-
   const refreshProfile = async () => {
     if (!user) return;
-    const response = await apiFetchWithToken("/api/profile/me", { method: "GET" });
-    const payload = (await response.json()) as { ok: boolean; error?: string; profile?: UserProfile | null };
-    if (!response.ok || !payload.ok) {
-      throw new Error(payload.error || "Erro ao atualizar perfil");
-    }
-    setUserProfile(payload.profile ?? null);
+    const requestUserId = impersonationTargetUid || user.uid;
+    const profile = await loadProfile({ userId: requestUserId }, false).unwrap();
+    setUserProfile(profile);
   };
 
   useEffect(() => {
@@ -204,9 +192,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return subscribeToImpersonationChange((nextTargetUid) => {
+      dispatch(baseApi.util.resetApiState());
       setImpersonationTargetUid(nextTargetUid);
     });
-  }, []);
+  }, [dispatch]);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      dispatch(baseApi.util.resetApiState());
+      setUser(null);
+      setUserProfile(null);
+      void supabase.auth.signOut();
+    };
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+    return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+  }, [dispatch, supabase]);
 
   useEffect(() => {
     let mounted = true;
@@ -214,6 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       if (!sessionUser) {
         authUserFingerprintRef.current = null;
+        dispatch(baseApi.util.resetApiState());
         setUser(null);
         setUserProfile(null);
         setLoading(false);
@@ -231,6 +232,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         hasPasswordProvider: mappedUser.hasPasswordProvider,
       });
       if (authUserFingerprintRef.current === fingerprint) return;
+      dispatch(baseApi.util.resetApiState());
       authUserFingerprintRef.current = fingerprint;
       setLoading(true);
       setUser(mappedUser);
@@ -250,7 +252,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, [dispatch, supabase]);
 
   useEffect(() => {
     if (!user || !userProfile) {
@@ -272,7 +274,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false;
-    getMyAccessControl()
+    loadAccessControl({ userId: userProfile.uid }, true).unwrap()
       .then((data) => {
         if (cancelled) return;
         setPagePreviewAccess(canAccessLevel(data.access["admin.pages.preview"] ?? "none", "read"));
@@ -288,7 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user, userProfile]);
+  }, [loadAccessControl, user, userProfile]);
 
   const authReady = !loading && (!user || !userProfile || pagePreviewAccessUid === userProfile.uid);
   const isWorkspaceGuardRoute = pathname === "/account-profile" || !PUBLIC_ROUTES.includes(pathname);
@@ -361,14 +363,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           needsPasswordSetup: shouldRequirePasswordSetup(user.providers),
         };
 
-        const fetchProfile = async () => {
-          const response = await apiFetchWithToken("/api/profile/me", { method: "GET" });
-          const payload = (await response.json()) as { ok: boolean; error?: string; profile?: UserProfile | null };
-          if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao buscar perfil");
-          return payload.profile ?? null;
-        };
+        const requestUserId = impersonationTargetUid || user.uid;
+        const fetchProfile = (preferCacheValue: boolean) =>
+          loadProfile({ userId: requestUserId }, preferCacheValue).unwrap();
 
-        let profile = await fetchProfile();
+        let profile = await fetchProfile(showLoadingState);
         const mergedProviders = Array.from(
           new Set([...(profile?.authProviders || []), ...(bootstrapProfile.authProviders || [])])
         ).sort((a, b) => a.localeCompare(b));
@@ -403,7 +402,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             },
             body: JSON.stringify({ profile: syncPayload }),
           });
-          profile = await fetchProfile();
+          profile = await fetchProfile(false);
         }
 
         if (!cancelled) setUserProfile(profile ?? null);
@@ -423,12 +422,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     void syncProfile(true);
-    const interval = setInterval(() => void syncProfile(false), PROFILE_BACKGROUND_REFRESH_MS);
     return () => {
       cancelled = true;
-      clearInterval(interval);
     };
-  }, [impersonationTargetUid, supabase, user]);
+  }, [impersonationTargetUid, loadProfile, supabase, user]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -601,6 +598,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await supabase.auth.signOut();
+    dispatch(baseApi.util.resetApiState());
     router.replace("/");
     router.refresh();
   };

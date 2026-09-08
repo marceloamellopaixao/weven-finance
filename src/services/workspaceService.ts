@@ -52,6 +52,7 @@ async function readPayload(response: Response): Promise<WorkspacesPayload> {
   if (!response.ok || !payload.ok) {
     const messages: Record<string, string> = {
       workspace_profile_limit_reached: "Seu plano permite somente um perfil financeiro próprio.",
+      invalid_business_document: "Confira o CNPJ informado. O número digitado não é válido.",
     };
     throw new Error((payload.error && messages[payload.error]) || payload.error || "Não foi possível carregar contextos");
   }

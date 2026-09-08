@@ -11,16 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
+import { usePaymentCards } from "@/hooks/usePaymentCards";
 import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { useTransactions } from "@/hooks/useTransactions";
-import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useTranslations } from "@/i18n/T";
 import { useFormatters } from "@/i18n/useFormatters";
 import { formatCurrencyInput, parseCurrencyInput } from "@/lib/money";
 import { getCurrencySymbol } from "@/lib/money/formatMoney";
-import { getPaymentCards } from "@/services/paymentCardService";
 import { savePiggyDeposit } from "@/services/piggyBankService";
-import { PaymentCard } from "@/types/paymentCard";
 import { PiggyBankGoalType } from "@/types/piggyBank";
 
 type GoalOption = {
@@ -64,8 +62,8 @@ export function NewPiggyBankClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, userProfile } = useAuth();
-  const { activeWorkspaceId } = useWorkspaces();
   const { transactions } = useTransactions();
+  const { paymentCards: cards } = usePaymentCards();
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [goalType, setGoalType] = useState((searchParams.get("goal") as PiggyBankGoalType) || "emergency_reserve");
@@ -75,7 +73,6 @@ export function NewPiggyBankClient() {
   const [yieldType, setYieldType] = useState("");
   const [sourceType, setSourceType] = useState<"bank" | "cash">("bank");
   const [cardId, setCardId] = useState(searchParams.get("cardId") || "");
-  const [cards, setCards] = useState<PaymentCard[]>([]);
   const currency = usePreferredCurrency();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -100,25 +97,8 @@ export function NewPiggyBankClient() {
   const selectedCard = useMemo(() => cards.find((card) => card.id === cardId), [cards, cardId]);
 
   useEffect(() => {
-    if (!user) return;
-    let mounted = true;
-    void (async () => {
-      try {
-        const loadedCards = await getPaymentCards();
-        if (!mounted) return;
-        setCards(loadedCards);
-        if (loadedCards.length > 0) {
-          setCardId((prev) => prev || loadedCards[0].id);
-        }
-      } catch (error) {
-        if (!mounted) return;
-        setFeedback(error instanceof Error ? error.message : t("feedback.loadError"));
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [activeWorkspaceId, t, user]);
+    if (cards.length > 0) setCardId((previous) => previous || cards[0].id);
+  }, [cards]);
 
   const canGoStep2 = goalType !== "custom" || goalName.trim().length > 1;
   const canGoStep3 = parsedAmount > 0 && parsedAmount <= Math.max(0, availableBalance) && (goalType !== "card_limit" || Boolean(cardId));

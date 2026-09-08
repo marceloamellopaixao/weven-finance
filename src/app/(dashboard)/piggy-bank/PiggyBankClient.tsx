@@ -1,18 +1,17 @@
 "use client";
 
-import { useEffect, useState, type ComponentType } from "react";
+import { type ComponentType } from "react";
 import Link from "next/link";
 import { Home, Landmark, PiggyBank as PiggyBankIcon, Plane, PlusCircle, ShieldCheck, Sparkles } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { usePlatformTour } from "@/hooks/usePlatformTour";
+import { usePiggyBanks } from "@/hooks/usePiggyBanks";
 import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
-import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useTranslations } from "@/i18n/T";
 import { useFormatters } from "@/i18n/useFormatters";
-import { getPiggyBanks } from "@/services/piggyBankService";
-import { PiggyBank, PiggyBankGoalType } from "@/types/piggyBank";
+import { PiggyBankGoalType } from "@/types/piggyBank";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -80,15 +79,12 @@ function PiggyBankPageSkeleton() {
 export function PiggyBankClient() {
   const t = useTranslations("piggyBank");
   const { user, userProfile } = useAuth();
-  const { activeWorkspaceId } = useWorkspaces();
+  const { piggyBanks: piggies, loading, error: loadingError } = usePiggyBanks();
   const {
     loading: onboardingLoading,
     isActive: isOnboardingActive,
     completeTour,
   } = useOnboarding();
-  const [piggies, setPiggies] = useState<PiggyBank[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [feedback, setFeedback] = useState<string | null>(null);
   const currency = usePreferredCurrency();
   const { money } = useFormatters(currency);
   usePlatformTour({
@@ -96,28 +92,6 @@ export function PiggyBankClient() {
     disabled: onboardingLoading || isOnboardingActive,
     onComplete: completeTour,
   });
-
-  useEffect(() => {
-    if (!user) return;
-    let mounted = true;
-    void (async () => {
-      setLoading(true);
-      setFeedback(null);
-      try {
-        const loadedPiggies = await getPiggyBanks();
-        if (!mounted) return;
-        setPiggies(loadedPiggies);
-      } catch (error) {
-        if (!mounted) return;
-        setFeedback(error instanceof Error ? error.message : t("feedback.loadError"));
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [activeWorkspaceId, t, user]);
 
   if (!user || !userProfile) {
     return (
@@ -160,8 +134,8 @@ export function PiggyBankClient() {
           </div>
         </div>
 
-        {feedback && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{feedback}</div>
+        {loadingError && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{t("feedback.loadError")}</div>
         )}
 
         <div className="grid gap-4 md:grid-cols-3">

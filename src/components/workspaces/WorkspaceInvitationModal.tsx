@@ -109,7 +109,7 @@ export function WorkspaceInvitationModal() {
           <div className="mb-2 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
             <InvitationIcon className="h-5 w-5" />
           </div>
-          <DialogTitle>{isBusiness ? "Convite para participar de uma empresa" : "Convite para compartilhar uma família"}</DialogTitle>
+          <DialogTitle>{isBusiness ? "Convite para participar de uma organização" : "Convite para compartilhar uma família"}</DialogTitle>
           <DialogDescription>
             {invitation.inviterName} convidou você para participar de <strong>{invitation.workspaceName}</strong> como {roleLabel.toLowerCase()}.
           </DialogDescription>

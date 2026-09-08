@@ -2,6 +2,15 @@ import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { getImpersonationActionStatus } from "@/services/impersonationService";
 import { getActiveWorkspaceId } from "@/services/workspaceService";
 
+export const CATEGORIES_CHANGED_EVENT = "wevenfinance:categories:changed";
+const TRANSACTIONS_CHANGED_EVENT = "wevenfinance:transactions:changed";
+
+function emitDataChanged(options?: { transactions?: boolean }) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(CATEGORIES_CHANGED_EVENT));
+  if (options?.transactions) window.dispatchEvent(new Event(TRANSACTIONS_CHANGED_EVENT));
+}
+
 export interface CustomCategory {
   id?: string;
   name: string;
@@ -115,6 +124,7 @@ export const addCustomCategory = async (
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível adicionar categoria");
   }
+  emitDataChanged();
 };
 
 export const deleteCustomCategoryByName = async (
@@ -129,6 +139,7 @@ export const deleteCustomCategoryByName = async (
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível excluir categoria");
   }
+  emitDataChanged({ transactions: true });
 };
 
 export const renameCustomCategoryByName = async (
@@ -143,6 +154,7 @@ export const renameCustomCategoryByName = async (
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível renomear categoria");
   }
+  emitDataChanged({ transactions: true });
 };
 
 export const setDefaultCategoryHidden = async (
@@ -157,4 +169,5 @@ export const setDefaultCategoryHidden = async (
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error || "Não foi possível atualizar visibilidade da categoria");
   }
+  emitDataChanged();
 };

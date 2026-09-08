@@ -1,12 +1,21 @@
 import type { OnboardingStatus } from "@/services/onboardingService";
 import { baseApi, type UserScope } from "./baseApi";
+import { keepQueryFreshFromRealtime } from "./cacheLifecycle";
 
 export const onboardingApi = baseApi.injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === "development",
   endpoints: (build) => ({
     getOnboarding: build.query<OnboardingStatus, UserScope>({
       query: () => "onboarding",
       transformResponse: (response: { onboarding: OnboardingStatus }) => response.onboarding,
       providesTags: (_result, _error, arg) => [{ type: "Onboarding", id: arg.userId }],
+      onCacheEntryAdded: (arg, { cacheDataLoaded, cacheEntryRemoved, dispatch }) =>
+        keepQueryFreshFromRealtime({
+          cacheDataLoaded,
+          cacheEntryRemoved,
+          sources: [{ table: "user_settings", filter: `uid=eq.${arg.userId}` }],
+          onChange: () => { dispatch(baseApi.util.invalidateTags([{ type: "Onboarding", id: arg.userId }])); },
+        }),
     }),
     updateOnboarding: build.mutation<void, UserScope & { dismissed?: boolean; tourCompleted?: boolean; steps?: Partial<OnboardingStatus["steps"]> }>({
       query: ({ userId, ...body }) => { void userId; return { url: "onboarding", method: "PUT", body }; },
