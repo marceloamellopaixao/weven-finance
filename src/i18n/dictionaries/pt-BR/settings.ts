@@ -261,6 +261,8 @@ export const settings = {
     firstResponse: "Primeira resposta registrada",
     resolvedAt: "Resolvido em {date}",
     ticketCount: "chamado(s)",
+    attachment: "Captura {index}",
+    attachmentError: "Não foi possível abrir esta captura.",
   },
   support: {
     title: "Solicitar suporte",
@@ -299,6 +301,7 @@ export const settings = {
     open: "Aberto",
   },
   ticketTypes: {
+    bug: "Problema / bug",
     feature: "Ideia / sugestão",
     accountRestore: "Recuperação de conta",
     support: "Suporte técnico",

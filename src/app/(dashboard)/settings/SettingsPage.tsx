@@ -34,6 +34,7 @@ import {
   UsersRound,
   WalletCards,
   BriefcaseBusiness,
+  ImageIcon,
 } from "lucide-react";
 import { useState, useEffect, type CSSProperties } from "react";
 import { requestOwnAccountDeletion, updateOwnProfile } from "@/services/userService";
@@ -42,7 +43,7 @@ import { getKeyFingerprint } from "@/lib/crypto";
 import { usePlans } from "@/hooks/usePlans";
 import { migrateCryptography } from "@/services/transactionService";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { sendFeatureRequest, sendSupportRequest, subscribeToSupportTickets, type SupportTicket } from "@/hooks/supportService";
+import { getSupportAttachmentUrl, sendFeatureRequest, sendSupportRequest, subscribeToSupportTickets, type SupportTicket } from "@/hooks/supportService";
 import { BillingHistoryItem, cancelSubscription, confirmPreapproval, getBillingHistory } from "@/services/billingService";
 import { buildUpgradeCheckoutPath, parseUpgradePlan } from "@/services/billing/checkoutIntent";
 import { useImpersonation } from "@/hooks/useImpersonation";
@@ -270,9 +271,19 @@ export default function SettingsPage() {
   };
 
   const formatTicketType = (ticket: SupportTicket) => {
+    if (ticket.type === "bug") return t("ticketTypes.bug");
     if (ticket.type === "feature") return t("ticketTypes.feature");
     if (ticket.supportKind === "account_restore") return t("ticketTypes.accountRestore");
     return t("ticketTypes.support");
+  };
+
+  const handleOpenTicketAttachment = async (attachmentId: string) => {
+    try {
+      const attachment = await getSupportAttachmentUrl(attachmentId);
+      window.open(attachment.url, "_blank", "noopener,noreferrer");
+    } catch {
+      showFeedback("error", t("feedback.error"), t("help.attachmentError"));
+    }
   };
 
   const handleTabChange = (tab: "account" | "profiles" | "family" | "business" | "billing" | "security" | "help") => {
@@ -1549,6 +1560,16 @@ export default function SettingsPage() {
                           </div>
                         </div>
                         <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{ticket.message}</p>
+                        {ticket.attachments?.length ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {ticket.attachments.map((attachment, index) => (
+                              <Button key={attachment.id} type="button" variant="outline" size="sm" className="h-8 rounded-lg text-xs" onClick={() => void handleOpenTicketAttachment(attachment.id)}>
+                                <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
+                                {t("help.attachment", { index: index + 1 })}
+                              </Button>
+                            ))}
+                          </div>
+                        ) : null}
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                           <span>{t("help.openedAt", { date: date(ticket.createdAt) })}</span>
                           {ticket.firstResponseAt ? <span>{t("help.firstResponse")}</span> : null}

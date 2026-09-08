@@ -1,94 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyRequestAuth } from "@/lib/auth/server";
-import { resolveActingContext } from "@/lib/impersonation/server";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { pushNotification, pushNotifications } from "@/lib/notifications/server";
-import { decryptServerPayload, encryptServerPayload } from "@/lib/secure-store/server";
-import { readSecureProfilePayload } from "@/lib/secure-store/profile";
+import { decryptServerPayload } from "@/lib/secure-store/server";
 import {
-  CREATOR_SUPREME_UID,
   getServerAccessControlConfig,
   isAccessAllowed,
-  ServerAccessProfile,
 } from "@/lib/access-control/server";
-import { parseUserPlan } from "@/lib/plans/catalog";
 import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
-
-type SupportType = "support" | "feature";
-type TicketPriority = "low" | "medium" | "high" | "urgent";
-type SupportAuthContext = ServerAccessProfile & { email: string; name: string };
+import { createSupportReport } from "@/lib/support/create-report.server";
+import { getSupabaseServiceClient } from "@/services/supabase/service-client";
+import { getSupportAuthContext } from "@/lib/support/auth.server";
+import { computeSupportEvidenceRetentionUntil } from "@/lib/support/report";
 
 const FINAL_STATUSES = new Set(["resolved", "implemented", "rejected"]);
-
-function formatProtocol(date = new Date()) {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  const suffix = Math.random().toString(36).slice(2, 7).toUpperCase();
-  return `WF-${y}${m}${d}-${suffix}`;
-}
-
-function inferPriority(type: SupportType, message: string): TicketPriority {
-  if (type === "feature") return "low";
-  const normalized = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  if (/(bloquead|urgente|nao consigo|nao entra|sem acesso|pagamento|cobranca|erro 500)/.test(normalized)) {
-    return "high";
-  }
-  if (/(travando|lento|falha|bug|problema)/.test(normalized)) {
-    return "medium";
-  }
-  return "low";
-}
-
-function computeSlaDueAt(createdAtIso: string, type: SupportType, priority: TicketPriority) {
-  const createdAt = new Date(createdAtIso).getTime();
-  const oneHour = 60 * 60 * 1000;
-  const supportHours: Record<TicketPriority, number> = {
-    urgent: 4,
-    high: 8,
-    medium: 24,
-    low: 48,
-  };
-  const featureHours: Record<TicketPriority, number> = {
-    urgent: 24,
-    high: 48,
-    medium: 72,
-    low: 96,
-  };
-  const hours = type === "feature" ? featureHours[priority] : supportHours[priority];
-  return new Date(createdAt + hours * oneHour).toISOString();
-}
-
-async function getAuthContext(request: NextRequest): Promise<SupportAuthContext> {
-  const decoded = await verifyRequestAuth(request);
-  const acting = await resolveActingContext(request);
-  const requesterRows = await supabaseSelect("profiles", {
-    filters: { uid: decoded.uid },
-    limit: 1,
-  });
-  const actingRows = await supabaseSelect("profiles", {
-    filters: { uid: acting.actingUid },
-    limit: 1,
-  });
-  if (actingRows.length === 0) throw new Error("user_not_found");
-  const row = actingRows[0];
-  const raw = readSecureProfilePayload(row.raw);
-  const requesterRoleRaw = ((requesterRows[0]?.raw as Record<string, unknown> | null) ?? {});
-  const requesterRole = String(requesterRows[0]?.role || requesterRoleRaw.role || "client");
-  const effectiveRole = acting.isImpersonating ? "client" : requesterRole;
-  const rawPlan = row.plan ?? raw.plan;
-  return {
-    uid: acting.actingUid,
-    email: String(row.email || raw.email || decoded.email || ""),
-    name: String(row.display_name || raw.displayName || raw.completeName || decoded.email || "Usuário"),
-    role: effectiveRole,
-    plan: parseUserPlan(rawPlan),
-    isSupremeAdmin: !acting.isImpersonating && decoded.uid === CREATOR_SUPREME_UID,
-  };
-}
 
 function escapeIlike(value: string) {
   return String(value || "")
@@ -112,7 +39,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const auth = await getAuthContext(request);
+    const auth = await getSupportAuthContext(request);
     const accessControl = await getServerAccessControlConfig();
     const canReadAdminSupport = isAccessAllowed(auth, accessControl, "admin.support.read", "read");
 
@@ -161,13 +88,24 @@ export async function GET(request: NextRequest) {
     const tickets = rows
       .map((row) => {
         const raw = (row.raw as Record<string, unknown> | null) ?? {};
-        const secure = decryptServerPayload<{ email?: string; name?: string; message?: string }>(raw.secureSupport) ?? {};
+        const report = (raw.report as Record<string, unknown> | null) ?? {};
+        const reporter = (raw.reporter as Record<string, unknown> | null) ?? {};
+        const secure = decryptServerPayload<{
+          email?: string;
+          name?: string;
+          title?: string;
+          message?: string;
+          stepsToReproduce?: string;
+          expectedResult?: string;
+          actualResult?: string;
+        }>(raw.secureSupport) ?? {};
         return {
           id: String(row.id || ""),
           uid: String(row.uid || raw.uid || ""),
           email: String(row.email || secure.email || raw.email || ""),
           name: String(row.name || secure.name || raw.name || ""),
           protocol: String(raw.protocol || row.title || ""),
+          title: String(report.title || secure.title || row.title || raw.protocol || ""),
           message: String(row.message || secure.message || raw.message || ""),
           type: String(row.ticket_type || raw.type || "support"),
           supportKind: typeof raw.supportKind === "string" ? raw.supportKind : undefined,
@@ -190,6 +128,11 @@ export async function GET(request: NextRequest) {
             new Date(raw.slaDueAt).getTime() < Date.now(),
           votes: typeof row.votes === "number" ? row.votes : typeof raw.votes === "number" ? raw.votes : 0,
           platform: String(raw.platform || "web"),
+          stepsToReproduce: String(report.stepsToReproduce || secure.stepsToReproduce || "") || undefined,
+          expectedResult: String(report.expectedResult || secure.expectedResult || "") || undefined,
+          actualResult: String(report.actualResult || secure.actualResult || "") || undefined,
+          technicalContext: raw.technicalContext && typeof raw.technicalContext === "object" ? raw.technicalContext : undefined,
+          reportedDuringImpersonation: Boolean(reporter.isImpersonating),
           createdAt: String(row.created_at || raw.createdAt || ""),
           updatedAt: String(row.updated_at || raw.updatedAt || ""),
         };
@@ -197,7 +140,33 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 
     const total = paged.total;
-    const sliced = tickets;
+    const attachmentByTicket = new Map<string, Array<Record<string, unknown>>>();
+    const ticketIds = tickets.map((ticket) => ticket.id).filter(Boolean);
+    if (ticketIds.length > 0) {
+      const supabase = getSupabaseServiceClient();
+      const { data: attachments, error: attachmentsError } = await supabase
+        .from("support_request_attachments")
+        .select("id,ticket_id,mime_type,size_bytes,width,height,scan_status,created_at")
+        .in("ticket_id", ticketIds)
+        .order("created_at", { ascending: true });
+      if (attachmentsError) throw new Error("support_attachments_list_failed");
+      for (const attachment of attachments || []) {
+        const ticketId = String(attachment.ticket_id || "");
+        const current = attachmentByTicket.get(ticketId) || [];
+        current.push({
+          id: String(attachment.id || ""),
+          ticketId,
+          mimeType: String(attachment.mime_type || ""),
+          sizeBytes: Number(attachment.size_bytes || 0),
+          width: Number(attachment.width || 0),
+          height: Number(attachment.height || 0),
+          scanStatus: String(attachment.scan_status || "unavailable"),
+          createdAt: String(attachment.created_at || ""),
+        });
+        attachmentByTicket.set(ticketId, current);
+      }
+    }
+    const sliced = tickets.map((ticket) => ({ ...ticket, attachments: attachmentByTicket.get(ticket.id) || [] }));
     const unseenCount =
       canReadAdminSupport
         ? sliced.filter((ticket) => !Array.isArray(ticket.staffSeenBy) || !ticket.staffSeenBy.includes(auth.uid)).length
@@ -230,67 +199,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const auth = await getAuthContext(request);
+    const auth = await getSupportAuthContext(request);
     const accessControl = await getServerAccessControlConfig();
     if (!isAccessAllowed(auth, accessControl, "support.write", "write")) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
-    const body = (await request.json()) as {
-      type?: SupportType;
-      message?: string;
-      status?: string;
-      platform?: string;
-    };
-
-    const type = body.type === "feature" ? "feature" : "support";
-    const message = body.message?.trim();
-    if (!message) {
-      return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
-    }
-
-    const nowIso = new Date().toISOString();
-    const id = crypto.randomUUID();
-    const protocol = formatProtocol(new Date(nowIso));
-    const priority = inferPriority(type, message);
-    const slaDueAt = computeSlaDueAt(nowIso, type, priority);
-    const raw: Record<string, unknown> = {
-      uid: auth.uid,
-      protocol,
-      type,
-      status: body.status || "pending",
-      priority,
-      slaDueAt,
-      firstResponseAt: null,
-      resolvedAt: null,
-      staffSeenBy: [],
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      platform: body.platform || "web",
-      secureSupport: encryptServerPayload({
-        email: auth.email,
-        name: auth.name,
-        message,
-      }),
-      ...(type === "feature" ? { votes: 0 } : {}),
-    };
-
-    await supabaseUpsertRows("support_requests", [
-      {
-        id,
-        uid: auth.uid,
-        email: auth.email,
-        name: auth.name,
-        title: protocol,
-        message,
-        ticket_type: type,
-        ticket_status: body.status || "pending",
-        staff_seen_by: [],
-        votes: type === "feature" ? 0 : null,
-        created_at: nowIso,
-        updated_at: nowIso,
-        raw,
-      },
-    ]);
+    const result = await createSupportReport(request, auth);
+    const { id, protocol, type } = result;
 
     const [admins, moderators, supports] = await Promise.all([
       supabaseSelect("profiles", { select: "uid", filters: { role: "admin" }, limit: 200 }),
@@ -300,19 +215,20 @@ export async function POST(request: NextRequest) {
     const staffUids = Array.from(
       new Set([...admins, ...moderators, ...supports].map((row) => String(row.uid || "").trim()).filter(Boolean))
     );
-    await pushNotifications(
+    if (!result.duplicated) await pushNotifications(
       staffUids.map((staffUid) => ({
         uid: staffUid,
         kind: "support" as const,
-        title: type === "feature" ? "Nova ideia recebida" : "Novo chamado de suporte",
+        title: type === "feature" ? "Nova ideia recebida" : type === "bug" ? "Novo bug relatado" : "Novo chamado de suporte",
         message: `${auth.name} abriu uma nova solicitação.`,
         href: "/admin?tab=support",
         meta: { ticketId: id, ticketType: type, fromUid: auth.uid },
       }))
     );
 
-    await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
-    return NextResponse.json({ ok: true, id, protocol }, { status: 200 });
+    const responseStatus = result.duplicated ? 200 : 201;
+    await writeApiMetric({ route: meta.route, method: meta.method, status: responseStatus, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
+    return NextResponse.json({ ok: true, id, protocol, duplicated: result.duplicated }, { status: responseStatus });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     apiLogger.error({
@@ -322,7 +238,20 @@ export async function POST(request: NextRequest) {
       method: meta.method,
       meta: { error: message },
     });
-    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
+    const badRequestErrors = new Set([
+      "description_too_short", "title_required", "invalid_payload", "invalid_client_request_id",
+      "invalid_technical_context", "too_many_attachments", "empty_file", "file_too_large",
+      "invalid_file_name", "unsupported_file_type", "file_type_mismatch", "invalid_image_dimensions",
+    ]);
+    const status = message === "missing_auth_token"
+      ? 401
+      : message === "forbidden"
+        ? 403
+        : message === "daily_attachment_quota_exceeded"
+          ? 429
+          : badRequestErrors.has(message)
+            ? 400
+            : 500;
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
@@ -338,7 +267,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const auth = await getAuthContext(request);
+    const auth = await getSupportAuthContext(request);
     const accessControl = await getServerAccessControlConfig();
     const body = (await request.json()) as {
       action?: "markSeen";
@@ -348,7 +277,7 @@ export async function PATCH(request: NextRequest) {
     };
 
     const allRows = await supabaseSelect("support_requests", {
-      select: "id,uid,assigned_to,assigned_to_name,staff_seen_by,raw,ticket_status",
+      select: "id,uid,assigned_to,assigned_to_name,staff_seen_by,raw,ticket_status,ticket_type",
     });
 
     if (body.action === "markSeen") {
@@ -406,16 +335,33 @@ export async function PATCH(request: NextRequest) {
       assignedTo: row.assigned_to ? String(row.assigned_to) : "",
     };
 
-    const isOwner = ticketData.uid === auth.uid;
     const canWriteAdminSupport = isAccessAllowed(auth, accessControl, "admin.support.write", "write");
-    const canWriteOwnSupport = isOwner && isAccessAllowed(auth, accessControl, "support.write", "write");
-
-    if (!canWriteAdminSupport && !canWriteOwnSupport) {
+    if (!canWriteAdminSupport) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
+    const allowedStatuses = String(row.ticket_type || "support") === "feature"
+      ? new Set(["pending", "under_review", "approved", "rejected", "implemented"])
+      : new Set(["pending", "in_progress", "resolved", "rejected"]);
+    const safeUpdates: Record<string, unknown> = {};
+    if (typeof body.updates.status === "string" && allowedStatuses.has(body.updates.status)) {
+      safeUpdates.status = body.updates.status;
+    }
+    if (typeof body.updates.priority === "string" && ["low", "medium", "high", "urgent"].includes(body.updates.priority)) {
+      safeUpdates.priority = body.updates.priority;
+    }
+    if (body.updates.assignedTo === null || typeof body.updates.assignedTo === "string") {
+      safeUpdates.assignedTo = typeof body.updates.assignedTo === "string" ? body.updates.assignedTo.trim().slice(0, 160) : null;
+    }
+    if (body.updates.assignedToName === null || typeof body.updates.assignedToName === "string") {
+      safeUpdates.assignedToName = typeof body.updates.assignedToName === "string" ? body.updates.assignedToName.trim().slice(0, 160) : null;
+    }
+    if (Object.keys(safeUpdates).length === 0) {
+      return NextResponse.json({ ok: false, error: "invalid_updates" }, { status: 400 });
+    }
+
     const raw = ((row.raw as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
-    const merged: Record<string, unknown> = { ...raw, ...body.updates, updatedAt: new Date().toISOString() };
+    const merged: Record<string, unknown> = { ...raw, ...safeUpdates, updatedAt: new Date().toISOString() };
     const nextStatus = String(merged["status"] || row["ticket_status"] || raw.status || "").toLowerCase();
 
     if (!raw.firstResponseAt && (nextStatus === "in_progress" || FINAL_STATUSES.has(nextStatus))) {
@@ -441,6 +387,15 @@ export async function PATCH(request: NextRequest) {
       ],
       { onConflict: "id" }
     );
+
+    if (typeof safeUpdates.status === "string") {
+      const retentionClient = getSupabaseServiceClient();
+      const { error: retentionError } = await retentionClient
+        .from("support_request_attachments")
+        .update({ retention_until: FINAL_STATUSES.has(nextStatus) ? computeSupportEvidenceRetentionUntil() : null })
+        .eq("ticket_id", ticketId);
+      if (retentionError) throw new Error("support_attachment_retention_update_failed");
+    }
 
     if (FINAL_STATUSES.has(nextStatus) && ticketData.uid) {
       const protocol = typeof merged.protocol === "string" ? merged.protocol : `#${ticketId.slice(0, 8)}`;
@@ -487,7 +442,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
-    const auth = await getAuthContext(request);
+    const auth = await getSupportAuthContext(request);
     const accessControl = await getServerAccessControlConfig();
     if (!isAccessAllowed(auth, accessControl, "admin.support.delete", "write")) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
@@ -498,6 +453,17 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
 
+    const storageClient = getSupabaseServiceClient();
+    const { data: attachments, error: attachmentsError } = await storageClient
+      .from("support_request_attachments")
+      .select("storage_path")
+      .eq("ticket_id", ticketId);
+    if (attachmentsError) throw new Error("support_attachments_cleanup_lookup_failed");
+    const storagePaths = (attachments || []).map((item) => String(item.storage_path || "")).filter(Boolean);
+    if (storagePaths.length > 0) {
+      const { error: storageError } = await storageClient.storage.from("support-evidence").remove(storagePaths);
+      if (storageError) throw new Error("support_attachments_cleanup_failed");
+    }
     await supabaseDeleteByFilters("support_requests", { id: ticketId });
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
     return NextResponse.json({ ok: true }, { status: 200 });

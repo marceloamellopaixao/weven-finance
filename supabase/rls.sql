@@ -68,6 +68,7 @@ alter table public.payment_cards enable row level security;
 alter table public.piggy_banks enable row level security;
 alter table public.piggy_bank_history enable row level security;
 alter table public.support_requests enable row level security;
+alter table public.support_request_attachments enable row level security;
 alter table public.billing_events enable row level security;
 alter table public.processed_events enable row level security;
 alter table public.subscriptions enable row level security;
@@ -96,6 +97,12 @@ drop policy if exists piggy_banks_self_all on public.piggy_banks;
 drop policy if exists piggy_bank_history_self_all on public.piggy_bank_history;
 drop policy if exists support_access_requests_insert_requester on public.support_access_requests;
 drop policy if exists support_requests_delete_staff on public.support_requests;
+drop policy if exists support_attachments_select_own on public.support_request_attachments;
+drop policy if exists support_attachments_insert_own on public.support_request_attachments;
+drop policy if exists support_attachments_delete_own on public.support_request_attachments;
+drop policy if exists support_evidence_select_own on storage.objects;
+drop policy if exists support_evidence_insert_own on storage.objects;
+drop policy if exists support_evidence_delete_own on storage.objects;
 
 do $$
 begin
@@ -241,6 +248,11 @@ begin
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'support_requests' and policyname = 'support_requests_delete_admin') then
     create policy support_requests_delete_admin on public.support_requests
       for delete using (public.is_admin_role());
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'support_request_attachments' and policyname = 'support_attachments_select_own') then
+    create policy support_attachments_select_own on public.support_request_attachments
+      for select using (public.current_user_uid() = owner_uid);
   end if;
 
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'billing_events' and policyname = 'billing_events_select_own_or_staff') then

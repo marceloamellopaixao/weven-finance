@@ -121,8 +121,10 @@ import {
   Bell,
   Download,
   FilterX,
+  Bug,
+  ImageIcon,
 } from "lucide-react";
-import { deleteTicket, FeatureRequestStatus, fetchSupportTicketsPage, markSupportTicketsAsSeen, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
+import { deleteTicket, FeatureRequestStatus, fetchSupportTicketsPage, getSupportAttachmentUrl, markSupportTicketsAsSeen, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
 import {
   activateImpersonation,
@@ -262,7 +264,7 @@ export default function AdminPage() {
   const [supportUnseenCount, setSupportUnseenCount] = useState(0);
   const [supportPage, setSupportPage] = useState(1);
   const supportPerPage = 12;
-  const [supportTypeFilter, setSupportTypeFilter] = useState<"support" | "feature" | "all">("all");
+  const [supportTypeFilter, setSupportTypeFilter] = useState<"bug" | "support" | "feature" | "all">("all");
   const [supportStatusFilter, setSupportStatusFilter] = useState("all");
   const [supportPriorityFilter, setSupportPriorityFilter] = useState<"low" | "medium" | "high" | "urgent" | "all">("all");
   const [supportSearch, setSupportSearch] = useState("");
@@ -642,7 +644,7 @@ export default function AdminPage() {
       const raw = window.localStorage.getItem(ADMIN_SUPPORT_FILTERS_STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw) as Partial<{
-        supportTypeFilter: "support" | "feature" | "all";
+        supportTypeFilter: "bug" | "support" | "feature" | "all";
         supportStatusFilter: string;
         supportPriorityFilter: "low" | "medium" | "high" | "urgent" | "all";
         supportSearch: string;
@@ -1009,8 +1011,8 @@ export default function AdminPage() {
   const handleAssignTicket = async (ticketId: string, staffUid: string) => {
     const staff = staffMembers.find(s => s.uid === staffUid);
     const assignment = {
-      assignedTo: staffUid,
-      assignedToName: staff?.displayName || tAdmin("common.staff"),
+      assignedTo: staffUid === "unassigned" ? "" : staffUid,
+      assignedToName: staffUid === "unassigned" ? "" : staff?.displayName || tAdmin("common.staff"),
     };
     try {
       await updateTicket(ticketId, assignment);
@@ -1042,6 +1044,15 @@ export default function AdminPage() {
       setViewTicket((ticket) => (ticket?.id === ticketId ? { ...ticket, priority } : ticket));
     } catch {
       showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("support.feedback.priorityErrorMessage"));
+    }
+  };
+
+  const handleOpenSupportAttachment = async (attachmentId: string) => {
+    try {
+      const attachment = await getSupportAttachmentUrl(attachmentId);
+      window.open(attachment.url, "_blank", "noopener,noreferrer");
+    } catch {
+      showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("support.feedback.attachmentErrorMessage"));
     }
   };
 
@@ -1773,12 +1784,13 @@ export default function AdminPage() {
                         className="h-10 rounded-xl"
                         placeholder={tAdmin("support.searchPlaceholder")}
                       />
-                      <Select value={supportTypeFilter} onValueChange={(value) => setSupportTypeFilter(value as "support" | "feature" | "all")}>
+                      <Select value={supportTypeFilter} onValueChange={(value) => setSupportTypeFilter(value as "bug" | "support" | "feature" | "all")}>
                         <SelectTrigger className="h-10 rounded-xl">
                           <SelectValue placeholder={tAdmin("support.filters.type")} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">{tAdmin("support.filters.allTypes")}</SelectItem>
+                          <SelectItem value="bug">{tAdmin("support.type.bug")}</SelectItem>
                           <SelectItem value="support">{tAdmin("support.type.support")}</SelectItem>
                           <SelectItem value="feature">{tAdmin("support.type.featurePlural")}</SelectItem>
                         </SelectContent>
@@ -1867,6 +1879,10 @@ export default function AdminPage() {
                               {ticket.type === 'feature' ? (
                                 <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 gap-1">
                                   <Lightbulb className="h-3 w-3" /> {tAdmin("support.type.feature")}
+                                </Badge>
+                              ) : ticket.type === "bug" ? (
+                                <Badge variant="outline" className="gap-1 border-red-200 bg-red-50 text-red-700">
+                                  <Bug className="h-3 w-3" /> {tAdmin("support.type.bug")}
                                 </Badge>
                               ) : (
                                 <Badge variant="outline" className="gap-1 border-primary/20 bg-accent text-primary">
@@ -1985,6 +2001,10 @@ export default function AdminPage() {
                                     <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 gap-1">
                                       <Lightbulb className="h-3 w-3" /> {tAdmin("support.type.feature")}
                                     </Badge>
+                                  ) : ticket.type === "bug" ? (
+                                    <Badge variant="outline" className="gap-1 border-red-200 bg-red-50 text-red-700">
+                                      <Bug className="h-3 w-3" /> {tAdmin("support.type.bug")}
+                                    </Badge>
                                   ) : (
                                     <Badge variant="outline" className="gap-1 border-primary/20 bg-accent text-primary">
                                       <MessageSquare className="h-3 w-3" /> {tAdmin("support.type.support")}
@@ -2071,7 +2091,7 @@ export default function AdminPage() {
                                             </span>
                                           </DropdownMenuSubTrigger>
                                           <DropdownMenuSubContent className="w-56 max-h-[min(70vh,22rem)] rounded-xl border border-zinc-200/70 bg-white p-1 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
-                                            {ticket.type === 'support' && (
+                                            {ticket.type !== 'feature' && (
                                               <>
                                                 <DropdownMenuItem
                                                   onClick={() => handleChangeTicketStatus(ticket.id, 'pending')}
@@ -3623,6 +3643,8 @@ export default function AdminPage() {
             <DialogTitle className="flex items-center gap-2">
               {viewTicket?.type === 'feature' ? (
                 <Lightbulb className="h-5 w-5 text-amber-600" />
+              ) : viewTicket?.type === "bug" ? (
+                <Bug className="h-5 w-5 text-red-600" />
               ) : (
                 <HeadphonesIcon className="h-5 w-5 text-primary" />
               )}
@@ -3719,11 +3741,67 @@ export default function AdminPage() {
                 )}
               </div>
               <div className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
+                {viewTicket.title ? (
+                  <>
+                    <span className="mb-1 block text-sm font-semibold">{tAdmin("support.reportTitle")}:</span>
+                    <p className="mb-4 wrap-break-words text-sm font-medium text-foreground">{viewTicket.title}</p>
+                  </>
+                ) : null}
                 <span className="font-semibold block text-sm mb-2">{tAdmin("common.message")}:</span>
                 <p className="whitespace-pre-wrap wrap-break-words text-sm leading-relaxed text-muted-foreground">
                   {viewTicket.message}
                 </p>
               </div>
+              {viewTicket.type === "bug" && (viewTicket.stepsToReproduce || viewTicket.expectedResult || viewTicket.actualResult) ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {viewTicket.stepsToReproduce ? (
+                    <div className="app-panel-subtle rounded-2xl border p-4 sm:col-span-2">
+                      <span className="mb-2 block text-sm font-semibold">{tAdmin("support.stepsToReproduce")}</span>
+                      <p className="whitespace-pre-wrap text-sm text-muted-foreground">{viewTicket.stepsToReproduce}</p>
+                    </div>
+                  ) : null}
+                  {viewTicket.expectedResult ? (
+                    <div className="app-panel-subtle rounded-2xl border p-4">
+                      <span className="mb-2 block text-sm font-semibold">{tAdmin("support.expectedResult")}</span>
+                      <p className="whitespace-pre-wrap text-sm text-muted-foreground">{viewTicket.expectedResult}</p>
+                    </div>
+                  ) : null}
+                  {viewTicket.actualResult ? (
+                    <div className="app-panel-subtle rounded-2xl border p-4">
+                      <span className="mb-2 block text-sm font-semibold">{tAdmin("support.actualResult")}</span>
+                      <p className="whitespace-pre-wrap text-sm text-muted-foreground">{viewTicket.actualResult}</p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {viewTicket.attachments?.length ? (
+                <div className="space-y-2">
+                  <span className="block text-sm font-semibold">{tAdmin("support.attachments")}</span>
+                  <div className="flex flex-wrap gap-2">
+                    {viewTicket.attachments.map((attachment, index) => (
+                      <Button key={attachment.id} type="button" variant="outline" className="rounded-xl" onClick={() => void handleOpenSupportAttachment(attachment.id)}>
+                        <ImageIcon className="mr-2 h-4 w-4" />
+                        {tAdmin("support.attachmentLabel", { index: index + 1 })}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{tAdmin("support.attachmentExpiry")}</p>
+                </div>
+              ) : null}
+              {viewTicket.technicalContext ? (
+                <div className="rounded-2xl border border-color:var(--app-panel-border) p-4">
+                  <span className="mb-2 block text-sm font-semibold">{tAdmin("support.technicalContext")}</span>
+                  <dl className="grid gap-1 text-xs sm:grid-cols-2">
+                    {Object.entries(viewTicket.technicalContext).filter(([, value]) => typeof value === "string" && value).map(([key, value]) => (
+                      <div key={key} className="flex min-w-0 gap-1">
+                        <dt className="font-medium">{key}:</dt>
+                        <dd className="truncate text-muted-foreground">{String(value)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {viewTicket.reportedDuringImpersonation ? <p className="mt-3 text-xs text-amber-600">{tAdmin("support.reportedDuringImpersonation")}</p> : null}
+                </div>
+              ) : null}
             </div>
           )}
           <DialogFooter>

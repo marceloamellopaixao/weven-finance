@@ -117,6 +117,20 @@ create index if not exists idx_support_requests_uid_created
 create index if not exists idx_support_requests_assigned_status_created
   on public.support_requests(assigned_to, ticket_status, created_at desc);
 
+create unique index if not exists idx_support_requests_uid_client_request
+  on public.support_requests(uid, client_request_id)
+  where client_request_id is not null;
+
+create index if not exists idx_support_attachments_ticket_created
+  on public.support_request_attachments(ticket_id, created_at asc);
+
+create index if not exists idx_support_attachments_owner_created
+  on public.support_request_attachments(owner_uid, created_at desc);
+
+create index if not exists idx_support_attachments_retention
+  on public.support_request_attachments(retention_until asc)
+  where retention_until is not null;
+
 create index if not exists idx_billing_events_uid_created
   on public.billing_events(uid, created_at desc);
 

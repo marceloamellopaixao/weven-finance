@@ -1053,7 +1053,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
         },
         post: {
           tags: ["Support"],
-          summary: "Criar chamado de suporte ou feature request",
+          summary: "Criar relato de bug, suporte ou sugestão, com evidências opcionais",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -1062,12 +1062,34 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
                 schema: {
                   type: "object",
                   properties: {
-                    type: { type: "string", enum: ["support", "feature"] },
+                    type: { type: "string", enum: ["bug", "support", "feature"] },
                     message: { type: "string" },
                     status: { type: "string", nullable: true },
                     platform: { type: "string", nullable: true },
                   },
                   required: ["type", "message"],
+                },
+              },
+              "multipart/form-data": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    type: { type: "string", enum: ["bug", "support", "feature"] },
+                    title: { type: "string", maxLength: 120 },
+                    description: { type: "string", maxLength: 5000 },
+                    stepsToReproduce: { type: "string", maxLength: 3000 },
+                    expectedResult: { type: "string", maxLength: 2000 },
+                    actualResult: { type: "string", maxLength: 2000 },
+                    includeTechnicalContext: { type: "boolean" },
+                    technicalContext: { type: "string", description: "JSON com contexto técnico permitido" },
+                    clientRequestId: { type: "string", format: "uuid" },
+                    attachments: {
+                      type: "array",
+                      maxItems: 3,
+                      items: { type: "string", format: "binary" },
+                    },
+                  },
+                  required: ["type", "title", "description", "clientRequestId"],
                 },
               },
             },
@@ -1114,6 +1136,21 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
             400: { description: "Parâmetros inválidos", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
             403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          },
+        },
+      },
+      "/api/support-requests/attachments": {
+        get: {
+          tags: ["Support"],
+          summary: "Gerar URL privada temporária para uma evidência autorizada",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "attachmentId", in: "query", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: {
+            200: { description: "URL assinada retornada por 5 minutos" },
+            400: { description: "Identificador inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            401: { description: "Sem token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            403: { description: "Sem permissão", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+            404: { description: "Evidência não encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           },
         },
       },

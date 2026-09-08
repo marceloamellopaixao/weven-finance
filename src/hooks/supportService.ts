@@ -1,6 +1,7 @@
 ﻿import { getAccessTokenOrThrow } from "@/services/auth/token";
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
+import type { SupportReportType, SupportTechnicalContext } from "@/lib/support/report";
 
 export type SupportRequestStatus = "pending" | "in_progress" | "resolved" | "rejected";
 export type FeatureRequestStatus = "pending" | "under_review" | "approved" | "rejected" | "implemented";
@@ -11,8 +12,15 @@ export interface SupportTicket {
   email: string;
   name: string;
   protocol?: string;
+  title?: string;
   message: string;
-  type: "support" | "feature";
+  type: SupportReportType;
+  stepsToReproduce?: string;
+  expectedResult?: string;
+  actualResult?: string;
+  technicalContext?: SupportTechnicalContext;
+  reportedDuringImpersonation?: boolean;
+  attachments?: SupportAttachment[];
   supportKind?: string;
   wantsData?: boolean;
   status: SupportRequestStatus | FeatureRequestStatus;
@@ -27,6 +35,30 @@ export interface SupportTicket {
   slaDueAt?: string | null;
   slaBreached?: boolean;
 }
+
+export type SupportAttachment = {
+  id: string;
+  ticketId: string;
+  mimeType: string;
+  sizeBytes: number;
+  width: number;
+  height: number;
+  scanStatus: "pending" | "clean" | "rejected" | "unavailable";
+  createdAt: string;
+};
+
+export type CreateSupportReportInput = {
+  type: SupportReportType;
+  title: string;
+  description: string;
+  stepsToReproduce?: string;
+  expectedResult?: string;
+  actualResult?: string;
+  includeTechnicalContext: boolean;
+  technicalContext?: SupportTechnicalContext;
+  attachments?: File[];
+  clientRequestId: string;
+};
 
 const POLLING_INTERVAL_MS = 20000;
 
@@ -50,6 +82,56 @@ async function fetchWithAuth(path: string, init?: RequestInit) {
       ...(init?.headers || {}),
     },
   });
+}
+
+export async function createSupportReport(input: CreateSupportReportInput) {
+  const token = await getIdTokenOrThrow();
+  const form = new FormData();
+  form.set("type", input.type);
+  form.set("title", input.title);
+  form.set("description", input.description);
+  form.set("stepsToReproduce", input.stepsToReproduce || "");
+  form.set("expectedResult", input.expectedResult || "");
+  form.set("actualResult", input.actualResult || "");
+  form.set("includeTechnicalContext", String(input.includeTechnicalContext));
+  form.set("technicalContext", JSON.stringify(input.technicalContext || {}));
+  form.set("clientRequestId", input.clientRequestId);
+  for (const file of input.attachments || []) form.append("attachments", file, file.name);
+
+  const response = await fetch("/api/support-requests", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Idempotency-Key": input.clientRequestId,
+      ...getImpersonationHeader(),
+    },
+    body: form,
+  });
+  const payload = (await response.json()) as {
+    ok: boolean;
+    error?: string;
+    id?: string;
+    protocol?: string;
+    duplicated?: boolean;
+  };
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "support_report_failed");
+  return payload;
+}
+
+export async function getSupportAttachmentUrl(attachmentId: string) {
+  const response = await fetchWithAuth(
+    `/api/support-requests/attachments?attachmentId=${encodeURIComponent(attachmentId)}`,
+    { method: "GET" },
+  );
+  const payload = (await response.json()) as {
+    ok: boolean;
+    error?: string;
+    attachment?: SupportAttachment & { url: string; expiresIn: number };
+  };
+  if (!response.ok || !payload.ok || !payload.attachment) {
+    throw new Error(payload.error || "support_attachment_url_failed");
+  }
+  return payload.attachment;
 }
 
 export const sendSupportRequest = async (_uid: string, _email: string, _name: string, reason: string) => {
@@ -100,7 +182,7 @@ async function getTickets(params?: {
   page?: number;
   limit?: number;
   scope?: "mine" | "all";
-  type?: "support" | "feature" | "all";
+  type?: SupportReportType | "all";
   status?: string;
   priority?: "low" | "medium" | "high" | "urgent" | "all";
   q?: string;
@@ -149,7 +231,7 @@ export async function fetchSupportTicketsPage(params?: {
   page?: number;
   limit?: number;
   scope?: "mine" | "all";
-  type?: "support" | "feature" | "all";
+  type?: SupportReportType | "all";
   status?: string;
   priority?: "low" | "medium" | "high" | "urgent" | "all";
   q?: string;
@@ -199,7 +281,7 @@ export const subscribeToSupportTickets = (
     page?: number;
     limit?: number;
     scope?: "mine" | "all";
-    type?: "support" | "feature" | "all";
+    type?: SupportReportType | "all";
     status?: string;
     priority?: "low" | "medium" | "high" | "urgent" | "all";
     q?: string;

@@ -294,6 +294,7 @@ create table if not exists public.support_requests (
   assigned_to_name text,
   staff_seen_by text[] not null default '{}',
   votes integer not null default 0,
+  client_request_id text,
   raw jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
@@ -337,6 +338,29 @@ create table if not exists public.foundation_plan_claims (
   expires_at timestamptz,
   updated_at timestamptz not null default timezone('utc', now())
 );
+
+create table if not exists public.support_request_attachments (
+  id text primary key,
+  ticket_id text not null references public.support_requests(id) on delete cascade,
+  owner_uid text not null,
+  storage_path text not null unique,
+  mime_type text not null check (mime_type in ('image/png', 'image/jpeg', 'image/webp')),
+  size_bytes bigint not null check (size_bytes > 0 and size_bytes <= 5242880),
+  sha256 text not null check (sha256 ~ '^[0-9a-f]{64}$'),
+  width integer not null check (width > 0 and width <= 4096),
+  height integer not null check (height > 0 and height <= 4096),
+  scan_status text not null default 'unavailable' check (scan_status in ('pending', 'clean', 'rejected', 'unavailable')),
+  retention_until timestamptz,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('support-evidence', 'support-evidence', false, 5242880, array['image/png', 'image/jpeg', 'image/webp']::text[])
+on conflict (id) do update set
+  public = false,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
 
 create or replace function public.claim_foundation_plan_slot(p_uid text, p_max_users integer)
 returns boolean
@@ -655,6 +679,20 @@ alter table if exists public.support_requests add column if not exists votes int
 alter table if exists public.support_requests add column if not exists raw jsonb default '{}'::jsonb;
 alter table if exists public.support_requests add column if not exists created_at timestamptz default timezone('utc', now());
 alter table if exists public.support_requests add column if not exists updated_at timestamptz default timezone('utc', now());
+alter table if exists public.support_requests add column if not exists client_request_id text;
+
+alter table if exists public.support_request_attachments add column if not exists ticket_id text;
+alter table if exists public.support_request_attachments add column if not exists owner_uid text;
+alter table if exists public.support_request_attachments add column if not exists storage_path text;
+alter table if exists public.support_request_attachments add column if not exists mime_type text;
+alter table if exists public.support_request_attachments add column if not exists size_bytes bigint;
+alter table if exists public.support_request_attachments add column if not exists sha256 text;
+alter table if exists public.support_request_attachments add column if not exists width integer;
+alter table if exists public.support_request_attachments add column if not exists height integer;
+alter table if exists public.support_request_attachments add column if not exists scan_status text default 'unavailable';
+alter table if exists public.support_request_attachments add column if not exists retention_until timestamptz;
+alter table if exists public.support_request_attachments add column if not exists created_at timestamptz default timezone('utc', now());
+alter table if exists public.support_request_attachments add column if not exists updated_at timestamptz default timezone('utc', now());
 
 alter table if exists public.billing_events add column if not exists uid text;
 alter table if exists public.billing_events add column if not exists event_type text;
@@ -782,6 +820,10 @@ for each row execute function public.set_updated_at();
 
 drop trigger if exists trg_support_requests_set_updated_at on public.support_requests;
 create trigger trg_support_requests_set_updated_at before update on public.support_requests
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_support_request_attachments_set_updated_at on public.support_request_attachments;
+create trigger trg_support_request_attachments_set_updated_at before update on public.support_request_attachments
 for each row execute function public.set_updated_at();
 
 drop trigger if exists trg_billing_events_set_updated_at on public.billing_events;

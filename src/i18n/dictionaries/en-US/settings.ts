@@ -261,6 +261,8 @@ export const settings = {
     firstResponse: "First response recorded",
     resolvedAt: "Resolved on {date}",
     ticketCount: "ticket(s)",
+    attachment: "Screenshot {index}",
+    attachmentError: "This screenshot could not be opened.",
   },
   support: {
     title: "Request support",
@@ -299,6 +301,7 @@ export const settings = {
     open: "Open",
   },
   ticketTypes: {
+    bug: "Problem / bug",
     feature: "Idea / suggestion",
     accountRestore: "Account recovery",
     support: "Technical support",
