@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { ClipboardPaste, HelpCircle, ImagePlus, Lightbulb, Loader2, MessageCircleQuestion, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
-import { type ChangeEvent, type ClipboardEvent, type DragEvent, type FormEvent, useMemo, useState } from "react";
+import { ClipboardPaste, ImagePlus, Lightbulb, Loader2, MessageCircleQuestion, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
+import { type ChangeEvent, type ClipboardEvent, type DragEvent, type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -22,6 +22,7 @@ import {
   type SupportTechnicalContext,
 } from "@/lib/support/report";
 import { createSupportReport } from "@/hooks/supportService";
+import { OPEN_SUPPORT_REPORTER_EVENT } from "@/lib/support/client-events";
 
 type SelectedImage = {
   id: string;
@@ -104,7 +105,7 @@ export function SupportReporter() {
     [t("context.plan"), userProfile?.plan],
   ].filter((row): row is [string, string] => Boolean(row[1])), [t, technicalContext, userProfile?.plan]);
 
-  const prepareOpen = () => {
+  const prepareOpen = useCallback(() => {
     const userAgent = navigator.userAgent || "";
     setTechnicalContext({
       route: pathname.split(/[?#]/, 1)[0],
@@ -122,7 +123,12 @@ export function SupportReporter() {
     setProtocol("");
     setError("");
     setOpen(true);
-  };
+  }, [activeWorkspace?.id, activeWorkspace?.type, pathname]);
+
+  useEffect(() => {
+    window.addEventListener(OPEN_SUPPORT_REPORTER_EVENT, prepareOpen);
+    return () => window.removeEventListener(OPEN_SUPPORT_REPORTER_EVENT, prepareOpen);
+  }, [prepareOpen]);
 
   const reset = () => {
     for (const image of images) URL.revokeObjectURL(image.previewUrl);
@@ -226,17 +232,6 @@ export function SupportReporter() {
 
   return (
     <>
-      <Button
-        type="button"
-        onClick={prepareOpen}
-        aria-label={t("button")}
-        title={t("button")}
-        className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+6.5rem)] z-40 h-12 rounded-full px-4 shadow-xl shadow-primary/20 md:right-6 md:bottom-6"
-      >
-        <HelpCircle className="h-5 w-5" aria-hidden="true" />
-        <span className="hidden sm:inline">{t("button")}</span>
-      </Button>
-
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="max-h-[92svh] w-[calc(100vw-1rem)] overflow-y-auto rounded-3xl border border-border/70 bg-card sm:max-w-[680px]">
           <DialogHeader>

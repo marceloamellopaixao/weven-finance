@@ -24,6 +24,12 @@ O bucket não possui políticas de acesso direto para clientes. Criação, exclu
 - A retenção inicial implementada é de 180 dias após o encerramento do chamado. Reabrir o chamado cancela a expiração pendente.
 - Os jobs administrativo e cron de retenção removem primeiro os objetos pela API do Storage e somente depois apagam os metadados. Não apague linhas de `storage.objects` diretamente.
 
+## Evolução da caixa de entrada
+
+O mesmo `schema.sql` também cria `support_request_messages`, `support_request_events` e as colunas normalizadas usadas nos filtros administrativos. Essas tabelas não possuem acesso direto pelo cliente: a API remove notas internas, UID do atendente, caminhos de Storage e metadados privados antes de responder ao titular. A reabertura pelo cliente fica limitada a 14 dias após o encerramento.
+
+No rollback desta evolução, remova primeiro `support_request_events` e `support_request_messages`. Depois remova os índices de filtros e, somente se não forem mais usadas, as colunas `protocol`, `workspace_id`, `workspace_type`, `effective_plan`, `report_route`, `app_version` e `browser` de `support_requests`.
+
 ## Rollback
 
 O rollback da interface e da API pode ser feito revertendo o commit da feature. Antes de remover estruturas do banco:

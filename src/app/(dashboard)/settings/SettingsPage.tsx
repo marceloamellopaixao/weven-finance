@@ -67,6 +67,7 @@ import { BusinessWorkspacePanel } from "@/components/workspaces/BusinessWorkspac
 import { WorkspaceSettingsPanel } from "@/components/workspaces/WorkspaceSettingsPanel";
 import { canViewBusinessMembers } from "@/lib/workspaces/business";
 import type { BusinessWorkspaceMember } from "@/types/workspace";
+import { SupportConversation } from "@/components/support/SupportConversation";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -154,6 +155,12 @@ export default function SettingsPage() {
   const [mySupportPage, setMySupportPage] = useState(1);
   const [mySupportPerPage] = useState(8);
   const [mySupportTotal, setMySupportTotal] = useState(0);
+  const [expandedSupportTicketId, setExpandedSupportTicketId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const ticketId = searchParams.get("ticket");
+    if (ticketId) setExpandedSupportTicketId(ticketId);
+  }, [searchParams]);
 
   // Estado para feedback modal
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
@@ -1572,9 +1579,20 @@ export default function SettingsPage() {
                         ) : null}
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                           <span>{t("help.openedAt", { date: date(ticket.createdAt) })}</span>
+                          {ticket.updatedAt ? <span>Atualizado em {date(new Date(ticket.updatedAt))}</span> : null}
                           {ticket.firstResponseAt ? <span>{t("help.firstResponse")}</span> : null}
                           {ticket.resolvedAt ? <span>{t("help.resolvedAt", { date: date(ticket.resolvedAt) })}</span> : null}
                         </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="mt-2 h-8 rounded-lg"
+                          onClick={() => setExpandedSupportTicketId((current) => current === ticket.id ? null : ticket.id)}
+                        >
+                          {expandedSupportTicketId === ticket.id ? "Ocultar detalhes" : "Ver detalhes e responder"}
+                        </Button>
+                        {expandedSupportTicketId === ticket.id ? <div className="mt-3"><SupportConversation ticket={ticket} /></div> : null}
                       </div>
                     ))
                   )}

@@ -131,6 +131,22 @@ create index if not exists idx_support_attachments_retention
   on public.support_request_attachments(retention_until asc)
   where retention_until is not null;
 
+create index if not exists idx_support_requests_admin_filters
+  on public.support_requests(ticket_type, ticket_status, assigned_to, effective_plan, workspace_id, created_at desc);
+
+create index if not exists idx_support_requests_context_filters
+  on public.support_requests(report_route, app_version, browser, created_at desc);
+
+create unique index if not exists idx_support_requests_protocol
+  on public.support_requests(protocol)
+  where protocol is not null;
+
+create index if not exists idx_support_request_messages_ticket_created
+  on public.support_request_messages(ticket_id, created_at asc);
+
+create index if not exists idx_support_request_events_ticket_created
+  on public.support_request_events(ticket_id, created_at asc);
+
 create index if not exists idx_billing_events_uid_created
   on public.billing_events(uid, created_at desc);
 

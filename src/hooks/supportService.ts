@@ -26,6 +26,7 @@ export interface SupportTicket {
   status: SupportRequestStatus | FeatureRequestStatus;
   priority?: "low" | "medium" | "high" | "urgent";
   createdAt: Date;
+  updatedAt?: string | null;
   platform: string;
   assignedTo?: string;
   assignedToName?: string;
@@ -34,7 +35,38 @@ export interface SupportTicket {
   resolvedAt?: string | null;
   slaDueAt?: string | null;
   slaBreached?: boolean;
+  workspaceId?: string;
+  workspaceType?: string;
+  effectivePlan?: string;
+  reportRoute?: string;
+  appVersion?: string;
+  browser?: string;
 }
+
+export type SupportActivity = {
+  ticketId: string;
+  protocol: string;
+  status: string;
+  assignedToName: string | null;
+  updatedAt: string;
+  messages: Array<{ id: string; visibility: "public" | "internal"; message: string; author: "you" | "support" | "client"; createdAt: string }>;
+  events: Array<{ id: string; type: string; visibility: "public" | "internal"; metadata: Record<string, unknown>; actor: "you" | "support"; createdAt: string }>;
+  attachments: SupportAttachment[];
+  canReply: boolean;
+  canWriteInternal: boolean;
+  canRequestAccess: boolean;
+  canReopen: boolean;
+  reopenWindowDays: number;
+};
+
+export type SupportTicketFilters = {
+  assignedTo?: string;
+  route?: string;
+  appVersion?: string;
+  browser?: string;
+  plan?: string;
+  workspaceId?: string;
+};
 
 export type SupportAttachment = {
   id: string;
@@ -118,9 +150,9 @@ export async function createSupportReport(input: CreateSupportReportInput) {
   return payload;
 }
 
-export async function getSupportAttachmentUrl(attachmentId: string) {
+export async function getSupportAttachmentUrl(attachmentId: string, action: "view" | "download" = "view") {
   const response = await fetchWithAuth(
-    `/api/support-requests/attachments?attachmentId=${encodeURIComponent(attachmentId)}`,
+    `/api/support-requests/attachments?attachmentId=${encodeURIComponent(attachmentId)}&action=${action}`,
     { method: "GET" },
   );
   const payload = (await response.json()) as {
@@ -186,7 +218,7 @@ async function getTickets(params?: {
   status?: string;
   priority?: "low" | "medium" | "high" | "urgent" | "all";
   q?: string;
-}): Promise<SupportTicketsPage> {
+} & SupportTicketFilters): Promise<SupportTicketsPage> {
   const query = new URLSearchParams();
   query.set("page", String(Math.max(1, Number(params?.page || 1))));
   query.set("limit", String(Math.max(1, Math.min(100, Number(params?.limit || 20)))));
@@ -195,6 +227,12 @@ async function getTickets(params?: {
   if (params?.status && params.status !== "all") query.set("status", params.status);
   if (params?.priority && params.priority !== "all") query.set("priority", params.priority);
   if (params?.q?.trim()) query.set("q", params.q.trim());
+  if (params?.assignedTo && params.assignedTo !== "all") query.set("assignedTo", params.assignedTo);
+  if (params?.route && params.route !== "all") query.set("route", params.route);
+  if (params?.appVersion && params.appVersion !== "all") query.set("appVersion", params.appVersion);
+  if (params?.browser && params.browser !== "all") query.set("browser", params.browser);
+  if (params?.plan && params.plan !== "all") query.set("plan", params.plan);
+  if (params?.workspaceId && params.workspaceId !== "all") query.set("workspaceId", params.workspaceId);
 
   const response = await fetchWithAuth(`/api/support-requests?${query.toString()}`, {
     method: "GET",
@@ -235,7 +273,7 @@ export async function fetchSupportTicketsPage(params?: {
   status?: string;
   priority?: "low" | "medium" | "high" | "urgent" | "all";
   q?: string;
-}) {
+} & SupportTicketFilters) {
   const query = new URLSearchParams();
   query.set("page", String(Math.max(1, Number(params?.page || 1))));
   query.set("limit", String(Math.max(1, Math.min(100, Number(params?.limit || 20)))));
@@ -244,6 +282,12 @@ export async function fetchSupportTicketsPage(params?: {
   if (params?.status && params.status !== "all") query.set("status", params.status);
   if (params?.priority && params.priority !== "all") query.set("priority", params.priority);
   if (params?.q?.trim()) query.set("q", params.q.trim());
+  if (params?.assignedTo && params.assignedTo !== "all") query.set("assignedTo", params.assignedTo);
+  if (params?.route && params.route !== "all") query.set("route", params.route);
+  if (params?.appVersion && params.appVersion !== "all") query.set("appVersion", params.appVersion);
+  if (params?.browser && params.browser !== "all") query.set("browser", params.browser);
+  if (params?.plan && params.plan !== "all") query.set("plan", params.plan);
+  if (params?.workspaceId && params.workspaceId !== "all") query.set("workspaceId", params.workspaceId);
 
   const response = await fetchWithAuth(`/api/support-requests?${query.toString()}`, {
     method: "GET",
@@ -352,4 +396,30 @@ export const deleteTicket = async (ticketId: string) => {
     throw new Error(payload.error || "Erro ao deletar chamado");
   }
 };
+
+export async function fetchSupportActivity(ticketId: string) {
+  const response = await fetchWithAuth(`/api/support-requests/activity?ticketId=${encodeURIComponent(ticketId)}`, { method: "GET" });
+  const payload = (await response.json()) as { ok: boolean; error?: string; activity?: SupportActivity };
+  if (!response.ok || !payload.ok || !payload.activity) throw new Error(payload.error || "support_activity_failed");
+  return payload.activity;
+}
+
+export async function postSupportActivity(input: { ticketId: string; action: "reply" | "internal_note" | "request_info" | "reopen"; message?: string; attachments?: File[] }) {
+  const token = await getIdTokenOrThrow();
+  const form = new FormData();
+  form.set("ticketId", input.ticketId);
+  form.set("action", input.action);
+  if (input.message) form.set("message", input.message);
+  for (const file of input.attachments || []) form.append("attachments", file, file.name);
+  const response = await fetch("/api/support-requests/activity", { method: "POST", headers: { Authorization: `Bearer ${token}`, ...getImpersonationHeader() }, body: form });
+  const payload = (await response.json()) as { ok: boolean; error?: string; status?: string };
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "support_activity_write_failed");
+  return payload;
+}
+
+export async function removeSupportAttachment(attachmentId: string) {
+  const response = await fetchWithAuth(`/api/support-requests/attachments?attachmentId=${encodeURIComponent(attachmentId)}`, { method: "DELETE" });
+  const payload = (await response.json()) as { ok: boolean; error?: string };
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "support_attachment_delete_failed");
+}
 

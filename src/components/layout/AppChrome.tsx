@@ -7,6 +7,7 @@ import { AppDock } from "@/components/layout/AppDock";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { SupportReporter } from "@/components/support/SupportReporter";
+import { QuickActionsMenu } from "@/components/layout/QuickActionsMenu";
 
 const MARKETING_ROUTES = new Set(["/", "/contact", "/security", "/terms"]);
 const AUTH_ROUTES = new Set([
@@ -47,6 +48,7 @@ export function AppChrome({ children }: AppChromeProps) {
       </main>
       {showFooter ? <Footer /> : null}
       {showDock ? <SupportReporter /> : null}
+      {showDock ? <QuickActionsMenu /> : null}
       {showDock ? <AppDock /> : null}
     </div>
   );

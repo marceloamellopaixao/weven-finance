@@ -21,7 +21,7 @@ import { getSupabaseServiceClient } from "@/services/supabase/service-client";
 const SUPPORT_EVIDENCE_BUCKET = "support-evidence";
 const FINAL_STATUSES = new Set(["resolved", "implemented", "rejected"]);
 
-type UploadedEvidence = ProcessedSupportEvidence & {
+export type UploadedEvidence = ProcessedSupportEvidence & {
   id: string;
   storagePath: string;
 };
@@ -91,7 +91,7 @@ async function parseRequest(request: NextRequest) {
   };
 }
 
-async function enforceDailyQuota(ownerUid: string, incomingFiles: number, incomingBytes: number) {
+export async function enforceSupportDailyQuota(ownerUid: string, incomingFiles: number, incomingBytes: number) {
   if (incomingFiles === 0) return;
   const supabase = getSupabaseServiceClient();
   const startOfDay = new Date();
@@ -107,6 +107,59 @@ async function enforceDailyQuota(ownerUid: string, incomingFiles: number, incomi
   const usedBytes = (data || []).reduce((total, row) => total + Number(row.size_bytes || 0), 0);
   if (usedFiles + incomingFiles > MAX_SUPPORT_DAILY_ATTACHMENTS || usedBytes + incomingBytes > MAX_SUPPORT_DAILY_BYTES) {
     throw new Error("daily_attachment_quota_exceeded");
+  }
+}
+
+export async function uploadSupportEvidence(input: { ownerUid: string; ticketId: string; files: File[] }) {
+  if (input.files.length > MAX_SUPPORT_ATTACHMENTS) throw new Error("too_many_attachments");
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(input.ownerUid)) throw new Error("invalid_owner_uid");
+  const incomingBytes = input.files.reduce((total, file) => total + file.size, 0);
+  await enforceSupportDailyQuota(input.ownerUid, input.files.length, incomingBytes);
+  const processed = await Promise.all(input.files.map(processSupportEvidence));
+  const supabase = getSupabaseServiceClient();
+  const uploaded: UploadedEvidence[] = [];
+  try {
+    for (const evidence of processed) {
+      const id = crypto.randomUUID();
+      const extension = extensionForSupportEvidence(evidence.mimeType);
+      const storagePath = `${input.ownerUid}/${input.ticketId}/${id}.${extension}`;
+      const { error } = await supabase.storage.from(SUPPORT_EVIDENCE_BUCKET).upload(storagePath, evidence.bytes, {
+        contentType: evidence.mimeType,
+        cacheControl: "3600",
+        upsert: false,
+      });
+      if (error) throw new Error("support_attachment_upload_failed");
+      uploaded.push({ ...evidence, id, storagePath });
+    }
+    return uploaded;
+  } catch (error) {
+    await removeUploaded(uploaded.map((item) => item.storagePath));
+    throw error;
+  }
+}
+
+export async function persistSupportEvidence(input: { ownerUid: string; ticketId: string; uploaded: UploadedEvidence[]; visibility?: "public" | "internal" }) {
+  if (input.uploaded.length === 0) return;
+  const nowIso = new Date().toISOString();
+  const supabase = getSupabaseServiceClient();
+  const { error } = await supabase.from("support_request_attachments").insert(input.uploaded.map((item) => ({
+    id: item.id,
+    ticket_id: input.ticketId,
+    owner_uid: input.ownerUid,
+    storage_path: item.storagePath,
+    mime_type: item.mimeType,
+    size_bytes: item.sizeBytes,
+    sha256: item.sha256,
+    width: item.width,
+    height: item.height,
+    scan_status: "unavailable",
+    visibility: input.visibility || "public",
+    created_at: nowIso,
+    updated_at: nowIso,
+  })));
+  if (error) {
+    await removeUploaded(input.uploaded.map((item) => item.storagePath));
+    throw new Error("support_attachment_insert_failed");
   }
 }
 
@@ -153,27 +206,10 @@ export async function createSupportReport(request: NextRequest, auth: SupportAut
     };
   }
 
-  const incomingBytes = files.reduce((total, file) => total + file.size, 0);
-  await enforceDailyQuota(auth.uid, files.length, incomingBytes);
-  const processed = await Promise.all(files.map(processSupportEvidence));
   const ticketId = crypto.randomUUID();
-  if (!/^[A-Za-z0-9_-]{1,160}$/.test(auth.uid)) throw new Error("invalid_owner_uid");
-  const uploaded: UploadedEvidence[] = [];
+  const uploaded = await uploadSupportEvidence({ ownerUid: auth.uid, ticketId, files });
 
   try {
-    for (const evidence of processed) {
-      const id = crypto.randomUUID();
-      const extension = extensionForSupportEvidence(evidence.mimeType);
-      const storagePath = `${auth.uid}/${ticketId}/${id}.${extension}`;
-      const { error } = await supabase.storage.from(SUPPORT_EVIDENCE_BUCKET).upload(storagePath, evidence.bytes, {
-        contentType: evidence.mimeType,
-        cacheControl: "3600",
-        upsert: false,
-      });
-      if (error) throw new Error("support_attachment_upload_failed");
-      uploaded.push({ ...evidence, id, storagePath });
-    }
-
     const nowIso = new Date().toISOString();
     const protocol = formatProtocol(new Date(nowIso));
     const priority = inferPriority(fields.type, `${fields.title} ${fields.description} ${fields.actualResult || ""}`);
@@ -219,6 +255,13 @@ export async function createSupportReport(request: NextRequest, auth: SupportAut
     const { error: ticketError } = await supabase.from("support_requests").insert({
       id: ticketId,
       uid: auth.uid,
+      protocol,
+      workspace_id: technicalContext?.workspaceId || null,
+      workspace_type: technicalContext?.workspaceType || null,
+      effective_plan: auth.plan,
+      report_route: technicalContext?.route || null,
+      app_version: technicalContext?.appVersion || null,
+      browser: technicalContext?.browser || null,
       email: auth.email,
       name: auth.name,
       title: fields.title,
@@ -248,26 +291,26 @@ export async function createSupportReport(request: NextRequest, auth: SupportAut
     }
 
     if (uploaded.length > 0) {
-      const { error: attachmentError } = await supabase.from("support_request_attachments").insert(
-        uploaded.map((item) => ({
-          id: item.id,
-          ticket_id: ticketId,
-          owner_uid: auth.uid,
-          storage_path: item.storagePath,
-          mime_type: item.mimeType,
-          size_bytes: item.sizeBytes,
-          sha256: item.sha256,
-          width: item.width,
-          height: item.height,
-          scan_status: "unavailable",
-          created_at: nowIso,
-          updated_at: nowIso,
-        })),
-      );
-      if (attachmentError) {
+      try {
+        await persistSupportEvidence({ ownerUid: auth.uid, ticketId, uploaded });
+      } catch {
         await supabase.from("support_requests").delete().eq("id", ticketId);
         throw new Error("support_attachment_insert_failed");
       }
+    }
+
+    const { error: eventError } = await supabase.from("support_request_events").insert({
+      id: crypto.randomUUID(),
+      ticket_id: ticketId,
+      actor_uid: auth.requesterUid,
+      event_type: "created",
+      visibility: "public",
+      metadata: { protocol, type: fields.type, impersonating: auth.isImpersonating },
+      created_at: nowIso,
+    });
+    if (eventError) {
+      await supabase.from("support_requests").delete().eq("id", ticketId);
+      throw new Error("support_event_write_failed");
     }
 
     return { id: ticketId, protocol, type: fields.type, duplicated: false };

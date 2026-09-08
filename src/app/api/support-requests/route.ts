@@ -14,6 +14,7 @@ import { createSupportReport } from "@/lib/support/create-report.server";
 import { getSupabaseServiceClient } from "@/services/supabase/service-client";
 import { getSupportAuthContext } from "@/lib/support/auth.server";
 import { computeSupportEvidenceRetentionUntil } from "@/lib/support/report";
+import { writeAdminAuditLog } from "@/lib/audit/admin";
 
 const FINAL_STATUSES = new Set(["resolved", "implemented", "rejected"]);
 
@@ -48,25 +49,38 @@ export async function GET(request: NextRequest) {
     const typeFilter = request.nextUrl.searchParams.get("type")?.trim();
     const statusFilter = request.nextUrl.searchParams.get("status")?.trim();
     const priorityFilter = request.nextUrl.searchParams.get("priority")?.trim();
+    const assignedToFilter = request.nextUrl.searchParams.get("assignedTo")?.trim();
+    const routeFilter = request.nextUrl.searchParams.get("route")?.trim();
+    const versionFilter = request.nextUrl.searchParams.get("appVersion")?.trim();
+    const browserFilter = request.nextUrl.searchParams.get("browser")?.trim();
+    const planFilter = request.nextUrl.searchParams.get("plan")?.trim();
+    const workspaceFilter = request.nextUrl.searchParams.get("workspaceId")?.trim();
     const scope = request.nextUrl.searchParams.get("scope")?.trim();
     const q = request.nextUrl.searchParams.get("q")?.trim().toLowerCase() || "";
 
     const filters: Record<string, string | undefined> = {};
     if (typeFilter && typeFilter !== "all") filters.ticket_type = typeFilter;
     if (statusFilter && statusFilter !== "all") filters.ticket_status = statusFilter;
+    if (assignedToFilter && assignedToFilter !== "all" && assignedToFilter !== "unassigned") filters.assigned_to = assignedToFilter;
+    if (routeFilter && routeFilter !== "all") filters.report_route = routeFilter;
+    if (versionFilter && versionFilter !== "all") filters.app_version = versionFilter;
+    if (browserFilter && browserFilter !== "all") filters.browser = browserFilter;
+    if (planFilter && planFilter !== "all") filters.effective_plan = planFilter;
+    if (workspaceFilter && workspaceFilter !== "all") filters.workspace_id = workspaceFilter;
     if (scope === "mine" || !canReadAdminSupport) {
       filters.uid = auth.uid;
     }
 
     const baseSelect =
-      "id,uid,email,name,title,message,ticket_type,ticket_status,assigned_to,assigned_to_name,staff_seen_by,votes,created_at,updated_at,raw";
+      "id,uid,email,name,title,message,protocol,workspace_id,workspace_type,effective_plan,report_route,app_version,browser,ticket_type,ticket_status,assigned_to,assigned_to_name,staff_seen_by,votes,created_at,updated_at,raw";
     const conditions: Record<string, string> = {};
     if (priorityFilter && priorityFilter !== "all") {
       conditions.raw = `cs.${JSON.stringify({ priority: priorityFilter })}`;
     }
+    if (assignedToFilter === "unassigned") conditions.assigned_to = "is.null";
     const safeQ = escapeIlike(q);
     const or = safeQ
-      ? `title.ilike.*${safeQ}*,message.ilike.*${safeQ}*,name.ilike.*${safeQ}*,email.ilike.*${safeQ}*`
+      ? `protocol.ilike.*${safeQ}*,title.ilike.*${safeQ}*,name.ilike.*${safeQ}*,email.ilike.*${safeQ}*`
       : undefined;
     const paged = await supabaseSelectPaged("support_requests", {
       select: baseSelect,
@@ -104,7 +118,7 @@ export async function GET(request: NextRequest) {
           uid: String(row.uid || raw.uid || ""),
           email: String(row.email || secure.email || raw.email || ""),
           name: String(row.name || secure.name || raw.name || ""),
-          protocol: String(raw.protocol || row.title || ""),
+          protocol: String(row.protocol || raw.protocol || row.title || ""),
           title: String(report.title || secure.title || row.title || raw.protocol || ""),
           message: String(row.message || secure.message || raw.message || ""),
           type: String(row.ticket_type || raw.type || "support"),
@@ -112,11 +126,13 @@ export async function GET(request: NextRequest) {
           wantsData: typeof raw.wantsData === "boolean" ? raw.wantsData : undefined,
           status: String(row.ticket_status || raw.status || "pending"),
           priority: String(raw.priority || "medium"),
-          assignedTo: row.assigned_to ?? raw.assignedTo ?? null,
-          assignedToName: row.assigned_to_name ?? raw.assignedToName ?? null,
-          staffSeenBy: Array.isArray(row.staff_seen_by)
+          assignedTo: canReadAdminSupport ? (row.assigned_to ?? raw.assignedTo ?? null) : null,
+          assignedToName: canReadAdminSupport
+            ? (row.assigned_to_name ?? raw.assignedToName ?? null)
+            : (row.assigned_to || raw.assignedTo ? "Equipe de suporte" : null),
+          staffSeenBy: canReadAdminSupport && Array.isArray(row.staff_seen_by)
             ? row.staff_seen_by
-            : Array.isArray(raw.staffSeenBy)
+            : canReadAdminSupport && Array.isArray(raw.staffSeenBy)
               ? raw.staffSeenBy
               : [],
           firstResponseAt: typeof raw.firstResponseAt === "string" ? raw.firstResponseAt : null,
@@ -132,6 +148,12 @@ export async function GET(request: NextRequest) {
           expectedResult: String(report.expectedResult || secure.expectedResult || "") || undefined,
           actualResult: String(report.actualResult || secure.actualResult || "") || undefined,
           technicalContext: raw.technicalContext && typeof raw.technicalContext === "object" ? raw.technicalContext : undefined,
+          workspaceId: String(row.workspace_id || "") || undefined,
+          workspaceType: String(row.workspace_type || "") || undefined,
+          effectivePlan: String(row.effective_plan || auth.plan || "") || undefined,
+          reportRoute: String(row.report_route || "") || undefined,
+          appVersion: String(row.app_version || "") || undefined,
+          browser: String(row.browser || "") || undefined,
           reportedDuringImpersonation: Boolean(reporter.isImpersonating),
           createdAt: String(row.created_at || raw.createdAt || ""),
           updatedAt: String(row.updated_at || raw.updatedAt || ""),
@@ -146,11 +168,12 @@ export async function GET(request: NextRequest) {
       const supabase = getSupabaseServiceClient();
       const { data: attachments, error: attachmentsError } = await supabase
         .from("support_request_attachments")
-        .select("id,ticket_id,mime_type,size_bytes,width,height,scan_status,created_at")
+        .select("id,ticket_id,mime_type,size_bytes,width,height,scan_status,visibility,created_at")
         .in("ticket_id", ticketIds)
         .order("created_at", { ascending: true });
       if (attachmentsError) throw new Error("support_attachments_list_failed");
       for (const attachment of attachments || []) {
+        if (!canReadAdminSupport && attachment.visibility === "internal") continue;
         const ticketId = String(attachment.ticket_id || "");
         const current = attachmentByTicket.get(ticketId) || [];
         current.push({
@@ -315,6 +338,7 @@ export async function PATCH(request: NextRequest) {
 
       if (upserts.length > 0) {
         await supabaseUpsertRows("support_requests", upserts, { onConflict: "id" });
+        await writeAdminAuditLog({ actorUid: auth.requesterUid, action: "support.tickets.viewed", requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { ticketIds: upserts.map((item) => item.id), impersonating: auth.isImpersonating } });
       }
       await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
       return NextResponse.json({ ok: true, updated: upserts.length }, { status: 200 });
@@ -388,6 +412,25 @@ export async function PATCH(request: NextRequest) {
       { onConflict: "id" }
     );
 
+    const previousStatus = String(row.ticket_status || raw.status || "pending");
+    const previousAssignedTo = row.assigned_to ? String(row.assigned_to) : null;
+    const eventClient = getSupabaseServiceClient();
+    const events: Array<Record<string, unknown>> = [];
+    if (typeof safeUpdates.status === "string" && previousStatus !== nextStatus) {
+      events.push({ id: crypto.randomUUID(), ticket_id: ticketId, actor_uid: auth.requesterUid, event_type: "status_changed", visibility: "public", metadata: { from: previousStatus, to: nextStatus }, created_at: new Date().toISOString() });
+    }
+    if (Object.hasOwn(safeUpdates, "assignedTo") && previousAssignedTo !== (safeUpdates.assignedTo || null)) {
+      events.push({ id: crypto.randomUUID(), ticket_id: ticketId, actor_uid: auth.requesterUid, event_type: "assigned", visibility: "public", metadata: { assigned: Boolean(safeUpdates.assignedTo) }, created_at: new Date().toISOString() });
+    }
+    if (typeof safeUpdates.priority === "string" && safeUpdates.priority !== raw.priority) {
+      events.push({ id: crypto.randomUUID(), ticket_id: ticketId, actor_uid: auth.requesterUid, event_type: "priority_changed", visibility: "internal", metadata: { from: raw.priority || "medium", to: safeUpdates.priority }, created_at: new Date().toISOString() });
+    }
+    if (events.length > 0) {
+      const { error: eventError } = await eventClient.from("support_request_events").insert(events);
+      if (eventError) throw new Error("support_event_write_failed");
+    }
+    await writeAdminAuditLog({ actorUid: auth.requesterUid, action: "support.ticket.updated", targetUid: ticketData.uid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { ticketId, fields: Object.keys(safeUpdates), previousStatus, nextStatus, impersonating: auth.isImpersonating } });
+
     if (typeof safeUpdates.status === "string") {
       const retentionClient = getSupabaseServiceClient();
       const { error: retentionError } = await retentionClient
@@ -397,7 +440,7 @@ export async function PATCH(request: NextRequest) {
       if (retentionError) throw new Error("support_attachment_retention_update_failed");
     }
 
-    if (FINAL_STATUSES.has(nextStatus) && ticketData.uid) {
+    if (typeof safeUpdates.status === "string" && previousStatus !== nextStatus && ticketData.uid) {
       const protocol = typeof merged.protocol === "string" ? merged.protocol : `#${ticketId.slice(0, 8)}`;
       const statusLabel =
         nextStatus === "resolved"
@@ -408,9 +451,9 @@ export async function PATCH(request: NextRequest) {
       await pushNotification({
         uid: ticketData.uid,
         kind: "support",
-        title: `Protocolo ${protocol} finalizado`,
-        message: `Seu chamado foi finalizado com status: ${statusLabel}.`,
-        href: "/settings?tab=help",
+        title: FINAL_STATUSES.has(nextStatus) ? `Protocolo ${protocol} finalizado` : `Protocolo ${protocol} atualizado`,
+        message: FINAL_STATUSES.has(nextStatus) ? `Seu chamado foi finalizado com status: ${statusLabel}.` : `O status do seu chamado mudou para ${nextStatus}.`,
+        href: `/settings?tab=help&ticket=${encodeURIComponent(ticketId)}`,
         meta: { ticketId, status: nextStatus, protocol },
       });
     }
@@ -465,6 +508,7 @@ export async function DELETE(request: NextRequest) {
       if (storageError) throw new Error("support_attachments_cleanup_failed");
     }
     await supabaseDeleteByFilters("support_requests", { id: ticketId });
+    await writeAdminAuditLog({ actorUid: auth.requesterUid, action: "support.ticket.deleted", requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { ticketId, impersonating: auth.isImpersonating } });
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {

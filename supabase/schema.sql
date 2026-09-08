@@ -350,9 +350,31 @@ create table if not exists public.support_request_attachments (
   width integer not null check (width > 0 and width <= 4096),
   height integer not null check (height > 0 and height <= 4096),
   scan_status text not null default 'unavailable' check (scan_status in ('pending', 'clean', 'rejected', 'unavailable')),
+  visibility text not null default 'public' check (visibility in ('public', 'internal')),
   retention_until timestamptz,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.support_request_messages (
+  id text primary key,
+  ticket_id text not null references public.support_requests(id) on delete cascade,
+  author_uid text not null,
+  author_kind text not null check (author_kind in ('client', 'staff')),
+  visibility text not null default 'public' check (visibility in ('public', 'internal')),
+  message text not null check (char_length(message) between 1 and 5000),
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.support_request_events (
+  id text primary key,
+  ticket_id text not null references public.support_requests(id) on delete cascade,
+  actor_uid text,
+  event_type text not null,
+  visibility text not null default 'public' check (visibility in ('public', 'internal')),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default timezone('utc', now())
 );
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -680,6 +702,13 @@ alter table if exists public.support_requests add column if not exists raw jsonb
 alter table if exists public.support_requests add column if not exists created_at timestamptz default timezone('utc', now());
 alter table if exists public.support_requests add column if not exists updated_at timestamptz default timezone('utc', now());
 alter table if exists public.support_requests add column if not exists client_request_id text;
+alter table if exists public.support_requests add column if not exists protocol text;
+alter table if exists public.support_requests add column if not exists workspace_id text;
+alter table if exists public.support_requests add column if not exists workspace_type text;
+alter table if exists public.support_requests add column if not exists effective_plan text;
+alter table if exists public.support_requests add column if not exists report_route text;
+alter table if exists public.support_requests add column if not exists app_version text;
+alter table if exists public.support_requests add column if not exists browser text;
 
 alter table if exists public.support_request_attachments add column if not exists ticket_id text;
 alter table if exists public.support_request_attachments add column if not exists owner_uid text;
@@ -690,9 +719,25 @@ alter table if exists public.support_request_attachments add column if not exist
 alter table if exists public.support_request_attachments add column if not exists width integer;
 alter table if exists public.support_request_attachments add column if not exists height integer;
 alter table if exists public.support_request_attachments add column if not exists scan_status text default 'unavailable';
+alter table if exists public.support_request_attachments add column if not exists visibility text default 'public';
 alter table if exists public.support_request_attachments add column if not exists retention_until timestamptz;
 alter table if exists public.support_request_attachments add column if not exists created_at timestamptz default timezone('utc', now());
 alter table if exists public.support_request_attachments add column if not exists updated_at timestamptz default timezone('utc', now());
+
+alter table if exists public.support_request_messages add column if not exists ticket_id text;
+alter table if exists public.support_request_messages add column if not exists author_uid text;
+alter table if exists public.support_request_messages add column if not exists author_kind text;
+alter table if exists public.support_request_messages add column if not exists visibility text default 'public';
+alter table if exists public.support_request_messages add column if not exists message text;
+alter table if exists public.support_request_messages add column if not exists created_at timestamptz default timezone('utc', now());
+alter table if exists public.support_request_messages add column if not exists updated_at timestamptz default timezone('utc', now());
+
+alter table if exists public.support_request_events add column if not exists ticket_id text;
+alter table if exists public.support_request_events add column if not exists actor_uid text;
+alter table if exists public.support_request_events add column if not exists event_type text;
+alter table if exists public.support_request_events add column if not exists visibility text default 'public';
+alter table if exists public.support_request_events add column if not exists metadata jsonb default '{}'::jsonb;
+alter table if exists public.support_request_events add column if not exists created_at timestamptz default timezone('utc', now());
 
 alter table if exists public.billing_events add column if not exists uid text;
 alter table if exists public.billing_events add column if not exists event_type text;
@@ -824,6 +869,10 @@ for each row execute function public.set_updated_at();
 
 drop trigger if exists trg_support_request_attachments_set_updated_at on public.support_request_attachments;
 create trigger trg_support_request_attachments_set_updated_at before update on public.support_request_attachments
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_support_request_messages_set_updated_at on public.support_request_messages;
+create trigger trg_support_request_messages_set_updated_at before update on public.support_request_messages
 for each row execute function public.set_updated_at();
 
 drop trigger if exists trg_billing_events_set_updated_at on public.billing_events;

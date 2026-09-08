@@ -1154,6 +1154,46 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
           },
         },
       },
+      "/api/support-requests/activity": {
+        get: {
+          tags: ["Support"],
+          summary: "Consultar timeline autorizada do chamado",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "ticketId", in: "query", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: {
+            200: { description: "Timeline publica ou administrativa retornada" },
+            404: { description: "Chamado nao encontrado ou nao autorizado" },
+          },
+        },
+        post: {
+          tags: ["Support"],
+          summary: "Responder, criar nota interna, pedir informacoes ou reabrir chamado",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "multipart/form-data": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ticketId: { type: "string", format: "uuid" },
+                    action: { type: "string", enum: ["reply", "internal_note", "request_info", "reopen"] },
+                    message: { type: "string", maxLength: 5000 },
+                    attachments: { type: "array", maxItems: 3, items: { type: "string", format: "binary" } },
+                  },
+                  required: ["ticketId", "action"],
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Atividade registrada" },
+            403: { description: "Sem permissao" },
+            404: { description: "Chamado nao encontrado" },
+            409: { description: "Janela de reabertura expirada" },
+          },
+        },
+      },
       "/api/system/plans": {
         get: {
           tags: ["System"],

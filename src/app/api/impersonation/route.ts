@@ -12,6 +12,8 @@ import { canAccessResource } from "@/lib/access-control/server";
 import { UserRole } from "@/types/user";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { apiLogger } from "@/lib/observability/logger";
+import { getRequestMeta } from "@/lib/api/request-meta";
+import { writeAdminAuditLog } from "@/lib/audit/admin";
 
 function toUserRole(value: unknown): UserRole {
   if (value === "admin" || value === "moderator" || value === "support" || value === "client") {
@@ -182,6 +184,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const meta = getRequestMeta(request);
   try {
     const auth = await getAuthContextFromRequest(request);
     const body = (await request.json()) as
@@ -267,6 +270,8 @@ export async function POST(request: NextRequest) {
         updated_at: nowIso,
       });
 
+      await writeAdminAuditLog({ actorUid: auth.uid, action: "impersonation.access.requested", targetUid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { supportRequestId: requestId } });
+
       return NextResponse.json({ ok: true, requestId, status: "pending" }, { status: 200 });
     }
 
@@ -320,6 +325,8 @@ export async function POST(request: NextRequest) {
         permissionImpersonate: body.approved,
         requestId,
       });
+
+      await writeAdminAuditLog({ actorUid: auth.uid, action: body.approved ? "impersonation.access.approved" : "impersonation.access.rejected", targetUid: requestData.requesterUid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { supportRequestId: requestId } });
 
       return NextResponse.json(
         {
