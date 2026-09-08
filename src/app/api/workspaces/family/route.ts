@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveApiErrorStatus } from "@/lib/api/error";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
-import { verifyRequestAuth } from "@/lib/auth/server";
+import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
 import { pushNotification } from "@/lib/notifications/server";
@@ -409,13 +409,40 @@ function getFamilyErrorStatus(message: string) {
   return resolveApiErrorStatus(message);
 }
 
+async function resolveFamilyRouteAuth(request: NextRequest) {
+  const acting = await resolveActingContext(request);
+  return {
+    acting,
+    auth: {
+      uid: acting.actingUid,
+      email: acting.actingEmail,
+      name: acting.actingDisplayName,
+    },
+  };
+}
+
+async function requireFamilyImpersonationApproval(
+  request: NextRequest,
+  acting: Awaited<ReturnType<typeof resolveActingContext>>,
+  actionType: string,
+  actionLabel: string,
+) {
+  const approval = await ensureImpersonationWriteApproval({ request, acting, actionType, actionLabel });
+  return approval.allowed
+    ? null
+    : NextResponse.json(
+        { ok: false, error: "impersonation_write_confirmation_required", actionRequestId: approval.actionRequestId },
+        { status: 409 },
+      );
+}
+
 export async function GET(request: NextRequest) {
   const meta = getRequestMeta(request);
   const startedAt = Date.now();
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-family:get", max: 120, windowMs: 60_000 });
     if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
-    const auth = await verifyRequestAuth(request);
+    const { auth } = await resolveFamilyRouteAuth(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
     if (!workspaceId) return NextResponse.json({ ok: false, error: "missing_workspace_id" }, { status: 400 });
     const access = await assertCanView(auth.uid, workspaceId);
@@ -455,7 +482,7 @@ export async function POST(request: NextRequest) {
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-family:post", max: 30, windowMs: 60_000 });
     if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
-    const auth = await verifyRequestAuth(request);
+    const { acting, auth } = await resolveFamilyRouteAuth(request);
     const body = (await request.json()) as {
       workspaceId?: string;
       email?: string;
@@ -466,6 +493,8 @@ export async function POST(request: NextRequest) {
     const workspaceId = String(body.workspaceId || "").trim();
     const email = normalizeEmail(body.email);
     if (!workspaceId || !email) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    const approvalResponse = await requireFamilyImpersonationApproval(request, acting, "family:invite-member", "Convidar membro para o perfil Família");
+    if (approvalResponse) return approvalResponse;
     if (email === normalizeEmail(auth.email)) throw new Error("cannot_invite_yourself");
     const access = await assertCanManage(auth.uid, workspaceId, "invite_members");
     await assertFamilyInviteAllowed(access.workspaceUid, workspaceId, email);
@@ -492,7 +521,7 @@ export async function POST(request: NextRequest) {
       displayName: memberDisplayName,
       role,
       permissions,
-      invitedByUid: auth.uid,
+      invitedByUid: acting.requesterUid,
       status: "pending",
     });
     const invitationRow = toInvitationRow({
@@ -501,7 +530,7 @@ export async function POST(request: NextRequest) {
       email,
       role,
       permissions,
-      invitedByUid: auth.uid,
+      invitedByUid: acting.requesterUid,
       invitedMemberUid: authUser.uid,
       recipientAccountExisted: authUser.accountExists,
       status: "pending",
@@ -564,7 +593,7 @@ export async function PUT(request: NextRequest) {
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-family:put", max: 30, windowMs: 60_000 });
     if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
-    const auth = await verifyRequestAuth(request);
+    const { acting, auth } = await resolveFamilyRouteAuth(request);
     const body = (await request.json()) as {
       workspaceId?: string;
       invitationId?: string;
@@ -574,6 +603,8 @@ export async function PUT(request: NextRequest) {
     const invitationId = String(body.invitationId || "").trim();
     const memberUid = String(body.memberUid || "").trim();
     if (!workspaceId || (!invitationId && !memberUid)) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    const approvalResponse = await requireFamilyImpersonationApproval(request, acting, "family:resend-invitation", "Reenviar acesso ao perfil Família");
+    if (approvalResponse) return approvalResponse;
     const access = await assertCanManage(auth.uid, workspaceId, "invite_members");
     if (memberUid) {
       if (memberUid === access.workspaceUid) {
@@ -681,7 +712,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-family:patch", max: 60, windowMs: 60_000 });
     if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
-    const auth = await verifyRequestAuth(request);
+    const { acting, auth } = await resolveFamilyRouteAuth(request);
     const body = (await request.json()) as {
       workspaceId?: string;
       memberUid?: string;
@@ -692,6 +723,8 @@ export async function PATCH(request: NextRequest) {
     const workspaceId = String(body.workspaceId || "").trim();
     const memberUid = String(body.memberUid || "").trim();
     if (!workspaceId || !memberUid) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    const approvalResponse = await requireFamilyImpersonationApproval(request, acting, "family:update-member", "Alterar membro do perfil Família");
+    if (approvalResponse) return approvalResponse;
     const requiredAction: FamilyManageAction = body.role !== undefined || body.status !== undefined ? "manage_members" : "edit_permissions";
     const access = await assertCanManage(auth.uid, workspaceId, requiredAction);
     if (body.permissions !== undefined && !access.owner && !canEditFamilyPermissions(access.manager)) {
@@ -758,10 +791,17 @@ export async function DELETE(request: NextRequest) {
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-family:delete", max: 10, windowMs: 60_000 });
     if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
-    const auth = await verifyRequestAuth(request);
+    const { acting, auth } = await resolveFamilyRouteAuth(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
     const invitationId = request.nextUrl.searchParams.get("invitationId")?.trim();
     if (!workspaceId) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    const approvalResponse = await requireFamilyImpersonationApproval(
+      request,
+      acting,
+      invitationId ? "family:revoke-invitation" : "family:close-workspace",
+      invitationId ? "Revogar convite do perfil Família" : "Encerrar perfil Família",
+    );
+    if (approvalResponse) return approvalResponse;
 
     if (invitationId) {
       const access = await assertCanManage(auth.uid, workspaceId, "invite_members");
@@ -785,7 +825,7 @@ export async function DELETE(request: NextRequest) {
       const updatedRow = {
         ...invitationRow,
         invitation_status: "revoked",
-        raw: { ...raw, status: "revoked", revokedAt: now, revokedByUid: auth.uid, updatedAt: now },
+        raw: { ...raw, status: "revoked", revokedAt: now, revokedByUid: acting.requesterUid, updatedAt: now },
         updated_at: now,
       };
       await supabaseUpsertRows("workspace_invitations", [updatedRow], { onConflict: "id" });

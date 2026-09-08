@@ -2,6 +2,7 @@
 
 import { getImpersonationHeader } from "@/lib/impersonation/client";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { fetchWithImpersonationApproval } from "@/services/impersonationApprovalFetch";
 import type { FamilyPermission, FamilyRole, PendingWorkspaceInvitation, SharedWorkspaceMember, WorkspaceInvitation, WorkspaceMember, WorkspaceSeatSummary } from "@/types/workspace";
 
 export type FamilyWorkspacePayload = {
@@ -59,7 +60,7 @@ export async function getFamilyWorkspace(workspaceId: string) {
 }
 
 export async function inviteFamilyMember(input: InviteFamilyMemberInput) {
-  const response = await apiFetch("/api/workspaces/family", {
+  const response = await fetchWithImpersonationApproval("/api/workspaces/family", {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -79,7 +80,7 @@ export async function resendFamilyInvitation(input: {
   workspaceId: string;
   invitationId: string;
 }) {
-  const response = await apiFetch("/api/workspaces/family", {
+  const response = await fetchWithImpersonationApproval("/api/workspaces/family", {
     method: "PUT",
     body: JSON.stringify(input),
   });
@@ -91,7 +92,7 @@ export async function resendFamilyMemberAccess(input: {
   workspaceId: string;
   memberUid: string;
 }) {
-  const response = await apiFetch("/api/workspaces/family", {
+  const response = await fetchWithImpersonationApproval("/api/workspaces/family", {
     method: "PUT",
     body: JSON.stringify(input),
   });
@@ -106,7 +107,7 @@ export async function updateFamilyMember(input: {
   permissions?: FamilyPermission[];
   status?: "active" | "pending" | "disabled";
 }) {
-  const response = await apiFetch("/api/workspaces/family", {
+  const response = await fetchWithImpersonationApproval("/api/workspaces/family", {
     method: "PATCH",
     body: JSON.stringify(input),
   });
@@ -123,7 +124,7 @@ export async function revokeFamilyInvitation(input: {
   workspaceId: string;
   invitationId: string;
 }) {
-  const response = await apiFetch(
+  const response = await fetchWithImpersonationApproval(
     `/api/workspaces/family?workspaceId=${encodeURIComponent(input.workspaceId)}&invitationId=${encodeURIComponent(input.invitationId)}`,
     { method: "DELETE" },
   );

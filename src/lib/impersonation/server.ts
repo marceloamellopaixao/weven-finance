@@ -19,7 +19,11 @@ export type ActingContext = {
   requesterUid: string;
   requesterRawUid: string;
   requesterRole: UserRole;
+  requesterDisplayName: string;
+  requesterEmail: string;
   actingUid: string;
+  actingDisplayName: string;
+  actingEmail: string;
   isImpersonating: boolean;
 };
 
@@ -135,7 +139,11 @@ export async function resolveActingContext(request: NextRequest): Promise<Acting
       requesterUid: auth.uid,
       requesterRawUid: auth.rawUid,
       requesterRole: auth.role,
+      requesterDisplayName: auth.displayName,
+      requesterEmail: auth.email,
       actingUid: auth.uid,
+      actingDisplayName: auth.displayName,
+      actingEmail: auth.email,
       isImpersonating: false,
     };
   }
@@ -181,7 +189,11 @@ export async function resolveActingContext(request: NextRequest): Promise<Acting
     requesterUid: auth.uid,
     requesterRawUid: auth.rawUid,
     requesterRole: auth.role,
+    requesterDisplayName: auth.displayName,
+    requesterEmail: auth.email,
     actingUid: targetUid,
+    actingDisplayName: validDoc.targetDisplayName,
+    actingEmail: validDoc.targetEmail,
     isImpersonating: true,
   };
 }

@@ -1,3 +1,5 @@
+import { LoaderCircle } from "lucide-react";
+
 export function AppBootLoading() {
   return (
     <main className="flex min-h-svh items-center justify-center bg-background px-6 text-foreground" role="status" aria-live="polite">
@@ -7,9 +9,10 @@ export function AppBootLoading() {
         </div>
         <p className="mt-5 text-lg font-bold">WevenFinance</p>
         <p className="mt-1 text-sm text-muted-foreground">Preparando seu espaço financeiro...</p>
-        <div className="mx-auto mt-6 h-1.5 w-48 overflow-hidden rounded-full bg-primary/10">
-          <div className="h-full w-1/2 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-primary" />
-        </div>
+        <LoaderCircle
+          className="mx-auto mt-5 h-7 w-7 animate-spin text-primary"
+          aria-hidden="true"
+        />
         <span className="sr-only">Carregando aplicação</span>
       </div>
     </main>
