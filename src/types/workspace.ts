@@ -2,6 +2,8 @@ import type { CurrencyCode } from "@/lib/money/formatMoney";
 
 export type WorkspaceType = "personal" | "professional" | "church" | "family" | "business";
 export type FinancialProfileType = "personal" | "family" | "business";
+export type BusinessOrganizationKind = "self_employed" | "company" | "services" | "church" | "nonprofit" | "project" | "other";
+export type BusinessTeamSize = "solo" | "2_5" | "6_20" | "21_100" | "100_plus";
 export type WorkspaceStatus = "active" | "archived";
 
 export type WorkspaceSettings = {
@@ -10,6 +12,8 @@ export type WorkspaceSettings = {
   categoriesPresetApplied?: boolean;
   familyModeEnabled?: boolean;
   businessDocument?: string;
+  businessOrganizationKind?: BusinessOrganizationKind;
+  businessTeamSize?: BusinessTeamSize;
   archivedAt?: string | null;
 };
 

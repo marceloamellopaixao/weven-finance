@@ -366,3 +366,10 @@ where schemaname = 'public'
     'product_events'
   )
 order by tablename, policyname;
+
+select
+  'reserve_business_workspace_invitation(text,text,integer,jsonb,jsonb)' as required_function,
+  case
+    when to_regprocedure('public.reserve_business_workspace_invitation(text,text,integer,jsonb,jsonb)') is null then 'missing'
+    else 'ok'
+  end as function_status;

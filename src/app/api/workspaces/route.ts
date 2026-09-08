@@ -7,7 +7,6 @@ import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/im
 import { normalizeCurrency } from "@/lib/money/formatMoney";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
-import { getDefaultCategoriesForWorkspaceType } from "@/lib/categories/defaultCategories";
 import { canPlanUseProfile } from "@/lib/plans/catalog";
 import { getUserPlanContext } from "@/lib/plans/server";
 import { canAccessAdminArea } from "@/lib/access-control/roles";
@@ -15,6 +14,8 @@ import { supabaseDeleteByFilters, supabasePatchByFilters, supabaseSelect, supaba
 import { toFinancialProfileType, type Workspace, type WorkspaceSettings, type WorkspaceType } from "@/types/workspace";
 import { ensureBusinessOwnerMembership, ensureFamilyManagerMembership, getActiveMemberships, toWorkspaceMember } from "@/lib/workspaces/server";
 import { reconcileOwnedWorkspacesForPlan } from "@/lib/workspaces/reconcile-server";
+import { normalizeBusinessOrganizationKind, normalizeBusinessTeamSize } from "@/lib/workspaces/business-profile";
+import { isValidCnpj, stripCnpj } from "@/lib/business/cnpj";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,10 +40,11 @@ function normalizeWorkspaceType(type: WorkspaceType): WorkspaceType {
 }
 
 function assertDocumentAllowed(type: WorkspaceType, settings?: WorkspaceSettings) {
-  const document = typeof settings?.businessDocument === "string" ? settings.businessDocument.replace(/\D/g, "") : "";
+  const document = typeof settings?.businessDocument === "string" ? stripCnpj(settings.businessDocument) : "";
   if (document && type !== "business") {
     throw new Error("Para controlar um negócio, MEI, igreja, projeto profissional ou qualquer atividade com CNPJ, use o perfil Business/PJ.");
   }
+  if (document && !isValidCnpj(document)) throw new Error("invalid_business_document");
 }
 
 async function assertPlanCanUseWorkspace(uid: string, type: WorkspaceType) {
@@ -73,12 +75,15 @@ function parseSettings(value: unknown): WorkspaceSettings {
     monthlyReportEnabled: data.monthlyReportEnabled !== false,
     categoriesPresetApplied: Boolean(data.categoriesPresetApplied),
     familyModeEnabled: Boolean(data.familyModeEnabled),
-    businessDocument: typeof data.businessDocument === "string" ? data.businessDocument.replace(/\D/g, "").slice(0, 14) : undefined,
+    businessDocument: typeof data.businessDocument === "string" ? stripCnpj(data.businessDocument) : undefined,
+    businessOrganizationKind: data.businessOrganizationKind ? normalizeBusinessOrganizationKind(data.businessOrganizationKind) : undefined,
+    businessTeamSize: data.businessTeamSize ? normalizeBusinessTeamSize(data.businessTeamSize) : undefined,
     archivedAt,
   };
 }
 
 function getWorkspaceErrorStatus(message: string) {
+  if (message === "invalid_business_document") return 400;
   if (message.includes("CNPJ")) return 400;
   if (message.startsWith("Enquanto você participar")) return 409;
   if (message.startsWith("Para criar um perfil") || message.startsWith("Para controlar")) return 403;
@@ -139,43 +144,6 @@ function toWorkspaceRow(uid: string, workspace: Workspace) {
   };
 }
 
-function isMissingCategoryWorkspaceColumn(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error || "");
-  return message.includes("workspace_id") || message.includes("PGRST204");
-}
-
-function withoutWorkspaceColumn(row: Record<string, unknown>) {
-  const { workspace_id: _workspaceId, ...legacyRow } = row;
-  void _workspaceId;
-  return legacyRow;
-}
-
-async function upsertCategoryRows(rows: Array<Record<string, unknown>>) {
-  try {
-    await supabaseUpsertRows("categories", rows, { onConflict: "id" });
-  } catch (error) {
-    if (!isMissingCategoryWorkspaceColumn(error)) throw error;
-    await supabaseUpsertRows("categories", rows.map(withoutWorkspaceColumn), { onConflict: "id" });
-  }
-}
-
-function toCategoryRow(uid: string, sourceId: string, data: Record<string, unknown>, workspaceId?: string | null) {
-  return {
-    id: `${uid}__${sourceId}`,
-    uid,
-    workspace_id: workspaceId || null,
-    source_id: sourceId,
-    name: data.name ?? "",
-    parent_name: null,
-    category_type: data.type ?? null,
-    color: data.color ?? null,
-    is_default: false,
-    is_custom: true,
-    raw: { ...data, workspaceId: workspaceId || null },
-    created_at: typeof data.createdAt === "string" ? data.createdAt : new Date().toISOString(),
-  };
-}
-
 async function getWorkspaceRows(uid: string) {
   const rows = await supabaseSelect("workspaces", {
     select: "source_id,name,workspace_type,is_default,settings,raw,created_at,updated_at",
@@ -201,43 +169,6 @@ async function getProfileSummary(uid: string) {
     email: String(row.email || raw.email || ""),
     displayName: String(row.display_name || raw.displayName || row.complete_name || raw.completeName || row.email || raw.email || "Gestor"),
   };
-}
-
-async function applyCategoryPreset(uid: string, workspaceType: WorkspaceType, workspaceId: string) {
-  let existingRows: Record<string, unknown>[];
-  try {
-    existingRows = await supabaseSelect("categories", {
-      select: "name,category_type,workspace_id,raw",
-      filters: { uid },
-    });
-  } catch (error) {
-    if (!isMissingCategoryWorkspaceColumn(error)) throw error;
-    existingRows = await supabaseSelect("categories", {
-      select: "name,category_type,raw",
-      filters: { uid },
-    });
-  }
-  const workspaceRows = existingRows.filter((row) => {
-    const raw = (row.raw as Record<string, unknown> | null) || {};
-    return String(row.workspace_id || raw.workspaceId || "") === workspaceId;
-  });
-  const existing = new Set(workspaceRows.map((row) => `${String(row.name || "").toLowerCase()}::${String(row.category_type || "")}`));
-  const now = new Date().toISOString();
-  const rows = getDefaultCategoriesForWorkspaceType(workspaceType)
-    .filter((category) => !existing.has(`${category.name.toLowerCase()}::${category.type}`))
-    .map((category) =>
-      toCategoryRow(uid, `preset_${workspaceId}_${workspaceType}_${category.type}_${category.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, {
-        ...category,
-        userId: uid,
-        isCustom: true,
-        workspacePreset: workspaceType,
-        createdAt: now,
-      }, workspaceId)
-    );
-
-  if (rows.length > 0) {
-    await upsertCategoryRows(rows);
-  }
 }
 
 async function persistWorkspaceSet(uid: string, workspaces: Workspace[]) {
@@ -416,7 +347,6 @@ export async function POST(request: NextRequest) {
 
     await persistWorkspaceSet(uid, next);
     await ensureSharedWorkspaceOwnerIfNeeded(uid, workspaceToPersist);
-    await applyCategoryPreset(uid, workspaceToPersist.type, workspaceToPersist.id);
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json({ ok: true, workspace: workspaceToPersist }, { status: 200 });
   } catch (error) {
@@ -470,7 +400,6 @@ export async function PATCH(request: NextRequest) {
       const next = [...current.map((item) => ({ ...item, isDefault: false, updatedAt: new Date().toISOString() })), workspace];
       await persistWorkspaceSet(uid, next);
       await ensureSharedWorkspaceOwnerIfNeeded(uid, workspace);
-      await applyCategoryPreset(uid, workspace.type, workspace.id);
       return NextResponse.json({ ok: true, defaultWorkspace: workspace }, { status: 200 });
     }
 
@@ -521,10 +450,6 @@ export async function PATCH(request: NextRequest) {
     );
     await persistWorkspaceSet(uid, next);
     await ensureSharedWorkspaceOwnerIfNeeded(uid, updated);
-    if (updated.settings?.categoriesPresetApplied !== true || updated.type !== target.type) {
-      await applyCategoryPreset(uid, updated.type, updated.id);
-    }
-
     await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid });
     return NextResponse.json({ ok: true, workspace: updated }, { status: 200 });
   } catch (error) {

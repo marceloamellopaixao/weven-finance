@@ -6,17 +6,23 @@ A store é criada uma vez por árvore React em `src/store/provider.tsx` e conect
 
 O Redux DevTools fica habilitado somente em desenvolvimento. Focus refetch está desabilitado; reconnect refetch está habilitado e entradas sem consumidores permanecem por 120 segundos (planos, por 300 segundos).
 
+As assinaturas Supabase Realtime pertencem ao ciclo de vida da entrada de cache, e não ao componente. Assim, vários componentes consumindo os mesmos argumentos compartilham uma consulta, uma entrada de cache e um conjunto de listeners. Eventos locais emitidos pelos services ainda não migrados invalidam a mesma tag, mantendo a transição gradual consistente.
+
 ## Autenticação e segurança
 
 `prepareHeaders` obtém o access token do Supabase no momento da request e acrescenta os headers de impersonation. O token não faz parte dos argumentos, estado ou cache Redux. Os endpoints chamam exclusivamente `/api/*`; chaves de service role e segredos de provedores de pagamento permanecem server-side.
 
 Não registre headers, tokens ou payloads financeiros. Uma resposta 401 é devolvida ao consumidor sem retry ou refresh em loop; o fluxo de sessão existente decide logout/redirecionamento.
 
+Quando a API responde 401, a camada base emite um único evento de sessão expirada com proteção contra repetição. O provedor de autenticação encerra a sessão e limpa todo o cache. O mesmo reset ocorre ao trocar usuário ou iniciar/encerrar impersonation.
+
 ## Chaves de cache e workspaces
 
 Toda query autenticada recebe `userId`, mesmo quando ele não vai para a URL. Toda query financeira recebe também `workspaceId`. Esses valores fazem parte da serialização automática dos argumentos e impedem que cache de outro usuário ou workspace seja reutilizado. Filtros, mês, paginação e tipo também devem fazer parte do objeto de argumentos.
 
 Use `skip` ou `skipToken` até usuário e workspace estarem prontos. Nunca use `"default"` como workspace real.
+
+Para workspaces compartilhados, informe também `ownerId`. Ele faz parte da chave e define o proprietário usado no filtro Realtime e na descriptografia, sem substituir o `userId` de quem está fazendo a requisição.
 
 ## Endpoints novos
 
@@ -27,3 +33,5 @@ Exemplo de identidade de tag por workspace: ``{ type: "Transactions", id: `${use
 ## Migração
 
 Os endpoints centrais disponíveis cobrem perfil, configurações financeiras, planos, controle de acesso, workspaces, categorias/visibilidade padrão, transações, cartões, resumo de crédito, porquinhos e onboarding. Hooks migrados devem preservar a interface pública para não quebrar páginas. Caches manuais e polling só devem ser removidos depois que todos os consumidores daquele domínio usarem RTK Query; eventos realtime podem chamar `refetch` ou invalidar a tag correspondente.
+
+Os hooks centrais (`useTransactions`, `useCategories`, `useWorkspaces`, `usePreferredCurrency`, `useUserSettings`, `usePlans`, `useFeatureAccess`, `useAccessControl`, `usePaymentCards`, `usePiggyBanks` e `useOnboarding`) consomem a API compartilhada. Services antigos permanecem apenas para mutações com fluxos especiais, como aprovação durante impersonation, ou telas administrativas que possuem contratos diferentes.

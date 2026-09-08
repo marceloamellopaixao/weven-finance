@@ -10,6 +10,7 @@ import type {
   WorkspaceMember,
   WorkspaceInvitation,
   WorkspaceInvitationStatus,
+  WorkspaceSettings,
   WorkspaceType,
 } from "@/types/workspace";
 import { normalizeFamilyPermissions, normalizeFamilyRole } from "@/lib/workspaces/family";
@@ -51,6 +52,13 @@ export function toFamilyWorkspaceMember(row: WorkspaceRow): WorkspaceMember {
     createdAt: String(row.created_at || raw.createdAt || new Date().toISOString()),
     updatedAt: String(row.updated_at || raw.updatedAt || new Date().toISOString()),
   };
+}
+
+function getWorkspaceSettings(row: WorkspaceRow | null | undefined): WorkspaceSettings | undefined {
+  if (!row) return undefined;
+  const raw = (row.raw as Record<string, unknown> | null) || {};
+  const settings = row.settings ?? raw.settings;
+  return settings && typeof settings === "object" ? settings as WorkspaceSettings : undefined;
 }
 
 export function toBusinessWorkspaceMember(row: WorkspaceRow): BusinessWorkspaceMember {
@@ -263,6 +271,7 @@ export async function resolveActiveWorkspaceContext(uid: string, workspaceId?: s
   workspaceType: WorkspaceType;
   member: SharedWorkspaceMember | null;
   includeLegacyRows: boolean;
+  workspaceSettings?: WorkspaceSettings;
 }> {
   const planContext = await getUserPlanContext(uid);
   const isStaff = canAccessAdminArea({ uid, role: planContext.role });
@@ -285,6 +294,7 @@ export async function resolveActiveWorkspaceContext(uid: string, workspaceId?: s
       workspaceType: String(workspaceRows[0].workspace_type || "family") as WorkspaceType,
       member: membership,
       includeLegacyRows: false,
+      workspaceSettings: getWorkspaceSettings(workspaceRows[0]),
     };
   }
 
@@ -310,6 +320,7 @@ export async function resolveActiveWorkspaceContext(uid: string, workspaceId?: s
       workspaceType,
       member: null,
       includeLegacyRows: toFinancialProfileType(workspaceType) === "personal" && (Boolean(owned.is_default) || !workspaceId),
+      workspaceSettings: getWorkspaceSettings(owned),
     };
   }
 
@@ -350,5 +361,6 @@ export async function resolveActiveWorkspaceContext(uid: string, workspaceId?: s
     workspaceType: String(workspaceRows[0]?.workspace_type || "family") as WorkspaceType,
     member: membership,
     includeLegacyRows: false,
+    workspaceSettings: getWorkspaceSettings(workspaceRows[0]),
   };
 }

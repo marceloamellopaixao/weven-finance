@@ -14,6 +14,7 @@ export type BusinessWorkspacePayload = {
   members: BusinessWorkspaceMember[];
   invitations: BusinessWorkspaceInvitation[];
   seats: WorkspaceSeatSummary;
+  pagination: { page: number; limit: number; total: number; pages: number };
 };
 
 async function apiFetch(path: string, init?: RequestInit) {
@@ -33,14 +34,15 @@ async function readPayload<T>(response: Response): Promise<T> {
   const payload = await response.json() as T & { ok?: boolean; error?: string };
   if (!response.ok || !payload.ok) {
     const messages: Record<string, string> = {
-      business_plan_required: "Contrate o plano Business/PJ antes de convidar funcionários.",
+      business_plan_required: "Contrate o plano Business/PJ antes de convidar pessoas para a equipe.",
       business_seat_limit_reached: "Não há usuários disponíveis. Adicione um usuário adicional antes de convidar outra pessoa.",
       business_member_already_invited: "Esta pessoa já pertence à equipe ou possui um convite pendente.",
       business_seat_capacity_changed: "A capacidade da equipe mudou. Atualize a página e tente novamente.",
+      cannot_invite_yourself: "Você já é o responsável por este perfil e não precisa enviar um convite para si mesmo.",
       cannot_assign_business_owner: "A titularidade do perfil não pode ser atribuída por esta tela.",
       cannot_modify_business_owner: "O proprietário do perfil não pode ser alterado por esta tela.",
       additional_seat_price_not_configured: "O valor do usuário adicional ainda não foi configurado.",
-      cannot_remove_occupied_seats: "Remova funcionários ou convites pendentes antes de reduzir os usuários adicionais.",
+      cannot_remove_occupied_seats: "Remova pessoas ou convites pendentes antes de reduzir os usuários adicionais.",
       subscription_not_active_for_seat_change: "É necessário ter uma assinatura Business/PJ ativa para alterar os usuários adicionais.",
       invitation_not_found: "Este convite não está mais disponível.",
       invitation_not_pending: "Este convite já foi respondido ou cancelado.",
@@ -51,8 +53,10 @@ async function readPayload<T>(response: Response): Promise<T> {
   return payload;
 }
 
-export async function getBusinessWorkspace(workspaceId: string) {
-  const response = await apiFetch(`/api/workspaces/business?workspaceId=${encodeURIComponent(workspaceId)}`);
+export async function getBusinessWorkspace(workspaceId: string, options?: { page?: number; limit?: number; search?: string }) {
+  const params = new URLSearchParams({ workspaceId, page: String(options?.page || 1), limit: String(options?.limit || 10) });
+  if (options?.search?.trim()) params.set("search", options.search.trim());
+  const response = await apiFetch(`/api/workspaces/business?${params.toString()}`);
   return readPayload<BusinessWorkspacePayload & { ok: true }>(response);
 }
 

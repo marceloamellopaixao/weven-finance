@@ -17,11 +17,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useCategories } from "@/hooks/useCategories";
+import { usePaymentCards } from "@/hooks/usePaymentCards";
 import { useFormatters } from "@/i18n/useFormatters";
 import { useTranslations } from "@/i18n/T";
 import { PaymentMethod, Transaction } from "@/types/transaction";
-import { subscribeToPaymentCards } from "@/services/paymentCardService";
-import { PaymentCard } from "@/types/paymentCard";
 import { deleteTransaction, updateTransaction } from "@/services/transactionService";
 import { getCreditCardDueDateFromSelectedCard, isCreditCapableCard } from "@/lib/credit-card/due-date";
 import { addMonthsUTC } from "@/lib/transactions/recurring";
@@ -54,8 +53,8 @@ export default function EditTransactionPage() {
     renameCategory,
     toggleDefaultCategoryVisibility,
   } = useCategories();
+  const { paymentCards } = usePaymentCards();
 
-  const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([]);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -65,11 +64,6 @@ export default function EditTransactionPage() {
 
   const txId = String(params?.id || "");
   const formatCurrencyDisplay = (value: number) => (privacyMode ? `${getCurrencySymbol(currency)} ******` : money(value));
-
-  useEffect(() => {
-    if (!user) return;
-    return subscribeToPaymentCards(user.uid, setPaymentCards, () => setPaymentCards([]));
-  }, [user]);
 
   useEffect(() => {
     if (!txId) {

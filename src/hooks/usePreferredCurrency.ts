@@ -7,10 +7,11 @@ import { useWorkspaces } from "./useWorkspaces";
 export function usePreferredCurrency() {
   const { user, userProfile } = useAuth();
   const { locale } = useI18n();
-  const { activeWorkspaceId } = useWorkspaces();
+  const { activeWorkspaceId, activeWorkspace } = useWorkspaces();
   const userId = userProfile?.uid || user?.uid;
+  const ownerId = activeWorkspace?.ownerUid || activeWorkspace?.uid || userId;
   const { data } = useGetFinanceSettingsQuery(
-    { userId: userId || "", workspaceId: activeWorkspaceId || "" },
+    { userId: userId || "", workspaceId: activeWorkspaceId || "", ownerId: ownerId || "" },
     { skip: !userId || !activeWorkspaceId },
   );
   return normalizeCurrency(data?.currency ?? getDefaultCurrencyForLocale(locale));

@@ -132,6 +132,7 @@ import {
 import { useI18n } from "@/i18n/I18nProvider";
 import { useTranslations } from "@/i18n/T";
 import { AdminLoadingShell } from "./components/AdminLoadingShell";
+import { AdminCategoryPresetsPanel } from "./components/AdminCategoryPresetsPanel";
 
 type UserWithCount = UserProfile & { transactionCount?: number };
 type DeletionSuccessData = { name: string; email: string } | null;
@@ -3044,6 +3045,11 @@ export default function AdminPage() {
                   );
                 })}
               </div>
+
+              <AdminCategoryPresetsPanel
+                userId={userProfile?.uid || user?.uid || ""}
+                canWrite={canManageSensitive}
+              />
 
             </div>
           )}

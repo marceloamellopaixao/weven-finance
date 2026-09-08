@@ -17,6 +17,15 @@ import { canPlanUseProfile } from "@/lib/plans/catalog";
 import { canAccessAdminArea } from "@/lib/access-control/roles";
 import { createWorkspace, setActiveWorkspaceId } from "@/services/workspaceService";
 import { toFinancialProfileType, type WorkspaceType } from "@/types/workspace";
+import type { BusinessOrganizationKind, BusinessTeamSize } from "@/types/workspace";
+import {
+  BUSINESS_ORGANIZATION_DESCRIPTIONS,
+  BUSINESS_ORGANIZATION_KINDS,
+  BUSINESS_ORGANIZATION_LABELS,
+  BUSINESS_TEAM_SIZE_LABELS,
+  BUSINESS_TEAM_SIZES,
+} from "@/lib/workspaces/business-profile";
+import { formatCnpj, isValidCnpj, stripCnpj } from "@/lib/business/cnpj";
 
 const OPTIONS: Array<{
   type: WorkspaceType;
@@ -52,19 +61,6 @@ const OPTIONS: Array<{
   },
 ];
 
-function stripCnpj(value: string) {
-  return value.replace(/\D/g, "").slice(0, 14);
-}
-
-function formatCnpj(value: string) {
-  const digits = stripCnpj(value);
-  return digits
-    .replace(/^(\d{2})(\d)/, "$1.$2")
-    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
-    .replace(/\.(\d{3})(\d)/, ".$1/$2")
-    .replace(/(\d{4})(\d)/, "$1-$2");
-}
-
 export function AccountProfileClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -77,6 +73,8 @@ export function AccountProfileClient() {
   const [profileName, setProfileName] = useState("Meu dinheiro");
   const [wantsCnpj, setWantsCnpj] = useState(false);
   const [cnpj, setCnpj] = useState("");
+  const [businessOrganizationKind, setBusinessOrganizationKind] = useState<BusinessOrganizationKind>("company");
+  const [businessTeamSize, setBusinessTeamSize] = useState<BusinessTeamSize>("solo");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isCreatingAdditionalWorkspace = searchParams.get("create") === "1";
@@ -137,8 +135,12 @@ export function AccountProfileClient() {
       setError("Para controlar um negócio, MEI, igreja, projeto profissional ou qualquer atividade com CNPJ, use o perfil Business/PJ.");
       return;
     }
-    if (selectedOption.type === "business" && wantsCnpj && cleanedCnpj.length !== 14) {
-      setError("Confira o CNPJ informado. Ele precisa ter 14 números.");
+    if (selectedOption.type === "business" && wantsCnpj && !isValidCnpj(cleanedCnpj)) {
+      setError("Confira o CNPJ informado. O número digitado não é válido.");
+      return;
+    }
+    if (selectedOption.type === "business" && businessTeamSize === "100_plus") {
+      setError("Para equipes com mais de 100 pessoas, fale conosco para montarmos uma configuração Enterprise adequada.");
       return;
     }
     setSubmitting(true);
@@ -153,7 +155,9 @@ export function AccountProfileClient() {
           monthlyReportEnabled: true,
           categoriesPresetApplied: true,
           familyModeEnabled: selectedOption.type === "family",
-          businessDocument: selectedOption.type === "business" && cleanedCnpj ? cleanedCnpj : undefined,
+          businessDocument: selectedOption.type === "business" && wantsCnpj && cleanedCnpj ? cleanedCnpj : undefined,
+          businessOrganizationKind: selectedOption.type === "business" ? businessOrganizationKind : undefined,
+          businessTeamSize: selectedOption.type === "business" ? businessTeamSize : undefined,
         },
       });
       setActiveWorkspaceId(workspace.id, workspace.ownerUid || workspace.uid || userProfile?.uid);
@@ -259,11 +263,30 @@ export function AccountProfileClient() {
           <div className="rounded-2xl border border-border/80 bg-card/80 p-5">
             {selectedOption.type === "business" ? (
               <>
-                <h2 className="text-xl font-bold text-foreground">Você quer informar um CNPJ agora?</h2>
+                <h2 className="text-xl font-bold text-foreground">Como este perfil será utilizado?</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  O CNPJ é opcional, mas ajuda a identificar relatórios e organizar melhor seu perfil profissional.
+                  Usaremos essa escolha somente para recomendar categorias, textos e relatórios mais adequados.
                 </p>
                 <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                  {BUSINESS_ORGANIZATION_KINDS.map((kind) => (
+                    <button key={kind} type="button" onClick={() => setBusinessOrganizationKind(kind)} className={`rounded-xl border p-3 text-left transition-colors ${businessOrganizationKind === kind ? "border-primary/45 bg-primary/10" : "border-border/70 hover:bg-accent"}`}>
+                      <span className="block text-sm font-semibold">{BUSINESS_ORGANIZATION_LABELS[kind]}</span>
+                      <span className="mt-1 block text-xs leading-5 text-muted-foreground">{BUSINESS_ORGANIZATION_DESCRIPTIONS[kind]}</span>
+                    </button>
+                  ))}
+                </div>
+                <h3 className="mt-6 text-sm font-semibold text-foreground">Quantas pessoas devem usar este perfil?</h3>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {BUSINESS_TEAM_SIZES.map((size) => (
+                    <button key={size} type="button" onClick={() => setBusinessTeamSize(size)} className={`rounded-full border px-3 py-2 text-xs font-semibold transition-colors ${businessTeamSize === size ? "border-primary/45 bg-primary/10 text-primary" : "border-border/70 text-muted-foreground hover:bg-accent"}`}>
+                      {BUSINESS_TEAM_SIZE_LABELS[size]}
+                    </button>
+                  ))}
+                </div>
+                {businessTeamSize === "100_plus" ? <p className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">Equipes acima de 100 pessoas precisam de configuração Enterprise. Entre em contato conosco antes de continuar.</p> : null}
+                <h3 className="mt-6 text-sm font-semibold text-foreground">Você quer informar um CNPJ agora?</h3>
+                <p className="mt-1 text-xs text-muted-foreground">É opcional e poderá ser informado depois.</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <Button type="button" variant={wantsCnpj ? "default" : "outline"} onClick={() => setWantsCnpj(true)} className="rounded-xl">
                     Sim, informar CNPJ
                   </Button>
