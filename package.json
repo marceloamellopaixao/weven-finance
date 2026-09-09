@@ -9,6 +9,8 @@
     "lint": "eslint",
     "i18n:validate": "tsx scripts/validate-i18n.ts",
     "test": "tsx --test tests/**/*.test.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:list": "playwright test --list",
     "health:check": "powershell -ExecutionPolicy Bypass -File scripts/health-check.ps1 -BaseUrl http://localhost:3000"
   },
   "dependencies": {
@@ -49,6 +51,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

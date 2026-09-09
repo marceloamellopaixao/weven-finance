@@ -12,7 +12,7 @@ import { openSupportReporter } from "@/lib/support/client-events";
 import { PLATFORM_TOUR_ROUTE_HREFS } from "@/lib/platform-tour/config";
 import { ALL_PLATFORM_TOUR_ROUTES } from "@/types/navigation";
 
-export function QuickActionsMenu() {
+export function QuickActionsMenu({ supportCenterEnabled }: { supportCenterEnabled: boolean }) {
   const router = useRouter();
   const { privacyMode, togglePrivacyMode } = useAuth();
   const { resetTour } = useOnboarding();
@@ -51,7 +51,7 @@ export function QuickActionsMenu() {
   };
 
   const actions = [
-    { label: "Pedir ajuda ou relatar problema", icon: HelpCircle, action: openSupportReporter },
+    ...(supportCenterEnabled ? [{ label: "Pedir ajuda ou relatar problema", icon: HelpCircle, action: openSupportReporter }] : []),
     { label: "Reiniciar guia da plataforma", icon: Map, action: restartTour, disabled: startingTour },
     { label: privacyMode ? "Desativar modo privacidade" : "Ativar modo privacidade", icon: privacyMode ? Eye : EyeOff, action: togglePrivacyMode },
   ];

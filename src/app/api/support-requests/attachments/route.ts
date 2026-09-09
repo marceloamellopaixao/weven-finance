@@ -61,9 +61,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "attachment_not_found" }, { status: 404 });
     }
 
+    const signedUrlTtl = process.env.NODE_ENV !== "production" && process.env.PLAYWRIGHT_TEST === "1"
+      ? Math.max(1, Math.min(SIGNED_URL_TTL_SECONDS, Number(request.headers.get("x-e2e-signed-url-ttl") || SIGNED_URL_TTL_SECONDS)))
+      : SIGNED_URL_TTL_SECONDS;
     const { data: signed, error: signedError } = await supabase.storage
       .from(SUPPORT_EVIDENCE_BUCKET)
-      .createSignedUrl(String(attachment.storage_path), SIGNED_URL_TTL_SECONDS, action === "download" ? { download: true } : undefined);
+      .createSignedUrl(String(attachment.storage_path), signedUrlTtl, action === "download" ? { download: true } : undefined);
     if (signedError || !signed?.signedUrl) throw new Error("support_attachment_sign_failed");
 
     await writeAdminAuditLog({
@@ -90,7 +93,7 @@ export async function GET(request: NextRequest) {
         scanStatus: String(attachment.scan_status),
         createdAt: String(attachment.created_at),
         url: signed.signedUrl,
-        expiresIn: SIGNED_URL_TTL_SECONDS,
+        expiresIn: signedUrlTtl,
       },
     });
   } catch (error) {

@@ -128,6 +128,11 @@ export async function uploadSupportEvidence(input: { ownerUid: string; ticketId:
   try {
     for (const evidence of processed) {
       const uploadStartedAt = performance.now();
+      const simulateStorageFailure =
+        process.env.NODE_ENV !== "production" &&
+        process.env.PLAYWRIGHT_TEST === "1" &&
+        input.request?.headers.get("x-e2e-storage-failure") === "1";
+      if (simulateStorageFailure) throw new Error("support_attachment_upload_failed");
       const id = crypto.randomUUID();
       const extension = extensionForSupportEvidence(evidence.mimeType);
       const storagePath = `${input.ownerUid}/${input.ticketId}/${id}.${extension}`;

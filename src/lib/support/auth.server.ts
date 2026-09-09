@@ -8,6 +8,7 @@ import { resolveActingContext } from "@/lib/impersonation/server";
 import { parseUserPlan } from "@/lib/plans/catalog";
 import { readSecureProfilePayload } from "@/lib/secure-store/profile";
 import { supabaseSelect } from "@/services/supabase/admin";
+import { evaluateSupportCenterRollout } from "@/lib/features/support-center";
 
 export type SupportAuthContext = ServerAccessProfile & {
   email: string;
@@ -17,7 +18,10 @@ export type SupportAuthContext = ServerAccessProfile & {
   isImpersonating: boolean;
 };
 
-export async function getSupportAuthContext(request: NextRequest): Promise<SupportAuthContext> {
+export async function getSupportAuthContext(
+  request: NextRequest,
+  options: { skipFeatureGate?: boolean } = {},
+): Promise<SupportAuthContext> {
   const decoded = await verifyRequestAuth(request);
   const acting = await resolveActingContext(request);
   const [requesterRows, actingRows] = await Promise.all([
@@ -32,7 +36,7 @@ export async function getSupportAuthContext(request: NextRequest): Promise<Suppo
   const requesterRole = String(requesterRows[0]?.role || requesterRaw.role || "client");
   const effectiveRole = acting.isImpersonating ? "client" : requesterRole;
 
-  return {
+  const context: SupportAuthContext = {
     uid: acting.actingUid,
     email: String(row.email || raw.email || acting.actingEmail || ""),
     name: String(row.display_name || raw.displayName || raw.completeName || acting.actingDisplayName || "Usuário"),
@@ -43,4 +47,9 @@ export async function getSupportAuthContext(request: NextRequest): Promise<Suppo
     requesterRole: acting.requesterRole,
     isImpersonating: acting.isImpersonating,
   };
+  if (!options.skipFeatureGate) {
+    const rollout = evaluateSupportCenterRollout({ uid: context.requesterUid, role: context.requesterRole });
+    if (!rollout.enabled) throw new Error("forbidden");
+  }
+  return context;
 }
