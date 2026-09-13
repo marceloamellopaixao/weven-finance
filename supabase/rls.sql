@@ -89,6 +89,9 @@ alter table public.product_events enable row level security;
 drop policy if exists profiles_self_select on public.profiles;
 drop policy if exists profiles_self_update on public.profiles;
 drop policy if exists profiles_staff_select on public.profiles;
+drop policy if exists profiles_select_own_or_staff on public.profiles;
+drop policy if exists profiles_insert_own_or_staff on public.profiles;
+drop policy if exists profiles_update_own_or_staff on public.profiles;
 drop policy if exists user_settings_self_all on public.user_settings;
 drop policy if exists categories_self_all on public.categories;
 drop policy if exists workspaces_self_all on public.workspaces;
@@ -113,23 +116,80 @@ drop policy if exists support_events_select_own on public.support_request_events
 drop policy if exists support_evidence_select_own on storage.objects;
 drop policy if exists support_evidence_insert_own on storage.objects;
 drop policy if exists support_evidence_delete_own on storage.objects;
+drop policy if exists system_configs_select_authenticated on public.system_configs;
+
+-- Profiles contain authorization, plan and billing fields. All mutations go
+-- through authenticated server routes that use service_role; browser clients
+-- only need SELECT for their own row and Realtime subscriptions.
+revoke insert, update, delete, truncate, references, trigger
+  on table public.profiles from anon, authenticated;
+grant select on table public.profiles to authenticated;
+
+-- Defense in depth: if a future grant accidentally restores direct writes,
+-- privileged fields still cannot be forged by an authenticated browser user.
+create or replace function public.protect_profile_privileged_fields()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if auth.role() = 'service_role'
+     or current_user in ('postgres', 'service_role', 'supabase_admin') then
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' then
+    if new.uid is distinct from public.current_user_uid()
+       or new.email is not null
+       or new.role is distinct from 'client'
+       or new.plan is distinct from 'free'
+       or new.status is distinct from 'active'
+       or new.block_reason is not null
+       or new.verified_email is distinct from false
+       or new.deleted_at is not null
+       or new.payment_status is distinct from 'pending'
+       or new.transaction_count is distinct from 0
+       or new.billing is distinct from '{}'::jsonb
+       or new.raw is distinct from '{}'::jsonb then
+      raise exception 'profile_privileged_fields_are_server_managed'
+        using errcode = '42501';
+    end if;
+  elsif tg_op = 'UPDATE' then
+    if new.uid is distinct from old.uid
+       or new.email is distinct from old.email
+       or new.role is distinct from old.role
+       or new.plan is distinct from old.plan
+       or new.status is distinct from old.status
+       or new.block_reason is distinct from old.block_reason
+       or new.verified_email is distinct from old.verified_email
+       or new.deleted_at is distinct from old.deleted_at
+       or new.payment_status is distinct from old.payment_status
+       or new.transaction_count is distinct from old.transaction_count
+       or new.billing is distinct from old.billing
+       or new.raw is distinct from old.raw
+       or new.created_at is distinct from old.created_at then
+      raise exception 'profile_privileged_fields_are_server_managed'
+        using errcode = '42501';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.protect_profile_privileged_fields() from public;
+
+drop trigger if exists trg_profiles_protect_privileged_fields on public.profiles;
+create trigger trg_profiles_protect_privileged_fields
+before insert or update on public.profiles
+for each row execute function public.protect_profile_privileged_fields();
 
 do $$
 begin
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles_select_own_or_staff') then
     create policy profiles_select_own_or_staff on public.profiles
-      for select using (public.current_user_uid() = uid or public.is_staff_role());
-  end if;
-
-  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles_insert_own_or_staff') then
-    create policy profiles_insert_own_or_staff on public.profiles
-      for insert with check (public.current_user_uid() = uid or public.is_staff_role());
-  end if;
-
-  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles_update_own_or_staff') then
-    create policy profiles_update_own_or_staff on public.profiles
-      for update using (public.current_user_uid() = uid or public.is_staff_role())
-      with check (public.current_user_uid() = uid or public.is_staff_role());
+      for select to authenticated
+      using (public.current_user_uid() = uid or public.is_staff_role());
   end if;
 
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'user_settings' and policyname = 'user_settings_own_all') then
@@ -337,7 +397,11 @@ begin
 
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'system_configs' and policyname = 'system_configs_select_authenticated') then
     create policy system_configs_select_authenticated on public.system_configs
-      for select using (public.current_user_uid() is not null);
+      for select to authenticated
+      using (
+        public.current_user_uid() is not null
+        and key in ('plans', 'category_presets')
+      );
   end if;
 
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'system_configs' and policyname = 'system_configs_write_manager') then
