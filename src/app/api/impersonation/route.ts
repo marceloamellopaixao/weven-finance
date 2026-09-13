@@ -15,6 +15,7 @@ import { apiLogger } from "@/lib/observability/logger";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { writeAdminAuditLog } from "@/lib/audit/admin";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rate-limit";
+import { resolveApiErrorStatus } from "@/lib/api/error";
 
 function toUserRole(value: unknown): UserRole {
   if (value === "admin" || value === "moderator" || value === "support" || value === "client") {
@@ -25,6 +26,10 @@ function toUserRole(value: unknown): UserRole {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function requireImpersonationStaffMfa(aal: "aal1" | "aal2") {
+  if (aal !== "aal2") throw new Error("mfa_required");
+}
 
 function mapAccessRows(rows: Array<Record<string, unknown>>) {
   return rows.map((row) => ({
@@ -76,6 +81,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (mode === "mine") {
+      requireImpersonationStaffMfa(auth.aal);
       if (!(await canAccessResource(auth.uid, "admin.impersonation", "write"))) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
@@ -98,6 +104,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (mode === "status") {
+      requireImpersonationStaffMfa(auth.aal);
       if (!(await canAccessResource(auth.uid, "admin.impersonation", "write"))) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
@@ -151,6 +158,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (mode === "action-status") {
+      requireImpersonationStaffMfa(auth.aal);
       if (!(await canAccessResource(auth.uid, "admin.impersonation", "write"))) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
@@ -181,7 +189,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "invalid_mode" }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
+    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
@@ -198,6 +206,7 @@ export async function POST(request: NextRequest) {
       | { action: "respond-action"; actionRequestId?: string; approved?: boolean };
 
     if (body.action === "request") {
+      requireImpersonationStaffMfa(auth.aal);
       if (!(await canAccessResource(auth.uid, "admin.impersonation", "write"))) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
@@ -433,7 +442,7 @@ export async function POST(request: NextRequest) {
       method: "POST",
       meta: { error: message },
     });
-    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
+    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }

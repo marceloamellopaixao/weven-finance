@@ -64,7 +64,7 @@ export const auth: Dictionary["auth"] = {
       invalidRecoveryLink: "We could not validate the recovery link. Request a new email.",
       missingPassword: "Please enter the new password.",
       missingConfirmPassword: "Please confirm the new password.",
-      passwordTooShort: "The password must have at least 6 characters.",
+      passwordTooShort: "The password must have at least 12 characters.",
       passwordMismatch: "The passwords do not match.",
       updatePassword: "We could not update the password.",
     },
@@ -74,7 +74,7 @@ export const auth: Dictionary["auth"] = {
       confirmPassword: "Confirm password",
     },
     placeholders: {
-      password: "At least 6 characters",
+      password: "At least 12 characters",
       confirmPassword: "Repeat the new password",
     },
     actions: {

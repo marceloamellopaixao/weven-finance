@@ -10,6 +10,7 @@ import {
   updateUserRole,
   getUserTransactionCount,
   resetUserFinancialData,
+  resetUserMfa,
   softDeleteUser,
   updateUserPaymentStatus,
   normalizeDatabaseUsers,
@@ -122,9 +123,8 @@ import {
   Download,
   FilterX,
   Bug,
-  ImageIcon,
 } from "lucide-react";
-import { deleteTicket, FeatureRequestStatus, fetchSupportTicketsPage, getSupportAttachmentUrl, markSupportTicketsAsSeen, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
+import { deleteTicket, FeatureRequestStatus, fetchSupportTicketsPage, markSupportTicketsAsSeen, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
 import {
   activateImpersonation,
@@ -299,6 +299,8 @@ export default function AdminPage() {
 
   // --- Modais de Ação ---
   const [userToReset, setUserToReset] = useState<UserProfile | null>(null);
+  const [userToResetMfa, setUserToResetMfa] = useState<(Pick<UserProfile, "uid" | "displayName" | "email"> & { ticketId?: string }) | null>(null);
+  const [isResettingMfa, setIsResettingMfa] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const [userToPermanentDelete, setUserToPermanentDelete] = useState<UserProfile | null>(null);
   const [deletedUserData, setDeletedUserData] = useState<DeletionSuccessData>(null);
@@ -1097,15 +1099,6 @@ export default function AdminPage() {
     }
   };
 
-  const handleOpenSupportAttachment = async (attachmentId: string) => {
-    try {
-      const attachment = await getSupportAttachmentUrl(attachmentId);
-      window.open(attachment.url, "_blank", "noopener,noreferrer");
-    } catch {
-      showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("support.feedback.attachmentErrorMessage"));
-    }
-  };
-
   const handleDeleteTicket = async () => {
     if (!ticketToDelete) return;
     if (!canDeleteRecords) {
@@ -1271,6 +1264,22 @@ export default function AdminPage() {
         prev.map((u) => (u.uid === userToReset.uid ? { ...u, transactionCount: count } : u))
       );
     } catch { }
+  };
+
+  const confirmResetMfa = async () => {
+    if (!userToResetMfa || isResettingMfa) return;
+    const target = userToResetMfa;
+    setIsResettingMfa(true);
+    try {
+      const deleted = await resetUserMfa(target.uid);
+      if (target.ticketId) await handleChangeTicketStatus(target.ticketId, "resolved");
+      setUserToResetMfa(null);
+      showFeedback("success", tAdmin("dialogs.mfaResetCompletedTitle"), tAdmin("dialogs.mfaResetCompletedMessage", { count: deleted }));
+    } catch {
+      showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("dialogs.mfaResetErrorMessage"));
+    } finally {
+      setIsResettingMfa(false);
+    }
   };
 
   const confirmDeleteUser = async () => {
@@ -2453,6 +2462,13 @@ export default function AdminPage() {
                                       >
                                         <RefreshCcw className="mr-2 h-4 w-4" /> {tAdmin("users.menu.resetData")}
                                       </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => setUserToResetMfa(u)}
+                                        disabled={!canResetThisUser || u.uid === userProfile?.uid}
+                                        className="cursor-pointer rounded-lg text-xs font-medium disabled:opacity-50"
+                                      >
+                                        <ShieldAlert className="mr-2 h-4 w-4" /> {tAdmin("users.menu.resetMfa")}
+                                      </DropdownMenuItem>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
                                         onClick={() => setUserToDelete(u)}
@@ -2750,6 +2766,13 @@ export default function AdminPage() {
                                             disabled={!canResetThisUser}
                                             className="cursor-pointer rounded-lg text-xs font-medium disabled:opacity-50">
                                             <RefreshCcw className="mr-2 h-4 w-4" /> {tAdmin("users.menu.resetData")}
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() => setUserToResetMfa(u)}
+                                            disabled={!canResetThisUser || u.uid === userProfile?.uid}
+                                            className="cursor-pointer rounded-lg text-xs font-medium disabled:opacity-50"
+                                          >
+                                            <ShieldAlert className="mr-2 h-4 w-4" /> {tAdmin("users.menu.resetMfa")}
                                           </DropdownMenuItem>
                                           <DropdownMenuSeparator />
                                           <DropdownMenuItem
@@ -3610,6 +3633,28 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!userToResetMfa} onOpenChange={(open) => !open && setUserToResetMfa(null)}>
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} max-w-[480px]`}>
+          <DialogHeader>
+            <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
+              <ShieldAlert className="h-5 w-5" />
+            </div>
+            <DialogTitle>{tAdmin("dialogs.mfaResetTitle")}</DialogTitle>
+            <DialogDescription>{tAdmin("dialogs.mfaResetDescription", { name: userToResetMfa?.displayName || userToResetMfa?.email || "" })}</DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-sm text-muted-foreground">
+            {tAdmin("dialogs.mfaResetWarning")}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setUserToResetMfa(null)} disabled={isResettingMfa} variant="ghost" className="rounded-xl">{tAdmin("common.cancel")}</Button>
+            <Button onClick={() => void confirmResetMfa()} disabled={isResettingMfa} variant="destructive" className="rounded-xl">
+              {isResettingMfa ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {tAdmin("users.menu.resetMfa")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal Excluir Usuário */}
       <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
         <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} max-w-[460px]`}>
@@ -3710,8 +3755,8 @@ export default function AdminPage() {
 
       {/* Modal Detalhes do Chamado */}
       <Dialog open={!!viewTicket} onOpenChange={(open) => !open && setViewTicket(null)}>
-        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} sm:max-w-[720px]`}>
-          <DialogHeader>
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} flex min-w-0 flex-col overflow-hidden sm:max-w-[720px]`}>
+          <DialogHeader className="w-full min-w-0 shrink-0">
             <DialogTitle className="flex items-center gap-2">
               {viewTicket?.type === 'feature' ? (
                 <Lightbulb className="h-5 w-5 text-amber-600" />
@@ -3724,7 +3769,7 @@ export default function AdminPage() {
             </DialogTitle>
           </DialogHeader>
           {viewTicket && (
-            <div className="space-y-4">
+            <div className="w-full min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain pr-1">
               <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
                 <div>
                   <span className="font-semibold block">{tAdmin("common.requester")}:</span>
@@ -3846,20 +3891,6 @@ export default function AdminPage() {
                   ) : null}
                 </div>
               ) : null}
-              {viewTicket.attachments?.length ? (
-                <div className="space-y-2">
-                  <span className="block text-sm font-semibold">{tAdmin("support.attachments")}</span>
-                  <div className="flex flex-wrap gap-2">
-                    {viewTicket.attachments.map((attachment, index) => (
-                      <Button key={attachment.id} type="button" variant="outline" className="rounded-xl" onClick={() => void handleOpenSupportAttachment(attachment.id)}>
-                        <ImageIcon className="mr-2 h-4 w-4" />
-                        {tAdmin("support.attachmentLabel", { index: index + 1 })}
-                      </Button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{tAdmin("support.attachmentExpiry")}</p>
-                </div>
-              ) : null}
               {viewTicket.technicalContext ? (
                 <div className="rounded-2xl border border-color:var(--app-panel-border) p-4">
                   <span className="mb-2 block text-sm font-semibold">{tAdmin("support.technicalContext")}</span>
@@ -3881,7 +3912,17 @@ export default function AdminPage() {
               />
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="w-full min-w-0 shrink-0">
+            {viewTicket?.supportKind === "mfa_recovery" && canDeleteRecords && viewTicket.uid !== userProfile?.uid ? (
+              <Button
+                variant="outline"
+                onClick={() => setUserToResetMfa({ uid: viewTicket.uid, displayName: viewTicket.name, email: viewTicket.email, ticketId: viewTicket.id })}
+                className="w-full rounded-xl sm:w-auto"
+              >
+                <ShieldAlert className="mr-2 h-4 w-4" />
+                {tAdmin("users.menu.resetMfa")}
+              </Button>
+            ) : null}
             {viewTicket && canDeleteRecords && (
               <Button
                 variant="destructive"

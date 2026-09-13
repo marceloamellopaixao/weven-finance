@@ -87,6 +87,7 @@ export const admin: Dictionary["admin"] = {
     menu: {
       impersonate: "Impersonate",
       resetData: "Reset data",
+      resetMfa: "Reset MFA",
       deleteAccount: "Delete account",
     },
     tooltips: {
@@ -409,6 +410,12 @@ export const admin: Dictionary["admin"] = {
   dialogs: {
     resetTitle: "Reset data?",
     resetDescription: "Confirm to delete all transactions.",
+    mfaResetTitle: "Reset two-step verification?",
+    mfaResetDescription: "All authenticators registered by {name} will be removed.",
+    mfaResetWarning: "Only proceed after confirming the account holder's identity. Active sessions will be signed out and the user must configure MFA again when required.",
+    mfaResetCompletedTitle: "MFA reset",
+    mfaResetCompletedMessage: "{count} authenticator(s) were removed from the account.",
+    mfaResetErrorMessage: "The user's MFA could not be reset.",
     deleteAccountTitle: "Delete account?",
     deleteAccountDescription: "Confirm to close the account and archive all customer data.",
     archiveAccount: "Archive account",

@@ -8,7 +8,30 @@ export type ServerAuthUser = {
   name: string;
   provider: "supabase";
   rawUid: string;
+  aal: "aal1" | "aal2";
 };
+
+function getTokenAal(token: string): "aal1" | "aal2" {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return "aal1";
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { aal?: unknown };
+    return parsed.aal === "aal2" ? "aal2" : "aal1";
+  } catch {
+    return "aal1";
+  }
+}
+
+function requiresPrivilegedMfa(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  return (
+    pathname.startsWith("/api/admin/") ||
+    pathname === "/api/admin" ||
+    pathname === "/api/system/access-control" ||
+    pathname.startsWith("/api/system/category-presets") ||
+    request.headers.has("x-impersonate-uid")
+  );
+}
 
 function getBearerToken(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -54,11 +77,16 @@ async function verifySupabaseToken(token: string): Promise<ServerAuthUser> {
     email: String(user.email || ""),
     name: String(metadata.displayName || "Usuário"),
     provider: "supabase",
+    aal: getTokenAal(token),
   };
 }
 
 export async function verifyRequestAuth(request: NextRequest): Promise<ServerAuthUser> {
   const token = getBearerToken(request);
   if (!token) throw new Error("missing_auth_token");
-  return verifySupabaseToken(token);
+  const auth = await verifySupabaseToken(token);
+  if (requiresPrivilegedMfa(request) && auth.aal !== "aal2") {
+    throw new Error("mfa_required");
+  }
+  return auth;
 }

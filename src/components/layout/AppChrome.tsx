@@ -18,6 +18,7 @@ const AUTH_ROUTES = new Set([
   "/first-access",
   "/account-profile",
   "/verify-email",
+  "/mfa",
   "/goodbye",
   "/blocked",
 ]);

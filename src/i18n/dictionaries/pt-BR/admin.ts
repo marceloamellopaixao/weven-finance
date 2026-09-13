@@ -85,6 +85,7 @@ export const admin = {
     menu: {
       impersonate: "Impersonar",
       resetData: "Resetar dados",
+      resetMfa: "Redefinir MFA",
       deleteAccount: "Excluir conta",
     },
     tooltips: {
@@ -428,6 +429,12 @@ export const admin = {
   dialogs: {
     resetTitle: "Resetar dados?",
     resetDescription: "Confirme para apagar todas as transações.",
+    mfaResetTitle: "Redefinir autenticação em duas etapas?",
+    mfaResetDescription: "Todos os autenticadores cadastrados de {name} serão removidos.",
+    mfaResetWarning: "Faça isso somente depois de confirmar a identidade do titular. As sessões ativas serão encerradas e o usuário precisará configurar o MFA novamente quando exigido.",
+    mfaResetCompletedTitle: "MFA redefinido",
+    mfaResetCompletedMessage: "{count} autenticador(es) foram removidos da conta.",
+    mfaResetErrorMessage: "Não foi possível redefinir o MFA deste usuário.",
     deleteAccountTitle: "Excluir conta?",
     deleteAccountDescription: "Confirme para encerrar a conta e arquivar todos os dados do cliente.",
     archiveAccount: "Arquivar conta",

@@ -30,10 +30,7 @@ export default defineConfig({
     env: {
       ...process.env,
       PLAYWRIGHT_TEST: "1",
-      SUPPORT_CENTER_ENABLED: "true",
-      SUPPORT_CENTER_ENVIRONMENTS: "development",
-      SUPPORT_CENTER_ALLOWED_ROLES: "",
-      SUPPORT_CENTER_ROLLOUT_PERCENT: "100",
+      SUPPORT_CENTER_KILL_SWITCH: "false",
     },
   } : undefined,
 });

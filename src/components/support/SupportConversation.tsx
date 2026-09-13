@@ -1,16 +1,18 @@
 "use client";
 
 import Image from "next/image";
-import { Clock3, Download, FileImage, LockKeyhole, MessageSquareReply, RefreshCw, ShieldQuestion, Trash2, X } from "lucide-react";
+import { Clock3, Download, FileImage, LockKeyhole, MessageSquareReply, RefreshCw, ShieldQuestion, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   fetchSupportActivity,
   getSupportAttachmentUrl,
+  getSupportAttachmentUrls,
   postSupportActivity,
   removeSupportAttachment,
   type SupportActivity,
@@ -42,13 +44,15 @@ export function SupportConversation({ ticket, staff = false, onRequestAccess, on
     try {
       const next = await fetchSupportActivity(ticket.id);
       setActivity(next);
-      const signed = await Promise.all(next.attachments.map(async (item) => {
-        try { return [item.id, (await getSupportAttachmentUrl(item.id)).url] as const; } catch { return null; }
-      }));
-      setUrls(Object.fromEntries(signed.filter((item): item is readonly [string, string] => Boolean(item))));
+      setLoading(false);
+      setUrls({});
+      if (next.attachments.length > 0) {
+        void getSupportAttachmentUrls(next.attachments.map((item) => item.id))
+          .then((signed) => setUrls(Object.fromEntries(signed.map((item) => [item.id, item.url]))))
+          .catch(() => setUrls({}));
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível carregar o chamado.");
-    } finally {
       setLoading(false);
     }
   }, [ticket.id]);
@@ -156,7 +160,19 @@ export function SupportConversation({ ticket, staff = false, onRequestAccess, on
         <div className="flex flex-wrap justify-end gap-2">{staff && activity.canRequestAccess && onRequestAccess ? <Button variant="outline" onClick={() => void onRequestAccess()}>Solicitar acesso temporário</Button> : null}<Button disabled={sending || message.trim().length === 0} onClick={() => void submit()}>{sending ? "Enviando…" : mode === "internal_note" ? "Salvar nota" : "Enviar resposta"}</Button></div>
       </div> : null}
 
-      {lightbox ? <div role="dialog" aria-modal="true" aria-label="Visualização da evidência" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4" onClick={() => setLightbox(null)}><Button size="icon" variant="secondary" className="absolute right-4 top-4" onClick={() => setLightbox(null)}><X /></Button><div className="relative h-[85vh] w-[92vw]"><Image src={lightbox} alt="Evidência ampliada" fill unoptimized className="object-contain" /></div></div> : null}
+      <Dialog open={Boolean(lightbox)} onOpenChange={(open) => !open && setLightbox(null)}>
+        {lightbox ? (
+          <DialogContent
+            aria-describedby={undefined}
+            className="h-[calc(100svh-2rem)] w-[calc(100vw-2rem)] max-w-none overflow-hidden border-0 bg-transparent p-0 shadow-none sm:max-w-none sm:p-0"
+          >
+            <DialogTitle className="sr-only">Visualização ampliada da evidência</DialogTitle>
+            <div className="relative h-full w-full">
+              <Image src={lightbox} alt="Evidência ampliada" fill unoptimized className="object-contain" priority />
+            </div>
+          </DialogContent>
+        ) : null}
+      </Dialog>
     </div>
   );
 }

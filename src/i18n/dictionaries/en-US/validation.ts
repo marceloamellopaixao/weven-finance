@@ -1,6 +1,6 @@
 export const validation = {
   fillAllFields: "Please fill in all fields.",
-  passwordMin: "Password must be at least 6 characters.",
+  passwordMin: "Password must be at least 12 characters.",
   invalidEmail: "Please enter a valid email.",
   nicknameRequired: "Please enter a dashboard nickname.",
   phoneRequired: "Please enter your phone number.",

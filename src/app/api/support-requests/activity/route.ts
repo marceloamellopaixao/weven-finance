@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerAccessControlConfig, isAccessAllowed } from "@/lib/access-control/server";
 import { checkRateLimit, rateLimitResponse, RateLimitExceededError } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
+import { resolveApiErrorStatus } from "@/lib/api/error";
 import { writeAdminAuditLog } from "@/lib/audit/admin";
 import { pushNotification } from "@/lib/notifications/server";
 import {
@@ -12,7 +13,7 @@ import {
   publicSupportEventMetadata,
   reopenedStatusForType,
 } from "@/lib/support/activity";
-import { getSupportAuthContext } from "@/lib/support/auth.server";
+import { getSupportAuthContext, requireSupportStaffMfa } from "@/lib/support/auth.server";
 import { persistSupportEvidence, uploadSupportEvidence } from "@/lib/support/create-report.server";
 import { normalizeSupportReportType } from "@/lib/support/report";
 import { getSupabaseServiceClient } from "@/services/supabase/service-client";
@@ -42,6 +43,7 @@ async function resolveTicketAccess(request: NextRequest, ticketId: string) {
     canWriteStaff,
   }, { ticketUid: String(ticket.uid || "") });
   if (!access.canRead) return null;
+  if (!access.isOwner && (canReadStaff || canWriteStaff)) requireSupportStaffMfa(auth);
   return { auth, access, ticket, supabase, canReadStaff, canWriteStaff };
 }
 
@@ -150,7 +152,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
+    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
@@ -244,7 +246,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof RateLimitExceededError) return rateLimitResponse(error.result);
     const message = error instanceof Error ? error.message : "unknown_error";
     const bad = new Set(["invalid_message", "too_many_attachments", "empty_file", "file_too_large", "invalid_file_name", "unsupported_file_type", "file_type_mismatch"]);
-    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : bad.has(message) ? 400 : 500;
+    const status = message === "forbidden" ? 403 : bad.has(message) ? 400 : resolveApiErrorStatus(message);
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }

@@ -25,7 +25,7 @@ import { canAccessAdminArea, isCreatorSupremeUid } from "@/lib/access-control/ro
 import { WorkspaceProfileSwitcher } from "@/components/workspaces/WorkspaceProfileSwitcher";
 import { formatPlanName } from "@/lib/plans/capabilities";
 
-const FLOW_ROUTES = new Set(["/login", "/register", "/forgot-password", "/first-access", "/verify-email", "/goodbye", "/blocked"]);
+const FLOW_ROUTES = new Set(["/login", "/register", "/forgot-password", "/first-access", "/verify-email", "/mfa", "/goodbye", "/blocked"]);
 const PUBLIC_FIXED_HEADER_ROUTES = new Set(["/", "/contact", "/security", "/terms"]);
 
 export function Header() {
@@ -53,7 +53,8 @@ export function Header() {
 
   const handleStopImpersonation = () => {
     stopImpersonation();
-    window.location.href = "/admin";
+    router.push("/admin");
+    router.refresh();
   };
 
   const resolveNotificationHref = (href: string | null) => {
@@ -110,11 +111,11 @@ export function Header() {
   }, [forceAccountMenuOpen]);
 
   // Se não tiver usuário logado, mostra o header da landing page.
-  if (!isAuthenticated) {
+  if (!isAuthenticated || isFlowRoute) {
     return (
       <nav className={`${isFlowRoute || !hasFixedPublicHeader ? "sticky" : "fixed"} top-0 z-50 w-full border-b border-border/70 bg-background/80 backdrop-blur-md transition-all duration-300`}>
         <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2 group">
+          <Link href={isAuthenticated ? (pathname || "/") : "/"} className="flex items-center gap-2 group">
             <div className="rounded-xl bg-primary p-2 text-primary-foreground shadow-lg shadow-primary/20 transition-transform group-hover:scale-105">
               <Wallet className="h-5 w-5" />
             </div>
@@ -122,7 +123,7 @@ export function Header() {
               Weven<span className="text-primary">Finance</span>
             </span>
           </Link>
-          <div className="flex items-center gap-4">
+          {!isAuthenticated ? <div className="flex items-center gap-4">
             {/* Seletor de idioma preservado para a futura retomada do i18n. */}
             <Link href="/login" className="hidden sm:block">
               <Button variant="ghost" className="rounded-full font-medium text-muted-foreground hover:bg-accent hover:text-foreground">{tHeader("login")}</Button>
@@ -132,7 +133,7 @@ export function Header() {
                 {tHeader("startNow")}
               </Button>
             </Link>
-          </div>
+          </div> : null}
         </div>
       </nav>
     );

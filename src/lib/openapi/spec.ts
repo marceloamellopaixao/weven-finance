@@ -425,7 +425,7 @@ export function buildOpenApiSpec(servers: OpenApiServer[]) {
                   properties: {
                     action: {
                       type: "string",
-                      enum: ["normalize", "resetFinancialData", "softDelete", "restore", "recountTransactionCount"],
+                      enum: ["normalize", "resetFinancialData", "resetMfa", "softDelete", "restore", "recountTransactionCount"],
                     },
                     uid: { type: "string", nullable: true },
                     restoreData: { type: "boolean", nullable: true },

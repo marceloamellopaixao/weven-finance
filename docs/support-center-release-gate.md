@@ -8,14 +8,13 @@ O `npm audit --omit=dev` de 2026-09-08 encontrou 15 dependências de produção 
 
 ## Estratégia de rollout
 
-A decisão ocorre no servidor e exige todas as condições aplicáveis:
+A Central de Ajuda fica disponível para todos os usuários autenticados. Não há liberação por papel,
+UID ou porcentagem, porque solicitar suporte é uma capacidade essencial do produto. A autorização
+normal de cada endpoint e o isolamento por usuário/workspace continuam obrigatórios.
 
-1. `SUPPORT_CENTER_ENABLED=true`;
-2. ambiente presente em `SUPPORT_CENTER_ENVIRONMENTS`;
-3. UID na allowlist interna **ou** papel permitido e bucket dentro do percentual;
-4. autorização normal do endpoint e do recurso.
-
-O bucket é estável entre 0 e 99, derivado de SHA-256 com salt. Alterar o percentual não redistribui usuários já incluídos. A interface consulta apenas `{ enabled }`; todas as rotas de chamados, atividades e anexos repetem o bloqueio no servidor.
+`SUPPORT_CENTER_KILL_SWITCH=true` é apenas o freio de emergência no servidor. Ele não faz parte da
+operação cotidiana e normalmente permanece `false`. A equipe autorizada continua conseguindo abrir
+a caixa de entrada do Admin para tratar chamados existentes.
 
 ## Execução E2E
 
@@ -46,7 +45,7 @@ Os testes que alteram plano restauram o valor original em `finally`. Os controle
 - [ ] Bucket privado `support-evidence`, MIME e 5 MiB conferidos.
 - [ ] Service role presente somente no servidor.
 - [ ] Upstash, salt de rate limit e cabeçalho de proxy confiável configurados.
-- [ ] Variáveis da flag configuradas, ainda com percentual 0.
+- [ ] `SUPPORT_CENTER_KILL_SWITCH=false` no ambiente de QA.
 - [ ] `ENABLE_API_METRICS=true` e `ENABLE_PERFORMANCE_METRICS=true` em QA.
 - [ ] Alertas 5xx, 429, latência p75 e falha de Storage entregues ao canal interno.
 - [ ] `npm test`, lint, typecheck, i18n, build e toda a suíte E2E verdes.
@@ -56,11 +55,11 @@ Os testes que alteram plano restauram o valor original em `finally`. Os controle
 
 ## Canário interno
 
-1. Manter percentual em 0 e adicionar somente UIDs internos em `SUPPORT_CENTER_INTERNAL_UIDS` no ambiente de QA/preview.
+1. Validar a Central com contas internas no ambiente de QA.
 2. Observar por pelo menos 24 horas e executar todos os fluxos, inclusive anexos, impersonation e respostas.
-3. Liberar em produção somente para UIDs internos, ainda com percentual 0, por 24–48 horas.
-4. Se todos os critérios estiverem verdes, incluir `client` nos papéis elegíveis e avançar 1% → 5% → 25% → 50% → 100%, com uma janela mínima de observação entre etapas.
-5. Em qualquer violação, voltar imediatamente o percentual para 0; se necessário, definir `SUPPORT_CENTER_ENABLED=false`.
+3. Executar um canário interno em produção por 24–48 horas antes de comunicar a funcionalidade.
+4. Se todos os critérios estiverem verdes, disponibilizar a entrada normalmente aos usuários autenticados.
+5. Em qualquer violação, desativar a Central pelo Admin; em emergência, definir `SUPPORT_CENTER_KILL_SWITCH=true`.
 
 ## Critérios objetivos de GO
 

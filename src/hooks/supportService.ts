@@ -173,6 +173,24 @@ export async function getSupportAttachmentUrl(attachmentId: string, action: "vie
   return payload.attachment;
 }
 
+export async function getSupportAttachmentUrls(attachmentIds: string[]) {
+  const ids = [...new Set(attachmentIds.map((id) => id.trim()).filter(Boolean))].slice(0, 3);
+  if (ids.length === 0) return [];
+  const response = await fetchWithAuth(
+    `/api/support-requests/attachments?attachmentIds=${encodeURIComponent(ids.join(","))}&action=view`,
+    { method: "GET" },
+  );
+  const payload = await response.json() as {
+    ok: boolean;
+    error?: string;
+    attachments?: Array<SupportAttachment & { url: string; expiresIn: number }>;
+  };
+  if (!response.ok || !payload.ok || !payload.attachments) {
+    throw new Error(payload.error || "support_attachment_url_failed");
+  }
+  return payload.attachments;
+}
+
 export const sendSupportRequest = async (_uid: string, _email: string, _name: string, reason: string) => {
   const response = await fetchWithAuth("/api/support-requests", {
     method: "POST",

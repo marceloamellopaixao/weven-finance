@@ -83,8 +83,6 @@ Testes obrigatórios:
 Entregue migration idempotente, políticas RLS, implementação, testes e instruções de rollback. Não aplique a migration em produção.
 ```
 
-Referências para este prompt: [OWASP File Upload Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html), [Supabase Storage Access Control](https://supabase.com/docs/guides/storage/security/access-control), [Supabase Storage Buckets](https://supabase.com/docs/guides/storage/buckets/fundamentals) e [Supabase Storage File Limits](https://supabase.com/docs/guides/storage/uploads/file-limits).
-
 ## Prompt 3 — Caixa de entrada para Admin e equipe de suporte
 
 ```text

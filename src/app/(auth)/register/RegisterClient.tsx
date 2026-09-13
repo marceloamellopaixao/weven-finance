@@ -51,7 +51,7 @@ export function RegisterClient() {
     if (!password) return setError(tValidation("passwordRequired"));
     if (!confirmPassword) return setError(tValidation("confirmPasswordRequired"));
     if (password !== confirmPassword) return setError(tValidation("passwordMismatch"));
-    if (password.length < 6) return setError(tValidation("passwordMin"));
+    if (password.length < 12) return setError(tValidation("passwordMin"));
 
     setIsLoading(true);
     try {

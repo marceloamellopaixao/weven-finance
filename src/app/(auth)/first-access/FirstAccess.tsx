@@ -182,7 +182,7 @@ export default function FirstAccessPage() {
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length < 12) {
       setError(t("errors.passwordTooShort"));
       return;
     }

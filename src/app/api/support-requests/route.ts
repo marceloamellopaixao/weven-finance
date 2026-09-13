@@ -12,7 +12,8 @@ import {
 import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
 import { createSupportReport } from "@/lib/support/create-report.server";
 import { getSupabaseServiceClient } from "@/services/supabase/service-client";
-import { getSupportAuthContext } from "@/lib/support/auth.server";
+import { getSupportAuthContext, requireSupportStaffMfa } from "@/lib/support/auth.server";
+import { resolveApiErrorStatus } from "@/lib/api/error";
 import { computeSupportEvidenceRetentionUntil } from "@/lib/support/report";
 import { writeAdminAuditLog } from "@/lib/audit/admin";
 
@@ -57,6 +58,8 @@ export async function GET(request: NextRequest) {
     const workspaceFilter = request.nextUrl.searchParams.get("workspaceId")?.trim();
     const scope = request.nextUrl.searchParams.get("scope")?.trim();
     const q = request.nextUrl.searchParams.get("q")?.trim().toLowerCase() || "";
+
+    if (canReadAdminSupport && scope !== "mine") requireSupportStaffMfa(auth);
 
     const filters: Record<string, string | undefined> = {};
     if (typeFilter && typeFilter !== "all") filters.ticket_type = typeFilter;
@@ -206,7 +209,7 @@ export async function GET(request: NextRequest) {
       method: meta.method,
       meta: { error: message },
     });
-    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
+    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
@@ -267,15 +270,13 @@ export async function POST(request: NextRequest) {
       "invalid_technical_context", "too_many_attachments", "empty_file", "file_too_large",
       "invalid_file_name", "unsupported_file_type", "file_type_mismatch", "invalid_image_dimensions",
     ]);
-    const status = message === "missing_auth_token"
-      ? 401
-      : message === "forbidden"
+    const status = message === "forbidden"
         ? 403
         : message === "daily_attachment_quota_exceeded"
           ? 429
           : badRequestErrors.has(message)
             ? 400
-            : 500;
+            : resolveApiErrorStatus(message);
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
@@ -308,6 +309,7 @@ export async function PATCH(request: NextRequest) {
       if (!isAccessAllowed(auth, accessControl, "admin.support.read", "read")) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
+      requireSupportStaffMfa(auth);
       const ids = Array.isArray(body.ticketIds)
         ? body.ticketIds.map((id) => String(id || "").trim()).filter(Boolean)
         : [];
@@ -364,6 +366,7 @@ export async function PATCH(request: NextRequest) {
     if (!canWriteAdminSupport) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
+    requireSupportStaffMfa(auth);
 
     const allowedStatuses = String(row.ticket_type || "support") === "feature"
       ? new Set(["pending", "under_review", "approved", "rejected", "implemented"])
@@ -471,7 +474,7 @@ export async function PATCH(request: NextRequest) {
       method: meta.method,
       meta: { error: message },
     });
-    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
+    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }
@@ -492,6 +495,7 @@ export async function DELETE(request: NextRequest) {
     if (!isAccessAllowed(auth, accessControl, "admin.support.delete", "write")) {
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
+    requireSupportStaffMfa(auth);
 
     const ticketId = request.nextUrl.searchParams.get("ticketId")?.trim();
     if (!ticketId) {
@@ -522,7 +526,7 @@ export async function DELETE(request: NextRequest) {
       method: meta.method,
       meta: { error: message },
     });
-    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
+    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
     await writeApiMetric({ route: meta.route, method: meta.method, status, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: message });
     return NextResponse.json({ ok: false, error: message }, { status });
   }

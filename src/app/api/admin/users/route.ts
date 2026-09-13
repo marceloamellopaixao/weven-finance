@@ -16,11 +16,12 @@ import {
   isAccessAllowed,
   ServerAccessProfile,
 } from "@/lib/access-control/server";
-import { supabaseDeleteByFilters, supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
-import { deleteSupabaseAuthUser, isUuid, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
+import { supabaseSelect, supabaseSelectPaged, supabaseUpsertRows } from "@/services/supabase/admin";
+import { deleteSupabaseAuthUser, getSupabaseServiceClient, isUuid, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
 import { BillingInfo, UserPaymentStatus, UserPlan, UserRole, UserStatus } from "@/types/user";
 import { DEFAULT_ACCESS_CONTROL_CONFIG } from "@/types/system";
 import { parseUserPlan } from "@/lib/plans/catalog";
+import { resetUserFinancialData } from "@/lib/account-data/reset.server";
 
 async function getAuthContext(request: NextRequest): Promise<ServerAccessProfile> {
   const decoded = await verifyRequestAuth(request);
@@ -35,20 +36,6 @@ async function getAuthContext(request: NextRequest): Promise<ServerAccessProfile
     plan: parseUserPlan(rawPlan),
     isSupremeAdmin: decoded.uid === CREATOR_SUPREME_UID,
   };
-}
-
-async function deleteAllTransactions(uid: string) {
-  const rows = await supabaseSelect("transactions", {
-    select: "source_id",
-    filters: { uid },
-  });
-  for (const row of rows) {
-    await supabaseDeleteByFilters("transactions", {
-      uid,
-      source_id: String(row.source_id || ""),
-    });
-  }
-  return rows.length;
 }
 
 function mapProfileRowToUser(row: Record<string, unknown>) {
@@ -386,7 +373,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as {
-      action?: "normalize" | "resetFinancialData" | "softDelete" | "restore" | "permanentDelete" | "recountTransactionCount";
+      action?: "normalize" | "resetFinancialData" | "resetMfa" | "softDelete" | "restore" | "permanentDelete" | "recountTransactionCount";
       uid?: string;
       restoreData?: boolean;
     };
@@ -444,10 +431,7 @@ export async function POST(request: NextRequest) {
       if (!isAccessAllowed(auth, accessControl, "admin.users.delete", "write")) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
-      const deleted = await deleteAllTransactions(body.uid);
-      await supabaseUpsertRows("profiles", [{ uid: body.uid, transaction_count: 0, updated_at: new Date().toISOString() }], {
-        onConflict: "uid",
-      });
+      const deleted = await resetUserFinancialData(body.uid);
       await writeAdminAuditLog({
         actorUid: auth.uid,
         action: "admin.users.reset_financial_data",
@@ -461,6 +445,58 @@ export async function POST(request: NextRequest) {
       });
       await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
       return NextResponse.json({ ok: true, deleted }, { status: 200 });
+    }
+
+    if (body.action === "resetMfa") {
+      if (!isAccessAllowed(auth, accessControl, "admin.users.delete", "write")) {
+        return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+      }
+      if (body.uid === auth.uid || body.uid === CREATOR_SUPREME_UID) {
+        return NextResponse.json({ ok: false, error: "mfa_reset_not_allowed" }, { status: 403 });
+      }
+
+      const profileRows = await supabaseSelect("profiles", {
+        select: "uid,email,raw",
+        filters: { uid: body.uid },
+        limit: 1,
+      });
+      if (profileRows.length === 0) {
+        return NextResponse.json({ ok: false, error: "user_not_found" }, { status: 404 });
+      }
+
+      const profileRow = profileRows[0];
+      const profileRaw = readSecureProfilePayload(profileRow.raw);
+      const email = String(profileRow.email || profileRaw.email || "").trim().toLowerCase();
+      const rawAuthUserId = typeof profileRaw.authUserId === "string" && isUuid(profileRaw.authUserId)
+        ? profileRaw.authUserId
+        : null;
+      const authUserId = await resolveSupabaseAuthUserId({ rawUid: rawAuthUserId, uid: body.uid, email });
+      if (!authUserId) {
+        return NextResponse.json({ ok: false, error: "auth_user_not_found" }, { status: 404 });
+      }
+
+      const supabase = getSupabaseServiceClient();
+      const listed = await supabase.auth.admin.mfa.listFactors({ userId: authUserId });
+      if (listed.error) throw new Error(`supabase_mfa_list_failed:${listed.error.message}`);
+      const factors = listed.data?.factors || [];
+      for (const factor of factors) {
+        const removed = await supabase.auth.admin.mfa.deleteFactor({ userId: authUserId, id: factor.id });
+        if (removed.error) throw new Error(`supabase_mfa_delete_failed:${removed.error.message}`);
+      }
+
+      await writeAdminAuditLog({
+        actorUid: auth.uid,
+        action: "admin.users.mfa_reset",
+        targetUid: body.uid,
+        requestId: meta.requestId,
+        route: meta.route,
+        method: meta.method,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+        details: { deletedFactors: factors.length },
+      });
+      await writeApiMetric({ route: meta.route, method: meta.method, status: 200, durationMs: Date.now() - startedAt, requestId: meta.requestId, uid: auth.uid });
+      return NextResponse.json({ ok: true, deleted: factors.length }, { status: 200 });
     }
 
     if (body.action === "softDelete") {

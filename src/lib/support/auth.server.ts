@@ -2,13 +2,13 @@ import "server-only";
 
 import type { NextRequest } from "next/server";
 
-import { CREATOR_SUPREME_UID, type ServerAccessProfile } from "@/lib/access-control/server";
+import { CREATOR_SUPREME_UID, getServerAccessControlConfig, isAccessAllowed, type ServerAccessProfile } from "@/lib/access-control/server";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { resolveActingContext } from "@/lib/impersonation/server";
 import { parseUserPlan } from "@/lib/plans/catalog";
 import { readSecureProfilePayload } from "@/lib/secure-store/profile";
 import { supabaseSelect } from "@/services/supabase/admin";
-import { evaluateSupportCenterRollout } from "@/lib/features/support-center";
+import { getSupportCenterDecision } from "@/lib/features/support-center.server";
 
 export type SupportAuthContext = ServerAccessProfile & {
   email: string;
@@ -16,7 +16,12 @@ export type SupportAuthContext = ServerAccessProfile & {
   requesterUid: string;
   requesterRole: string;
   isImpersonating: boolean;
+  aal: "aal1" | "aal2";
 };
+
+export function requireSupportStaffMfa(auth: Pick<SupportAuthContext, "aal">) {
+  if (auth.aal !== "aal2") throw new Error("mfa_required");
+}
 
 export async function getSupportAuthContext(
   request: NextRequest,
@@ -44,12 +49,23 @@ export async function getSupportAuthContext(
     plan: parseUserPlan(row.plan ?? raw.plan),
     isSupremeAdmin: !acting.isImpersonating && decoded.uid === CREATOR_SUPREME_UID,
     requesterUid: acting.requesterUid,
-    requesterRole: acting.requesterRole,
+    requesterRole,
     isImpersonating: acting.isImpersonating,
+    aal: decoded.aal,
   };
   if (!options.skipFeatureGate) {
-    const rollout = evaluateSupportCenterRollout({ uid: context.requesterUid, role: context.requesterRole });
-    if (!rollout.enabled) throw new Error("forbidden");
+    const requesterProfile: ServerAccessProfile = {
+      uid: decoded.uid,
+      role: requesterRole,
+      plan: parseUserPlan(requesterRows[0]?.plan ?? requesterRaw.plan),
+      isSupremeAdmin: decoded.uid === CREATOR_SUPREME_UID,
+    };
+    const accessControl = await getServerAccessControlConfig();
+    const canReadSupportInbox = isAccessAllowed(requesterProfile, accessControl, "admin.support.read", "read");
+    if (!canReadSupportInbox) {
+      const rollout = await getSupportCenterDecision();
+      if (!rollout.enabled) throw new Error("forbidden");
+    }
   }
   return context;
 }

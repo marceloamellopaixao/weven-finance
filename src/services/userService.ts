@@ -416,3 +416,30 @@ export const requestOwnAccountDeletion = async (idToken: string): Promise<void> 
   }
 };
 
+export const resetUserMfa = async (uid: string) => {
+  const response = await apiFetch("/api/admin/users", {
+    method: "POST",
+    body: JSON.stringify({ action: "resetMfa", uid }),
+  });
+  const payload = (await response.json()) as { ok: boolean; error?: string; deleted?: number };
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "Erro ao redefinir a autenticação em duas etapas");
+  return payload.deleted || 0;
+};
+
+export const resetOwnFinancialData = async (idToken: string): Promise<number> => {
+  const response = await fetch("/api/account/reset-data", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ confirmation: "RESETAR" }),
+  });
+
+  const payload = (await response.json()) as { ok: boolean; error?: string; deleted?: number };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Não foi possível resetar seus dados financeiros");
+  }
+  return Number(payload.deleted || 0);
+};
+
