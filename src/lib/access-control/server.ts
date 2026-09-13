@@ -98,5 +98,6 @@ export async function requireAccessResource(
     profile.isSupremeAdmin ||
     isAccessAllowed(profile, accessControl, resource, minimum);
   if (!allowed) throw new Error("forbidden");
+  if (auth.aal !== "aal2") throw new Error("mfa_required");
   return { auth, profile, accessControl };
 }

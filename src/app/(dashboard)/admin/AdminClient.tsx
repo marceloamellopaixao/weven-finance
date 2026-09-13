@@ -10,6 +10,7 @@ import {
   updateUserRole,
   getUserTransactionCount,
   resetUserFinancialData,
+  resetUserMfa,
   softDeleteUser,
   updateUserPaymentStatus,
   normalizeDatabaseUsers,
@@ -121,6 +122,7 @@ import {
   Bell,
   Download,
   FilterX,
+  Bug,
 } from "lucide-react";
 import { deleteTicket, FeatureRequestStatus, fetchSupportTicketsPage, markSupportTicketsAsSeen, SupportRequestStatus, SupportTicket, updateTicket } from "@/hooks/supportService";
 import { subscribeToTableChanges } from "@/services/supabase/realtime";
@@ -133,6 +135,8 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { useTranslations } from "@/i18n/T";
 import { AdminLoadingShell } from "./components/AdminLoadingShell";
 import { AdminCategoryPresetsPanel } from "./components/AdminCategoryPresetsPanel";
+import { SupportConversation } from "@/components/support/SupportConversation";
+import { useImpersonation } from "@/hooks/useImpersonation";
 
 type UserWithCount = UserProfile & { transactionCount?: number };
 type DeletionSuccessData = { name: string; email: string } | null;
@@ -236,6 +240,7 @@ function getAdminNavButtonClass(active: boolean) {
 
 export default function AdminPage() {
   const { user, userProfile, loading } = useAuth();
+  const { isImpersonating } = useImpersonation();
   const { plans } = usePlans();
   const tAdmin = useTranslations("admin");
   const { locale } = useI18n();
@@ -259,13 +264,21 @@ export default function AdminPage() {
   // Support Data
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [ticketsTotal, setTicketsTotal] = useState(0);
+  const [isLoadingSupport, setIsLoadingSupport] = useState(true);
+  const [supportLoadError, setSupportLoadError] = useState("");
   const [supportUnseenCount, setSupportUnseenCount] = useState(0);
   const [supportPage, setSupportPage] = useState(1);
   const supportPerPage = 12;
-  const [supportTypeFilter, setSupportTypeFilter] = useState<"support" | "feature" | "all">("all");
+  const [supportTypeFilter, setSupportTypeFilter] = useState<"bug" | "support" | "feature" | "all">("all");
   const [supportStatusFilter, setSupportStatusFilter] = useState("all");
   const [supportPriorityFilter, setSupportPriorityFilter] = useState<"low" | "medium" | "high" | "urgent" | "all">("all");
   const [supportSearch, setSupportSearch] = useState("");
+  const [supportAssignedFilter, setSupportAssignedFilter] = useState("all");
+  const [supportRouteFilter, setSupportRouteFilter] = useState("");
+  const [supportVersionFilter, setSupportVersionFilter] = useState("");
+  const [supportBrowserFilter, setSupportBrowserFilter] = useState("");
+  const [supportPlanFilter, setSupportPlanFilter] = useState("all");
+  const [supportWorkspaceFilter, setSupportWorkspaceFilter] = useState("");
   const [staffMembers, setStaffMembers] = useState<UserProfile[]>([]);
   const [viewTicket, setViewTicket] = useState<SupportTicket | null>(null);
   const [ticketToDelete, setTicketToDelete] = useState<SupportTicket | null>(null);
@@ -286,6 +299,8 @@ export default function AdminPage() {
 
   // --- Modais de Ação ---
   const [userToReset, setUserToReset] = useState<UserProfile | null>(null);
+  const [userToResetMfa, setUserToResetMfa] = useState<(Pick<UserProfile, "uid" | "displayName" | "email"> & { ticketId?: string }) | null>(null);
+  const [isResettingMfa, setIsResettingMfa] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const [userToPermanentDelete, setUserToPermanentDelete] = useState<UserProfile | null>(null);
   const [deletedUserData, setDeletedUserData] = useState<DeletionSuccessData>(null);
@@ -642,15 +657,27 @@ export default function AdminPage() {
       const raw = window.localStorage.getItem(ADMIN_SUPPORT_FILTERS_STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw) as Partial<{
-        supportTypeFilter: "support" | "feature" | "all";
+        supportTypeFilter: "bug" | "support" | "feature" | "all";
         supportStatusFilter: string;
         supportPriorityFilter: "low" | "medium" | "high" | "urgent" | "all";
         supportSearch: string;
+        supportAssignedFilter: string;
+        supportRouteFilter: string;
+        supportVersionFilter: string;
+        supportBrowserFilter: string;
+        supportPlanFilter: string;
+        supportWorkspaceFilter: string;
       }>;
       if (parsed.supportTypeFilter) setSupportTypeFilter(parsed.supportTypeFilter);
       if (typeof parsed.supportStatusFilter === "string") setSupportStatusFilter(parsed.supportStatusFilter);
       if (parsed.supportPriorityFilter) setSupportPriorityFilter(parsed.supportPriorityFilter);
       if (typeof parsed.supportSearch === "string") setSupportSearch(parsed.supportSearch);
+      if (typeof parsed.supportAssignedFilter === "string") setSupportAssignedFilter(parsed.supportAssignedFilter);
+      if (typeof parsed.supportRouteFilter === "string") setSupportRouteFilter(parsed.supportRouteFilter);
+      if (typeof parsed.supportVersionFilter === "string") setSupportVersionFilter(parsed.supportVersionFilter);
+      if (typeof parsed.supportBrowserFilter === "string") setSupportBrowserFilter(parsed.supportBrowserFilter);
+      if (typeof parsed.supportPlanFilter === "string") setSupportPlanFilter(parsed.supportPlanFilter);
+      if (typeof parsed.supportWorkspaceFilter === "string") setSupportWorkspaceFilter(parsed.supportWorkspaceFilter);
     } catch {
       // ignora parse invalido
     }
@@ -666,12 +693,18 @@ export default function AdminPage() {
           supportStatusFilter,
           supportPriorityFilter,
           supportSearch,
+          supportAssignedFilter,
+          supportRouteFilter,
+          supportVersionFilter,
+          supportBrowserFilter,
+          supportPlanFilter,
+          supportWorkspaceFilter,
         })
       );
     } catch {
       // ignora falha de storage
     }
-  }, [supportTypeFilter, supportStatusFilter, supportPriorityFilter, supportSearch]);
+  }, [supportTypeFilter, supportStatusFilter, supportPriorityFilter, supportSearch, supportAssignedFilter, supportRouteFilter, supportVersionFilter, supportBrowserFilter, supportPlanFilter, supportWorkspaceFilter]);
 
   useEffect(() => {
     if (loading || !userProfile || isTabBootstrapped) return;
@@ -748,6 +781,8 @@ export default function AdminPage() {
     const loadTickets = async () => {
       if (!shouldRefreshAdminNow()) return;
       try {
+        setIsLoadingSupport(true);
+        setSupportLoadError("");
         const payload = await fetchSupportTicketsPage({
           page: supportPage,
           limit: supportPerPage,
@@ -755,6 +790,12 @@ export default function AdminPage() {
           status: supportStatusFilter,
           priority: supportPriorityFilter,
           q: supportSearch,
+          assignedTo: supportAssignedFilter,
+          route: supportRouteFilter,
+          appVersion: supportVersionFilter,
+          browser: supportBrowserFilter,
+          plan: supportPlanFilter,
+          workspaceId: supportWorkspaceFilter,
         });
         if (cancelled) return;
         setTickets(payload.tickets);
@@ -765,7 +806,10 @@ export default function AdminPage() {
           setTickets([]);
           setTicketsTotal(0);
           setSupportUnseenCount(0);
+          setSupportLoadError("Não foi possível carregar a caixa de entrada. Tente novamente.");
         }
+      } finally {
+        if (!cancelled) setIsLoadingSupport(false);
       }
     };
 
@@ -781,7 +825,7 @@ export default function AdminPage() {
       clearInterval(interval);
       stopRealtime();
     };
-  }, [activeTab, loading, userProfile, supportPage, supportTypeFilter, supportStatusFilter, supportPriorityFilter, supportSearch]);
+  }, [activeTab, loading, userProfile, supportPage, supportTypeFilter, supportStatusFilter, supportPriorityFilter, supportSearch, supportAssignedFilter, supportRouteFilter, supportVersionFilter, supportBrowserFilter, supportPlanFilter, supportWorkspaceFilter]);
 
   useEffect(() => {
     if (!userProfile) return;
@@ -1009,8 +1053,8 @@ export default function AdminPage() {
   const handleAssignTicket = async (ticketId: string, staffUid: string) => {
     const staff = staffMembers.find(s => s.uid === staffUid);
     const assignment = {
-      assignedTo: staffUid,
-      assignedToName: staff?.displayName || tAdmin("common.staff"),
+      assignedTo: staffUid === "unassigned" ? "" : staffUid,
+      assignedToName: staffUid === "unassigned" ? "" : staff?.displayName || tAdmin("common.staff"),
     };
     try {
       await updateTicket(ticketId, assignment);
@@ -1042,6 +1086,16 @@ export default function AdminPage() {
       setViewTicket((ticket) => (ticket?.id === ticketId ? { ...ticket, priority } : ticket));
     } catch {
       showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("support.feedback.priorityErrorMessage"));
+    }
+  };
+
+  const handleRequestTicketAccess = async (ticket: SupportTicket) => {
+    try {
+      const result = await requestImpersonationAccess(ticket.uid);
+      setImpersonationPollingTargetUid(ticket.uid);
+      showFeedback("info", tAdmin("impersonation.title"), result.alreadyPending ? tAdmin("impersonation.pendingMessage") : tAdmin("impersonation.sentMessage"));
+    } catch {
+      showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("impersonation.requestErrorMessage"));
     }
   };
 
@@ -1210,6 +1264,22 @@ export default function AdminPage() {
         prev.map((u) => (u.uid === userToReset.uid ? { ...u, transactionCount: count } : u))
       );
     } catch { }
+  };
+
+  const confirmResetMfa = async () => {
+    if (!userToResetMfa || isResettingMfa) return;
+    const target = userToResetMfa;
+    setIsResettingMfa(true);
+    try {
+      const deleted = await resetUserMfa(target.uid);
+      if (target.ticketId) await handleChangeTicketStatus(target.ticketId, "resolved");
+      setUserToResetMfa(null);
+      showFeedback("success", tAdmin("dialogs.mfaResetCompletedTitle"), tAdmin("dialogs.mfaResetCompletedMessage", { count: deleted }));
+    } catch {
+      showFeedback("error", tAdmin("feedback.genericErrorTitle"), tAdmin("dialogs.mfaResetErrorMessage"));
+    } finally {
+      setIsResettingMfa(false);
+    }
   };
 
   const confirmDeleteUser = async () => {
@@ -1535,6 +1605,12 @@ export default function AdminPage() {
     setSupportStatusFilter("all");
     setSupportPriorityFilter("all");
     setSupportSearch("");
+    setSupportAssignedFilter("all");
+    setSupportRouteFilter("");
+    setSupportVersionFilter("");
+    setSupportBrowserFilter("");
+    setSupportPlanFilter("all");
+    setSupportWorkspaceFilter("");
     setSupportPage(1);
   }, []);
 
@@ -1594,7 +1670,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     setSupportPage(1);
-  }, [supportTypeFilter, supportStatusFilter, supportPriorityFilter, supportSearch]);
+  }, [supportTypeFilter, supportStatusFilter, supportPriorityFilter, supportSearch, supportAssignedFilter, supportRouteFilter, supportVersionFilter, supportBrowserFilter, supportPlanFilter, supportWorkspaceFilter]);
 
   const hasAdminAccess = Boolean(userProfile && userProfile.role !== "client" && allowedTabs.length > 0);
   const shouldLoadAdminConfig = Boolean(userProfile && userProfile.role !== "client");
@@ -1773,12 +1849,13 @@ export default function AdminPage() {
                         className="h-10 rounded-xl"
                         placeholder={tAdmin("support.searchPlaceholder")}
                       />
-                      <Select value={supportTypeFilter} onValueChange={(value) => setSupportTypeFilter(value as "support" | "feature" | "all")}>
+                      <Select value={supportTypeFilter} onValueChange={(value) => setSupportTypeFilter(value as "bug" | "support" | "feature" | "all")}>
                         <SelectTrigger className="h-10 rounded-xl">
                           <SelectValue placeholder={tAdmin("support.filters.type")} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">{tAdmin("support.filters.allTypes")}</SelectItem>
+                          <SelectItem value="bug">{tAdmin("support.type.bug")}</SelectItem>
                           <SelectItem value="support">{tAdmin("support.type.support")}</SelectItem>
                           <SelectItem value="feature">{tAdmin("support.type.featurePlural")}</SelectItem>
                         </SelectContent>
@@ -1810,6 +1887,18 @@ export default function AdminPage() {
                           <SelectItem value="urgent">{tAdmin("support.priority.urgent")}</SelectItem>
                         </SelectContent>
                       </Select>
+                      <Select value={supportAssignedFilter} onValueChange={setSupportAssignedFilter}>
+                        <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Responsável" /></SelectTrigger>
+                        <SelectContent><SelectItem value="all">Todos os responsáveis</SelectItem><SelectItem value="unassigned">Sem responsável</SelectItem>{staffMembers.map((staff) => <SelectItem key={staff.uid} value={staff.uid}>{staff.displayName || staff.email}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Select value={supportPlanFilter} onValueChange={setSupportPlanFilter}>
+                        <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Plano" /></SelectTrigger>
+                        <SelectContent><SelectItem value="all">Todos os planos</SelectItem>{PLAN_ORDER.map((plan) => <SelectItem key={plan} value={plan}>{PLAN_CATALOG[plan].publicName}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Input value={supportRouteFilter} onChange={(event) => setSupportRouteFilter(event.target.value)} placeholder="Rota ex.: /dashboard" className="h-10 rounded-xl" />
+                      <Input value={supportVersionFilter} onChange={(event) => setSupportVersionFilter(event.target.value)} placeholder="Versão da aplicação" className="h-10 rounded-xl" />
+                      <Input value={supportBrowserFilter} onChange={(event) => setSupportBrowserFilter(event.target.value)} placeholder="Navegador" className="h-10 rounded-xl" />
+                      <Input value={supportWorkspaceFilter} onChange={(event) => setSupportWorkspaceFilter(event.target.value)} placeholder="ID do workspace" className="h-10 rounded-xl" />
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <Button variant="outline" className="h-10 w-full rounded-xl sm:w-auto" onClick={clearSupportFilters}>
@@ -1827,7 +1916,11 @@ export default function AdminPage() {
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-4 p-4 md:p-5 2xl:grid-cols-2">
-                    {supportTicketsOrdered.length === 0 ? (
+                    {isLoadingSupport ? (
+                      <div className="app-panel-subtle col-span-full flex h-32 items-center justify-center rounded-2xl border text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando chamados…</div>
+                    ) : supportLoadError ? (
+                      <div role="alert" className="col-span-full rounded-2xl border border-destructive/30 p-4 text-sm text-destructive">{supportLoadError}</div>
+                    ) : supportTicketsOrdered.length === 0 ? (
                       <div className="app-panel-subtle col-span-full flex h-32 items-center justify-center rounded-2xl border border-color:var(--app-panel-border) text-muted-foreground">
                         {tAdmin("support.empty")}
                       </div>
@@ -1867,6 +1960,10 @@ export default function AdminPage() {
                               {ticket.type === 'feature' ? (
                                 <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 gap-1">
                                   <Lightbulb className="h-3 w-3" /> {tAdmin("support.type.feature")}
+                                </Badge>
+                              ) : ticket.type === "bug" ? (
+                                <Badge variant="outline" className="gap-1 border-red-200 bg-red-50 text-red-700">
+                                  <Bug className="h-3 w-3" /> {tAdmin("support.type.bug")}
                                 </Badge>
                               ) : (
                                 <Badge variant="outline" className="gap-1 border-primary/20 bg-accent text-primary">
@@ -1985,6 +2082,10 @@ export default function AdminPage() {
                                     <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 gap-1">
                                       <Lightbulb className="h-3 w-3" /> {tAdmin("support.type.feature")}
                                     </Badge>
+                                  ) : ticket.type === "bug" ? (
+                                    <Badge variant="outline" className="gap-1 border-red-200 bg-red-50 text-red-700">
+                                      <Bug className="h-3 w-3" /> {tAdmin("support.type.bug")}
+                                    </Badge>
                                   ) : (
                                     <Badge variant="outline" className="gap-1 border-primary/20 bg-accent text-primary">
                                       <MessageSquare className="h-3 w-3" /> {tAdmin("support.type.support")}
@@ -2071,7 +2172,7 @@ export default function AdminPage() {
                                             </span>
                                           </DropdownMenuSubTrigger>
                                           <DropdownMenuSubContent className="w-56 max-h-[min(70vh,22rem)] rounded-xl border border-zinc-200/70 bg-white p-1 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
-                                            {ticket.type === 'support' && (
+                                            {ticket.type !== 'feature' && (
                                               <>
                                                 <DropdownMenuItem
                                                   onClick={() => handleChangeTicketStatus(ticket.id, 'pending')}
@@ -2360,6 +2461,13 @@ export default function AdminPage() {
                                         className="cursor-pointer rounded-lg text-xs font-medium disabled:opacity-50"
                                       >
                                         <RefreshCcw className="mr-2 h-4 w-4" /> {tAdmin("users.menu.resetData")}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => setUserToResetMfa(u)}
+                                        disabled={!canResetThisUser || u.uid === userProfile?.uid}
+                                        className="cursor-pointer rounded-lg text-xs font-medium disabled:opacity-50"
+                                      >
+                                        <ShieldAlert className="mr-2 h-4 w-4" /> {tAdmin("users.menu.resetMfa")}
                                       </DropdownMenuItem>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
@@ -2658,6 +2766,13 @@ export default function AdminPage() {
                                             disabled={!canResetThisUser}
                                             className="cursor-pointer rounded-lg text-xs font-medium disabled:opacity-50">
                                             <RefreshCcw className="mr-2 h-4 w-4" /> {tAdmin("users.menu.resetData")}
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() => setUserToResetMfa(u)}
+                                            disabled={!canResetThisUser || u.uid === userProfile?.uid}
+                                            className="cursor-pointer rounded-lg text-xs font-medium disabled:opacity-50"
+                                          >
+                                            <ShieldAlert className="mr-2 h-4 w-4" /> {tAdmin("users.menu.resetMfa")}
                                           </DropdownMenuItem>
                                           <DropdownMenuSeparator />
                                           <DropdownMenuItem
@@ -3518,6 +3633,28 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!userToResetMfa} onOpenChange={(open) => !open && setUserToResetMfa(null)}>
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} max-w-[480px]`}>
+          <DialogHeader>
+            <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
+              <ShieldAlert className="h-5 w-5" />
+            </div>
+            <DialogTitle>{tAdmin("dialogs.mfaResetTitle")}</DialogTitle>
+            <DialogDescription>{tAdmin("dialogs.mfaResetDescription", { name: userToResetMfa?.displayName || userToResetMfa?.email || "" })}</DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-sm text-muted-foreground">
+            {tAdmin("dialogs.mfaResetWarning")}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setUserToResetMfa(null)} disabled={isResettingMfa} variant="ghost" className="rounded-xl">{tAdmin("common.cancel")}</Button>
+            <Button onClick={() => void confirmResetMfa()} disabled={isResettingMfa} variant="destructive" className="rounded-xl">
+              {isResettingMfa ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {tAdmin("users.menu.resetMfa")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal Excluir Usuário */}
       <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
         <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} max-w-[460px]`}>
@@ -3618,11 +3755,13 @@ export default function AdminPage() {
 
       {/* Modal Detalhes do Chamado */}
       <Dialog open={!!viewTicket} onOpenChange={(open) => !open && setViewTicket(null)}>
-        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} sm:max-w-[720px]`}>
-          <DialogHeader>
+        <DialogContent className={`${ADMIN_DIALOG_CONTENT_CLASS} flex min-w-0 flex-col overflow-hidden sm:max-w-[720px]`}>
+          <DialogHeader className="w-full min-w-0 shrink-0">
             <DialogTitle className="flex items-center gap-2">
               {viewTicket?.type === 'feature' ? (
                 <Lightbulb className="h-5 w-5 text-amber-600" />
+              ) : viewTicket?.type === "bug" ? (
+                <Bug className="h-5 w-5 text-red-600" />
               ) : (
                 <HeadphonesIcon className="h-5 w-5 text-primary" />
               )}
@@ -3630,7 +3769,7 @@ export default function AdminPage() {
             </DialogTitle>
           </DialogHeader>
           {viewTicket && (
-            <div className="space-y-4">
+            <div className="w-full min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain pr-1">
               <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
                 <div>
                   <span className="font-semibold block">{tAdmin("common.requester")}:</span>
@@ -3719,14 +3858,71 @@ export default function AdminPage() {
                 )}
               </div>
               <div className="app-panel-subtle rounded-2xl border border-color:var(--app-panel-border) p-4">
+                {viewTicket.title ? (
+                  <>
+                    <span className="mb-1 block text-sm font-semibold">{tAdmin("support.reportTitle")}:</span>
+                    <p className="mb-4 wrap-break-words text-sm font-medium text-foreground">{viewTicket.title}</p>
+                  </>
+                ) : null}
                 <span className="font-semibold block text-sm mb-2">{tAdmin("common.message")}:</span>
                 <p className="whitespace-pre-wrap wrap-break-words text-sm leading-relaxed text-muted-foreground">
                   {viewTicket.message}
                 </p>
               </div>
+              {viewTicket.type === "bug" && (viewTicket.stepsToReproduce || viewTicket.expectedResult || viewTicket.actualResult) ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {viewTicket.stepsToReproduce ? (
+                    <div className="app-panel-subtle rounded-2xl border p-4 sm:col-span-2">
+                      <span className="mb-2 block text-sm font-semibold">{tAdmin("support.stepsToReproduce")}</span>
+                      <p className="whitespace-pre-wrap text-sm text-muted-foreground">{viewTicket.stepsToReproduce}</p>
+                    </div>
+                  ) : null}
+                  {viewTicket.expectedResult ? (
+                    <div className="app-panel-subtle rounded-2xl border p-4">
+                      <span className="mb-2 block text-sm font-semibold">{tAdmin("support.expectedResult")}</span>
+                      <p className="whitespace-pre-wrap text-sm text-muted-foreground">{viewTicket.expectedResult}</p>
+                    </div>
+                  ) : null}
+                  {viewTicket.actualResult ? (
+                    <div className="app-panel-subtle rounded-2xl border p-4">
+                      <span className="mb-2 block text-sm font-semibold">{tAdmin("support.actualResult")}</span>
+                      <p className="whitespace-pre-wrap text-sm text-muted-foreground">{viewTicket.actualResult}</p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {viewTicket.technicalContext ? (
+                <div className="rounded-2xl border border-color:var(--app-panel-border) p-4">
+                  <span className="mb-2 block text-sm font-semibold">{tAdmin("support.technicalContext")}</span>
+                  <dl className="grid gap-1 text-xs sm:grid-cols-2">
+                    {Object.entries(viewTicket.technicalContext).filter(([, value]) => typeof value === "string" && value).map(([key, value]) => (
+                      <div key={key} className="flex min-w-0 gap-1">
+                        <dt className="font-medium">{key}:</dt>
+                        <dd className="truncate text-muted-foreground">{String(value)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {viewTicket.reportedDuringImpersonation ? <p className="mt-3 text-xs text-amber-600">{tAdmin("support.reportedDuringImpersonation")}</p> : null}
+                </div>
+              ) : null}
+              <SupportConversation
+                ticket={viewTicket}
+                staff
+                onRequestAccess={canImpersonateUsers && !isImpersonating ? () => handleRequestTicketAccess(viewTicket) : undefined}
+              />
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="w-full min-w-0 shrink-0">
+            {viewTicket?.supportKind === "mfa_recovery" && canDeleteRecords && viewTicket.uid !== userProfile?.uid ? (
+              <Button
+                variant="outline"
+                onClick={() => setUserToResetMfa({ uid: viewTicket.uid, displayName: viewTicket.name, email: viewTicket.email, ticketId: viewTicket.id })}
+                className="w-full rounded-xl sm:w-auto"
+              >
+                <ShieldAlert className="mr-2 h-4 w-4" />
+                {tAdmin("users.menu.resetMfa")}
+              </Button>
+            ) : null}
             {viewTicket && canDeleteRecords && (
               <Button
                 variant="destructive"

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { resolveApiErrorStatus } from "@/lib/api/error";
-import { checkRateLimit } from "@/lib/api/rate-limit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/api/rate-limit";
 import { assertPhoneAvailable } from "@/lib/profile/server";
 import { normalizePhone } from "@/lib/phone";
 
@@ -14,10 +14,11 @@ export async function POST(request: NextRequest) {
       key: "api:auth:phone-availability:post",
       max: 20,
       windowMs: 60_000,
+      critical: true,
     });
 
     if (!rate.allowed) {
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
     const body = (await request.json()) as { phone?: string };

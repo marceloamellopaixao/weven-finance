@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { checkRateLimit } from "@/lib/api/rate-limit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { changePreapprovalPlanForUser, getPreapprovalBillingInfoForUser } from "@/lib/billing/mercadopago";
@@ -19,8 +19,8 @@ export async function POST(request: NextRequest) {
   const startedAt = Date.now();
   let uid: string | null = null;
   try {
-    const rate = await checkRateLimit(request, { key: "api:billing-additional-seats:post", max: 10, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    const rate = await checkRateLimit(request, { key: "api:billing-additional-seats:post", max: 10, windowMs: 60_000, critical: true });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const auth = await verifyRequestAuth(request);
     uid = auth.uid;
     const body = await request.json() as { workspaceId?: string; quantity?: number };
@@ -29,6 +29,8 @@ export async function POST(request: NextRequest) {
     if (!workspaceId || !Number.isFinite(quantity) || quantity < 0) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
+    const userRate = await checkRateLimit(request, { key: "api:billing-additional-seats:user", max: Number(process.env.RATE_LIMIT_BILLING_ACTIONS_PER_MINUTE || 10), windowMs: 60_000, identity: { userId: auth.uid, tenantId: workspaceId }, critical: true });
+    if (!userRate.allowed) return rateLimitResponse(userRate);
 
     const workspace = await getOwnedWorkspace(auth.uid, workspaceId);
     if (!workspace || (workspace.workspace_type !== "family" && workspace.workspace_type !== "business")) {

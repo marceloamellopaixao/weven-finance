@@ -14,6 +14,7 @@ import { getDictionary } from "@/i18n/getDictionary";
 import { getRequestLocale } from "@/i18n/server";
 import { getSiteUrl, SITE_NAME } from "@/lib/site";
 import { StoreProvider } from "@/store/provider";
+import { WebVitalsReporter } from "@/components/observability/WebVitalsReporter";
 
 const siteUrl = getSiteUrl();
 const appearanceBootScript = `
@@ -190,6 +191,7 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: appearanceBootScript }} />
       </head>
       <body className="bg-background font-sans">
+        <WebVitalsReporter />
         <script
           type="application/ld+json"
           suppressHydrationWarning

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { resolveApiErrorStatus } from "@/lib/api/error";
-import { checkRateLimit } from "@/lib/api/rate-limit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { apiLogger } from "@/lib/observability/logger";
@@ -441,7 +441,7 @@ export async function GET(request: NextRequest) {
   const startedAt = Date.now();
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-family:get", max: 120, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const { auth } = await resolveFamilyRouteAuth(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
     if (!workspaceId) return NextResponse.json({ ok: false, error: "missing_workspace_id" }, { status: 400 });
@@ -480,8 +480,8 @@ export async function POST(request: NextRequest) {
   const meta = getRequestMeta(request);
   const startedAt = Date.now();
   try {
-    const rate = await checkRateLimit(request, { key: "api:workspaces-family:post", max: 30, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    const rate = await checkRateLimit(request, { key: "api:workspaces-family:post", max: 30, windowMs: 60_000, critical: true });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const { acting, auth } = await resolveFamilyRouteAuth(request);
     const body = (await request.json()) as {
       workspaceId?: string;
@@ -493,6 +493,8 @@ export async function POST(request: NextRequest) {
     const workspaceId = String(body.workspaceId || "").trim();
     const email = normalizeEmail(body.email);
     if (!workspaceId || !email) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    const inviteRate = await checkRateLimit(request, { key: "api:workspaces-family:invite", max: Number(process.env.RATE_LIMIT_INVITATIONS_PER_HOUR || 10), windowMs: 3_600_000, identity: { userId: acting.requesterUid, tenantId: workspaceId }, critical: true });
+    if (!inviteRate.allowed) return rateLimitResponse(inviteRate);
     const approvalResponse = await requireFamilyImpersonationApproval(request, acting, "family:invite-member", "Convidar membro para o perfil Família");
     if (approvalResponse) return approvalResponse;
     if (email === normalizeEmail(auth.email)) throw new Error("cannot_invite_yourself");
@@ -592,7 +594,7 @@ export async function PUT(request: NextRequest) {
   const startedAt = Date.now();
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-family:put", max: 30, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const { acting, auth } = await resolveFamilyRouteAuth(request);
     const body = (await request.json()) as {
       workspaceId?: string;
@@ -711,7 +713,7 @@ export async function PATCH(request: NextRequest) {
   const startedAt = Date.now();
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-family:patch", max: 60, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const { acting, auth } = await resolveFamilyRouteAuth(request);
     const body = (await request.json()) as {
       workspaceId?: string;
@@ -790,7 +792,7 @@ export async function DELETE(request: NextRequest) {
   const startedAt = Date.now();
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-family:delete", max: 10, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const { acting, auth } = await resolveFamilyRouteAuth(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
     const invitationId = request.nextUrl.searchParams.get("invitationId")?.trim();

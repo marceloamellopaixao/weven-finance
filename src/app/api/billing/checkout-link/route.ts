@@ -7,7 +7,7 @@ import { verifyRequestAuth } from "@/lib/auth/server";
 import { parseBillingInterval, parseUpgradePlan } from "@/services/billing/checkoutIntent";
 import { resolveActingContext } from "@/lib/impersonation/server";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
-import { checkRateLimit } from "@/lib/api/rate-limit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
@@ -28,12 +28,14 @@ export async function GET(request: NextRequest) {
     const rate = await checkRateLimit(request, { key: "api:billing-checkout:get", max: 30, windowMs: 60_000 });
     if (!rate.allowed) {
       await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
     await verifyRequestAuth(request);
     const acting = await resolveActingContext(request);
     uid = acting.actingUid;
+    const userRate = await checkRateLimit(request, { key: "api:billing-checkout:user", max: Number(process.env.RATE_LIMIT_BILLING_ACTIONS_PER_MINUTE || 10), windowMs: 60_000, identity: { userId: acting.requesterUid, tenantId: uid }, critical: true });
+    if (!userRate.allowed) return rateLimitResponse(userRate);
     const plan = parseUpgradePlan(request.nextUrl.searchParams.get("plan"));
     const interval = parseBillingInterval(request.nextUrl.searchParams.get("interval"));
     const adminTestRequested = request.nextUrl.searchParams.get("mode") === "admin-test";

@@ -23,6 +23,7 @@ import { useLazyGetAccessControlQuery } from "@/store/api/systemApi";
 import { AUTH_UNAUTHORIZED_EVENT, baseApi } from "@/store/api/baseApi";
 import { useAppDispatch } from "@/store/hooks";
 import { AppBootLoading } from "@/components/loading/AppBootLoading";
+import { createCorrelationId, sendPerformanceMetric } from "@/lib/observability/client-performance";
 
 const BLOCKED_STATUSES = new Set(["inactive", "blocked"]);
 const PUBLIC_ROUTES = [
@@ -32,6 +33,7 @@ const PUBLIC_ROUTES = [
   "/forgot-password",
   "/first-access",
   "/verify-email",
+  "/mfa",
   "/billing/checkout",
   "/billing/activating",
   "/not-found",
@@ -134,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mfaCheckedUid, setMfaCheckedUid] = useState<string | null>(null);
   const [privacyMode, setPrivacyMode] = useState(false);
   const [pagePreviewAccess, setPagePreviewAccess] = useState(false);
   const [pagePreviewAccessUid, setPagePreviewAccessUid] = useState<string | null>(null);
@@ -141,10 +144,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getImpersonationTargetUid()
   );
   const authUserFingerprintRef = useRef<string | null>(null);
+  const workspaceMetricStartedAtRef = useRef<number | null>(null);
 
   const router = useRouter();
   const pathname = usePathname();
   const supabase = useMemo(() => getSupabaseClient(), []);
+
+  useEffect(() => {
+    if (window.location.href.endsWith("#")) {
+      window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}`);
+    }
+  }, [pathname]);
 
   const resolvePostAuthPath = useCallback(() => {
     const pendingUpgradePlan = readPendingUpgradePlan();
@@ -210,6 +220,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    const sessionStartedAt = performance.now();
+    const sessionCorrelationId = createCorrelationId();
     const applySessionUser = (sessionUser: Parameters<typeof mapSupabaseUserToAuthUser>[0] | null) => {
       if (!mounted) return;
       if (!sessionUser) {
@@ -239,6 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     supabase.auth.getSession().then(({ data }) => {
+      sendPerformanceMetric({ name: "boot.session_restore", durationMs: performance.now() - sessionStartedAt, correlationId: sessionCorrelationId });
       applySessionUser(data.session?.user ?? null);
     });
 
@@ -333,12 +346,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    if (canApplyWorkspaceGuard && isLoadingWorkspaceGuard && workspaceMetricStartedAtRef.current === null) {
+      workspaceMetricStartedAtRef.current = performance.now();
+      return;
+    }
+    if (!isLoadingWorkspaceGuard && workspaceMetricStartedAtRef.current !== null) {
+      sendPerformanceMetric({
+        name: "boot.workspace_impersonation",
+        durationMs: performance.now() - workspaceMetricStartedAtRef.current,
+      });
+      workspaceMetricStartedAtRef.current = null;
+    }
+  }, [canApplyWorkspaceGuard, isLoadingWorkspaceGuard]);
+
+  useEffect(() => {
     if (!user) return;
     let cancelled = false;
 
     const syncProfile = async (showLoadingState: boolean) => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       if (showLoadingState) setLoading(true);
+      const profileStartedAt = performance.now();
+      const profileCorrelationId = createCorrelationId();
       try {
         const token = await getAccessTokenOrThrow();
         const bootstrapProfile: Partial<UserProfile> = {
@@ -417,6 +446,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } finally {
+        sendPerformanceMetric({
+          name: "boot.profile_plan_permissions",
+          durationMs: performance.now() - profileStartedAt,
+          correlationId: profileCorrelationId,
+        });
         if (!cancelled) setLoading(false);
       }
     };
@@ -464,8 +498,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (mfaCheckedUid !== user.uid) return;
+
     const postAuthRedirect = readPostAuthRedirect();
-    if (postAuthRedirect && !hasPrivilegedAccess) {
+    if (postAuthRedirect && !hasPrivilegedAccess && pathname !== "/mfa") {
       const postAuthPathname = postAuthRedirect.split("?")[0] || postAuthRedirect;
       clearPostAuthRedirect();
       if (pathname !== postAuthPathname) {
@@ -484,7 +520,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         router.replace("/dashboard");
       }
     }
-  }, [authReady, pagePreviewAccess, pathname, resolvePostAuthPath, router, supabase.auth, user, userProfile]);
+  }, [authReady, mfaCheckedUid, pagePreviewAccess, pathname, resolvePostAuthPath, router, supabase.auth, user, userProfile]);
+
+  useEffect(() => {
+    if (!user || !userProfile) {
+      setMfaCheckedUid(null);
+      return;
+    }
+    let cancelled = false;
+
+    const enforceMfa = async () => {
+      const isPrivileged = canAccessAdminArea(userProfile);
+      if (
+        userProfile.status === "deleted" ||
+        BLOCKED_STATUSES.has(userProfile.status) ||
+        userProfile.needsPasswordSetup ||
+        !userProfile.verifiedEmail
+      ) {
+        setMfaCheckedUid(user.uid);
+        return;
+      }
+      const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (cancelled) return;
+      if (assuranceError || assurance.currentLevel === "aal2") {
+        setMfaCheckedUid(user.uid);
+        return;
+      }
+
+      const { data: factors, error: factorsError } = await supabase.auth.mfa.listFactors();
+      if (cancelled || factorsError) return;
+      const hasVerifiedTotp = factors.totp.some((factor) => factor.status === "verified");
+      const isEnrollmentPage =
+        pathname === "/settings" &&
+        typeof window !== "undefined" &&
+        new URLSearchParams(window.location.search).get("tab") === "security";
+
+      if (hasVerifiedTotp) {
+        if (pathname !== "/mfa") {
+          rememberPostAuthRedirect(pathname === "/login" ? resolvePostAuthPath() : pathname);
+          router.replace("/mfa");
+          return;
+        }
+        setMfaCheckedUid(user.uid);
+        return;
+      }
+
+      if (isPrivileged && !isEnrollmentPage) {
+        router.replace("/settings?tab=security&mfa=required");
+        return;
+      }
+      setMfaCheckedUid(user.uid);
+    };
+
+    void enforceMfa();
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, resolvePostAuthPath, router, supabase, user, userProfile]);
 
   useEffect(() => {
     if (!canApplyWorkspaceGuard || isLoadingWorkspaceGuard) return;
@@ -594,10 +686,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithEmail = async (email: string, pass: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
     if (error) throw error.message || "Erro ao entrar.";
+    const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (!assuranceError && assurance.currentLevel === "aal1" && assurance.nextLevel === "aal2") {
+      router.replace("/mfa");
+    }
   };
 
   const logout = async () => {
     await supabase.auth.signOut();
+    setMfaCheckedUid(null);
     dispatch(baseApi.util.resetApiState());
     router.replace("/");
     router.refresh();
