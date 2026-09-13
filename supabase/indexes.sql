@@ -117,6 +117,40 @@ create index if not exists idx_support_requests_uid_created
 create index if not exists idx_support_requests_assigned_status_created
   on public.support_requests(assigned_to, ticket_status, created_at desc);
 
+create unique index if not exists idx_support_requests_uid_client_request
+  on public.support_requests(uid, client_request_id)
+  where client_request_id is not null;
+
+create index if not exists idx_support_attachments_ticket_created
+  on public.support_request_attachments(ticket_id, created_at asc);
+
+create index if not exists idx_support_attachments_owner_created
+  on public.support_request_attachments(owner_uid, created_at desc);
+
+create index if not exists idx_support_attachments_retention
+  on public.support_request_attachments(retention_until asc)
+  where retention_until is not null;
+
+create index if not exists idx_support_requests_admin_filters
+  on public.support_requests(ticket_type, ticket_status, assigned_to, effective_plan, workspace_id, created_at desc);
+
+create index if not exists idx_support_requests_context_filters
+  on public.support_requests(report_route, app_version, browser, created_at desc);
+
+create unique index if not exists idx_support_requests_protocol
+  on public.support_requests(protocol)
+  where protocol is not null;
+
+create index if not exists idx_support_request_messages_ticket_created
+  on public.support_request_messages(ticket_id, created_at asc);
+
+create unique index if not exists idx_support_request_messages_ticket_client_request
+  on public.support_request_messages(ticket_id, client_request_id)
+  where client_request_id is not null;
+
+create index if not exists idx_support_request_events_ticket_created
+  on public.support_request_events(ticket_id, created_at asc);
+
 create index if not exists idx_billing_events_uid_created
   on public.billing_events(uid, created_at desc);
 
@@ -141,6 +175,10 @@ create index if not exists idx_foundation_plan_claims_status_claimed
 create index if not exists idx_notifications_uid_created_at
   on public.notifications(uid, created_at desc);
 
+create unique index if not exists idx_notifications_uid_dedupe_key
+  on public.notifications(uid, dedupe_key)
+  where dedupe_key is not null;
+
 create index if not exists idx_notifications_uid_is_read
   on public.notifications(uid, is_read, created_at desc);
 
@@ -158,6 +196,9 @@ create index if not exists idx_api_request_metrics_created_at
 
 create index if not exists idx_api_request_metrics_route_method_created_at
   on public.api_request_metrics(route, method, created_at desc);
+
+create index if not exists idx_performance_metrics_name_created
+  on public.performance_metrics(metric_name, created_at desc);
 
 create index if not exists idx_product_events_name_created
   on public.product_events(event_name, created_at desc);

@@ -7,18 +7,22 @@ import {
   isTerminalImpersonationError,
 } from "@/lib/impersonation/client";
 import { getAccessTokenOrThrow } from "@/services/auth/token";
+import { createCorrelationId, sendPerformanceMetric } from "@/lib/observability/client-performance";
 
 export type UserScope = { userId: string };
 export type WorkspaceScope = UserScope & { workspaceId: string; ownerId?: string };
 export const AUTH_UNAUTHORIZED_EVENT = "wevenfinance:auth:unauthorized";
 
 let lastUnauthorizedEventAt = 0;
+let dashboardFirstDataReported = false;
+const dashboardStartedAt = typeof performance === "undefined" ? 0 : performance.now();
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: "/api",
   prepareHeaders: async (headers) => {
     const token = await getAccessTokenOrThrow();
     headers.set("authorization", `Bearer ${token}`);
+    headers.set("x-request-id", createCorrelationId());
     for (const [name, value] of Object.entries(getImpersonationHeader())) headers.set(name, value);
     return headers;
   },
@@ -41,6 +45,10 @@ const authenticatedBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBase
       lastUnauthorizedEventAt = now;
       window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
     }
+  }
+  if (!result.error && !dashboardFirstDataReported && typeof window !== "undefined" && window.location.pathname === "/dashboard") {
+    dashboardFirstDataReported = true;
+    sendPerformanceMetric({ name: "dashboard.first_data", durationMs: performance.now() - dashboardStartedAt });
   }
   return result;
 };

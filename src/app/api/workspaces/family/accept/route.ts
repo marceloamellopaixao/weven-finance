@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { canAccessAdminArea } from "@/lib/access-control/roles";
-import { checkRateLimit } from "@/lib/api/rate-limit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { verifyRequestAuth, type ServerAuthUser } from "@/lib/auth/server";
 import { cancelSubscriptionForUser } from "@/lib/billing/mercadopago";
@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
   const startedAt = Date.now();
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-family-accept:get", max: 60, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const auth = await verifyRequestAuth(request);
     const [rows, impact] = await Promise.all([getAccessiblePendingRows(auth), getInvitationAccountImpact(auth)]);
     const invitations = await Promise.all(rows.map((row) => decorateInvitation(row, impact)));
@@ -133,8 +133,8 @@ export async function POST(request: NextRequest) {
   const meta = getRequestMeta(request);
   const startedAt = Date.now();
   try {
-    const rate = await checkRateLimit(request, { key: "api:workspaces-family-accept:post", max: 20, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    const rate = await checkRateLimit(request, { key: "api:workspaces-family-accept:post", max: 20, windowMs: 60_000, critical: true });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const auth = await verifyRequestAuth(request);
     const body = await request.json().catch(() => ({})) as { invitationId?: string; cancelCurrentSubscription?: boolean };
     const invitationId = String(body.invitationId || "").trim();
@@ -250,8 +250,8 @@ export async function DELETE(request: NextRequest) {
   const meta = getRequestMeta(request);
   const startedAt = Date.now();
   try {
-    const rate = await checkRateLimit(request, { key: "api:workspaces-family-accept:delete", max: 20, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    const rate = await checkRateLimit(request, { key: "api:workspaces-family-accept:delete", max: 20, windowMs: 60_000, critical: true });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const auth = await verifyRequestAuth(request);
     const invitationId = request.nextUrl.searchParams.get("invitationId")?.trim() || "";
     const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim() || "";

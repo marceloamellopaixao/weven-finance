@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Loader2, Wallet } from "lucide-react";
 
 import { AuthPageShell, authIconClassName, authPanelClassName } from "@/components/auth/AuthPageShell";
@@ -13,7 +13,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTranslations } from "@/i18n/T";
 import { formatPlanName } from "@/lib/plans/capabilities";
 import {
-  buildUpgradeCheckoutPath,
   parseUpgradePlan,
   readPendingUpgradePlan,
   rememberPendingUpgradePlan,
@@ -29,12 +28,11 @@ const GoogleIcon = () => (
 );
 
 export function LoginClient() {
-  const { signInWithGoogle, loginWithEmail, user, userProfile, canPreviewRestrictedPages } = useAuth();
+  const { signInWithGoogle, loginWithEmail } = useAuth();
   const tLogin = useTranslations("auth.login");
   const tPlaceholders = useTranslations("auth.placeholders");
   const tValidation = useTranslations("validation");
   const tCommon = useTranslations("common");
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   const [email, setEmail] = useState("");
@@ -54,12 +52,6 @@ export function LoginClient() {
     }
   }, [pendingUpgradePlan]);
 
-  useEffect(() => {
-    if (user && userProfile && userProfile.status !== "deleted" && !canPreviewRestrictedPages) {
-      router.replace(pendingUpgradePlan ? buildUpgradeCheckoutPath(pendingUpgradePlan) : "/dashboard");
-    }
-  }, [canPreviewRestrictedPages, pendingUpgradePlan, router, user, userProfile]);
-
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -67,12 +59,6 @@ export function LoginClient() {
     try {
       if (email.trim() === "" || password.trim() === "") {
         setError(tValidation("fillAllFields"));
-        setIsLoading(false);
-        return;
-      }
-
-      if (password.length < 6) {
-        setError(tValidation("passwordMin"));
         setIsLoading(false);
         return;
       }

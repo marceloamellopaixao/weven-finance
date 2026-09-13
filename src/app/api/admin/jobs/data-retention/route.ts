@@ -6,6 +6,7 @@ import { writeApiMetric } from "@/lib/observability/metrics";
 import { runDeletedAccountGraceCleanup } from "@/lib/account-archive/server";
 import { requireAccessResource } from "@/lib/access-control/server";
 import { supabaseRpc } from "@/services/supabase/admin";
+import { runExpiredSupportEvidenceCleanup } from "@/lib/support/retention.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,9 +32,10 @@ export async function POST(request: NextRequest) {
     const { auth } = await requireAccessResource(request, "admin.retention_jobs", "write");
     uid = auth.uid;
 
-    const [result, deletedAccounts] = await Promise.all([
+    const [result, deletedAccounts, supportEvidence] = await Promise.all([
       supabaseRpc("run_data_retention_tasks"),
       runDeletedAccountGraceCleanup(),
+      runExpiredSupportEvidenceCleanup(),
     ]);
     await writeApiMetric({
       route: meta.route,
@@ -43,7 +45,7 @@ export async function POST(request: NextRequest) {
       requestId: meta.requestId,
       uid,
     });
-    return NextResponse.json({ ok: true, result, deletedAccounts }, { status: 200 });
+    return NextResponse.json({ ok: true, result, deletedAccounts, supportEvidence }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;

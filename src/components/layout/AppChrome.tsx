@@ -6,6 +6,9 @@ import { usePathname } from "next/navigation";
 import { AppDock } from "@/components/layout/AppDock";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
+import { SupportReporter } from "@/components/support/SupportReporter";
+import { QuickActionsMenu } from "@/components/layout/QuickActionsMenu";
+import { useSupportCenterAvailability } from "@/hooks/useSupportCenterAvailability";
 
 const MARKETING_ROUTES = new Set(["/", "/contact", "/security", "/terms"]);
 const AUTH_ROUTES = new Set([
@@ -15,6 +18,7 @@ const AUTH_ROUTES = new Set([
   "/first-access",
   "/account-profile",
   "/verify-email",
+  "/mfa",
   "/goodbye",
   "/blocked",
 ]);
@@ -37,6 +41,7 @@ export function AppChrome({ children }: AppChromeProps) {
   const isAuthLikeRoute = isAuthRoute(pathname) || isBillingRoute(pathname);
   const showFooter = isMarketingRoute;
   const showDock = !isMarketingRoute && !isAuthLikeRoute;
+  const supportCenterEnabled = useSupportCenterAvailability();
 
   return (
     <div className="app-shell flex min-h-100svh flex-col overflow-x-hidden bg-background font-sans transition-all duration-800">
@@ -45,6 +50,8 @@ export function AppChrome({ children }: AppChromeProps) {
         {children}
       </main>
       {showFooter ? <Footer /> : null}
+      {showDock && supportCenterEnabled ? <SupportReporter /> : null}
+      {showDock ? <QuickActionsMenu supportCenterEnabled={supportCenterEnabled} /> : null}
       {showDock ? <AppDock /> : null}
     </div>
   );

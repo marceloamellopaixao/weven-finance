@@ -1,4 +1,5 @@
 import { supabaseUpsertRows } from "@/services/supabase/admin";
+import { createHash } from "node:crypto";
 
 export type NotificationKind =
   | "system"
@@ -17,17 +18,19 @@ type NotificationInput = {
   message: string;
   href?: string | null;
   meta?: Record<string, unknown>;
+  dedupeKey?: string;
 };
 
 function toRow(input: NotificationInput) {
   const now = new Date().toISOString();
   return {
-    id: crypto.randomUUID(),
+    id: input.dedupeKey ? createHash("sha256").update(`${input.uid}:${input.dedupeKey}`).digest("hex") : crypto.randomUUID(),
     uid: input.uid,
     kind: input.kind,
     title: input.title,
     message: input.message,
     href: input.href || null,
+    dedupe_key: input.dedupeKey?.slice(0, 180) || null,
     is_read: false,
     meta: input.meta || {},
     created_at: now,

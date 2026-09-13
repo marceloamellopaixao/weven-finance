@@ -11,7 +11,8 @@ function normalizePath(path: string | null | undefined) {
   const value = path.trim();
   if (!value.startsWith("/")) return null;
   if (value.startsWith("//")) return null;
-  return value;
+  const hashIndex = value.indexOf("#");
+  return hashIndex >= 0 ? value.slice(0, hashIndex) || "/" : value;
 }
 
 export function rememberPostAuthRedirect(path: string) {

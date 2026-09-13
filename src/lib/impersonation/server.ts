@@ -13,6 +13,7 @@ export type AuthContext = {
   role: UserRole;
   displayName: string;
   email: string;
+  aal: "aal1" | "aal2";
 };
 
 export type ActingContext = {
@@ -117,6 +118,7 @@ export async function getAuthContextFromRequest(request: NextRequest): Promise<A
       role: "client",
       displayName: String(decoded.name || "Usuário"),
       email: String(decoded.email || ""),
+      aal: decoded.aal,
     };
   }
   const row = rows[0];
@@ -127,6 +129,7 @@ export async function getAuthContextFromRequest(request: NextRequest): Promise<A
     role: toUserRole(row.role || raw.role),
     displayName: String(row.display_name || raw.displayName || decoded.name || "Usuário"),
     email: String(row.email || raw.email || decoded.email || ""),
+    aal: decoded.aal,
   };
 }
 

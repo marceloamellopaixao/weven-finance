@@ -66,7 +66,19 @@ export function ensurePlatformTourTheme() {
       }
 
       .driver-popover.driverjs-theme .driver-popover-close-btn {
-        color: #a1a1aa;
+        color: #71717a;
+        font-size: 0;
+        width: auto;
+        height: auto;
+        top: 14px;
+        right: 14px;
+      }
+
+      .driver-popover.driverjs-theme .driver-popover-close-btn::after {
+        content: "Pular tour";
+        font-size: 12px;
+        font-weight: 700;
+        text-decoration: underline;
       }
 
       .driver-popover.driverjs-theme .driver-popover-progress-text {

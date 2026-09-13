@@ -1,7 +1,7 @@
 import { isDeletionWindowExpired } from "@/lib/account-deletion/policy";
 import { readSecureProfilePayload } from "@/lib/secure-store/profile";
 import { supabaseDeleteByFilters, supabasePatchByFilters, supabaseSelect } from "@/services/supabase/admin";
-import { deleteSupabaseAuthUser, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
+import { deleteSupabaseAuthUser, getSupabaseServiceClient, resolveSupabaseAuthUserId } from "@/services/supabase/service-client";
 
 type JsonFieldName = "raw" | "data" | "meta";
 
@@ -137,6 +137,20 @@ async function deleteRowsByUidSourceId(table: string, uid: string) {
   }
 }
 
+async function deleteSupportEvidence(ticketIds: string[]) {
+  if (ticketIds.length === 0) return;
+  const client = getSupabaseServiceClient();
+  const { data, error } = await client
+    .from("support_request_attachments")
+    .select("storage_path")
+    .in("ticket_id", ticketIds);
+  if (error) throw new Error("support_attachments_cleanup_lookup_failed");
+  const paths = (data || []).map((row) => String(row.storage_path || "")).filter(Boolean);
+  if (paths.length === 0) return;
+  const { error: storageError } = await client.storage.from("support-evidence").remove(paths);
+  if (storageError) throw new Error("support_attachments_cleanup_failed");
+}
+
 async function deleteUserCoreRows(uid: string) {
   await deleteRowsByUidSourceId("workspaces", uid);
   await deleteRowsByUidSourceId("categories", uid);
@@ -202,6 +216,7 @@ export async function permanentlyDeleteUserData(uid: string, options?: { email?:
       return String(row.uid || "") === uid || targetUid === uid || (normalizedEmail && rowEmail === normalizedEmail);
     })
     .map((row) => String(row.id || ""));
+  await deleteSupportEvidence(supportIds);
   await deleteRowsByIds("support_requests", supportIds);
 
   const billingEvents = await supabaseSelect("billing_events", {

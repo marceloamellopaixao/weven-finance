@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { resolveApiErrorStatus } from "@/lib/api/error";
-import { checkRateLimit } from "@/lib/api/rate-limit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { ensureImpersonationWriteApproval, resolveActingContext } from "@/lib/impersonation/server";
 import { resolveUserUidFromMetadata } from "@/lib/auth/user-uid";
@@ -308,7 +308,7 @@ export async function GET(request: NextRequest) {
   const startedAt = Date.now();
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-business:get", max: 120, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const { auth } = await resolveBusinessRouteAuth(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
     if (!workspaceId) return NextResponse.json({ ok: false, error: "missing_workspace_id" }, { status: 400 });
@@ -336,13 +336,15 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const startedAt = Date.now();
   try {
-    const rate = await checkRateLimit(request, { key: "api:workspaces-business:post", max: 30, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    const rate = await checkRateLimit(request, { key: "api:workspaces-business:post", max: 30, windowMs: 60_000, critical: true });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const { acting, auth } = await resolveBusinessRouteAuth(request);
     const body = await request.json() as { workspaceId?: string; email?: string; displayName?: string; role?: unknown; permissions?: unknown };
     const workspaceId = String(body.workspaceId || "").trim();
     const email = normalizeEmail(body.email);
     if (!workspaceId || !email) return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    const inviteRate = await checkRateLimit(request, { key: "api:workspaces-business:invite", max: Number(process.env.RATE_LIMIT_INVITATIONS_PER_HOUR || 10), windowMs: 3_600_000, identity: { userId: acting.requesterUid, tenantId: workspaceId }, critical: true });
+    if (!inviteRate.allowed) return rateLimitResponse(inviteRate);
     const approvalResponse = await requireBusinessImpersonationApproval(request, acting, "business:invite-member", "Convidar membro para o perfil Business/PJ");
     if (approvalResponse) return approvalResponse;
     if (email === normalizeEmail(auth.email)) throw new Error("cannot_invite_yourself");
@@ -387,7 +389,7 @@ export async function PUT(request: NextRequest) {
   const startedAt = Date.now();
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-business:put", max: 30, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const { acting, auth } = await resolveBusinessRouteAuth(request);
     const body = await request.json() as { workspaceId?: string; invitationId?: string };
     const workspaceId = String(body.workspaceId || "").trim();
@@ -423,7 +425,7 @@ export async function PATCH(request: NextRequest) {
   const startedAt = Date.now();
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-business:patch", max: 60, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const { acting, auth } = await resolveBusinessRouteAuth(request);
     const body = await request.json() as { workspaceId?: string; memberUid?: string; role?: unknown; permissions?: unknown; status?: "active" | "pending" | "disabled" };
     const workspaceId = String(body.workspaceId || "").trim();
@@ -460,7 +462,7 @@ export async function DELETE(request: NextRequest) {
   const startedAt = Date.now();
   try {
     const rate = await checkRateLimit(request, { key: "api:workspaces-business:delete", max: 20, windowMs: 60_000 });
-    if (!rate.allowed) return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const { acting, auth } = await resolveBusinessRouteAuth(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId")?.trim();
     const invitationId = request.nextUrl.searchParams.get("invitationId")?.trim();

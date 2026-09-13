@@ -41,11 +41,6 @@ function getDaysRemaining(today: string, month: string) {
   return Math.max(1, daysInMonth - day + 1);
 }
 
-function signedAmount(transaction: DailyLimitInput["transactions"][number]) {
-  const amount = Number(transaction.amount || 0);
-  return transaction.type === "income" ? amount : -amount;
-}
-
 function isRealOccurrence(transaction: DailyLimitInput["transactions"][number]) {
   return transaction.recurringRole !== "template";
 }

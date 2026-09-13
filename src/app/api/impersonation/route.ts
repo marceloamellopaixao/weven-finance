@@ -12,6 +12,10 @@ import { canAccessResource } from "@/lib/access-control/server";
 import { UserRole } from "@/types/user";
 import { supabaseSelect, supabaseUpsertRows } from "@/services/supabase/admin";
 import { apiLogger } from "@/lib/observability/logger";
+import { getRequestMeta } from "@/lib/api/request-meta";
+import { writeAdminAuditLog } from "@/lib/audit/admin";
+import { checkRateLimit, rateLimitResponse } from "@/lib/api/rate-limit";
+import { resolveApiErrorStatus } from "@/lib/api/error";
 
 function toUserRole(value: unknown): UserRole {
   if (value === "admin" || value === "moderator" || value === "support" || value === "client") {
@@ -22,6 +26,10 @@ function toUserRole(value: unknown): UserRole {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function requireImpersonationStaffMfa(aal: "aal1" | "aal2") {
+  if (aal !== "aal2") throw new Error("mfa_required");
+}
 
 function mapAccessRows(rows: Array<Record<string, unknown>>) {
   return rows.map((row) => ({
@@ -56,6 +64,8 @@ async function upsertSupportAccessRequestRow(row: Record<string, unknown>) {
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthContextFromRequest(request);
+    const rate = await checkRateLimit(request, { key: "api:impersonation:get", max: Number(process.env.RATE_LIMIT_IMPERSONATION_READS_PER_MINUTE || 60), windowMs: 60_000, identity: { userId: auth.uid, tenantId: auth.uid } });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const requesterCandidates = Array.from(new Set([auth.uid, auth.rawUid].filter(Boolean)));
     const mode = request.nextUrl.searchParams.get("mode") || "pending";
 
@@ -71,6 +81,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (mode === "mine") {
+      requireImpersonationStaffMfa(auth.aal);
       if (!(await canAccessResource(auth.uid, "admin.impersonation", "write"))) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
@@ -93,6 +104,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (mode === "status") {
+      requireImpersonationStaffMfa(auth.aal);
       if (!(await canAccessResource(auth.uid, "admin.impersonation", "write"))) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
@@ -146,6 +158,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (mode === "action-status") {
+      requireImpersonationStaffMfa(auth.aal);
       if (!(await canAccessResource(auth.uid, "admin.impersonation", "write"))) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
@@ -176,20 +189,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "invalid_mode" }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
-    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
+    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
 
 export async function POST(request: NextRequest) {
+  const meta = getRequestMeta(request);
   try {
     const auth = await getAuthContextFromRequest(request);
+    const rate = await checkRateLimit(request, { key: "api:impersonation:post", max: Number(process.env.RATE_LIMIT_IMPERSONATION_ACTIONS_PER_MINUTE || 10), windowMs: 60_000, identity: { userId: auth.uid, tenantId: auth.uid }, critical: true });
+    if (!rate.allowed) return rateLimitResponse(rate);
     const body = (await request.json()) as
       | { action: "request"; targetUid?: string }
       | { action: "respond"; requestId?: string; approved?: boolean }
       | { action: "respond-action"; actionRequestId?: string; approved?: boolean };
 
     if (body.action === "request") {
+      requireImpersonationStaffMfa(auth.aal);
       if (!(await canAccessResource(auth.uid, "admin.impersonation", "write"))) {
         return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
       }
@@ -267,6 +284,8 @@ export async function POST(request: NextRequest) {
         updated_at: nowIso,
       });
 
+      await writeAdminAuditLog({ actorUid: auth.uid, action: "impersonation.access.requested", targetUid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { supportRequestId: requestId } });
+
       return NextResponse.json({ ok: true, requestId, status: "pending" }, { status: 200 });
     }
 
@@ -320,6 +339,8 @@ export async function POST(request: NextRequest) {
         permissionImpersonate: body.approved,
         requestId,
       });
+
+      await writeAdminAuditLog({ actorUid: auth.uid, action: body.approved ? "impersonation.access.approved" : "impersonation.access.rejected", targetUid: requestData.requesterUid, requestId: meta.requestId, route: meta.route, method: meta.method, ip: meta.ip, userAgent: meta.userAgent, details: { supportRequestId: requestId } });
 
       return NextResponse.json(
         {
@@ -421,7 +442,7 @@ export async function POST(request: NextRequest) {
       method: "POST",
       meta: { error: message },
     });
-    const status = message === "missing_auth_token" ? 401 : message === "forbidden" ? 403 : 500;
+    const status = message === "forbidden" ? 403 : resolveApiErrorStatus(message);
     return NextResponse.json({ ok: false, error: message }, { status });
   }
 }

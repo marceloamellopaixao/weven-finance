@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { driver } from "driver.js";
 import { useRouter } from "next/navigation";
 import { usePlatformExperience } from "@/hooks/usePlatformExperience";
-import { PlatformTourRouteKey } from "@/types/navigation";
+import { ALL_PLATFORM_TOUR_ROUTES, PlatformTourRouteKey } from "@/types/navigation";
 import { ensurePlatformTourTheme } from "@/lib/platform-tour/driver-theme";
 import { getPlatformTourConfig, PLATFORM_TOUR_ROUTE_HREFS } from "@/lib/platform-tour/config";
 
@@ -94,9 +94,11 @@ export function usePlatformTour(options: UsePlatformTourOptions) {
     if (route !== "dashboard" || disabled) return;
     if (isPlatformTourActive) return;
     if (forceStart || !hasSeen) {
-      startPlatformTour("dashboard");
+      const firstRoute = ALL_PLATFORM_TOUR_ROUTES[0] as PlatformTourRouteKey;
+      startPlatformTour(firstRoute, [...ALL_PLATFORM_TOUR_ROUTES]);
+      if (firstRoute !== route) router.push(PLATFORM_TOUR_ROUTE_HREFS[firstRoute]);
     }
-  }, [disabled, forceStart, hasSeen, isPlatformTourActive, route, startPlatformTour]);
+  }, [disabled, forceStart, hasSeen, isPlatformTourActive, route, router, startPlatformTour]);
 
   useEffect(() => {
     const shouldDrive = !disabled && isPlatformTourActive && platformTourState.route === route;
@@ -159,11 +161,12 @@ export function usePlatformTour(options: UsePlatformTourOptions) {
     driverRef.current = driver({
       showProgress: true,
       animate: true,
-      allowClose: false,
+      allowClose: true,
       disableActiveInteraction: true,
       overlayClickBehavior: () => undefined,
       popoverClass: "driverjs-theme",
       doneBtnText: "Concluir",
+      showButtons: ["previous", "next", "close"],
       nextBtnText: "Próximo",
       prevBtnText: "Anterior",
       progressText: "{{current}} de {{total}}",

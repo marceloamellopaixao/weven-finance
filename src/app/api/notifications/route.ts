@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyRequestAuth } from "@/lib/auth/server";
 import { resolveActingContext } from "@/lib/impersonation/server";
-import { checkRateLimit } from "@/lib/api/rate-limit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/api/rate-limit";
 import { getRequestMeta } from "@/lib/api/request-meta";
 import { apiLogger } from "@/lib/observability/logger";
 import { writeApiMetric } from "@/lib/observability/metrics";
@@ -48,12 +48,14 @@ export async function GET(request: NextRequest) {
     const rate = await checkRateLimit(request, { key: "api:notifications:get", max: 120, windowMs: 60_000 });
     if (!rate.allowed) {
       await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
     await verifyRequestAuth(request);
     const acting = await resolveActingContext(request);
     uid = acting.actingUid;
+    const userRate = await checkRateLimit(request, { key: "api:notifications:get:user", max: Number(process.env.RATE_LIMIT_NOTIFICATIONS_READS_PER_MINUTE || 60), windowMs: 60_000, identity: { userId: acting.requesterUid, tenantId: uid } });
+    if (!userRate.allowed) return rateLimitResponse(userRate);
 
     const page = Math.max(1, Number(request.nextUrl.searchParams.get("page") || "1"));
     const limit = Math.max(1, Math.min(100, Number(request.nextUrl.searchParams.get("limit") || "20")));
@@ -112,12 +114,14 @@ export async function PATCH(request: NextRequest) {
     const rate = await checkRateLimit(request, { key: "api:notifications:patch", max: 120, windowMs: 60_000 });
     if (!rate.allowed) {
       await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
     await verifyRequestAuth(request);
     const acting = await resolveActingContext(request);
     uid = acting.actingUid;
+    const userRate = await checkRateLimit(request, { key: "api:notifications:patch:user", max: Number(process.env.RATE_LIMIT_NOTIFICATION_MUTATIONS_PER_MINUTE || 30), windowMs: 60_000, identity: { userId: acting.requesterUid, tenantId: uid }, critical: true });
+    if (!userRate.allowed) return rateLimitResponse(userRate);
     const body = (await request.json()) as { id?: string; markAllRead?: boolean };
 
     let rows: Array<Record<string, unknown>> = [];
@@ -183,12 +187,14 @@ export async function DELETE(request: NextRequest) {
     const rate = await checkRateLimit(request, { key: "api:notifications:delete", max: 60, windowMs: 60_000 });
     if (!rate.allowed) {
       await writeApiMetric({ route: meta.route, method: meta.method, status: 429, durationMs: Date.now() - startedAt, requestId: meta.requestId, errorCode: "rate_limited" });
-      return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+      return rateLimitResponse(rate);
     }
 
     await verifyRequestAuth(request);
     const acting = await resolveActingContext(request);
     uid = acting.actingUid;
+    const userRate = await checkRateLimit(request, { key: "api:notifications:delete:user", max: Number(process.env.RATE_LIMIT_NOTIFICATION_MUTATIONS_PER_MINUTE || 30), windowMs: 60_000, identity: { userId: acting.requesterUid, tenantId: uid }, critical: true });
+    if (!userRate.allowed) return rateLimitResponse(userRate);
 
     try {
       await supabaseDeleteByFilters("notifications", { uid });

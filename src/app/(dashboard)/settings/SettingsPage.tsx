@@ -34,11 +34,11 @@ import {
   UsersRound,
   WalletCards,
   BriefcaseBusiness,
+  ImageIcon,
 } from "lucide-react";
 import { useState, useEffect, type CSSProperties } from "react";
-import { requestOwnAccountDeletion, updateOwnProfile } from "@/services/userService";
+import { requestOwnAccountDeletion, resetOwnFinancialData, updateOwnProfile } from "@/services/userService";
 import { rememberAccountDeletionRequest } from "@/lib/account-deletion/client";
-import { getKeyFingerprint } from "@/lib/crypto";
 import { usePlans } from "@/hooks/usePlans";
 import { migrateCryptography } from "@/services/transactionService";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -66,6 +66,8 @@ import { BusinessWorkspacePanel } from "@/components/workspaces/BusinessWorkspac
 import { WorkspaceSettingsPanel } from "@/components/workspaces/WorkspaceSettingsPanel";
 import { canViewBusinessMembers } from "@/lib/workspaces/business";
 import type { BusinessWorkspaceMember } from "@/types/workspace";
+import { SupportConversation } from "@/components/support/SupportConversation";
+import { MfaSettingsCard } from "@/components/auth/MfaSettingsCard";
 
 // Tipo para feedback
 type FeedbackData = {
@@ -121,9 +123,11 @@ export default function SettingsPage() {
   const [completeName, setCompleteName] = useState("");
   const [phone, setPhone] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [keyFingerprint, setKeyFingerprint] = useState(t("security.internalIdLoading"));
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showResetDataModal, setShowResetDataModal] = useState(false);
+  const [isResettingData, setIsResettingData] = useState(false);
+  const [resetConfirmation, setResetConfirmation] = useState("");
   const [isOpeningCheckout, setIsOpeningCheckout] = useState<UpgradePlan | null>(null);
   const [isConfirmingPreapproval, setIsConfirmingPreapproval] = useState(false);
   const [isAutoReconcilingBilling, setIsAutoReconcilingBilling] = useState(false);
@@ -153,6 +157,12 @@ export default function SettingsPage() {
   const [mySupportPage, setMySupportPage] = useState(1);
   const [mySupportPerPage] = useState(8);
   const [mySupportTotal, setMySupportTotal] = useState(0);
+  const [expandedSupportTicketId, setExpandedSupportTicketId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const ticketId = searchParams.get("ticket");
+    if (ticketId) setExpandedSupportTicketId(ticketId);
+  }, [searchParams]);
 
   // Estado para feedback modal
   const [feedbackModal, setFeedbackModal] = useState<FeedbackData>({ isOpen: false, type: 'info', title: '', message: '' });
@@ -198,12 +208,6 @@ export default function SettingsPage() {
       setPhone(normalizePhone(userProfile?.phone));
     }
   }, [userProfile]);
-
-  useEffect(() => {
-    if (effectiveProfileUid) {
-      getKeyFingerprint(effectiveProfileUid).then(setKeyFingerprint);
-    }
-  }, [effectiveProfileUid]);
 
   const showFeedback = (type: 'success' | 'error' | 'info', title: string, message: string) => {
     setFeedbackModal({ isOpen: true, type, title, message });
@@ -270,6 +274,7 @@ export default function SettingsPage() {
   };
 
   const formatTicketType = (ticket: SupportTicket) => {
+    if (ticket.type === "bug") return t("ticketTypes.bug");
     if (ticket.type === "feature") return t("ticketTypes.feature");
     if (ticket.supportKind === "account_restore") return t("ticketTypes.accountRestore");
     return t("ticketTypes.support");
@@ -322,6 +327,23 @@ export default function SettingsPage() {
       showFeedback("error", t("feedback.deleteErrorTitle"), errorMessage);
       setIsDeleting(false);
       setShowDeleteModal(false);
+    }
+  };
+
+  const handleResetFinancialData = async () => {
+    if (!user || resetConfirmation !== "RESETAR" || isImpersonating) return;
+    setIsResettingData(true);
+    try {
+      const token = await user.getIdToken();
+      const deleted = await resetOwnFinancialData(token);
+      setShowResetDataModal(false);
+      setResetConfirmation("");
+      showFeedback("success", "Dados financeiros resetados", `${deleted} lançamento(s) foram apagados.`);
+    } catch (error) {
+      console.error("Erro ao resetar dados financeiros:", error);
+      showFeedback("error", "Não foi possível resetar os dados", "Tente novamente em alguns instantes.");
+    } finally {
+      setIsResettingData(false);
     }
   };
 
@@ -1333,9 +1355,9 @@ export default function SettingsPage() {
           {/* ABA SEGURANÇA */}
           {activeTab === "security" && (
             <Card id="tour-settings-panel" className={`${zoomIn} delay-200 app-panel-soft rounded-3xl border border-color:var(--app-panel-border) shadow-xl shadow-zinc-200/50 dark:shadow-black/20`}>
-              <CardHeader>
+              <CardHeader className="border-b border-border/60 pb-5">
                 <CardTitle className="flex items-center gap-2">
-                  <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-full">
+                  <div className="rounded-2xl bg-emerald-500/10 p-2.5">
                     <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   {t("security.title")}
@@ -1344,52 +1366,62 @@ export default function SettingsPage() {
                   {t("security.description")}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-8">
+              <CardContent className="space-y-6 pt-6">
+                <MfaSettingsCard required={["admin", "moderator", "support"].includes(userProfile?.role || "")} />
 
-                <div className="app-panel-subtle flex items-center justify-between rounded-2xl border p-5 transition-all hover:border-primary/20">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2"><EyeOff className="h-5 w-5 text-zinc-600 dark:text-zinc-400" /><Label className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{t("security.discreetMode")}</Label></div>
-                    <p className="text-sm text-zinc-500">{t("security.discreetDescription")}</p>
+                <section className="app-panel-subtle rounded-2xl border p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <EyeOff className="h-5 w-5 text-primary" />
+                        <Label htmlFor="privacy-mode" className="text-base font-semibold">{t("security.discreetMode")}</Label>
+                      </div>
+                      <p className="max-w-2xl text-sm text-muted-foreground">{t("security.discreetDescription")}</p>
+                    </div>
+                    <Switch id="privacy-mode" checked={privacyMode} onCheckedChange={togglePrivacyMode} className="hover:cursor-pointer" />
                   </div>
-                  <Switch checked={privacyMode} onCheckedChange={togglePrivacyMode} className="hover:cursor-pointer" />
-                </div>
-                <Separator className="bg-zinc-300 dark:bg-zinc-800" />
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2"><Lock className="h-4 w-4 text-primary" /><h3 className="font-semibold text-sm uppercase tracking-wider text-zinc-500">{t("security.dataSecurity")}</h3></div>
-                  <div className="p-5 rounded-2xl bg-zinc-950 text-zinc-400 font-mono text-xs break-all relative border border-zinc-800 shadow-inner group transition-all hover:border-zinc-700">
-                    <div className="absolute top-3 right-3"><Badge variant="outline" className="text-[10px] border-zinc-700 text-emerald-500 font-bold px-2 py-0.5">{t("security.privacyBadge")}</Badge></div>
-                    <p className="mb-2 text-zinc-600 uppercase tracking-widest text-[10px] font-bold">{t("security.internalId")}</p>
-                    {keyFingerprint}
-                  </div>
-                  <p className="text-xs text-zinc-500 leading-relaxed">{t("security.internalIdHelp")}</p>
-                  <Separator className="bg-zinc-300 dark:bg-zinc-800" />
+                </section>
 
-                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-900/50">
-                    <h4 className="text-sm font-bold text-blue-700 dark:text-blue-300 mb-2 flex items-center gap-2">
-                      <RefreshCw className="h-4 w-4" /> {t("security.recoveryTitle")}
-                    </h4>
-                    <p className="text-xs text-blue-600/80 dark:text-blue-400 mb-4">
-                      {t("security.recoveryDescription")}
-                    </p>
+                <section className="space-y-3">
+                  <div className="flex items-center gap-2 px-1">
+                    <Lock className="h-4 w-4 text-primary" />
+                    <h3 className="text-sm font-semibold">Seus dados</h3>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="app-panel-subtle flex flex-col justify-between gap-4 rounded-2xl border p-5">
+                      <div>
+                        <h4 className="flex items-center gap-2 font-semibold"><RefreshCw className="h-4 w-4 text-primary" /> {t("security.recoveryTitle")}</h4>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{t("security.recoveryDescription")}</p>
+                      </div>
                     <Button
+                      variant="outline"
                       size="sm"
                       onClick={handleMigration}
                       disabled={isMigrating}
-                      className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg w-full sm:w-auto hover:cursor-pointer transition-all active:scale-95"
+                        className="w-full rounded-xl sm:w-fit"
                     >
                       {isMigrating ? t("security.fixing") : t("security.fixProtectedData")}
                     </Button>
                   </div>
-
-                </div>
-                <Separator className="bg-zinc-300 dark:bg-zinc-800" />
-                <div className="space-y-4">
-                  <h3 className="text-red-600 font-bold text-sm flex items-center gap-2 mb-3"><AlertTriangle className="h-4 w-4" /> {t("security.dangerZone")}</h3>
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-950/10 rounded-2xl">
-                    <p className="text-xs text-red-600/80 dark:text-red-400">{t("security.deleteWarning")}</p>
-                    <Button variant="outline" onClick={() => setShowDeleteModal(true)} className="text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300 dark:hover:bg-red-900/40 dark:border-red-900 whitespace-nowrap rounded-xl hover:cursor-pointer transition-all active:scale-95">{t("security.deleteAction")}</Button>
+                    <div className="flex flex-col justify-between gap-4 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-5">
+                      <div>
+                        <h4 className="flex items-center gap-2 font-semibold text-amber-700 dark:text-amber-300"><AlertTriangle className="h-4 w-4" /> Resetar dados financeiros</h4>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">Apaga todos os seus lançamentos. Cartões, categorias, metas e sua conta serão mantidos.</p>
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={() => setShowResetDataModal(true)} disabled={isImpersonating} className="w-full rounded-xl border-amber-500/40 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300 sm:w-fit">
+                        Resetar dados
+                      </Button>
+                    </div>
                   </div>
-                </div>
+                </section>
+
+                <section className="rounded-2xl border border-destructive/25 bg-destructive/5 p-5">
+                  <h3 className="flex items-center gap-2 font-semibold text-destructive"><AlertTriangle className="h-4 w-4" /> {t("security.dangerZone")}</h3>
+                  <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="max-w-2xl text-sm text-muted-foreground">{t("security.deleteWarning")}</p>
+                    <Button variant="outline" onClick={() => setShowDeleteModal(true)} className="shrink-0 rounded-xl border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive">{t("security.deleteAction")}</Button>
+                  </div>
+                </section>
               </CardContent>
             </Card>
           )}
@@ -1549,11 +1581,28 @@ export default function SettingsPage() {
                           </div>
                         </div>
                         <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{ticket.message}</p>
+                        {ticket.attachments?.length ? (
+                          <Badge variant="outline" className="mt-2 gap-1 text-[11px] text-muted-foreground">
+                            <ImageIcon className="h-3.5 w-3.5" />
+                            {ticket.attachments.length} {ticket.attachments.length === 1 ? "evidência" : "evidências"}
+                          </Badge>
+                        ) : null}
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                           <span>{t("help.openedAt", { date: date(ticket.createdAt) })}</span>
+                          {ticket.updatedAt ? <span>Atualizado em {date(new Date(ticket.updatedAt))}</span> : null}
                           {ticket.firstResponseAt ? <span>{t("help.firstResponse")}</span> : null}
                           {ticket.resolvedAt ? <span>{t("help.resolvedAt", { date: date(ticket.resolvedAt) })}</span> : null}
                         </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="mt-2 h-8 rounded-lg"
+                          onClick={() => setExpandedSupportTicketId((current) => current === ticket.id ? null : ticket.id)}
+                        >
+                          {expandedSupportTicketId === ticket.id ? "Ocultar detalhes" : "Ver detalhes e responder"}
+                        </Button>
+                        {expandedSupportTicketId === ticket.id ? <div className="mt-3"><SupportConversation ticket={ticket} /></div> : null}
                       </div>
                     ))
                   )}
@@ -1712,6 +1761,47 @@ export default function SettingsPage() {
               >
                 {isSendingFeature ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
                 {t("feature.send")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={showResetDataModal}
+          onOpenChange={(open) => {
+            setShowResetDataModal(open);
+            if (!open) setResetConfirmation("");
+          }}
+        >
+          <DialogContent className="w-[calc(100vw-1rem)] max-w-[440px] rounded-3xl p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+                <AlertTriangle className="h-5 w-5" /> Resetar dados financeiros?
+              </DialogTitle>
+              <DialogDescription className="pt-2 leading-6">
+                Todos os seus lançamentos serão apagados permanentemente. Seus cartões, categorias, metas, configurações e conta serão mantidos.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 py-3">
+              <Label htmlFor="reset-data-confirmation">Digite RESETAR para confirmar</Label>
+              <Input
+                id="reset-data-confirmation"
+                value={resetConfirmation}
+                onChange={(event) => setResetConfirmation(event.target.value.toUpperCase())}
+                autoComplete="off"
+                placeholder="RESETAR"
+              />
+            </div>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="ghost" onClick={() => setShowResetDataModal(false)}>Cancelar</Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => void handleResetFinancialData()}
+                disabled={resetConfirmation !== "RESETAR" || isResettingData}
+              >
+                {isResettingData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Apagar lançamentos
               </Button>
             </DialogFooter>
           </DialogContent>

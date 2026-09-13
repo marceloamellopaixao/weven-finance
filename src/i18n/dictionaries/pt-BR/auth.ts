@@ -62,7 +62,7 @@ export const auth = {
       invalidRecoveryLink: "Não foi possível validar o link de recuperação. Solicite um novo envio.",
       missingPassword: "Por favor, informe a nova senha.",
       missingConfirmPassword: "Por favor, confirme a nova senha.",
-      passwordTooShort: "A senha deve ter no mínimo 6 caracteres.",
+      passwordTooShort: "A senha deve ter no mínimo 12 caracteres.",
       passwordMismatch: "As senhas não coincidem.",
       updatePassword: "Não foi possível atualizar a senha.",
     },
@@ -72,7 +72,7 @@ export const auth = {
       confirmPassword: "Confirmar senha",
     },
     placeholders: {
-      password: "Mínimo de 6 caracteres",
+      password: "Mínimo de 12 caracteres",
       confirmPassword: "Repita a nova senha",
     },
     actions: {

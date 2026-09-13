@@ -29,13 +29,13 @@ export type NavigationPreferences = {
 };
 
 export const ALL_PLATFORM_TOUR_ROUTES = [
-  "dashboard",
-  "settings",
   "account-profile",
   "transactions-new",
   "reports",
   "cards",
   "piggy-bank",
+  "settings",
+  "dashboard",
 ] as const;
 
 export type PlatformTourRouteKey = (typeof ALL_PLATFORM_TOUR_ROUTES)[number];

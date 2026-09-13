@@ -19,6 +19,7 @@ export function AuthPageShell({
 }: AuthPageShellProps) {
   return (
     <div
+      data-auth-page-shell=""
       className={cn(
         "relative flex min-h-[calc(100svh-4rem)] items-center justify-center overflow-x-hidden px-4 py-8 font-sans sm:px-6 sm:py-12",
         className

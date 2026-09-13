@@ -87,6 +87,7 @@ export const admin: Dictionary["admin"] = {
     menu: {
       impersonate: "Impersonar",
       resetData: "Resetear datos",
+      resetMfa: "Restablecer MFA",
       deleteAccount: "Eliminar cuenta",
     },
     tooltips: {
@@ -150,6 +151,7 @@ export const admin: Dictionary["admin"] = {
       urgent: "Urgente",
     },
     type: {
+      bug: "Bug",
       support: "Soporte",
       feature: "Idea",
       featurePlural: "Ideas",
@@ -167,7 +169,17 @@ export const admin: Dictionary["admin"] = {
       deleteErrorMessage: "Error al eliminar el ticket.",
       exportErrorTitle: "La exportación falló",
       exportErrorMessage: "No fue posible exportar los tickets ahora.",
+      attachmentErrorMessage: "No se pudo abrir esta evidencia.",
     },
+    reportTitle: "Título del informe",
+    stepsToReproduce: "Pasos para reproducir",
+    expectedResult: "Resultado esperado",
+    actualResult: "Resultado observado",
+    attachments: "Evidencias",
+    attachmentLabel: "Captura {index}",
+    attachmentExpiry: "El enlace privado caduca en pocos minutos.",
+    technicalContext: "Contexto técnico autorizado",
+    reportedDuringImpersonation: "Informe enviado por soporte durante el acceso temporal al usuario.",
     empty: "No se encontraron tickets.",
     metrics: {
       openQueue: "Fila abierta",
@@ -398,6 +410,12 @@ export const admin: Dictionary["admin"] = {
   dialogs: {
     resetTitle: "¿Resetear datos?",
     resetDescription: "Confirme para eliminar todas las transacciones.",
+    mfaResetTitle: "¿Restablecer la verificación en dos pasos?",
+    mfaResetDescription: "Se eliminarán todos los autenticadores registrados por {name}.",
+    mfaResetWarning: "Hazlo solo después de confirmar la identidad del titular. Se cerrarán las sesiones activas y el usuario deberá configurar MFA nuevamente cuando sea obligatorio.",
+    mfaResetCompletedTitle: "MFA restablecido",
+    mfaResetCompletedMessage: "Se eliminaron {count} autenticador(es) de la cuenta.",
+    mfaResetErrorMessage: "No fue posible restablecer el MFA del usuario.",
     deleteAccountTitle: "¿Eliminar cuenta?",
     deleteAccountDescription: "Confirme para cerrar la cuenta y archivar todos los datos del cliente.",
     archiveAccount: "Archivar cuenta",
