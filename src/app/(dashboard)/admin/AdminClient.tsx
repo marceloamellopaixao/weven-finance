@@ -2915,10 +2915,10 @@ export default function AdminPage() {
                               <TableCell className="pl-6 font-medium text-zinc-800 dark:text-zinc-200">
                                 <span className="block max-w-[220px] truncate" title={u.displayName}>{u.displayName}</span>
                               </TableCell>
-                              <TableCell className="text-zinc-500">
+                              <TableCell className="text-zinc-800 dark:text-zinc-200">
                                 <div className="space-y-1">
                                   <p className="max-w-[260px] truncate" title={u.email}>{u.email}</p>
-                                  <p className="text-[11px] text-zinc-500/80">
+                                  <p className="text-[11px]">
                                     {tAdmin("restore.archivedRecordsLabel", { count: Number.isNaN(u.transactionCount) ? "..." : (u.transactionCount ?? "...") })}
                                   </p>
                                 </div>
@@ -2928,7 +2928,7 @@ export default function AdminPage() {
                                   {isRestoreExpired(u) ? tAdmin("restore.expired") : tAdmin("restore.availableUntil", { date: getRestoreDeadlineLabel(u) })}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="uppercase text-xs font-bold text-zinc-400">{u.plan}</TableCell>
+                              <TableCell className="uppercase text-xs font-bold text-zinc-800 dark:text-zinc-200">{u.plan}</TableCell>
                               <TableCell className="text-right pr-6">
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
